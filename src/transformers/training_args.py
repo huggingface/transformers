@@ -2201,8 +2201,12 @@ class TrainingArguments:
             accelerator_state_kwargs["use_configured_state"] = self.accelerator_config.pop(
                 "use_configured_state", False
             )
+
+        # Check if there's an existing AcceleratorState
+        has_existing_state = PartialState._shared_state != {}
+
         if accelerator_state_kwargs["use_configured_state"]:
-            if PartialState._shared_state == {}:
+            if not has_existing_state:
                 raise ValueError(
                     "Passing `'use_configured_state':True` to the AcceleratorConfig requires a pre-configured "
                     "`AcceleratorState` or `PartialState` to be defined before calling `TrainingArguments`. "
@@ -2216,8 +2220,18 @@ class TrainingArguments:
                     "`use_configured_state:False` instead or setup your `Accelerator` or `PartialState` properly."
                 )
         else:
-            AcceleratorState._reset_state(reset_partial_state=True)
-            self.distributed_state = None
+            # Better approach: reuse existing AcceleratorState if available, only reset if explicitly needed
+            if has_existing_state:
+                logger.info(
+                    "Detected existing AcceleratorState, TrainingArguments will reuse existing configuration. "
+                    "To force reset, set accelerator_config={'use_configured_state': False, 'force_reset': True}."
+                )
+                # Reuse existing state instead of resetting
+                self.distributed_state = PartialState(cpu=self.use_cpu)
+            else:
+                # No existing state, safe to reset
+                AcceleratorState._reset_state(reset_partial_state=True)
+                self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
 
