@@ -172,7 +172,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_lengths = iter([])
 
         if images is not None:
-            images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
@@ -180,7 +180,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         if videos is not None:
             videos = make_batched_videos(videos)
-            videos_inputs = self.video_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             fps = [fps] * len(videos)
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
@@ -195,16 +195,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-            image_grid_thw,
-            video_grid_thw,
-            video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
-            position_id_per_seconds=position_id_per_seconds,
-            seconds_per_chunk=seconds_per_chunk,
-        )
+        if images is not None or videos is not None or audio is not None:
+            text = self.replace_multimodal_special_tokens(
+                text,
+                audio_lengths,
+                image_grid_thw,
+                video_grid_thw,
+                video_second_per_grid=video_second_per_grid,
+                use_audio_in_video=use_audio_in_video,
+                position_id_per_seconds=position_id_per_seconds,
+                seconds_per_chunk=seconds_per_chunk,
+            )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -316,20 +317,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             yield (start_idx, len(token_indices))
 
         return list(_iter())
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         is_batched = False

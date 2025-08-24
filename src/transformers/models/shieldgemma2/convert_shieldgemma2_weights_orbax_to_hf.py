@@ -458,7 +458,7 @@ def main(*args):
         model = ShieldGemma2ForImageClassification(config=config)
 
     model.load_state_dict(result.state_tree, assign=True, strict=True)
-    model.config.torch_dtype = dtype
+    model.config.dtype = dtype
     logging.info("Loaded Shieldgemma2 in Hugging Face Transformers.")
     model.save_pretrained(output_path, safe_serialization=True)
     logging.info("Saved Shieldgemma2 to SafeTensors in %s", output_path)

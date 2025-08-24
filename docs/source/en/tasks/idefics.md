@@ -76,7 +76,7 @@ preparing text and image inputs for the model.
 
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 ```
 
 Setting `device_map` to `"auto"` will automatically determine how to load and store the model weights in the most optimized 
@@ -84,7 +84,7 @@ manner given existing devices.
 
 ### Quantized model
 
-If high-memory GPU availability is an issue, you can load the quantized version of the model. To load the model and the 
+If high-memory device availability is an issue, you can load the quantized version of the model. To load the model and the 
 processor in 4bit precision, pass a `BitsAndBytesConfig` to the `from_pretrained` method and the model will be compressed 
 on the fly while loading.
 
@@ -131,7 +131,7 @@ As image input to the model, you can use either an image object (`PIL.Image`) or
 ...     "https://images.unsplash.com/photo-1583160247711-2191776b4b91?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3542&q=80",
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -167,7 +167,7 @@ Textual and image prompts can be passed to the model's processor as a single lis
 ...     "This is an image of ",
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -201,7 +201,7 @@ Photo by [Juan Mayobre](https://unsplash.com/@jmayobres).
 ...            "Describe this image.\nAssistant:"
 ...            ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=30, bad_words_ids=bad_words_ids)
@@ -239,7 +239,7 @@ You can steer the model from image captioning to visual question answering by pr
 ...     "Question: Where are these people and what's the weather like? Answer:"
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=20, bad_words_ids=bad_words_ids)
@@ -272,7 +272,7 @@ We can instruct the model to classify the image into one of the categories that 
 ...     "Category: "
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=6, bad_words_ids=bad_words_ids)
@@ -302,7 +302,7 @@ Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
 ...     "https://images.unsplash.com/photo-1517086822157-2b0358e7684a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2203&q=80",
 ...     "Story: \n"]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, num_beams=2, max_new_tokens=200, bad_words_ids=bad_words_ids)
@@ -356,7 +356,7 @@ for a batch of examples by passing a list of prompts:
 ...     ],
 ... ]
 
->>> inputs = processor(prompts, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompts, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -386,11 +386,9 @@ The use and prompting for the conversational use is very similar to using the ba
 ```py
 >>> import torch
 >>> from transformers import IdeficsForVisionText2Text, AutoProcessor
->>> from accelerate.test_utils.testing import get_backend
 
->>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
 >>> prompts = [
@@ -410,9 +408,9 @@ The use and prompting for the conversational use is very similar to using the ba
 ... ]
 
 >>> # --batched mode
->>> inputs = processor(prompts, add_end_of_utterance_token=False, return_tensors="pt").to(device)
+>>> inputs = processor(prompts, add_end_of_utterance_token=False, return_tensors="pt").to(model.device)
 >>> # --single sample mode
->>> # inputs = processor(prompts[0], return_tensors="pt").to(device)
+>>> # inputs = processor(prompts[0], return_tensors="pt").to(model.device)
 
 >>> # Generation args
 >>> exit_condition = processor.tokenizer("<end_of_utterance>", add_special_tokens=False).input_ids

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-21 and added to Hugging Face Transformers on 2025-01-10.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -43,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="UsefulSensors/moonshine-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -63,10 +64,10 @@ processor = AutoProcessor.from_pretrained(
 )
 model = MoonshineForConditionalGeneration.from_pretrained(
     "UsefulSensors/moonshine-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
-).to("cuda")
+)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
 audio_sample = ds[0]["audio"]
@@ -76,7 +77,7 @@ input_features = processor(
     sampling_rate=audio_sample["sampling_rate"],
     return_tensors="pt"
 )
-input_features = input_features.to("cuda", dtype=torch.float16)
+input_features = input_features.to(model.device, dtype=torch.float16)
 
 predicted_ids = model.generate(**input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)

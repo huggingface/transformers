@@ -143,7 +143,7 @@ class ColQwen2Processor(ColPaliProcessor):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = True if suffix is not None else False
+        return_token_type_ids = suffix is not None
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -249,6 +249,18 @@ class ColQwen2Processor(ColPaliProcessor):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+
+        # ColQwen doesn't process videos. Make a copy of list when removing
+        # otherwise `self.feature_extractor.model_input_names` is also modified
+        image_processor_input_names = [
+            name for name in image_processor_input_names if name not in ["pixel_values_videos", "video_grid_thw"]
+        ]
+        return tokenizer_input_names + image_processor_input_names
 
 
 class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):

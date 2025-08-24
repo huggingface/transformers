@@ -615,7 +615,7 @@ class Trainer:
         # Bnb Quantized models doesn't support `.to` operation.
         if (
             self.place_model_on_device
-            and not getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+            and getattr(model, "quantization_method", None) != QuantizationMethod.BITS_AND_BYTES
         ):
             self._move_model_to_device(model, args.device)
 
@@ -783,15 +783,17 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        if _is_peft_model(self.model) and self.args.label_names is None:
-            logger.warning(
-                f"No label_names provided for model class `{self.model.__class__.__name__}`."
-                " Since `PeftModel` hides base models input arguments, if label_names is not given, label_names can't be set automatically within `Trainer`."
-                " Note that empty label_names list will be used instead."
-            )
-        default_label_names = find_labels(self.model.__class__)
+
+        model_to_inspect = self.model
+        if _is_peft_model(self.model):
+            if hasattr(self.model, "get_base_model"):
+                model_to_inspect = self.model.get_base_model()
+            else:
+                # PeftMixedModel do not provide a `get_base_model` method
+                model_to_inspect = self.model.base_model.model
+        default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.can_return_loss = can_return_loss(self.model.__class__)
+        self.can_return_loss = can_return_loss(model_to_inspect.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # Internal variables to help with automatic batch size reduction
@@ -902,6 +904,79 @@ class Trainer:
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
+
+    def _align_special_tokens(self):
+        """
+        Aligns the special tokens of the tokenizer with the model configs.
+
+        A new tokens may be defined in the tokenizer for fine-tuning purposes, e.g. an "end of turn" token may be
+        added on chat models. In that case, we want the model configs to be aligned with the tokenizer, so that all
+        downstream uses work as expected. This alignment should happen before training, to ensure the prediction step
+        uses the new tokens as well.
+        """
+        if isinstance(self.processing_class, ProcessorMixin):
+            tokenizer = self.processing_class.tokenizer
+        else:
+            tokenizer = self.processing_class
+        model_has_generation_config = (
+            hasattr(self.model, "generation_config") and self.model.generation_config is not None
+        )
+        updated_tokens = {}
+
+        # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
+        # token.
+        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+        if model_has_generation_config:
+            # `generation_config.eos_token_id` is None: direct comparison
+            if self.model.generation_config.eos_token_id is None:
+                tokenizer_has_new_eos |= tokenizer.eos_token_id != self.model.generation_config.eos_token_id
+            else:
+                # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+                if isinstance(self.model.generation_config.eos_token_id, int):
+                    self.model.generation_config.eos_token_id = [self.model.generation_config.eos_token_id]
+                # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+                tokenizer_has_new_eos |= tokenizer.eos_token_id not in self.model.generation_config.eos_token_id
+
+        if tokenizer_has_new_eos:
+            updated_tokens["eos_token_id"] = tokenizer.eos_token_id
+            self.model.config.eos_token_id = tokenizer.eos_token_id
+            # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
+            # EOS tokens defined here will halt generation.
+            if model_has_generation_config:
+                all_eos_tokens = [tokenizer.eos_token_id]
+                if self.model.generation_config.eos_token_id is not None:
+                    all_eos_tokens += list(self.model.generation_config.eos_token_id)
+                self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+
+        # 2 - Align BOS
+        tokenizer_has_new_bos = tokenizer.bos_token_id != self.model.config.bos_token_id
+        if model_has_generation_config:
+            tokenizer_has_new_bos |= tokenizer.bos_token_id != self.model.generation_config.bos_token_id
+
+        if tokenizer_has_new_bos:
+            updated_tokens["bos_token_id"] = tokenizer.bos_token_id
+            self.model.config.bos_token_id = tokenizer.bos_token_id
+            if model_has_generation_config:
+                self.model.generation_config.bos_token_id = tokenizer.bos_token_id
+
+        # 3 - Align PAD
+        tokenizer_has_new_pad = tokenizer.pad_token_id != self.model.config.pad_token_id
+        if model_has_generation_config:
+            tokenizer_has_new_pad |= tokenizer.pad_token_id != self.model.generation_config.pad_token_id
+
+        if tokenizer_has_new_pad:
+            updated_tokens["pad_token_id"] = tokenizer.pad_token_id
+            self.model.config.pad_token_id = tokenizer.pad_token_id
+            if model_has_generation_config:
+                self.model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        # 4 - Warn users about the changes
+        if len(updated_tokens) > 0:
+            logger.warning(
+                "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+                "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+                f"values. Updated tokens: {updated_tokens}."
+            )
 
     def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
@@ -1032,17 +1107,16 @@ class Trainer:
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
-        dataloader = DataLoader(dataset, **dataloader_params)
+        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # Accelerator.free_memory() will destroy the references, so
-        # we need to store the non-prepared version for eval dataloaders.
+        # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
             if hasattr(self, "_eval_dataloaders"):
                 self._eval_dataloaders[dataloader_key] = dataloader
             else:
                 self._eval_dataloaders = {dataloader_key: dataloader}
 
-        return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -1130,7 +1204,7 @@ class Trainer:
             and dataloader_key in self._eval_dataloaders
             and self.args.dataloader_persistent_workers
         ):
-            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+            return self._eval_dataloaders[dataloader_key]
 
         eval_dataset = (
             self.eval_dataset[eval_dataset]
@@ -1745,6 +1819,7 @@ class Trainer:
             if kahan_sum is not None:
                 kahan_sum = bool(kahan_sum)
 
+            adam_kwargs["weight_decay"] = args.weight_decay
             stable_adamw_kwargs = {
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
@@ -2161,6 +2236,12 @@ class Trainer:
 
         self.is_in_train = True
 
+        # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
+            self._align_special_tokens()
+
         # Attach NEFTune hooks if necessary
         if self.neftune_noise_alpha is not None:
             self.model = self._activate_neftune(self.model)
@@ -2363,7 +2444,7 @@ class Trainer:
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
-        use_accelerator_prepare = True if model is self.model else False
+        use_accelerator_prepare = model is self.model
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
             # In case of auto_find_batch_size=True
@@ -3818,7 +3899,7 @@ class Trainer:
 
         kwargs = {}
 
-        # For LOMO optimizers you need to explicitly use the learnign rate
+        # For LOMO optimizers you need to explicitly use the learning rate
         if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             kwargs["learning_rate"] = self._get_learning_rate()
 
@@ -3869,7 +3950,7 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
 
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
@@ -4411,7 +4492,8 @@ class Trainer:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
-        model.eval()
+        if hasattr(model, "eval") and callable(model.eval):
+            model.eval()
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
 
@@ -4621,7 +4703,7 @@ class Trainer:
         return_loss = inputs.get("return_loss")
         if return_loss is None:
             return_loss = self.can_return_loss
-        loss_without_labels = True if len(self.label_names) == 0 and return_loss else False
+        loss_without_labels = len(self.label_names) == 0 and return_loss
 
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:

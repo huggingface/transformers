@@ -141,6 +141,7 @@ class ConfigTester:
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
                 sub_config_loaded_dict = sub_config_loaded.to_dict()
                 sub_config_loaded_dict.pop("transformers_version", None)
+                general_config_dict[sub_config_key].pop("transformers_version", None)
                 self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
 
                 # Verify that the loaded config type is same as in the general config
@@ -152,6 +153,41 @@ class ConfigTester:
                     sub_config_loaded.save_pretrained(tmpdirname2)
                     sub_config_loaded_2 = sub_class.from_pretrained(tmpdirname2)
                     self.parent.assertEqual(sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict())
+
+    def create_and_test_config_from_pretrained_custom_kwargs(self):
+        """
+        Tests that passing custom kwargs to the `from_pretrained` will overwrite model's saved config values.
+        for composite configs. We should overwrite only the requested keys, keeping all values of the
+        subconfig that are loaded from the checkpoint.
+        """
+        # Check only composite configs. We can't know which attributes each type fo config has so check
+        # only text config because we are sure that all text configs have a `vocab_size`
+        config = self.config_class(**self.inputs_dict)
+        if config.get_text_config() is config or not hasattr(self.parent.model_tester, "get_config"):
+            return
+
+        # First create a config with non-default values and save it. The reload it back with a new
+        # `vocab_size` and check that all values are loaded from checkpoint and not init from defaults
+        non_default_inputs = self.parent.model_tester.get_config().to_dict()
+        config = self.config_class(**non_default_inputs)
+        original_text_config = config.get_text_config()
+        text_config_key = [key for key in config if getattr(config, key) is original_text_config]
+
+        # The heuristic is a bit brittle so let's just skip the test
+        if len(text_config_key) != 1:
+            return
+
+        text_config_key = text_config_key[0]
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+
+            # Set vocab size to 20 tokens and reload from checkpoint and check if all keys/values are identical except for `vocab_size`
+            config_reloaded = self.config_class.from_pretrained(tmpdirname, **{text_config_key: {"vocab_size": 20}})
+            original_text_config_dict = original_text_config.to_dict()
+            original_text_config_dict["vocab_size"] = 20
+
+            text_config_reloaded_dict = config_reloaded.get_text_config().to_dict()
+            self.parent.assertDictEqual(text_config_reloaded_dict, original_text_config_dict)
 
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)
@@ -178,14 +214,14 @@ class ConfigTester:
         config = self.config_class(**kwargs)
         wrong_values = []
         for key, value in config_common_kwargs.items():
-            if key == "torch_dtype":
+            if key == "dtype":
                 if not is_torch_available():
                     continue
                 else:
                     import torch
 
-                    if config.torch_dtype != torch.float16:
-                        wrong_values.append(("torch_dtype", config.torch_dtype, torch.float16))
+                    if config.dtype != torch.float16:
+                        wrong_values.append(("dtype", config.dtype, torch.float16))
             elif getattr(config, key) != value:
                 wrong_values.append((key, getattr(config, key), value))
 
@@ -203,3 +239,4 @@ class ConfigTester:
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
+        self.create_and_test_config_from_pretrained_custom_kwargs()

@@ -189,27 +189,27 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
     @require_torch
-    def test_torch_dtype_property(self):
+    def test_dtype_property(self):
         import torch
 
         model_id = "hf-internal-testing/tiny-random-distilbert"
 
         # If dtype is specified in the pipeline constructor, the property should return that type
-        pipe = pipeline(model=model_id, torch_dtype=torch.float16)
-        self.assertEqual(pipe.torch_dtype, torch.float16)
+        pipe = pipeline(model=model_id, dtype=torch.float16)
+        self.assertEqual(pipe.dtype, torch.float16)
 
         # If the underlying model changes dtype, the property should return the new type
         pipe.model.to(torch.bfloat16)
-        self.assertEqual(pipe.torch_dtype, torch.bfloat16)
+        self.assertEqual(pipe.dtype, torch.bfloat16)
 
         # If dtype is NOT specified in the pipeline constructor, the property should just return
         # the dtype of the underlying model (default)
         pipe = pipeline(model=model_id)
-        self.assertEqual(pipe.torch_dtype, torch.float32)
+        self.assertEqual(pipe.dtype, torch.float32)
 
         # If underlying model doesn't have dtype property, simply return None
         pipe.model = None
-        self.assertIsNone(pipe.torch_dtype)
+        self.assertIsNone(pipe.dtype)
 
     @require_torch
     def test_auto_model_pipeline_registration_from_local_dir(self):
@@ -523,22 +523,22 @@ class PipelineUtilsTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         # Case 1: Model is manually moved to device
-        model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-bert", dtype=torch.float16).to(
+            torch_device
+        )
         model_device = model.device
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
         self.assertEqual(pipe.model.device, model_device)
         # Case 2: Model is loaded by accelerate
         model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", device_map=torch_device, torch_dtype=torch.float16
+            "hf-internal-testing/tiny-random-bert", device_map=torch_device, dtype=torch.float16
         )
         model_device = model.device
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
         self.assertEqual(pipe.model.device, model_device)
         # Case 3: device_map is passed to model and device is passed to pipeline
         model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", device_map=torch_device, torch_dtype=torch.float16
+            "hf-internal-testing/tiny-random-bert", device_map=torch_device, dtype=torch.float16
         )
         with self.assertRaises(ValueError):
             pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
@@ -552,9 +552,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         model_device = f"{torch_device}:1"
-        model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
-        ).to(model_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-bert", dtype=torch.float16).to(
+            model_device
+        )
         target_device = f"{torch_device}:0"
         self.assertNotEqual(model_device, target_device)
         pipe = pipeline("text-generation", model=model, device=target_device, tokenizer=tokenizer)
@@ -604,6 +604,34 @@ class PipelineUtilsTest(unittest.TestCase):
     def test_pipeline_accelerator_indexed(self):
         pipe = pipeline("text-generation", device=torch_device)
         _ = pipe("Hello")
+
+    @slow
+    @require_torch
+    def test_bc_torch_device(self):
+        import torch
+
+        from transformers.pipelines import get_supported_tasks
+
+        for task in get_supported_tasks():
+            # Check that it works for all dtypes
+            for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                pipe_torch_dtype = pipeline(task, torch_dtype=dtype)
+                pipe_dtype = pipeline(task, dtype=dtype)
+                # Make sure all parameters have the same dtype
+                for (k1, v1), (k2, v2) in zip(
+                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
+                ):
+                    self.assertEqual(k1, k2)
+                    self.assertEqual(v1.dtype, v2.dtype)
+
+                pipe_torch_dtype = pipeline(task, model_kwargs={"torch_dtype": dtype})
+                pipe_dtype = pipeline(task, model_kwargs={"dtype": dtype})
+                # Make sure all parameters have the same dtype
+                for (k1, v1), (k2, v2) in zip(
+                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
+                ):
+                    self.assertEqual(k1, k2)
+                    self.assertEqual(v1.dtype, v2.dtype)
 
     def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline

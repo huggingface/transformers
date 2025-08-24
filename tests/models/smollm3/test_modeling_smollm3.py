@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -93,7 +92,6 @@ class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # flaky test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions
@@ -172,6 +170,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -199,7 +198,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         model = SmolLM3ForCausalLM.from_pretrained(
             self.model_id,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
