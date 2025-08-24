@@ -175,6 +175,8 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "KeyeTextModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeForConditionalGeneration.
+        "KeyeVisionModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeForConditionalGeneration.
     ]
 )
 
