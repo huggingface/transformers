@@ -205,7 +205,12 @@ class Qwen3MoeMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x, num_tokens_per_expert=None):
+        import os
+
+        if os.environ.get("USE_NEW_MOE", "false") != "false":
+            return self.new_forward(x, num_tokens_per_expert)
+
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -223,8 +228,62 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
             [Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
         )
 
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.gate_proj = nn.Parameter(torch.ones(config.num_experts, config.moe_intermediate_size, config.hidden_size))
+        self.up_proj = nn.Parameter(torch.ones(config.num_experts, config.moe_intermediate_size, config.hidden_size))
+        self.down_proj = nn.Parameter(torch.ones(config.num_experts, config.hidden_size, config.moe_intermediate_size))
+
+    def moe_forward(self, x, num_tokens_per_expert):
+        offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+        g = self.act_fn(torch._grouped_mm(x.bfloat16(), self.gate_proj.bfloat16().transpose(-2, -1), offs=offsets))
+
+        g2 = g * torch._grouped_mm(x.bfloat16(), self.up_proj.bfloat16().transpose(-2, -1), offs=offsets)
+
+        out = torch._grouped_mm(g2, self.down_proj.bfloat16().transpose(-2, -1), offs=offsets).type_as(x)
+        return out
+
+    def _reorder(self, routing_weights, selected_experts):
+        tokens_sorted = torch.argsort(selected_experts.view(-1), stable=True)
+        sorted_routing_weights = routing_weights.view(-1)[tokens_sorted]
+        sorted_selected_experts = tokens_sorted // self.top_k
+
+        return sorted_routing_weights, sorted_selected_experts
+
+    def new_forward(self, hidden_states: torch.Tensor):
+        b, s, h = hidden_states.shape
+        hidden_states = hidden_states.view(-1, h)
+
+        router_logits = self.gate(hidden_states)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+
+        tokens_per_expert = torch.histc(selected_experts.view(-1), bins=self.num_experts, min=0, max=self.num_experts)
+
+        sorted_routing_weights, sorted_selected_experts = self._reorder(routing_weights, selected_experts)
+
+        sorted_selected_experts = sorted_selected_experts.reshape(-1, 1).expand(-1, h)
+
+        routed_input = torch.gather(hidden_states, dim=0, index=sorted_selected_experts)
+
+        routed_output = self.moe_forward(routed_input, tokens_per_expert)
+        routed_output = routed_output.to(torch.float32) * sorted_routing_weights.reshape(-1, 1).type_as(hidden_states)
+
+        out = torch.zeros_like(hidden_states)
+
+        out = out.scatter_add(dim=0, index=sorted_selected_experts, src=routed_output)
+        out = out.reshape(b, s, h)
+
+        return out, router_logits
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
+        import os
+
+        if os.environ.get("USE_NEW_MOE", "false") != "false":
+            return self.new_forward(hidden_states)
+
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
