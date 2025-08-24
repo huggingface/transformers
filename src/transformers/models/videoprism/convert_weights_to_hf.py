@@ -506,6 +506,7 @@ def convert(
                     ]
                 )
                 if checkpoint_info["model_size"] == "base":
+                    
                     assert torch.allclose(outputs[0][:, :9], lvt_video_base_expected_tensor, atol=1e-5), (
                         "Video output does not match expected tensor."
                     )
@@ -530,7 +531,7 @@ def convert(
 
 if __name__ == "__main__":
     convert(
-        model_type="lvt",
+        model_type="backbone",
         model_size="base",
         convert=False,
         upload=False,
