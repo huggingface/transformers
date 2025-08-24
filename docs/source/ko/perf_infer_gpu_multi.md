@@ -61,7 +61,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # 모든 가능한 전략을 시각화하기에 더 좋음
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # 적은 수의 GPU에 더 좋음
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
@@ -97,7 +97,7 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
 print(model._tp_plan)
 ```
 
@@ -247,7 +247,7 @@ Readd this when I get the exact error message
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...
     }
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
     ```
 
 ## 벤치마크[[benchmarks]]

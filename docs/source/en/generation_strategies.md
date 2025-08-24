@@ -32,12 +32,14 @@ Greedy search works well for tasks with relatively short outputs where creativit
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to default length because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -52,12 +54,14 @@ Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -75,12 +79,14 @@ Enable beam search with the `num_beams` parameter (should be greater than 1 othe
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, num_beams=2)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -125,7 +131,7 @@ pipe = pipeline(
     "text-generation",
     model="meta-llama/Llama-3.1-8B",
     assistant_model="meta-llama/Llama-3.2-1B",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
 pipe_output[0]["generated_text"]
@@ -160,12 +166,14 @@ Enable prompt lookup decoding with the `prompt_lookup_num_tokens` parameter.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", torch_dtype=torch.float16).to("cuda")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype=torch.float16).to(device)
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
 outputs = model.generate(**inputs, assistant_model=assistant_model, max_new_tokens=20, prompt_lookup_num_tokens=5)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -226,12 +234,14 @@ Enable contrastive search with the `penalty_alpha` and `top_k` parameters. The `
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -262,11 +272,13 @@ Enable DoLa with the following parameters.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
-inputs = tokenizer("What is the highest peak in the world??", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
+inputs = tokenizer("What is the highest peak in the world??", return_tensors="pt").to(device)
 
 outputs = model.generate(**inputs, max_new_tokens=50, dola_layers="high", do_sample=False)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -280,11 +292,13 @@ Contrast layers 18 and 20 with the final layer.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
-inputs = tokenizer("What is the highest peak in the world?", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
+inputs = tokenizer("What is the highest peak in the world?", return_tensors="pt").to(device)
 
 outputs = model.generate(**inputs, max_new_tokens=50, dola_layers=[18,20], do_sample=False, repetition_penalty=1.2)
 tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
@@ -302,12 +316,14 @@ Enable diverse beam search with the `num_beams`, `num_beam_groups` and `diversit
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)

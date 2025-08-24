@@ -42,6 +42,7 @@ if is_torch_available():
 
     from transformers import (
         DeepseekV3ForCausalLM,
+        DeepseekV3ForSequenceClassification,
         DeepseekV3Model,
     )
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
@@ -215,6 +216,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         (
             DeepseekV3Model,
             DeepseekV3ForCausalLM,
+            DeepseekV3ForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -223,7 +225,9 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV3Model,
+            "text-classification": DeepseekV3ForSequenceClassification,
             "text-generation": DeepseekV3ForCausalLM,
+            "zero-shot": DeepseekV3ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -439,14 +443,14 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -503,6 +507,18 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    def test_deepseek_v3_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
+        model = DeepseekV3ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
 
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
@@ -535,7 +551,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         ]
         tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3", pad_token="</s>", padding_side="right")
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3", device_map=torch_device, torch_dtype=torch.float16
+            "bzantium/tiny-deepseek-v3", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

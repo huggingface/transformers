@@ -19,12 +19,11 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
 
 The model can be used to predict segmentation masks of any object of interest given an input image.
 
@@ -139,41 +138,24 @@ alt="drawing" width="900"/>
 
 [[autodoc]] SamPromptEncoderConfig
 
-
 ## SamProcessor
 
 [[autodoc]] SamProcessor
-
 
 ## SamImageProcessor
 
 [[autodoc]] SamImageProcessor
 
-
 ## SamImageProcessorFast
 
 [[autodoc]] SamImageProcessorFast
-
 
 ## SamVisionModel
 
 [[autodoc]] SamVisionModel
     - forward
 
-
 ## SamModel
 
 [[autodoc]] SamModel
     - forward
-
-
-## TFSamVisionModel
-
-[[autodoc]] TFSamVisionModel
-    - call
-
-
-## TFSamModel
-
-[[autodoc]] TFSamModel
-    - call
