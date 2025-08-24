@@ -100,7 +100,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
-            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
+            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and kernels installed")
 
         if not self.pre_quantized:
             from kernels import get_kernel

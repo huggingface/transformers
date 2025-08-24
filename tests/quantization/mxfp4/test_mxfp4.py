@@ -194,7 +194,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -208,7 +208,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available but model is pre-quantized and dequantize is False"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
