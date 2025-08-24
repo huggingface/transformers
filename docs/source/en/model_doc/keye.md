@@ -336,3 +336,22 @@ print(output_text)
 [[autodoc]] KeyeForConditionalGeneration
     - forward
 
+## KeyeModel
+
+[[autodoc]] KeyeModel
+
+## KeyeTextConfig
+
+[[autodoc]] KeyeTextConfig
+
+## KeyeTextModel
+
+[[autodoc]] KeyeTextModel
+
+## KeyeVisionModel
+
+[[autodoc]] KeyeVisionModel
+
+## KeyeVideoProcessor
+
+[[autodoc]] KeyeVideoProcessor
