@@ -2310,4 +2310,4 @@ class KeyeForConditionalGeneration(KeyePreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
-__all__ = ["KeyeForConditionalGeneration", "KeyeModel", "KeyePreTrainedModel", "KeyeTextModel"]
+__all__ = ["KeyeForConditionalGeneration", "KeyeVisionModel", "KeyeModel", "KeyePreTrainedModel", "KeyeTextModel"]

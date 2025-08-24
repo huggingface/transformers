@@ -19,6 +19,7 @@
 # limitations under the License.
 
 
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -26,9 +27,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
+from torchvision.transforms import functional as TF
 
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    eager_attention_forward,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLDecoderLayer,
@@ -40,33 +44,35 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     apply_multimodal_rotary_pos_emb,
     apply_rotary_pos_emb_vision,
-    eager_attention_forward,
+    repeat_kv,
 )
-from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2RMSNorm
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
+
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from transformers.models.siglip.configuration_siglip import KeyeVisionConfig
-from transformers.models.siglip.modeling_siglip import (
-    SiglipMLP,
-    SiglipMultiheadAttentionPoolingHead,
-    SiglipVisionModelOutput,
-)
+from transformers.models.siglip.modeling_siglip import SiglipMLP, SiglipMultiheadAttentionPoolingHead, SiglipVisionModelOutput
 
 from ...activations import GELUActivation
 from ...cache_utils import Cache
-from ...image_processing_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     SizeDict,
+    PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
+    valid_images,
+    validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -76,11 +82,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     ALL_ATTENTION_FUNCTIONS,
+    sdpa_attention_forward,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     auto_docstring,
     can_return_tuple,
@@ -92,8 +101,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
-
+from ...video_utils import VideoInput, make_batched_videos, group_videos_by_shape, reorder_videos, VideoMetadata
 
 logger = logging.get_logger(__name__)
 
@@ -401,7 +409,7 @@ class KeyeImageProcessor(Qwen2VLImageProcessor):
             patch_size=patch_size,
             temporal_patch_size=temporal_patch_size,
             merge_size=merge_size,
-            **kwargs,
+            **kwargs
         )
 
     def _preprocess(
@@ -531,6 +539,7 @@ class KeyeImageProcessor(Qwen2VLImageProcessor):
         return flatten_patches, (grid_t, grid_h, grid_w)
 
 
+
 class KeyeVideoProcessor(Qwen2VLVideoProcessor):
     def _preprocess(
         self,
@@ -559,6 +568,7 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
         device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
+            
         if do_sample_frames:
             # Sample video frames
             videos = [
@@ -633,9 +643,7 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
                 self.patch_size,
             )
             patches = patches.permute(0, 3, 5, 2, 1, 4, 6)
-            flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * self.patch_size * self.patch_size
-            )
+            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * self.patch_size * self.patch_size)
 
             processed_videos_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
@@ -648,7 +656,7 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
         pixel_values_videos = pixel_values_videos.reshape(-1, channel, self.patch_size, self.patch_size)
 
         return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw":  video_grid_thw},
             tensor_type=return_tensors,
         )
         # return flatten_patches, (grid_t, grid_h, grid_w)
@@ -1132,7 +1140,6 @@ class KeyeVisionEncoder(nn.Module):
             attentions=all_attentions,
         )
 
-
 class KeyeVisionModelOutput(SiglipVisionModelOutput):
     pass
 
@@ -1153,8 +1160,6 @@ KEYEVISION_VISION_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-
 class KeyeVisionTransformer(nn.Module):
     def __init__(self, config: KeyeVisionConfig):
         super().__init__()
@@ -1386,7 +1391,6 @@ class KeyeVisionModel(KeyePreTrainedModel):
 class KeyeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
-
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -1574,19 +1578,21 @@ class KeyeProjector(nn.Module):
         for image_feature, image_grid in zip(image_features, image_grid_thw):
             image_feature = self.pre_norm(image_feature)
             time, height, width = image_grid
+            from einops import rearrange
 
             image_feature = (
-                image_feature.view(time, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
+                image_feature
+                .view(time, height // h_kernel, h_kernel,
+                    width  // w_kernel,  w_kernel,  -1)
                 .permute(0, 1, 3, 2, 4, 5)
-                .flatten(0, 2)  # T*H*W
-                .flatten(1, 3)  # h_kernel*w_kernel*D
+                .flatten(0, 2)                    # T*H*W
+                .flatten(1, 3)                    # h_kernel*w_kernel*D
             )
             hidden_states = self.linear_1(image_feature)
             hidden_states = self.act(hidden_states)
             hidden_states = self.linear_2(hidden_states)
             processed_features.append(hidden_states)
         return processed_features
-
 
 class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
     config: KeyeConfig
@@ -2331,10 +2337,11 @@ class KeyeForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
 __all__ = [
     "KeyeForConditionalGeneration",
+    "KeyeVisionModel",
     "KeyeModel",
     "KeyeConfig",
     "KeyePreTrainedModel",
     "KeyeProcessor",
     "KeyeTextConfig",
-    "KeyeTextModel",
+    "KeyeTextModel"
 ]
