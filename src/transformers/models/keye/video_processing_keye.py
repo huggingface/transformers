@@ -66,7 +66,7 @@ class KeyeVideoProcessorInitKwargs(VideosKwargs):
 
 
 @add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
+    "Constructs a fast Keye-VL image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         min_pixels (`int`, *optional*, defaults to `56 * 56`):

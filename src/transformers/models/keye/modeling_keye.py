@@ -845,6 +845,7 @@ class KeyePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@auto_docstring
 class KeyeVisionModel(KeyePreTrainedModel):
     config_class = KeyeVisionConfig
     main_input_name = "pixel_values"

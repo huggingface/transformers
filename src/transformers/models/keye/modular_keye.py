@@ -101,6 +101,9 @@ from ...utils import (
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...video_processing_utils import (
+    BASE_VIDEO_PROCESSOR_DOCSTRING
+)
 from ...video_utils import VideoInput, make_batched_videos, group_videos_by_shape, reorder_videos, VideoMetadata
 
 logger = logging.get_logger(__name__)
@@ -312,7 +315,6 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "keye_text"
     base_config_key = "text_config"
 
@@ -539,7 +541,27 @@ class KeyeImageProcessor(Qwen2VLImageProcessor):
         return flatten_patches, (grid_t, grid_h, grid_w)
 
 
-
+@add_start_docstrings(
+    "Constructs a fast Keye-VL image processor that dynamically resizes videos based on the original videos.",
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
+    """
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+        min_frames (`int`, *optional*, defaults to 4):
+            The minimum number of frames that can be sampled.
+        max_frames (`int`, *optional*, defaults to 768):
+            The maximum number of frames that can be sampled.
+    """,
+)
+@requires(backends=("torchvision",))
 class KeyeVideoProcessor(Qwen2VLVideoProcessor):
     def _preprocess(
         self,
@@ -1103,6 +1125,7 @@ class KeyeVisionEncoder(nn.Module):
             attentions=all_attentions,
         )
 
+
 class KeyeVisionModelOutput(SiglipVisionModelOutput):
     pass
 
@@ -1284,6 +1307,7 @@ class KeyePreTrainedModel(Qwen2_5_VLPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@auto_docstring
 class KeyeVisionModel(KeyePreTrainedModel):
     config_class = KeyeVisionConfig
     main_input_name = "pixel_values"
@@ -1551,6 +1575,7 @@ class KeyeProjector(nn.Module):
             processed_features.append(hidden_states)
         return processed_features
 
+@auto_docstring
 class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
     config: KeyeConfig
     base_model_prefix = ""
