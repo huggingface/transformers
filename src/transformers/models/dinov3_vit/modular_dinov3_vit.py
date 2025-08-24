@@ -15,7 +15,7 @@
 """PyTorch DINOv3 model."""
 
 import math
-from typing import Callable, Optional
+from typing import Callable, Optional , List, Union
 
 import numpy as np
 import torch
@@ -40,6 +40,8 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
+from ...utils.backbone_utils import BackboneMixin
+from ...modeling_outputs import BackboneOutput
 
 
 logger = logging.get_logger(__name__)
@@ -425,5 +427,121 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             pooler_output=pooled_output,
         )
 
+    def get_intermediate_layers(
+        self, 
+        pixel_values: torch.Tensor, 
+        n: Union[int, List[int]] = 1,
+        reshape: bool = False,
+        norm: bool = True,
+    ) -> List[torch.Tensor]:
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        batch_size, _, height, width = pixel_values.shape
+        
+        hidden_states = self.embeddings(pixel_values, bool_masked_pos=None)
+        position_embeddings = self.rope_embeddings(pixel_values)
+        
+        all_intermediate_states = [hidden_states]
+        
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(
+                hidden_states,
+                attention_mask=None,
+                position_embeddings=position_embeddings,
+            )
+            all_intermediate_states.append(hidden_states)
+        
+        final_normalized = self.norm(hidden_states)
+        all_intermediate_states.append(final_normalized)
+        
+        if isinstance(n, int):
+            num_transformer_layers = len(self.layer)
+            start_stage = max(1, num_transformer_layers - n + 1)
+            selected_stage_indices = list(range(start_stage, num_transformer_layers + 1))
+        else:
+            max_index = max(n) if n else 0
+            num_stages = len(all_intermediate_states)
+            
+            if max_index >= num_stages:
+                selected_stage_indices = [idx + 1 for idx in n if idx + 1 < num_stages]
+            else:
+                selected_stage_indices = [idx for idx in n if idx < num_stages]
+        
+        intermediate_outputs = []
+        
+        for stage_idx in selected_stage_indices:
+            if stage_idx >= len(all_intermediate_states):
+                continue
+                
+            output = all_intermediate_states[stage_idx]
+            
+            is_final_stage = (stage_idx == len(all_intermediate_states) - 1)
+            if norm and not is_final_stage:
+                output = self.norm(output)
+            
+            if reshape:
+                num_prefix_tokens = 1 + self.config.num_register_tokens
+                patch_tokens = output[:, num_prefix_tokens:]
+                
+                patch_size = self.config.patch_size
+                num_patches_h = height // patch_size
+                num_patches_w = width // patch_size
+                
+                expected_patches = num_patches_h * num_patches_w
+                actual_patches = patch_tokens.shape[1]
+                
+                if actual_patches != expected_patches:
+                    raise ValueError(
+                        f"Patch token count mismatch. Expected {expected_patches} "
+                        f"({num_patches_h}x{num_patches_w}), got {actual_patches}. "
+                        f"Input size: {height}x{width}, patch size: {patch_size}"
+                    )
+                
+                spatial_output = patch_tokens.reshape(
+                    batch_size, 
+                    num_patches_h, 
+                    num_patches_w, 
+                    self.config.hidden_size
+                ).permute(0, 3, 1, 2).contiguous()
+                
+                intermediate_outputs.append(spatial_output)
+            else:
+                intermediate_outputs.append(output)
+        
+        return intermediate_outputs
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
+
+
+@auto_docstring  
+class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+        
+        # Use the full model
+        self.dinov3 = DINOv3ViTModel(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.post_init()
+    
+    def get_input_embeddings(self):
+        return self.dinov3.get_input_embeddings()
+    
+    def forward(self, pixel_values: torch.Tensor, return_dict: Optional[bool] = None) -> BackboneOutput:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        # Use Facebook's pattern: get_intermediate_layers with reshape=True
+        layer_outputs = self.dinov3.get_intermediate_layers(
+            pixel_values,
+            n=self._out_indices,
+            reshape=self.config.reshape_hidden_states,
+            norm=self.config.apply_layernorm
+        )
+        
+        feature_maps = tuple(layer_outputs)
+        
+        if not return_dict:
+            return (feature_maps,)
+        
+        return BackboneOutput(feature_maps=feature_maps)
+
+
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]
