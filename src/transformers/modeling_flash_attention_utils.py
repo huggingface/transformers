@@ -352,7 +352,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
         max_length_q = int(q_len.max())
         max_length_k = int(last_position_ids.max()) + 1
     else:
-        position_ids = position_ids.reshape(-1)
+        position_ids = position_ids.view(-1)
         indices_q = (position_ids == 0).nonzero().view(-1)
 
         cu_seq_lens_q = torch.cat(
