@@ -711,7 +711,7 @@ In summary:"""
         # fmt: on
 
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
-        generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
 
         torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279, 467, 19859, 4180, 4168, 572, 264, 882, 315, 2244, 2297, 304, 5616, 13, 576, 66827, 66846, 572, 304, 17704]], dtype=torch.long)) # fmt: skip
         self.assertEqual(
