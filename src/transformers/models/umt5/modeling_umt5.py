@@ -997,10 +997,6 @@ class UMT5Model(UMT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    # Copied from transformers.models.t5.modeling_t5.T5Model.get_decoder
-    def get_decoder(self):
-        return self.decoder
-
     # Copied from transformers.models.t5.modeling_t5.T5Model._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
@@ -1213,10 +1209,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
     def get_encoder(self):
         return self.encoder
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_decoder
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(
@@ -1787,10 +1779,6 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
     def get_encoder(self):
         return self.encoder
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_decoder
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(
