@@ -34,6 +34,7 @@ def generate_simple(
     attn_implementation = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
+        "flash_paged": "flash_attention_2",
     }[attn_implementation]
 
     model = (
@@ -205,7 +206,6 @@ if __name__ == "__main__":
         MODEL_ID,
         attn_implementation=args.attn,
         dtype=torch.bfloat16,
-        torch_dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
 
