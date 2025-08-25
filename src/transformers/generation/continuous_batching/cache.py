@@ -274,7 +274,9 @@ class PagedAttentionMemoryHandler:
         logger.info(f"Cache memory: {cache_memory}")
 
         # Compute memory footprints # TODO: check and explain better
-        mem_per_activation_token = self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
+        mem_per_activation_token = (
+            self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
+        )
         mem_per_cache_token = 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
         mem_per_input_token = 8 * m * self._input_dtype.itemsize
         logger.info(f"Memory per activation token: {mem_per_activation_token}")

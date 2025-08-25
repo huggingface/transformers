@@ -55,15 +55,18 @@ def setup_metrics():
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-
         resource = Resource.create({"service.name": "transformers"})
         metrics_exporter = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
-            export_interval_millis=1000
+            OTLPMetricExporter(
+                endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"
+            ),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
+            export_interval_millis=1000,
         )
         meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
         metrics.set_meter_provider(meter_provider)
-        trace_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
+        trace_exporter = OTLPSpanExporter(
+            endpoint="http://localhost:4318/v1/traces"
+        )  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
         tracer_provider = TracerProvider(resource=resource)
         tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
         trace.set_tracer_provider(tracer_provider)
@@ -214,9 +217,7 @@ if __name__ == "__main__":
     # If no output file is provided, we pick a name based on the args
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
-        args.output_file = (
-            f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}.json"
-        )
+        args.output_file = f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}.json"
 
     # Run warmup batch generation
     batch_generate(
