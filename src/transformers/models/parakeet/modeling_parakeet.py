@@ -402,9 +402,10 @@ class ParakeetPreTrainedModel(PreTrainedModel):
 
         return lengths.to(dtype=torch.int)
 
-    def _get_output_attention_mask(self, attention_mask: torch.Tensor):
+    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: Optional[int] = None):
         output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
-        max_length = output_lengths.max()
+        # Use target_length if provided, otherwise use max length in batch
+        max_length = target_length if target_length is not None else output_lengths.max()
         attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
         return attention_mask
 
@@ -448,9 +449,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask)
-
             # TODO: @eustlb, which mask utils to do the same?
+            # Ensure attention mask matches the actual sequence length of hidden states
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
@@ -463,9 +464,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
-            if to_drop:
-                hidden_states = None
-            else:
+            # skip the layer when `to_drop=True``, rather than setting `hidden_states=None`
+            # which can cause error when computing loss on None output
+            if not to_drop:
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -551,7 +552,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
                     flattened_targets,
                     input_lengths,
                     target_lengths,
-                    blank=self.config.pad_token_id,
+                    blank=self.config.blank_token_id,
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )

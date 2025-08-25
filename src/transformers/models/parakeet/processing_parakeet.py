@@ -12,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import Unpack
+""" Parakeet processor class. """
 
 from ...audio_utils import AudioInput
-from ...processing_utils import ProcessorMixin, ProcessingKwargs
+from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...feature_extraction_utils import BatchFeature
 from ...utils import logging, is_torch_available
 

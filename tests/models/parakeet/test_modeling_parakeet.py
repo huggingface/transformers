@@ -13,15 +13,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch Parakeet model."""
 
+import tempfile
 import unittest
 import json
 from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device, require_torch_sdpa
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_datasets_available():
@@ -126,6 +127,34 @@ class ParakeetEncoderModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
+    
+    def check_ctc_loss(self, config, input_values, *args):
+        model = ParakeetForCTC(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
 
 
 @require_torch
@@ -163,6 +192,9 @@ class ParakeetForCTCModelTester:
 
         self.batch_size = self.encoder_model_tester.batch_size
         self.output_seq_length = self.encoder_model_tester.output_seq_length
+        self.num_hidden_layers = self.encoder_model_tester.num_hidden_layers
+        self.seq_length = vocab_size
+        self.hidden_size = self.encoder_model_tester.hidden_size
 
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id
@@ -194,6 +226,10 @@ class ParakeetForCTCModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
+    
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.encoder_model_tester.check_ctc_loss(*config_and_inputs)
 
 
 @require_torch
@@ -230,14 +266,41 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    # Original function assumes (vision+text model) 
+    # Below is modified from `tests/models/granite_speech/test_modeling_granite_speech.py` and removes language model
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        # overwrite because Granite Speech is audio+text model (not vision+text)
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
 
 @require_torch
 class ParakeetForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
     def setUp(self):
-        # TODO: update with the correct checkpoint
-        # self.checkpoint_name = "eustlb/parakeet-ctc-1.1b"
         self.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
         self.dtype = torch.float32
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
@@ -248,7 +311,6 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
     @classmethod
     def _load_dataset(cls):
         # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
-        # TODO way to get sample rate from processor?
         if cls._dataset is None:
             cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
             cls._dataset = cls._dataset.cast_column("audio", Audio(sampling_rate=16000))
@@ -297,29 +359,15 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
-        # # TODO eustlb's token have slightly less mismatch -> Mismatched elements: 1 / 1840 (0.1%)
-        # EXPECTED_TOKEN_IDS = torch.tensor(
-        #     [
-        #         [1024, 1024, 1024, 1024, 1024, 1024, 19, 37, 132, 1024, 1024, 264, 128, 1024, 1024, 1024, 132, 1024, 58, 1024, 5, 645, 1024, 1000, 82, 52, 1024, 34, 1024, 5, 19, 68, 1007, 52, 1024, 235, 1024, 388, 1024, 27, 1024, 25, 1024, 56, 1024, 103, 1024, 1024, 727, 112, 1024, 22, 1024, 56, 1006, 1009, 405, 1024, 1024, 217, 1024, 1024, 95, 1003, 1024, 133, 1006, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024],
-        #         [1024, 1024, 1024, 1024, 1024, 1024, 1024, 42, 28, 1024, 1024, 58, 1024, 19, 37, 1024, 132, 1024, 264, 128, 1024, 1024, 132, 1024, 1019, 1003, 1024, 284, 1024, 896, 1024, 32, 154, 1024, 715, 1024, 1024, 1024, 1024, 21, 1024, 322, 1024, 1024, 1024, 217, 1024, 1024, 1024, 1024, 19, 1024, 710, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024],
-        #         [1024, 1024, 1024, 1024, 1024, 1024, 1024, 67, 1024, 634, 1024, 1024, 1003, 1024, 208, 1024, 1024, 39, 1024, 1024, 124, 1024, 1024, 77, 1024, 1024, 1024, 20, 156, 1024, 1024, 171, 1024, 1024, 101, 1024, 667, 1024, 1024, 34, 1024, 5, 1024, 696, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 93, 1024, 1024, 1024, 1024, 121, 1004, 172, 1024, 1010, 43, 1024, 25, 1024, 343, 250, 1024, 1024, 1024, 50, 1024, 846, 1024, 1024, 304, 44, 1024, 1024, 21, 1024, 1024, 497, 1024, 1024, 208, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 596, 1024, 1024, 1024, 128, 1024, 1024, 27, 1024, 26, 96, 447, 1024, 176, 1024, 48, 1024, 1024, 599, 1024, 25, 1024, 525, 1024, 1024, 338, 1024, 411, 1003, 1024, 1024, 9, 1009, 1024, 1024, 1009, 83, 1024, 1024, 463, 1024, 788, 1024, 1024, 522, 1024, 22, 1024, 5, 1024, 19, 191, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024],
-        #         [1024, 1024, 1024, 1024, 1024, 1024, 67, 1024, 1024, 244, 1024, 1024, 657, 1024, 47, 1024, 1024, 26, 13, 1016, 998, 1003, 1024, 789, 1024, 1024, 8, 94, 1024, 20, 265, 1024, 12, 12, 363, 184, 120, 1024, 1024, 1024, 18, 1024, 1019, 1003, 337, 1024, 1024, 58, 1024, 1024, 254, 1024, 1024, 1024, 1024, 1024, 41, 302, 1018, 1024, 1024, 451, 1024, 1024, 1024, 1024, 142, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 25, 1024, 1024, 117, 1024, 1024, 1024, 321, 1024, 394, 1024, 71, 1024, 35, 1024, 45, 1024, 106, 1024, 1024, 1024, 401, 1024, 1024, 1024, 34, 1024, 1024, 1024, 343, 1024, 137, 1024, 1024, 1011, 1024, 45, 1005, 1024, 765, 1024, 1024, 999, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024],
-        #         [1024, 1024, 1024, 1024, 1024, 1024, 32, 1024, 10, 728, 728, 30, 1024, 1024, 1019, 1003, 1024, 24, 433, 1024, 799, 1024, 1024, 103, 1024, 1024, 3, 1024, 903, 1024, 1024, 34, 1024, 1024, 1024, 1024, 1024, 190, 1024, 1024, 1024, 415, 203, 1024, 1003, 1003, 25, 1024, 273, 1024, 1024, 104, 1024, 1024, 1024, 24, 164, 1024, 1024, 467, 1003, 1024, 1024, 1024, 1024, 1024, 25, 1024, 1024, 19, 1024, 1024, 1024, 667, 1024, 1019, 1003, 1024, 146, 1024, 162, 37, 1024, 320, 1024, 4, 1007, 1011, 1011, 30, 1024, 1003, 1024, 103, 1024, 1024, 88, 1024, 1024, 1024, 42, 1024, 1024, 1024, 895, 1024, 88, 1024, 1024, 3, 1024, 92, 1024, 21, 1024, 1024, 1000, 1024, 1024, 325, 1024, 1024, 215, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 747, 1024, 1024, 1024, 16, 83, 1024, 1018, 1024, 63, 1024, 453, 1024, 82, 1024, 12, 1024, 1019, 1003, 32, 187, 1003, 1024, 1009, 354, 27, 1024, 1024, 1024, 1024, 524, 1024, 429, 1024, 1024, 124, 1024, 1024, 165, 1024, 1024, 1024, 1024, 417, 1024, 1024, 35, 5, 1024, 545, 1024, 1024, 317, 1024, 1024, 39, 1024, 747, 1024, 1024, 1024, 1024, 15, 1024, 475, 1024, 1024, 1024, 12, 1024, 1024, 713, 1024, 1024, 1024, 22, 1024, 428, 1024, 958, 1024, 1024, 217, 1024, 1024, 261, 63, 1005, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 25, 1024, 1024, 747, 1024, 1024, 1024, 1024, 494, 1005, 1002, 1024, 737, 1024, 1024, 1001, 1024, 12, 1024, 1024, 1024, 41, 300, 1024, 27, 1024, 217, 1024, 882, 1024, 1024, 132, 1024, 1024, 3, 1024, 1024, 681, 12, 1024, 1024, 535, 1024, 1024, 635, 1024, 354, 1024, 1024, 1024, 62, 1024, 5, 1024, 344, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 497, 1024, 1024, 67, 1024, 1024, 858, 1024, 1024, 1024, 1024, 144, 1024, 3, 1024, 1024, 1024, 100, 104, 1024, 1015, 1024, 127, 1024, 12, 1024, 35, 1024, 3, 1, 83, 1018, 1024, 391, 1024, 1024, 16, 563, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 608, 1024, 1024, 1024, 1024, 284, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024],
-        #     ]
-        # )
-
-        samples = self._load_datasamples(1)
+        samples = self._load_datasamples(5)
         model = ParakeetForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
         model.eval()
         model.to(torch_device)
-
-        samples = self._load_datasamples(5)
 
         # -- apply
         inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
-        # # -- Mismatched elements: 2 / 1840 (0.1%)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(predicted_ids)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
