@@ -963,3 +963,45 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
+
+# Remove duplicate import
+# from .utils import (
+#     CONFIG_NAME,
+#     MODEL_CARD_NAME,
+#     PYTORCH_PRETRAINED_BERT_CACHE,
+#     PYTORCH_TRANSFORMERS_CACHE,
+#     SPIECE_UNDERLINE,
+#     TF2_WEIGHTS_NAME,
+#     TF_WEIGHTS_NAME,
+#     TRANSFORMERS_CACHE,
+#     WEIGHTS_NAME,
+#     TensorType,
+#     add_code_sample_docstrings,
+#     add_end_docstrings,
+#     add_start_docstrings,
+#     is_tf_available,
+#     is_torch_available,
+#     logging,
+# )
+
+# Fix potential circular import by ensuring proper ordering
+if TYPE_CHECKING:
+    from .models.auto import (
+        AutoConfig,
+        AutoModel,
+        AutoTokenizer,
+    )
+
+# Add proper error handling for optional dependencies
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    from .models.auto import (
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForSequenceClassification,
+        # ... other auto models
+    )
