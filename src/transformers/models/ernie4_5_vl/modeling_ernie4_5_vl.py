@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Ernie VL model"""
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -22,7 +21,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
@@ -462,7 +461,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         if self.shared_experts is not None:
             final_hidden_states = final_hidden_states + shared_output
 
-        return final_hidden_states, None, 1, router_logits
+        return final_hidden_states, router_logits
 
 
 # Copy Ernie 4.5 Moe
@@ -502,17 +501,15 @@ class Ernie4_5_DecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        (hidden_states, self_attn_weights, present_key_value, *router_loss_attn) = (
-            self.self_attn(
-                hidden_states=hidden_states,
-                past_key_value=past_key_value,
-                attention_mask=attention_mask,
-                attn_mask_start_row_indices=attn_mask_start_row_indices,
-                position_ids=position_ids,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                token_type_ids=token_type_ids,
-            )
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            past_key_value=past_key_value,
+            attention_mask=attention_mask,
+            attn_mask_start_row_indices=attn_mask_start_row_indices,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            token_type_ids=token_type_ids,
         )
         hidden_states = hidden_states + residual
 
@@ -521,12 +518,12 @@ class Ernie4_5_DecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
 
         if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
-            hidden_states, _, router_loss, gate_logits = self.mlp(
+            hidden_states, gate_logits = self.mlp(
                 hidden_states, token_type_ids
             )
         else:
             hidden_states = self.mlp(hidden_states)
-            gate_logits, router_loss = None, None
+            gate_logits = None
 
         hidden_states = hidden_states + residual
 
@@ -537,11 +534,6 @@ class Ernie4_5_DecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
-
-        # Non-empty only if `use_moe`
-        if router_loss_attn:
-            router_loss_attn = router_loss_attn[0]
-            router_loss = router_loss + router_loss_attn
 
         if output_gate_logits:
             outputs += (gate_logits,)
@@ -713,15 +705,12 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
                 if v is not None
             )
 
-        # assert all_router_loss is None, f'moe not support `return-dict`'
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            cross_attentions=None,
-            router_loss=all_router_loss,
-            gate_logits=all_gate_logits,
+            router_logits=all_gate_logits,
         )
 
 
@@ -1181,8 +1170,8 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
 
         self.image_preprocess = image_preprocess
 
-    # TODO: move to get xxx features
-    def vision_forward(self, images, grid_thw):
+    # TODO: move to processor
+    def forward_image_preprocess(self, images):
         if self.image_preprocess is not None:
             assert images.dtype == torch.uint8, images.dtype
             current_device = images.device
@@ -1199,36 +1188,63 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
             images = images.to(torch.bfloat16)
         else:
             assert images.dtype == torch.bfloat16, images.dtype
-        # logger.info(f"extract feature input - {images}--{grid_thw}")
-        if grid_thw is not None:
-            grid_thw = grid_thw[grid_thw > 0].reshape([-1, 3])
+
+        return images
+
+    # TODO: same with videos
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        if image_grid_thw is not None:
+            grid_thw = image_grid_thw[image_grid_thw > 0].reshape([-1, 3])
             grid_thw = F.pad(
                 torch.repeat_interleave(grid_thw[:, 1:], grid_thw[:, 0], 0),
                 [1, 0, 0, 0],
                 value=1,
             )
-        image_features = self.vision_tower(images, grid_thw)
-        return image_features
+        image_embeds = self.vision_tower(pixel_values, grid_thw)
+        image_embeds = self.resampler_model(image_embeds, grid_thw)
+        return image_embeds
 
-    # TODO: move to get xxx features
-    def vision_mapping_forward(
+    # TODO: fixup with videos, iirc this is not handled with a token atm
+    def get_placeholder_mask(
         self,
-        input_ids,
-        image_features,
-        inputs_embeds,
-        grid_thw,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
     ):
-        image_mask = input_ids == self.config.image_token_id
-        image_features = self.resampler_model(image_features, grid_thw)
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            #special_video_mask = input_ids == self.config.video_token_id
 
-        if image_features.dim == 2:
-            B, N, C = image_features.shape
-            image_features = image_features.reshape([B * N, C]).to(inputs_embeds.dtype)
-        # Will overwrite the part of `ids==image_token_id` in `mm_ids_features`
-        inputs_embeds[image_mask.to(inputs_embeds.device)] = image_features.to(
-            inputs_embeds.device
-        )
-        return inputs_embeds
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        """n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )"""
+
+        #return special_image_mask, special_video_mask
+        return special_image_mask, None
 
     def forward(
         self,
@@ -1245,40 +1261,27 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         grid_thw: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        if grid_thw is not None:
-            grid_thw = grid_thw[grid_thw > 0].reshape([-1, 3])
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # TODO: check if we can do similar with videos
-        image_mask = input_ids == self.config.image_token_id
+        # TODO: logic change for input embeds and videos
+        inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if past_key_values is None and images is not None:
-            assert (image_mask).any().item(), (
-                image_mask.detach().cpu().numpy().tolist(),
-                input_ids.detach().cpu().numpy().tolist(),
-                self.config.image_token_id,
-                images.shape,
-            )
-            image_features = self.vision_forward(images, grid_thw)
-        else:
-            image_features = None
+            # TODO: change logic to preprocessor
+            pixel_values = self.forward_image_preprocess(images)
 
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw=grid_thw)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        # TODO: add and check logic with videos ("or" mask?)
         if token_type_ids is None:
             token_type_ids = image_mask.to(torch.int64)
-
-        lm_input_ids = input_ids.clone()
-        inputs_embeds = self.language_model.embed_tokens(lm_input_ids)
         token_type_ids[token_type_ids == TokenType.video] = TokenType.image
-
-        if images is not None and image_features is not None:
-            inputs_embeds = self.vision_mapping_forward(
-                input_ids,
-                image_features,
-                inputs_embeds,
-                grid_thw,
-            )
 
         outputs = self.language_model(
             position_ids=position_ids,
@@ -1292,14 +1295,12 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
             return_dict=True,
         )
 
-        # TODO: change output type
-        return CausalLMOutputWithCrossAttentions(
-            loss=None,
-            logits=outputs.last_hidden_state,
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_loss=outputs.router_loss,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1330,7 +1331,7 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         if isinstance(outputs, tuple) and len(outputs) > 1 and not isinstance(outputs[1], torch.Tensor):
             model_kwargs["past_key_values"] = outputs[1]
 
-        if isinstance(outputs, CausalLMOutputWithCrossAttentions) and "past_key_values" in outputs:
+        if isinstance(outputs, MoeCausalLMOutputWithPast) and "past_key_values" in outputs:
             model_kwargs["past_key_values"] = outputs.past_key_values
 
         # update token_type_ids with last value
@@ -1449,77 +1450,23 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         )
 
         if not use_cache:
-            logits = self.lm_head(outputs.logits)
+            logits = self.lm_head(outputs.last_hidden_state)
         else:
-            logits = self.lm_head(outputs.logits[:, -1:, :])
+            logits = self.lm_head(outputs.last_hidden_state[:, -1:, :])
 
         # aka Generate Decoding
-        loss = None
-        return CausalLMOutputWithCrossAttentions(
+        loss = None  # TODO
+        aux_loss = None  # TODO: load balancing loss
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_loss=outputs.router_loss,
+            router_logits=outputs.router_logits,
         )
-
-
-@dataclass
-class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
-    """
-    Base class for model outputs with past key values and cross attention layers,
-    with additional support for router components in mixture-of-experts models.
-
-    This extends the base model output to include:
-    1. Router-related outputs for expert selection
-    2. Maintains all existing functionality from the parent class
-    """
-
-    last_hidden_state: Optional[tuple[torch.Tensor]] = None
-    past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None
-    hidden_states: Optional[tuple[torch.Tensor]] = None
-    attentions: Optional[tuple[torch.Tensor]] = None
-    cross_attentions: Optional[tuple[torch.Tensor]] = None
-    router_loss: Optional[torch.Tensor] = None
-    gate_logits: Optional[tuple[torch.Tensor]] = None
-
-
-@dataclass
-class CausalLMOutputWithCrossAttentions(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`
-            is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or
-            when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        router_loss (Optional[torch.Tensor]):
-            The routing loss computed by the gating network in mixture-of-experts models.
-            This is typically the load balancing loss that encourages equal expert utilization.
-            None when not using mixture-of-experts routing.
-    """
-
-    loss: Optional[torch.Tensor] = None
-    logits: torch.Tensor = None
-    past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None
-    hidden_states: Optional[tuple[torch.Tensor]] = None
-    attentions: Optional[tuple[torch.Tensor]] = None
-    router_loss: Optional[tuple[torch.Tensor]] = None
 
 
 __all__ = [
