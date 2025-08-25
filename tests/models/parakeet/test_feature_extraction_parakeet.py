@@ -11,22 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the FastConformer feature extraction."""
+"""Testing suite for the Parakeet feature extraction."""
 
 import itertools
 import random
+import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import ParakeetFeatureExtractor
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
-    pass
+    import torch
 
 
 global_rng = random.Random()
@@ -46,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class FastConformerFeatureExtractionTester:
+class ParakeetFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -88,136 +90,128 @@ class FastConformerFeatureExtractionTester:
             "return_attention_mask": self.return_attention_mask,
         }
 
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTester.prepare_inputs_for_common
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
         def _flatten(list_of_lists):
             return list(itertools.chain(*list_of_lists))
 
         if equal_length:
-            speech_inputs = [_flatten(floats_list((1, self.max_seq_length))) for _ in range(self.batch_size)]
+            speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
         else:
             # make sure that inputs increase in size
             speech_inputs = [
-                _flatten(floats_list((1, x)))
+                floats_list((x, self.feature_size))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
             ]
-
         if numpify:
             speech_inputs = [np.asarray(x) for x in speech_inputs]
-
         return speech_inputs
 
 
-class FastConformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ParakeetFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = FastConformerFeatureExtractionTester(self)
+        self.feat_extract_tester = ParakeetFeatureExtractionTester(self)
 
-    # @property
-    # def feat_extract_dict(self):
-    #     return self.feat_extract_tester.prepare_feat_extract_dict()
+    @property
+    def feat_extract_dict(self):
+        return self.feat_extract_tester.prepare_feat_extract_dict()
 
-    # def test_feat_extract_common_properties(self):
-    #     feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-    #     self.assertTrue(hasattr(feat_extract, "feature_size"))
-    #     self.assertTrue(hasattr(feat_extract, "sampling_rate"))
-    #     self.assertTrue(hasattr(feat_extract, "hop_length"))
+    def test_feat_extract_common_properties(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feat_extract, "feature_size"))
+        self.assertTrue(hasattr(feat_extract, "sampling_rate"))
+        self.assertTrue(hasattr(feat_extract, "hop_length"))
 
-    # def test_feat_extract_from_and_save_pretrained(self):
-    #     feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+    def test_feat_extract_from_and_save_pretrained(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         feat_extract_first.save_pretrained(tmpdirname)
-    #         feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            feat_extract_first.save_pretrained(tmpdirname)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
-    #     dict_first = feat_extract_first.to_dict()
-    #     dict_second = feat_extract_second.to_dict()
-    #     self.assertEqual(dict_first, dict_second)
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
 
-    # def test_init_without_params(self):
-    #     feat_extract = self.feature_extraction_class()
-    #     self.assertIsNotNone(feat_extract)
+    def test_init_without_params(self):
+        feat_extract = self.feature_extraction_class()
+        self.assertIsNotNone(feat_extract)
 
-    # @require_torch
-    # def test_call(self):
-    #     # Tests that all call wrap to encode_plus and batch_encode_plus
-    #     feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-    #     # create three inputs of length 800, 1000, and 1200
-    #     speech_inputs = [list(itertools.chain(*floats_list((1, x)))) for x in range(800, 1400, 200)]
+    @require_torch
+    def test_call(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [list(itertools.chain(*floats_list((1, x)))) for x in range(800, 1400, 200)]
 
-    #     # Test batched input with torch tensors
-    #     if is_torch_available():
-    #         # Convert to torch tensors
-    #         torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
+        # Test batched input with torch tensors
+        if is_torch_available():
+            # Convert to torch tensors
+            torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
 
-    #         # Test single input
-    #         encoded_sequence = feat_extract(torch_speech_inputs[0])
-    #         self.assertTrue("input_features" in encoded_sequence)
-    #         self.assertTrue("attention_mask" in encoded_sequence)
-    #         self.assertTrue("input_lengths" in encoded_sequence)
+            # Test single input
+            encoded_sequence = feat_extract(torch_speech_inputs[0])
+            self.assertTrue("input_features" in encoded_sequence)
+            self.assertTrue("attention_mask" in encoded_sequence)
 
-    #         # Test batched input with list of tensors (automatic padding)
-    #         encoded_sequences = feat_extract(torch_speech_inputs)
+            # Test batched input with list of tensors (automatic padding)
+            encoded_sequences = feat_extract(torch_speech_inputs)
 
-    #         self.assertTrue("input_features" in encoded_sequences)
-    #         self.assertTrue("attention_mask" in encoded_sequences)
-    #         self.assertTrue("input_lengths" in encoded_sequences)
-    #         self.assertEqual(encoded_sequences.input_features.shape[0], len(torch_speech_inputs))
+            self.assertTrue("input_features" in encoded_sequences)
+            self.assertTrue("attention_mask" in encoded_sequences)
+            self.assertEqual(encoded_sequences.input_features.shape[0], len(torch_speech_inputs))
 
-    # @require_torch
-    # def test_torch_extraction(self):
-    #     feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+    @require_torch
+    def test_torch_extraction(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
 
-    #     # Create test audio
-    #     speech_inputs = [list(itertools.chain(*floats_list((1, x)))) for x in range(800, 1400, 200)]
-    #     torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
+        # Create test audio
+        speech_inputs = [list(itertools.chain(*floats_list((1, x)))) for x in range(800, 1400, 200)]
+        torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
 
-    #     # Test single input
-    #     features = feat_extract(torch_speech_inputs[0])
+        # Test single input
+        features = feat_extract(torch_speech_inputs[0])
 
-    #     # Check output format
-    #     self.assertEqual(features.input_features.dim(), 3)  # (batch, time, features)
-    #     self.assertEqual(features.input_features.shape[2], feat_extract.feature_size)
-    #     self.assertEqual(features.attention_mask.dim(), 2)  # (batch, time)
-    #     self.assertEqual(features.input_lengths.dim(), 1)  # (batch,)
+        # Check output format
+        self.assertEqual(features.input_features.dim(), 3)  # (batch, time, features)
+        self.assertEqual(features.input_features.shape[2], feat_extract.feature_size)
+        self.assertEqual(features.attention_mask.dim(), 2)  # (batch, time)
 
-    # @require_torch
-    # def test_attention_mask_computation(self):
-    #     feat_extract = self.feature_extraction_class()
+    @require_torch
+    def test_attention_mask_computation(self):
+        feat_extract = self.feature_extraction_class()
 
-    #     # Create inputs of different lengths
-    #     short_audio = torch.randn(4000)  # 0.25 seconds
-    #     long_audio = torch.randn(12000)  # 0.75 seconds
+        # Create inputs of different lengths
+        short_audio = torch.randn(4000)  # 0.25 seconds
+        long_audio = torch.randn(12000)  # 0.75 seconds
 
-    #     # Pass as list of tensors (automatic padding will be handled internally)
-    #     features = feat_extract([short_audio, long_audio])
+        # Pass as list of tensors (automatic padding will be handled internally)
+        features = feat_extract([short_audio, long_audio])
 
-    #     # Check attention mask
-    #     attention_mask = features.attention_mask
+        # Check attention mask
+        attention_mask = features.attention_mask
 
-    #     # First sequence should have fewer valid frames
-    #     valid_frames_0 = attention_mask[0].sum().item()
-    #     valid_frames_1 = attention_mask[1].sum().item()
+        # First sequence should have fewer valid frames
+        valid_frames_0 = attention_mask[0].sum().item()
+        valid_frames_1 = attention_mask[1].sum().item()
 
-    #     self.assertLess(valid_frames_0, valid_frames_1)
+        self.assertLess(valid_frames_0, valid_frames_1)
 
-    #     # Check that input_lengths match attention mask sums
-    #     self.assertEqual(features.input_lengths[0].item(), valid_frames_0)
-    #     self.assertEqual(features.input_lengths[1].item(), valid_frames_1)
+    def test_invalid_normalize_parameter(self):
+        """Test that invalid normalize parameter raises ValueError."""
+        with self.assertRaises(ValueError):
+            ParakeetFeatureExtractor(normalize="invalid_type")
 
-    # def test_invalid_normalize_parameter(self):
-    #     """Test that invalid normalize parameter raises ValueError."""
-    #     with self.assertRaises(ValueError):
-    #         ParakeetFeatureExtractor(normalize="invalid_type")
+    def test_feature_extractor_without_torch(self):
+        """Test that appropriate error is raised when torch is not available."""
+        import unittest.mock
 
-    # def test_feature_extractor_without_torch(self):
-    #     """Test that appropriate error is raised when torch is not available."""
-    #     import unittest.mock
-
-    #     with unittest.mock.patch(
-    #         "transformers.models.fastconformer.feature_extraction_fastconformer.is_torch_available", lambda: False
-    #     ):
-    #         with self.assertRaises(ImportError):
-    #             feat_extract = ParakeetFeatureExtractor()
-    #             audio = [1, 2, 3, 4, 5]  # Simple list of numbers
-    #             feat_extract(audio)
+        with unittest.mock.patch(
+            "transformers.models.parakeet.feature_extraction_parakeet.is_torch_available", lambda: False
+        ):
+            with self.assertRaises(ImportError):
+                feat_extract = ParakeetFeatureExtractor()
+                audio = [1, 2, 3, 4, 5]  # Simple list of numbers
+                feat_extract(audio)
