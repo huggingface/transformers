@@ -1145,6 +1145,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         sampling=False,
         max_new_tokens=2048,
         min_new_tokens=0,
+        force_no_stop=False,
         **kwargs,
     ):
         assert input_ids is not None
@@ -1226,7 +1227,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             if not batched and use_tts_template and generate_audio:
                 # todo 这个地方怎么处理，必须得decode一次
                 result = processor.decode_text(outputs.sequences, processor.tokenizer, self.terminators)
-                mel_spec = self._generate_mel_spec(model_inputs, outputs, result[0], tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0})
+                mel_spec = self._generate_mel_spec(model_inputs, outputs, result[0], tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0}, force_no_stop=force_no_stop)
                 wav_numpy, sr = self.decode_mel_to_audio(mel_spec, kwargs.get('output_audio_path', None))
 
             if return_spk_embed:
@@ -1453,6 +1454,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         sampling=True,
         generate_audio=True,
         enable_regenerate=False,
+        force_no_stop=False,
         **kwargs,
     ):
         """
@@ -1501,7 +1503,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         if generate_audio:
             result = self._generate_mel_spec_audio_streaming(
-                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate, tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
+                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate, 
+                tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}, force_no_stop=force_no_stop
             )
             return result
         else:
@@ -1613,7 +1616,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         spk_embeds = last_hidden_states[spk_bound[0] : spk_bound[1]]
         return spk_embeds
 
-    def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048, tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}):
+    def _generate_mel_spec(self, inputs, outputs, text, force_no_stop=False, output_chunk_size=25, tts_max_new_tokens=2048, tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}):
         spk_embeds = self._get_last_spk_embeds(inputs, outputs)
 
         text = text.split("<|tts_bos|>")[-1]
@@ -1700,7 +1703,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                 past_key_values=past_key_values,
                 streaming_tts_text_mask=streaming_tts_text_mask,
                 max_new_token=output_chunk_size,
-                force_no_stop=self.force_no_stop,
+                force_no_stop=force_no_stop,
                 temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                 eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                 logits_warpers=logits_warpers,
@@ -1722,7 +1725,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     past_key_values=past_key_values,
                     streaming_tts_text_mask=streaming_tts_text_mask,
                     max_new_token=output_chunk_size,
-                    force_no_stop=self.force_no_stop,
+                    force_no_stop=force_no_stop,
                     temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                     eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                     logits_warpers=logits_warpers,
@@ -1783,6 +1786,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         prev_seg_text_left="",
         prev_seg_audio_ids=None,
         enable_regenerate=False,
+        force_no_stop=False,
         tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0},
     ):
         # get spk_embedding
@@ -1934,7 +1938,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     past_key_values=past_key_values,
                     streaming_tts_text_mask=streaming_tts_text_mask,
                     max_new_token=output_chunk_size,
-                    force_no_stop=self.force_no_stop,
+                    force_no_stop=force_no_stop,
                     temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                     eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                     logits_warpers=logits_warpers,
@@ -1975,7 +1979,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                         past_key_values=past_kv,
                         streaming_tts_text_mask=streaming_tts_text_mask,
                         max_new_token=N,
-                        force_no_stop=self.force_no_stop,
+                        force_no_stop=force_no_stop,
                         temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                         eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                         logits_warpers=logits_warpers,
@@ -2046,7 +2050,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     past_key_values=past_key_values,
                     streaming_tts_text_mask=streaming_tts_text_mask,
                     max_new_token=output_chunk_size,
-                    force_no_stop=self.force_no_stop,
+                    force_no_stop=force_no_stop,
                     # temperature=torch.tensor([0.1] * self.tts.num_vq, dtype=torch.float, device=self.tts.device),
                     temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                     eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
@@ -2086,7 +2090,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                         past_key_values=past_kv,
                         streaming_tts_text_mask=streaming_tts_text_mask,
                         max_new_token=N,
-                        force_no_stop=self.force_no_stop,
+                        force_no_stop=force_no_stop,
                         temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
                         eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                         logits_warpers=logits_warpers,
@@ -2150,7 +2154,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                 text_left,
                 prev_seg_audio_ids,
                 enable_regenerate=enable_regenerate,
-                tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
+                tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0},
+                force_no_stop=force_no_stop,
             )
             for res in result:
                 yield res
