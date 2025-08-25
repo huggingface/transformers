@@ -5455,9 +5455,9 @@ class Trainer:
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
-            if not is_accelerate_available("1.10.0"):
+            if not is_accelerate_available("1.10.1"):
                 raise ImportError(
-                    "ParallelismConfig requires accelerate v1.10.0 and above. Please upgrade accelerate to use this feature."
+                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
                 )
 
             args["parallelism_config"] = self.args.parallelism_config

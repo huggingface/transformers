@@ -77,7 +77,7 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
-    if is_accelerate_available("1.10.0"):
+    if is_accelerate_available("1.10.1"):
         from accelerate.parallelism_config import ParallelismConfig
 
 if is_torch_xla_available():
@@ -601,7 +601,7 @@ class TrainingArguments:
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
         parallelism_config (`ParallelismConfig`, *optional*):
-            Parallelism configuration for the training run. Requires Accelerate `1.10.0`
+            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1278,7 +1278,7 @@ class TrainingArguments:
     )
     parallelism_config: Optional["ParallelismConfig"] = field(
         default=None,
-        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.0`")},
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
     )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,
@@ -2570,19 +2570,7 @@ class TrainingArguments:
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
             if k == "parallelism_config" and v is not None:
-                if hasattr(v, "to_json"):
-                    d[k] = v.to_json()
-                else:
-                    # TODO: Remove this with accelerate 1.11, has been patched in 1.10
-                    import copy
-
-                    d[k] = copy.deepcopy(
-                        {
-                            k2: copy.deepcopy(v2.__dict__) if hasattr(v2, "__dict__") else v2
-                            for k2, v2 in v.__dict__.items()
-                            if k2 != "device_mesh"
-                        }
-                    )
+                d[k] = v.to_json()
 
         self._dict_dtype_to_str(d)
 
