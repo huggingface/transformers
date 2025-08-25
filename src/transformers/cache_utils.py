@@ -1144,7 +1144,7 @@ class StaticCache(Cache):
 class QuantizedCache(Cache):
     """
     A quantizer cache similar to what is described in the
-    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for keys and values
     by applying quantization.
     The cache has two types of storage, one for original precision and one for the
@@ -1409,7 +1409,7 @@ class EncoderDecoderCache(Cache):
 class OffloadedCache(DynamicCache):
     def __init__(self) -> None:
         logger.warning_once(
-            "`OffloadedCache` is deprecated and will be removed in version v4.60 "
+            "`OffloadedCache` is deprecated and will be removed in version v4.59 "
             "Use `DynamicCache(offloading=True)` instead"
         )
         super().__init__(offloading=True)

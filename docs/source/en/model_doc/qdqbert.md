@@ -102,8 +102,10 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 ...         module.load_calib_amax()
 ...         module.enable_quant()
 
->>> # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
->>> model.cuda()
+>>> # If running on accelerator, it needs to call `.to(xx)` again because new tensors will be created by calibration process
+>>> from transformers import infer_device
+>>> device = infer_device()
+>>> model.to(device)
 
 >>> # Keep running the quantized model
 >>> # ...

@@ -287,7 +287,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
@@ -321,7 +321,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_batched(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
@@ -369,7 +369,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_with_multi_image(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
