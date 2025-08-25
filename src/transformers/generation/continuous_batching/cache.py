@@ -235,6 +235,17 @@ class PagedAttentionMemoryHandler:
         max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
+        """
+        The memory footprint depends on the cache size C and the max batch tokens M in the following way:
+            Mem = Mem(cache) + Mem(activation) + Mem(static_tensors)
+        where:
+            Mem(cache) = 2 * num_heads * head_dim * num_layers * cache_dtype.itemsize * C
+            Mem(activation) = M * (hidden_size + vocab_size) * activation_dtype.itemsize
+            Mem(static_tensors) ~= 8M * input_dtype.itemsize + M * C * activation_dtype.itemsize
+
+        Depending on if C or M is given, we use different methods to infer the values (C = num_blocks * block_size) and
+        since block_size is fixed, num_blocks is the true variable to find.
+        """
         # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
         if num_blocks is None and max_batch_tokens is None:
             num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
@@ -262,14 +273,22 @@ class PagedAttentionMemoryHandler:
         self,
         max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
-        m: float = 0.1,
+        m: float = 0.01,
     ) -> tuple[int, int]:
+        """
+        If neither M nor C is given, we assume M = m*C so we have to solve a second-order polynomial in C:
+            Mem = C * 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
+                + C * m * (hidden_size + vocab_size) * activation_dtype.itemsize
+                + C * m * 8 * input_dtype.itemsize + C^2 * m * activation_dtype.itemsize
+
+        We solve for C and then M = m*C.
+        """
         cache_memory = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {cache_memory}")
 
-        # Compute memory footprints # TODO: check and explain better
+        # Compute memory footprints
         mem_per_activation_token = (
-            self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
+            m * self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size)
         )
         mem_per_cache_token = 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
         mem_per_input_token = 8 * m * self._input_dtype.itemsize
@@ -279,8 +298,8 @@ class PagedAttentionMemoryHandler:
 
         # Compute second-degree polynomial coefficients
         a = m * self._activation_dtype.itemsize
-        b = mem_per_input_token + mem_per_cache_token
-        c = mem_per_activation_token + 2 * self._input_dtype.itemsize - cache_memory
+        b = mem_per_input_token + mem_per_cache_token + mem_per_activation_token
+        c = - cache_memory
 
         # Compute discriminant and greatest solution
         discriminant = b**2 - 4 * a * c
@@ -307,15 +326,20 @@ class PagedAttentionMemoryHandler:
         max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
+        """
+        If C is given, we have a formula for M:
+            num = (Mem - C * 2 * num_heads * head_dim * num_layers * cache_dtype.itemsize)
+            denum = (8 * input_dtype.itemsize + C * activation_dtype.itemsize + (hidden_size + vocab_size) * activation_dtype.itemsize)
+        M = num / denum
+        """
         cache_memory = self.get_available_memory(max_memory_percent)
         cache_size = num_blocks * self.block_size
         # Compute numerator
         num = cache_memory
-        num -= self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
-        num -= 2 * self._input_dtype.itemsize
         num -= cache_size * 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
         # Compute denominator
         denum = 8 * self._input_dtype.itemsize + cache_size * self._activation_dtype.itemsize
+        denum += (self.hidden_size + self.vocab_size) * self._activation_dtype.itemsize
         # Compute max batch tokens and return
         return int(num / denum)
 
@@ -325,12 +349,17 @@ class PagedAttentionMemoryHandler:
         max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
+        """
+        If M is given, we have a formula for C:
+            num = Mem - M * (hidden_size + vocab_size) * activation_dtype.itemsize - 8 * M * input_dtype.itemsize
+            denum = 2 * num_heads * head_dim * num_layers * cache_dtype.itemsize + M * activation_dtype.itemsize
+        C = num / denum
+        """
         cache_memory = self.get_available_memory(max_memory_percent)
         # Compute numerator
         num = cache_memory
-        num -= self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
+        num -= self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * max_batch_tokens
         num -= 8 * max_batch_tokens * self._input_dtype.itemsize
-        num -= 2 * self._input_dtype.itemsize
         # Compute denominator
         denum = 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
         denum += max_batch_tokens * self._activation_dtype.itemsize
@@ -346,7 +375,7 @@ class PagedAttentionMemoryHandler:
     ) -> tuple[int, int, int]:
         # Compute activation memory footprint
         activation_memory_footprint = self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size)
-        activation_memory_footprint *= self._activation_safety_factor
+        activation_memory_footprint *= max_batch_tokens
         # Compute cache memory footprint if num_blocks is provided
         if num_blocks is not None:
             cache_size = num_blocks * self.block_size
@@ -360,7 +389,7 @@ class PagedAttentionMemoryHandler:
                 [
                     3 * max_batch_tokens * self._input_dtype.itemsize,  # input_ids, position_ids, output_ids
                     max_batch_tokens * cache_size * self._activation_dtype.itemsize,  # attention_mask
-                    2 * (max_batch_tokens + 1) * self._input_dtype.itemsize,  # cumulative_seqlens_qk
+                    2 * max_batch_tokens * self._input_dtype.itemsize,  # cumulative_seqlens_qk (we remove the +1 to M)
                     3 * max_batch_tokens * self._input_dtype.itemsize,  # write_index, read_index, logits_indices
                 ]
             )
