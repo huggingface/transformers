@@ -253,19 +253,5 @@ if __name__ == "__main__":
         expected_outputs=expected_outputs,
     )
 
-
-# python examples/pytorch/continuous_batching.py --attn sdpa_paged --matmul-precision none --samples 50 --displayed 0
-# Using calculated self.num_blocks = 4096, self.block_size = 32, self.max_batch_tokens = 2048
-# CB generation took: 18.80 seconds for 13775 tokens. 732.74tok/s
-
-
-# python examples/pytorch/continuous_batching.py --attn sdpa_paged --matmul-precision none --samples 100 --displayed 1
-# Setting up static tensors with T = 4096, max_token_budget = 524288, 139538202624 bytes available
-# CB generation took: 29.53 seconds for 26384 tokens. 893.41tok/s
-
-# Without changes to continuous_batching.py
-# Using calculated num_blocks=369, block_size=32, max concurrent requests 23
-# CB generation took: 79.58 seconds for 25813 tokens. 324.38tok/s
-
-
+# Example usage:
 # python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json
