@@ -46,16 +46,16 @@ if is_torch_available():
 
 MODALITY_INPUT_DATA = {
     "images": [
-        "http://images.cocodataset.org/val2017/000000039769.jpg",
-        "http://images.cocodataset.org/val2017/000000039769.jpg",
+        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
     ],
     "videos": [
-        "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
         ["https://www.ilankelman.org/stopsigns/australia.jpg", "https://www.ilankelman.org/stopsigns/australia.jpg"],
     ],
     "audio": [
-        "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-        "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+        "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+        "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     ],
 }
 
@@ -63,7 +63,9 @@ if is_av_available():
     from transformers.video_utils import load_video
 
     # load a video file in memory for testing
-    video, _ = load_video("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4")
+    video, _ = load_video(
+        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+    )
     MODALITY_INPUT_DATA["videos"].append(video)
 
 
@@ -169,6 +171,14 @@ class ProcessorTesterMixin:
             return video_input
         return [video_input] * batch_size
 
+    def prepare_audio_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of numpy audio."""
+        raw_speech = floats_list((1, 1000))
+        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        if batch_size is None:
+            return raw_speech
+        return raw_speech * batch_size
+
     def test_processor_to_json_string(self):
         processor = self.get_processor()
         obj = json.loads(processor.to_json_string())
@@ -203,6 +213,23 @@ class ProcessorTesterMixin:
                     # tokenizer repr contains model-path from where we loaded
                     if "tokenizer" not in attribute:
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modality="image")
+        image_input = self.prepare_image_inputs()
+        video_inputs = self.prepare_video_inputs()
+        audio_inputs = self.prepare_audio_inputs()
+        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs, "audio": audio_inputs}
+
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values()]
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+
+        inputs = processor(**inputs_dict, return_tensors="pt")
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
@@ -432,8 +459,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        raw_speech = self.prepare_audio_inputs(batch_size=3)
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
         self.assertEqual(len(inputs[self.text_input_name][0]), 300)
 
@@ -450,8 +476,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        raw_speech = self.prepare_audio_inputs(batch_size=3)
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
 
         self.assertEqual(len(inputs[self.text_input_name][0]), 300)
@@ -469,8 +494,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        raw_speech = self.prepare_audio_inputs(batch_size=3)
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
 
         self.assertEqual(len(inputs[self.text_input_name][0]), 300)
@@ -488,8 +512,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        raw_speech = self.prepare_audio_inputs(batch_size=3)
         with self.assertRaises(ValueError):
             _ = processor(
                 text=input_str,
@@ -512,8 +535,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modality="audio")
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        raw_speech = self.prepare_audio_inputs(batch_size=3)
 
         # Define the kwargs for each modality
         all_kwargs = {

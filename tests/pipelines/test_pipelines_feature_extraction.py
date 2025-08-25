@@ -119,7 +119,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if tokenizer is None:
             self.skipTest(reason="No tokenizer")
@@ -145,7 +145,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return feature_extractor_pipeline, ["This is a test", "This is another test"]
 

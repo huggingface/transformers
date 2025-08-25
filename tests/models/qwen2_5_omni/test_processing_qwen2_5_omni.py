@@ -318,26 +318,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(ValueError):
             processor(images=image_input)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        video_processor = self.get_video_processor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-        audio_input = self.prepare_audio_inputs()
-
-        inputs = processor(text=input_str, images=image_input, videos=video_inputs, audio=audio_input)
-        self.assertListEqual(sorted(inputs.keys()), sorted(processor.model_input_names))
-
     @require_torch
     def _test_apply_chat_template(
         self,
@@ -474,7 +454,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"].append(
             {
                 "type": "video",
-                "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
             }
         )
         num_frames = 3
