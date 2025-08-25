@@ -208,8 +208,8 @@ class PagedAttentionMemoryHandler:
     _activation_dtype = torch.bfloat16
     _activation_safety_factor = 2
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 2048
-    _upper_bound_num_blocks = 16384
+    _upper_bound_max_batch_tokens = 256
+    _upper_bound_num_blocks = 4096
 
     def __init__(
         self,
@@ -271,14 +271,20 @@ class PagedAttentionMemoryHandler:
         m: float = 0.1,
     ) -> tuple[int, int]:
         cache_memory = self.get_available_memory(max_memory_percent)
+        logger.info(f"Cache memory: {cache_memory}")
+
+        # Compute memory footprints # TODO: check and explain better
+        mem_per_activation_token = self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
+        mem_per_cache_token = 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
+        mem_per_input_token = 8 * m * self._input_dtype.itemsize
+        logger.info(f"Memory per activation token: {mem_per_activation_token}")
+        logger.info(f"Memory per cache token: {mem_per_cache_token}")
+        logger.info(f"Memory per input token: {mem_per_input_token}")
 
         # Compute second-degree polynomial coefficients
         a = m * self._activation_dtype.itemsize
-        b = 8 * m * self._input_dtype.itemsize
-        b += 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
-        c = self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size) * self._activation_safety_factor
-        c += 2 * self._input_dtype.itemsize
-        c -= cache_memory
+        b = mem_per_input_token + mem_per_cache_token
+        c = mem_per_activation_token + 2 * self._input_dtype.itemsize - cache_memory
 
         # Compute discriminant and greatest solution
         discriminant = b**2 - 4 * a * c

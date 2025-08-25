@@ -11,6 +11,7 @@ from ...utils.metrics import traced
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
+logger.setLevel(logging.INFO)
 
 
 @staticmethod
@@ -102,12 +103,35 @@ class RequestState:
     static_outputs: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: list[int] = field(default_factory=list)  # Block IDs allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: RequestStatus = RequestStatus.PENDING  # Status of the request
+    _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int = 20  # Maximum number of new tokens to generate
     eos_token_id: int = -1  # ID of the end-of-sequence token
     created_time: float = field(default_factory=time.time)  # Time the request was created
     error: Optional[str] = None  # Error message if the request failed
     next_token: Optional[str] = None  # Next token to be generated
+    lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
+
+    @property
+    def status(self) -> RequestStatus:
+        return self._status
+
+    @status.setter
+    def status(self, value: RequestStatus):
+        if self._status == RequestStatus.PENDING:
+            self.lifespan = (time.time(), -1)
+        elif value == RequestStatus.FINISHED:
+            self.lifespan = (self.lifespan[0], time.time())
+            self.log_end_of_request()
+        self._status = value
+
+    def log_end_of_request(self):
+        prefill_len = len(self.full_prompt_ids)
+        decode_len = self.generated_len()
+        start_time = self.lifespan[0] - self.created_time
+        end_time = self.lifespan[1] - self.created_time
+        logger.info(
+            f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
+        )
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -148,7 +172,7 @@ class RequestState:
     def __repr__(self):
         msg = [
             f"request_id={self.request_id}",
-            f"status={self.status}",
+            f"status={self._status}",
             f"out_tokens={self.generated_len()}",
             f"query_length={len(self.prompt_ids)}",
             f"remaining_tokens={len(self.remaining_prompt_ids)}",
