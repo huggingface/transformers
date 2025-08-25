@@ -2672,20 +2672,21 @@ class DVAE(nn.Module):
         )
 
     @torch.inference_mode()
-    def forward(self, inp: torch.Tensor, mode: Literal["encode", "decode"] = "decode") -> torch.Tensor:
-        if mode == "encode" and hasattr(self, "encoder") and self.vq_layer is not None:
-            mel = inp.clone()
-            x: torch.Tensor = self.downsample_conv(
-                torch.div(mel, self.coef.view(100, 1).expand(mel.shape), out=mel),
-            ).unsqueeze_(0)
-            del mel
-            x = self.encoder(x)
-            ind = self.vq_layer(x)
-            del x
-            return ind
+    def encode(self, mel: torch.Tensor) -> torch.Tensor:
+        """Encode mel spectrogram to VQ indices."""
+        mel = mel.clone()
+        x = self.downsample_conv(torch.div(mel, self.coef.view(100, 1).expand(mel.shape), out=mel))
+        x = x.unsqueeze(0)
+        x = self.encoder(x)
+        ind = self.vq_layer(x)
+        del x
+        return ind
 
+    def decode(self, inp: torch.Tensor) -> torch.Tensor:
+        """Decode VQ inputs (either indices or embeddings) back to spectrogram."""
         vq_feats = self.vq_layer._embed(inp)
 
+        # reshape embeddings
         vq_feats = (
             vq_feats.view(
                 (vq_feats.size(0), 2, vq_feats.size(1) // 2, vq_feats.size(2)),
@@ -2694,15 +2695,18 @@ class DVAE(nn.Module):
             .flatten(2)
         )
 
-        dec_out = self.out_conv(
-            self.decoder(
-                x=vq_feats,
-            ),
-        )
-
+        dec_out = self.decoder(x=vq_feats)
+        dec_out = self.out_conv(dec_out)
         del vq_feats
-
+        # re-apply coef
         return torch.mul(dec_out, self.coef, out=dec_out)
+
+    def forward(self, inp: torch.Tensor) -> torch.Tensor:
+        """Standard forward = encode + decode → full reconstruction."""
+        indices = self.encode(inp)
+        recon = self.decode(indices)
+        return recon
+
 
 def apply_spk_emb(
     input_ids: torch.Tensor = None,
@@ -3681,7 +3685,7 @@ class ConditionalChatTTS(PreTrainedModel):
             batch_result[i].narrow(1, 0, src.size(0)).copy_(src.permute(1, 0))
             del src
 
-        mel_specs = decoder(batch_result)
+        mel_specs = decoder.decode(batch_result)
         del batch_result
         return mel_specs
 
