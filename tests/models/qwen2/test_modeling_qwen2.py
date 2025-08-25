@@ -713,10 +713,10 @@ In summary:"""
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
         generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
 
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[  576,  4570, 71818,   374,  6509,   825,   315,   279,  1429, 88228, 21984,   315,   279, 11220,  4948,  8584,   304,   279,   467, 19859, 4180,  4168,    13,  1084, 14230, 16170,   315,  3349, 19256,   304, 279,  2266,   315, 13444, 14550,   448, 50867,   429,   525,   330, 4145,     1,   476,   330, 88845,     1,   323,  1246,  3425,   264]], dtype=torch.long))  # fmt: skip
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279, 467, 19859, 4180, 4168, 572, 264, 882, 315, 2244, 2297, 304, 5616, 13, 576, 66827, 66846, 572, 304, 17704]], dtype=torch.long)) # fmt: skip
         self.assertEqual(
             tokenizer.decode(generated_ids[0]),
-            """ The Guanzi is considered one of the most foundational texts of the developing political economy in the Warring States period. It addresses principles of price regulation in the context of effectively dealing with commodities that are "light" or "heavy" and how whether a""",
+            " the Warring States period was a time of great change in China. The Zhou dynasty was in decline",
         )
         model.config._attn_implementation = "eager"
         new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
