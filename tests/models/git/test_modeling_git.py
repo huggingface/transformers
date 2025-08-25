@@ -493,10 +493,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_dola_decoding_sample(self):
-        pass
-
 
 @require_torch
 @require_vision
