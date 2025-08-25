@@ -265,6 +265,7 @@ class SwitchTransformersDenseActDense(nn.Module):
         return hidden_states
 
 
+# FIXME: update the experst
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.

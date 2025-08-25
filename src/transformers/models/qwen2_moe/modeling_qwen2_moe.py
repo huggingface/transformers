@@ -587,6 +587,7 @@ QWEN2MOE_ATTENTION_CLASSES = {
 }
 
 
+# FIXME: needs MOE update
 class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()

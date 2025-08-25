@@ -574,6 +574,7 @@ OLMOE_ATTENTION_CLASSES = {
 }
 
 
+# FIXME: Update the modulelist
 class OlmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()

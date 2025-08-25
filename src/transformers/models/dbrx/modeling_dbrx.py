@@ -704,6 +704,7 @@ class DbrxExperts(nn.Module):
         return out
 
 
+# FIXME: make sure inputs are standard
 class DbrxFFN(nn.Module):
     def __init__(self, config: DbrxConfig):
         super().__init__()

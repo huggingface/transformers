@@ -410,6 +410,7 @@ class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
         super().__init__(config)
 
 
+# FIXME: update the expert class
 class Glm4vMoeTextMoE(Glm4MoeMoE):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)

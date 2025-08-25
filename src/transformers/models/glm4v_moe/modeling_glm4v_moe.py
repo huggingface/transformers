@@ -289,6 +289,7 @@ class Glm4vMoeTextTopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
+# FIXME: refactor moe
 class Glm4vMoeTextMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
