@@ -11,6 +11,7 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepa
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import ModelOutput, auto_docstring, logging
 from ..t5.tokenization_t5 import T5Tokenizer
+from ..t5.tokenization_t5_fast import T5TokenizerFast
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
     VivitEmbeddings,
@@ -135,6 +136,9 @@ class TextEncoderOutput(ModelOutput):
 
 @dataclass
 class VideoPrismClipOutput(ModelOutput):
+    """
+    Base class for VideoPrismClip model outputs.
+    """
 
     video_last_hidden_state: Optional[torch.FloatTensor] = None
     text_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -159,7 +163,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
     def forward(self, pixel_values, interpolate_pos_encoding: bool = False, mode="spatial"):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         
-        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
+        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):   # ! need to decide on this
             raise ValueError(
                 f"Image image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
@@ -280,16 +284,21 @@ class VideoPrismEmbeddings(VivitEmbeddings):
         """
         Interpolates the embedding to the target sequence length
         """
+        
         emb_dim = emb.shape[-1]
-        emb = emb.view(1, emb_dim, -1)  # ? (1, 768, 16) for large model size
-        # emb = emb.unsqueeze(dim=0)
-        target_emb = F.interpolate(     #todo check if linear works, otherwise follow the exact method as in videoprism repo
-            emb,                        # ? (1, 768, 16)
-            target_emb_length,
-            mode="linear",
-            antialias=True,             # ? set to True by default in jax.image.resize used in the original implementation
+        emb = emb.view(1, emb_dim, 1, -1)  # ? (1, 768, 16) for large model size
+        
+        target_emb = (
+            F.interpolate(
+                emb,                   # ? (1, 768, 1, 16)
+                (1, target_emb_length),
+                mode="bilinear",
+                antialias=True,
+            )
         )
-        # target_emb = target_emb.squeeze(0).view(1, target_emb_length, emb_dim)
+       
+        target_emb = target_emb.squeeze(2).view(1, target_emb_length, emb_dim)
+
         return target_emb
 
 
@@ -854,6 +863,57 @@ class VideoPrismTokenizer(T5Tokenizer):
         return len(token_ids_0 + token_ids_1) * [0]
 
 
+# class VideoPrismTokenizerFast(T5TokenizerFast): # ! not working with modular code
+#     pass
+
+    # def build_inputs_with_special_tokens(
+    #     self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    # ) -> list[int]:
+    #     """
+    #     Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+    #     adding special tokens. A sequence has the following format:
+
+    #     - single sequence: `X </s>`
+    #     - pair of sequences: `A </s> B </s>`
+
+    #     Args:
+    #         token_ids_0 (`list[int]`):
+    #             List of IDs to which the special tokens will be added.
+    #         token_ids_1 (`list[int]`, *optional*):
+    #             Optional second list of IDs for sequence pairs.
+
+    #     Returns:
+    #         `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+    #     """
+    #     # token_ids_0 = token_ids_0 + [self.eos_token_id]
+    #     if token_ids_1 is None:
+    #         return self.prefix_tokens + token_ids_0
+    #     else:
+    #         # token_ids_1 = token_ids_1 + [self.eos_token_id]
+    #         return self.prefix_tokens + token_ids_0 + token_ids_1
+
+    # def create_token_type_ids_from_sequences(
+    #     self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    # ) -> list[int]:
+    #     """
+    #     Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
+    #     use of token type ids, therefore a list of zeros is returned.
+
+    #     Args:
+    #         token_ids_0 (`list[int]`):
+    #             List of IDs.
+    #         token_ids_1 (`list[int]`, *optional*):
+    #             Optional second list of IDs for sequence pairs.
+
+    #     Returns:
+    #         `list[int]`: List of zeros.
+    #     """
+
+    #     if token_ids_1 is None:
+    #         return len(token_ids_0) * [0]
+    #     return len(token_ids_0 + token_ids_1) * [0]
+
+
 
 __all__ = [
     "VideoPrismConfig",
@@ -861,4 +921,5 @@ __all__ = [
     "VideoPrismPreTrainedModel",
     "VideoPrismClip",
     "VideoPrismTokenizer",
+    # "VideoPrismTokenizerFast",
 ]

@@ -87,6 +87,10 @@ class TextEncoderOutput(ModelOutput):
 
 @dataclass
 class VideoPrismClipOutput(ModelOutput):
+    """
+    Base class for VideoPrismClip model outputs.
+    """
+
     video_last_hidden_state: Optional[torch.FloatTensor] = None
     text_last_hidden_state: Optional[torch.FloatTensor] = None
     auxiliary_output: Optional[BaseModelOutput] = None
@@ -127,7 +131,9 @@ class VideoPrismTubeletEmbeddings(nn.Module):
     def forward(self, pixel_values, interpolate_pos_encoding: bool = False, mode="spatial"):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
 
-        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
+        if not interpolate_pos_encoding and (
+            height != self.image_size[0] or width != self.image_size[1]
+        ):  # ! need to decide on this
             raise ValueError(
                 f"Image image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
@@ -254,18 +260,19 @@ class VideoPrismEmbeddings(nn.Module):
         """
         Interpolates the embedding to the target sequence length
         """
+
         emb_dim = emb.shape[-1]
-        emb = emb.view(1, emb_dim, -1)  # ? (1, 768, 16) for large model size
-        # emb = emb.unsqueeze(dim=0)
-        target_emb = (
-            F.interpolate(  # todo check if linear works, otherwise follow the exact method as in videoprism repo
-                emb,  # ? (1, 768, 16)
-                target_emb_length,
-                mode="linear",
-                antialias=True,  # ? set to True by default in jax.image.resize used in the original implementation
-            )
+        emb = emb.view(1, emb_dim, 1, -1)  # ? (1, 768, 16) for large model size
+
+        target_emb = F.interpolate(
+            emb,  # ? (1, 768, 1, 16)
+            (1, target_emb_length),
+            mode="bilinear",
+            antialias=True,
         )
-        # target_emb = target_emb.squeeze(0).view(1, target_emb_length, emb_dim)
+
+        target_emb = target_emb.squeeze(2).view(1, target_emb_length, emb_dim)
+
         return target_emb
 
 
