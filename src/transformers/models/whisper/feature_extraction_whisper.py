@@ -326,7 +326,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][
+                :, self.hop_length - 1 :: self.hop_length
+            ]
 
         if return_token_timestamps is not None:
             logger.warning_once(
