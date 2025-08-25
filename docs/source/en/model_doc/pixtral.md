@@ -14,43 +14,26 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Pixtral
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Pixtral
 
-The Pixtral model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). Pixtral is a multimodal version of [Mistral](mistral), incorporating a 400 million parameter vision encoder trained from scratch.
+[Pixtral](https://huggingface.co/papers/2410.07073) model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). It couples a 400 M-parameter vision encoder with a 12 B-parameter Mistral Nemo decoder and can ingest an arbitrary number of images at their native resolution (no resizing, no common padding) thanks to **2-D RoPE** position embeddings. 
 
-The intro from the blog says the following:
+You can find all the original Pixtral checkpoints under the [mistral-community](https://huggingface.co/mistral-community) collection.
 
-*Pixtral is trained to understand both natural images and documents, achieving 52.5% on the MMMU reasoning benchmark, surpassing a number of larger models. The model shows strong abilities in tasks such as chart and figure understanding, document question answering, multimodal reasoning and instruction following. Pixtral is able to ingest images at their natural resolution and aspect ratio, giving the user flexibility on the number of tokens used to process an image. Pixtral is also able to process any number of images in its long context window of 128K tokens. Unlike previous open-source models, Pixtral does not compromise on text benchmark performance to excel in multimodal tasks.*
+> [!TIP]
+> This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ).
+> Click any Pixtral model in the right-hand sidebar to explore additional multimodal examples (VQA, document Q&A, chart understanding, etc.).
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/pixtral_architecture.webp"
-alt="drawing" width="600"/>
+<hfoptions id="usage">
 
-<small> Pixtral architecture. Taken from the <a href="https://mistral.ai/news/pixtral-12b/">blog post.</a> </small>
-
-Tips:
-
-- Pixtral is a multimodal model, taking images and text as input, and producing text as output.
-- This model follows the [Llava](llava) architecture. The model uses [`PixtralVisionModel`] for its vision encoder, and [`MistralForCausalLM`] for its language decoder.
-- The main contribution is the 2d ROPE (rotary position embeddings) on the images, and support for arbitrary image sizes (the images are not padded together nor are they resized).
-- Similar to [Llava](llava), the model internally replaces the `[IMG]` token placeholders by image embeddings from the vision encoder. The format for one or multiple prompts is the following:
-```
-"<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
-```
-Then, the processor will replace each `[IMG]` token with a number of `[IMG]` tokens that depend on the height and the width of each image. Each *row* of the image is separated by an `[IMG_BREAK]` token, and each image is separated by an `[IMG_END]` token. It's advised to use the `apply_chat_template` method of the processor, which takes care of all of this and formats the text for you. If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the [usage section](#usage) for more info.
-
-
-This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/vllm-project/vllm/pull/8377).
-
-
-## Usage
-
-At inference time, it's advised to use the processor's `apply_chat_template` method, which correctly formats the prompt for the model:
+<hfoption id="AutoModel">
 
 ```python
 from transformers import AutoProcessor, LlavaForConditionalGeneration
@@ -81,6 +64,13 @@ inputs = processor.apply_chat_template(
 generate_ids = model.generate(**inputs, max_new_tokens=500)
 output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```
+
+</hfoptions>
+
+## Notes
+
+- Pixtral is a multimodal model that follows the [Llava](llava) architecture, using a [`PixtralVisionModel`] and a [`MistralForCausalLM`] decoder.
+- The model internally replaces `[IMG]` token placeholders with image embeddings. To correctly format the prompt with text and images, it is highly recommended to use the `apply_chat_template` method of the processor, which handles the complex formatting automatically.
 
 ## PixtralVisionConfig
 
