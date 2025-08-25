@@ -88,37 +88,23 @@ def smart_resize(
 
 class KeyeImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
+    Constructs a Keye image processor that dynamically resizes images based on the original images.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
+            do_resize (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            size (`Optional`, *optional*): <fill_docstring>
+            resample (`Resampling`, *optional*, defaults to `Resampling.BICUBIC`): <fill_docstring>
+            do_rescale (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            rescale_factor (`Union`, *optional*, defaults to 0.0): <fill_docstring>
+            do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            image_mean (`Union`, *optional*): <fill_docstring>
+            image_std (`Union`, *optional*): <fill_docstring>
+            do_convert_rgb (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            min_pixels (`int`, *optional*, defaults to 101920): <fill_docstring>
+            max_pixels (`int`, *optional*, defaults to 1003520): <fill_docstring>
+            patch_size (`int`, *optional*, defaults to 14): <fill_docstring>
+            temporal_patch_size (`int`, *optional*, defaults to 1): <fill_docstring>
+            merge_size (`int`, *optional*, defaults to 2): <fill_docstring>
     """
 
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
