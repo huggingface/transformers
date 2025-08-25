@@ -273,10 +273,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Low memory will be removed soon so no need to fix it")
-    def test_beam_search_low_memory(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip("Paligemma2 does not seem to be compatible with assisted decoding")

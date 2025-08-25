@@ -837,6 +837,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_gpt2(self):
         article = (
@@ -848,7 +849,14 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
         input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = gpt2_model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
 
         generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 

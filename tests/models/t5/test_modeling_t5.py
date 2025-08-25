@@ -1569,6 +1569,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0])
         self.assertEqual(translation, expected_translation)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_t5(self):
         article = (
@@ -1603,7 +1604,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        outputs = t5_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         # TODO: @arthur?

@@ -585,14 +585,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_from_inputs_embeds(self):
         pass
 
-    # TODO: ydshieh
-    @pytest.mark.generate
-    @unittest.skip(
-        "Kosmos2_5ForConditionalGeneration returns `vision_model_output` which is currently not working with `stack_model_outputs`",
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite because Kosmos-2.5 need to padd pixel values and pad image-attn-mask
