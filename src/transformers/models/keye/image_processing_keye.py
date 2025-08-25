@@ -510,3 +510,6 @@ class KeyeImageProcessor(BaseImageProcessor):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
+
+__all__ = ["KeyeImageProcessor"]

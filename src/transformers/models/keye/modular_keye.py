@@ -2313,4 +2313,6 @@ __all__ = [
     "KeyeProcessor",
     "KeyeTextConfig",
     "KeyeTextModel",
+    "KeyeVideoProcessor",
+    "KeyeImageProcessor",
 ]
