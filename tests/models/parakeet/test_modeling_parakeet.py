@@ -13,13 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch Parakeet model."""
 
+import json
 import tempfile
 import unittest
-import json
 from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device, require_torch_sdpa
+from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -127,7 +127,7 @@ class ParakeetEncoderModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
-    
+
     def check_ctc_loss(self, config, input_values, *args):
         model = ParakeetForCTC(config=config)
         model.to(torch_device)
@@ -226,7 +226,7 @@ class ParakeetForCTCModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
-    
+
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.encoder_model_tester.check_ctc_loss(*config_and_inputs)
@@ -266,7 +266,7 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    # Original function assumes (vision+text model) 
+    # Original function assumes (vision+text model)
     # Below is modified from `tests/models/granite_speech/test_modeling_granite_speech.py` and removes language model
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):

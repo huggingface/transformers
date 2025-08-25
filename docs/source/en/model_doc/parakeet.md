@@ -208,18 +208,31 @@ python src/transformers/models/parakeet_ctc/convert_nemo_to_parakeet_ctc.py \
     --output_dir ./parakeet-ctc-hf
 ```
 
-## ParakeetCTCConfig
+## ParakeetConfig
 
-[[autodoc]] ParakeetCTCConfig 
+[[autodoc]] ParakeetConfig 
+
+## ParakeetEncoderConfig
+
+[[autodoc]] ParakeetEncoderConfig 
 
 ## ParakeetCTCTokenizer
 
 [[autodoc]] ParakeetCTCTokenizer 
 
-## ParakeetCTCPreTrainedModel
+## ParakeetFeatureExtractor
 
-[[autodoc]] ParakeetCTCPreTrainedModel 
+[[autodoc]] ParakeetFeatureExtractor
+    - __call__
 
-## ParakeetCTC
+## ParakeetProcessor
 
-[[autodoc]] ParakeetCTC
+[[autodoc]] ParakeetProcessor
+    - __call__
+    - batch_decode
+    - decode
+
+## ParakeetForCTC
+
+[[autodoc]] ParakeetForCTC
+

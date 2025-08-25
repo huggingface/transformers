@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Parakeet model configuration."""
+"""Parakeet model configuration."""
 
-from typing import Optional, Union
+from typing import Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -41,44 +42,36 @@ class ParakeetEncoderConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         conv_kernel_size (`int`, *optional*, defaults to 9):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 8):
             The factor by which the input sequence is subsampled.
         subsampling_conv_channels (`int`, *optional*, defaults to 256):
             The number of channels in the subsampling convolution layers.
-        num_mel_bins (`int`, *optional*, defaults to 128):
+        num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features.
-        xscaling (`bool`, *optional*, defaults to `False`):
-            Whether to apply input scaling to the model inputs.
-        dropout_emb (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for embedding layers.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the encoder.
+        subsampling_conv_kernel_size (`int`, *optional*, defaults to 3):
+            The kernel size of the subsampling convolution layers.
+        subsampling_conv_stride (`int`, *optional*, defaults to 2):
+            The stride of the subsampling convolution layers.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
+        dropout_positions (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the positions in the input sequence.
+        layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the layers in the encoder.
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for activations inside the fully connected layer.
-        use_bias (`bool`, *optional*, defaults to `False`):
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention layers.
+        max_position_embeddings (`int`, *optional*, defaults to 5000):
+            The maximum sequence length that this model might ever be used with.
+        use_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the linear layers.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the beginning-of-sequence token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end-of-sequence token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie word embeddings.
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether to use cache. Not used in ParakeetEncoder but kept for compatibility.
-        output_attentions (`bool`, *optional*, defaults to `False`):
-            Whether to output attention weights.
-        output_hidden_states (`bool`, *optional*, defaults to `False`):
-            Whether to output hidden states.
+        scale_input (`bool`, *optional*, defaults to `True`):
+            Whether to scale the input embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
         ```python
@@ -168,11 +161,11 @@ class ParakeetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 1024):
+        vocab_size (`int`, *optional*, defaults to 1025):
             Vocabulary size of the CTC head. Defines the number of different tokens that can be predicted by the model.
-        blank_token_id (`int`, *optional*, defaults to 0):
+        blank_token_id (`int`, *optional*, defaults to 1024):
             The id of the blank token used in CTC. Typically 0.
-        pad_token_id (`int`, *optional*, defaults to 0):
+        pad_token_id (`int`, *optional*, defaults to 1024):
             The id of the padding token.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the beginning-of-sequence token.

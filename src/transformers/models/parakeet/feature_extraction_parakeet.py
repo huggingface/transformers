@@ -419,8 +419,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
 
         if not is_librosa_available():
             raise ImportError(
-                "librosa is required for Parakeet feature extraction. "
-                "Please install it with `pip install librosa`."
+                "librosa is required for Parakeet feature extraction. Please install it with `pip install librosa`."
             )
 
         if sampling_rate is not None:

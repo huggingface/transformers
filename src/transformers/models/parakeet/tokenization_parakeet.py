@@ -18,8 +18,8 @@ Tokenization classes for Parakeet CTC.
 
 import json
 import re
-from typing import Optional, Union
 from itertools import groupby
+from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -149,7 +149,9 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
 
         # filter self.pad_token which is used as CTC-blank token
-        filtered_tokens = list(filter(lambda token: token != self.pad_token and token != self.unk_token, grouped_tokens))
+        filtered_tokens = list(
+            filter(lambda token: token != self.pad_token and token != self.unk_token, grouped_tokens)
+        )
 
         # Join tokens and handle SentencePiece-style subwords
         text = "".join(filtered_tokens)

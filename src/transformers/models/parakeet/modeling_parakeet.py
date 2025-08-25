@@ -276,7 +276,7 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
 
     def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d):
-        if hasattr(conv_layer, 'stride') and conv_layer.stride != (1, 1):
+        if hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1):
             padding = conv_layer.padding
             kernel_size = conv_layer.kernel_size[0]
             stride = conv_layer.stride[0]
@@ -297,7 +297,9 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
             if isinstance(layer, nn.Conv2d) and attention_mask is not None:
                 current_lengths = self._get_output_length(current_lengths, layer)
                 current_seq_length = hidden_states.shape[2]
-                channel_mask = torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
+                channel_mask = (
+                    torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
+                )
                 hidden_states *= channel_mask[:, None, :, None]
 
         hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)

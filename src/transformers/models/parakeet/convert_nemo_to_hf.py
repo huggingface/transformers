@@ -54,12 +54,11 @@ from typing import Any, Optional, Union
 import torch
 import yaml
 
-
-from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
+from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from transformers.models.parakeet.modeling_parakeet import ParakeetForCTC
-from transformers.models.parakeet.tokenization_parakeet import ParakeetCTCTokenizer
 from transformers.models.parakeet.processing_parakeet import ParakeetProcessor
+from transformers.models.parakeet.tokenization_parakeet import ParakeetCTCTokenizer
 
 
 # Set up logging
@@ -96,13 +95,12 @@ NEMO_TO_HF_WEIGHT_MAPPING = {
     r"decoder\.decoder_layers\.0\.bias": r"ctc_head.bias",
     # Catch-all pattern for any remaining encoder patterns (must be last)
     r"^encoder\.": r"encoder.",
-
-    r"linear_k" : "k_proj",
-    r"linear_v" : "v_proj",
-    r"linear_out" : "o_proj",
-    r"linear_q" : "q_proj",
-    r"pos_bias_u" : "bias_u",
-    r"pos_bias_v" : "bias_v",
+    r"linear_k": "k_proj",
+    r"linear_v": "v_proj",
+    r"linear_out": "o_proj",
+    r"linear_q": "q_proj",
+    r"pos_bias_u": "bias_u",
+    r"pos_bias_v": "bias_v",
     r"linear_pos": "relative_k_proj",
 }
 
@@ -892,7 +890,9 @@ def main():
         "--output_dir", type=str, required=True, help="Output directory for HuggingFace `ParakeetForCTC` model"
     )
     parser.add_argument(
-        "--verify", action="store_true", help="Verify conversion by testing `ParakeetForCTC` model loading and forward pass"
+        "--verify",
+        action="store_true",
+        help="Verify conversion by testing `ParakeetForCTC` model loading and forward pass",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing output directory")
     parser.add_argument(
@@ -910,7 +910,7 @@ def main():
         # Convert model
         conversion_info = convert_nemo_to_hf(args.path_to_nemo_model, args.output_dir, args.push_to_hub)
         model_path = args.output_dir if args.push_to_hub is None else args.push_to_hub
-        
+
         # Verify if requested
         if args.verify:
             verification_success = verify_conversion(model_path)

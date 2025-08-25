@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Parakeet processor class. """
+"""Parakeet processor class."""
 
 from ...audio_utils import AudioInput
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...feature_extraction_utils import BatchFeature
-from ...utils import logging, is_torch_available
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -32,6 +32,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {"sampling_rate": 16000},
         "common_kwargs": {"return_tensors": "pt"},
     }
+
 
 class ParakeetProcessor(ProcessorMixin):
     r"""
@@ -95,7 +96,7 @@ class ParakeetProcessor(ProcessorMixin):
         common_kwargs = output_kwargs["common_kwargs"]
         data = self.feature_extractor(audio, **audio_kwargs)
         return BatchFeature(data=data, tensor_type=common_kwargs["return_tensors"])
-    
+
     def batch_decode(
         self,
         predicted_ids: "torch.Tensor",
@@ -110,11 +111,7 @@ class ParakeetProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(predicted_ids, **kwargs)
 
-    def decode(
-        self, 
-        predicted_ids: "torch.Tensor",
-        **kwargs
-    ) -> "torch.Tensor":
+    def decode(self, predicted_ids: "torch.Tensor", **kwargs) -> "torch.Tensor":
         """
         Decodes a single output from the ParakeetForCTC model into text.
 

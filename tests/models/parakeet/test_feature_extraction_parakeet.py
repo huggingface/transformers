@@ -221,4 +221,3 @@ class FastConformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, uni
     #             feat_extract = ParakeetFeatureExtractor()
     #             audio = [1, 2, 3, 4, 5]  # Simple list of numbers
     #             feat_extract(audio)
-
