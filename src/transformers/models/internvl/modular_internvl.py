@@ -24,12 +24,12 @@ import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -93,8 +93,7 @@ class InternVLVisionAttention(JanusVisionAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -129,34 +128,7 @@ class InternVLVisionAttention(JanusVisionAttention):
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
 
-        outputs = (output, attn_weights) if output_attentions else (output, None)
-        return outputs
-
-
-@auto_docstring
-class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config: InternVLVisionConfig
-    base_model_prefix = "internvl_vision"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["InternVLVisionLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
-            if module.mask_token is not None:
-                module.mask_token.data.zero_()
-            if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
-        elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+        return output, attn_weights
 
 
 @dataclass
@@ -334,11 +306,9 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        attention_output, attention_weights = self.attention(
+        attention_output, _ = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
-            output_attentions=output_attentions,
         )
 
         attention_output = self.lambda_1 * attention_output
@@ -358,7 +328,7 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
         # second residual connection
         layer_output = layer_output + hidden_states
 
-        return layer_output, attention_weights
+        return layer_output
 
 
 class InternVLVisionEncoder(nn.Module):
@@ -368,35 +338,48 @@ class InternVLVisionEncoder(nn.Module):
         self.layer = nn.ModuleList([InternVLVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
     ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
+
+
+@auto_docstring
+class InternVLVisionPreTrainedModel(PreTrainedModel):
+    config: InternVLVisionConfig
+    base_model_prefix = "internvl_vision"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["InternVLVisionLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": InternVLVisionLayer,
+        "attentions": InternVLVisionAttention,
+    }
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, InternVLVisionEmbeddings):
+            module.cls_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, InternVLVisionLayer):
+            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -424,25 +407,14 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+        encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
@@ -584,18 +556,9 @@ class InternVLModel(LlavaModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InternVLModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -628,10 +591,6 @@ class InternVLModel(LlavaModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )

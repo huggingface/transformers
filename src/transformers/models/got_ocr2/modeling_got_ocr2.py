@@ -33,7 +33,6 @@ from transformers.utils.generic import check_model_inputs
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -286,6 +285,11 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = False
     _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": "DecoderLayer",
+        "attentions": "Attention",
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -612,7 +616,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, GotOcr2ModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
