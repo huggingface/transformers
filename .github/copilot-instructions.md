@@ -1,6 +1,6 @@
-# copilot_instructions.md Guide for Hugging Face Transformers
+# copilot-instructions.md Guide for Hugging Face Transformers
 
-This copilot_instructions.md file provides guidance for code agents working with this codebase.
+This copilot-instructions.md file provides guidance for code agents working with this codebase.
 
 ## Core Project Structure
 
