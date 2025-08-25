@@ -129,7 +129,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -783,6 +783,8 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
 
 
 class EvollaPreTrainedModel(LlamaPreTrainedModel):
+    _supports_flash_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
+    _supports_flex_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
     _supports_attention_backend = False
     _no_split_modules = [
         "EvollaDecoderLayer",
@@ -792,7 +794,7 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()

@@ -1349,9 +1349,9 @@ class EvollaPreTrainedModel(PreTrainedModel):
         "EvollaSequenceAlignerCrossAttention",
     ]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
 
     _can_compile_fullgraph = True
     _supports_attention_backend = False

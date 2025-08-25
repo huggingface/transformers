@@ -108,7 +108,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -134,7 +134,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -152,7 +152,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)

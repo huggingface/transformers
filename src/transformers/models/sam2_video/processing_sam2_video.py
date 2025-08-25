@@ -534,7 +534,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         processing_device: Union[str, "torch.device"] = None,
         video_storage_device: Union[str, "torch.device"] = None,
         max_vision_features_cache_size: int = 1,
-        torch_dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype = torch.float32,
     ):
         """
         Initializes a video session for inference.
@@ -553,7 +553,7 @@ class Sam2VideoProcessor(ProcessorMixin):
                 The device to store the processed video frames on.
             max_vision_features_cache_size (`int`, *optional*, defaults to 1):
                 The maximum number of vision features to cache.
-            torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
@@ -574,7 +574,7 @@ class Sam2VideoProcessor(ProcessorMixin):
             inference_device=inference_device,
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_vision_features_cache_size=max_vision_features_cache_size,
         )
         return inference_session

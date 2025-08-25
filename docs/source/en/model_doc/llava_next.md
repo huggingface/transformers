@@ -48,7 +48,7 @@ pipeline = pipeline(
     task="image-text-to-text",  
     model="llava-hf/llava-v1.6-mistral-7b-hf",  
     device=0,  
-    torch_dtype=torch.bfloat16  
+    dtype=torch.bfloat16  
 )  
 messages = [  
     {  
@@ -78,7 +78,7 @@ from transformers import AutoProcessor, LlavaNextForConditionalGeneration, infer
 device = infer_device()
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16).to(device)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
 
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -169,7 +169,7 @@ import requests, torch
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto"
+    "llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16, device_map="auto"
 )
 
 # Load multiple images

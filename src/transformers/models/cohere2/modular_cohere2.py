@@ -275,7 +275,7 @@ class Cohere2Attention(CohereAttention, nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Cohere2Config, layer_idx: Optional[int] = None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
