@@ -229,9 +229,13 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         )
 
         self.act_fn = ACT2FN[config.hidden_act]
-        self.gate_proj = nn.Parameter(torch.ones(config.num_experts, config.moe_intermediate_size, config.hidden_size))
-        self.up_proj = nn.Parameter(torch.ones(config.num_experts, config.moe_intermediate_size, config.hidden_size))
-        self.down_proj = nn.Parameter(torch.ones(config.num_experts, config.hidden_size, config.moe_intermediate_size))
+        import os
+
+        if os.environ.get("USE_NEW_MOE", "false") != "false":
+            setattr(self, "gate_proj", nn.Parameter(torch.stack([expert.gate_proj.weight for expert in self.experts])))
+            setattr(self, "up_proj", nn.Parameter(torch.stack([expert.up_proj.weight for expert in self.experts])))
+            setattr(self, "down_proj", nn.Parameter(torch.stack([expert.down_proj.weight for expert in self.experts])))
+            del self.experts
 
     def moe_forward(self, x, num_tokens_per_expert):
         offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
@@ -268,7 +272,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         routed_input = torch.gather(hidden_states, dim=0, index=sorted_selected_experts)
 
         routed_output = self.moe_forward(routed_input, tokens_per_expert)
-        routed_output = routed_output.to(torch.float32) * sorted_routing_weights.reshape(-1, 1).type_as(hidden_states)
+        routed_output = routed_output * sorted_routing_weights.reshape(-1, 1).type_as(hidden_states)
 
         out = torch.zeros_like(hidden_states)
 
