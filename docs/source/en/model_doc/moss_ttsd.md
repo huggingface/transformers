@@ -69,20 +69,20 @@ data = [
     { # Case 1: Text Generation (No voice cloning)
         "text": "人工智能浪潮正在席卷全球，给我们带来深刻变化",
         "system_prompt": "You are a speech synthesizer that generates natural, realistic, and human-like conversational audio from dialogue text.",
-    }
+    },
     { # Case 2: Single Voice Cloning - clone one speaker's voice from reference audio
         "text": "人工智能浪潮正在席卷全球，给我们带来深刻变化",
         "system_prompt": "You are a speech synthesizer that generates natural, realistic, and human-like conversational audio from dialogue text.",
-        "prompt_text": "Reference audio text for voice cloning",
+        "prompt_text": "周一到周五，每天早晨七点半到九点半的直播片段，言下之意呢就是废话有点儿多，大家也别嫌弃，因为这都是直播间最真实的状态",
         "prompt_audio": download_audio_file("https://raw.githubusercontent.com/OpenMOSS/MOSS-TTSD/main/examples/zh_spk1_moon.wav"),
-    }
+    },
     { # Case 3: Dual Dialogue Voice Cloning - generate dialogue with two different speaker voices
         "text": "[S1]你听说了吗，人工智能现在变得非常厉害！[S2]是啊，我听说现在TTS模型生成的声音已经非常逼真了",
         "system_prompt": "You are a speech synthesizer that generates natural, realistic, and human-like conversational audio from dialogue text.",
         "prompt_audio_speaker1": download_audio_file("https://raw.githubusercontent.com/OpenMOSS/MOSS-TTSD/main/examples/zh_spk1_moon.wav"),
-        "prompt_text_speaker1": "Reference text for speaker 1",
+        "prompt_text_speaker1": "周一到周五，每天早晨七点半到九点半的直播片段，言下之意呢就是废话有点儿多，大家也别嫌弃，因为这都是直播间最真实的状态",
         "prompt_audio_speaker2": download_audio_file("https://raw.githubusercontent.com/OpenMOSS/MOSS-TTSD/main/examples/zh_spk2_moon.wav"),
-        "prompt_text_speaker2": "Reference text for speaker 2"
+        "prompt_text_speaker2": "如果大家想听到更丰富、更及时的直播内容，记得在周一到周五准时进入直播间，和大家一起，畅聊新消费、新科技、新趋势"
     }
 ]
 
