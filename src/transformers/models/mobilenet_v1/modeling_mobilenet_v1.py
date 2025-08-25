@@ -229,7 +229,7 @@ class MobileNetV1ConvLayer(nn.Module):
 
 @auto_docstring
 class MobileNetV1PreTrainedModel(PreTrainedModel):
-    config_class = MobileNetV1Config
+    config: MobileNetV1Config
     load_tf_weights = load_tf_weights_in_mobilenet_v1
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"

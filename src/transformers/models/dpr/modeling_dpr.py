@@ -15,7 +15,7 @@
 """PyTorch DPR model for Open Domain Question Answering."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -40,92 +40,65 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`DPRQuestionEncoder`].
+    """
+)
 class DPRContextEncoderOutput(ModelOutput):
-    """
-    Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
-            The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
-            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
-            This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
+        hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+        This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`DPRQuestionEncoder`].
+    """
+)
 class DPRQuestionEncoderOutput(ModelOutput):
-    """
-    Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
-            The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
-            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
-            This output is to be used to embed questions for nearest neighbors queries with context embeddings.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
+        hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+        This output is to be used to embed questions for nearest neighbors queries with context embeddings.
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class DPRReaderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
-            Logits of the start index of the span for each passage.
-        end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
-            Logits of the end index of the span for each passage.
-        relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
-            Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
-            question, compared to all the other passages.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DPRReaderOutput(ModelOutput):
+    r"""
+    start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        Logits of the start index of the span for each passage.
+    end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        Logits of the end index of the span for each passage.
+    relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
+        Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
+        question, compared to all the other passages.
     """
 
     start_logits: torch.FloatTensor
     end_logits: Optional[torch.FloatTensor] = None
     relevance_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
@@ -172,7 +145,7 @@ class DPREncoder(DPRPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
+    ) -> Union[BaseModelOutputWithPooling, tuple[Tensor, ...]]:
         outputs = self.bert_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -224,7 +197,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
-    ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
         # feed encoder
@@ -273,7 +246,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
 
@@ -284,7 +257,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "question_encoder"
 
@@ -295,7 +268,7 @@ class DPRPretrainedReader(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "span_predictor"
 
@@ -328,7 +301,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRContextEncoderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRContextEncoderOutput, tuple[Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -433,7 +406,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRQuestionEncoderOutput, tuple[Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -538,9 +511,9 @@ class DPRReader(DPRPretrainedReader):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         r"""
-        input_ids (`Tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
+        input_ids (`tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:

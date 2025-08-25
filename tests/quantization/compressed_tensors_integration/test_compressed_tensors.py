@@ -2,7 +2,7 @@ import gc
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 
 
@@ -22,7 +22,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_config_args(self):

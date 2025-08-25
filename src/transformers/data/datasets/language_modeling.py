@@ -18,7 +18,7 @@ import pickle
 import random
 import time
 import warnings
-from typing import Dict, List, Optional
+from typing import Optional
 
 import torch
 from filelock import FileLock
@@ -139,7 +139,7 @@ class LineByLineTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
@@ -187,7 +187,7 @@ class LineByLineWithRefDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
@@ -339,7 +339,7 @@ class LineByLineWithSOPTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
@@ -433,7 +433,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                     f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
-    def create_examples_from_document(self, document: List[List[int]], doc_index: int, block_size: int):
+    def create_examples_from_document(self, document: list[list[int]], doc_index: int, block_size: int):
         """Creates examples for a single document."""
 
         max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=True)

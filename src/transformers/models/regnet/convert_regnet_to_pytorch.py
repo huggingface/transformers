@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Optional
 
 import timm
 import torch
@@ -40,11 +40,11 @@ logger = logging.get_logger()
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, (nn.Conv2d, nn.BatchNorm2d))
         if has_not_submodules:
             self.traced.append(m)
 
@@ -66,8 +66,8 @@ class ModuleTransfer:
     src: nn.Module
     dest: nn.Module
     verbose: int = 1
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
+    src_skip: list = field(default_factory=list)
+    dest_skip: list = field(default_factory=list)
     raise_if_mismatch: bool = True
 
     def __call__(self, x: Tensor):
@@ -101,7 +101,7 @@ class FakeRegNetVisslWrapper(nn.Module):
     def __init__(self, model: nn.Module):
         super().__init__()
 
-        feature_blocks: List[Tuple[str, nn.Module]] = []
+        feature_blocks: list[tuple[str, nn.Module]] = []
         # - get the stem
         feature_blocks.append(("conv1", model.stem))
         # - get all the feature blocks
@@ -129,7 +129,7 @@ class NameToFromModelFuncMap(dict):
         x_split = x.split("-")
         return x_split[0] + x_split[1] + "_" + "".join(x_split[2:])
 
-    def __getitem__(self, x: str) -> Callable[[], Tuple[nn.Module, Dict]]:
+    def __getitem__(self, x: str) -> Callable[[], tuple[nn.Module, dict]]:
         # default to timm!
         if x not in self:
             x = self.convert_name_to_timm(x)
@@ -154,7 +154,7 @@ class NameToOurModelFuncMap(dict):
         return val
 
 
-def manually_copy_vissl_head(from_state_dict, to_state_dict, keys: List[Tuple[str, str]]):
+def manually_copy_vissl_head(from_state_dict, to_state_dict, keys: list[tuple[str, str]]):
     for from_key, to_key in keys:
         to_state_dict[to_key] = from_state_dict[from_key].clone()
         print(f"Copied key={from_key} to={to_key}")
@@ -305,7 +305,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         "regnet-y-320": ImageNetPreTrainedConfig(
             depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
         ),
-        # models created by SEER -> https://arxiv.org/abs/2202.08360
+        # models created by SEER -> https://huggingface.co/papers/2202.08360
         "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
         "regnet-y-640-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328),
         "regnet-y-1280-seer": RegNetConfig(
@@ -339,7 +339,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
     names_to_from_model_map = NameToFromModelFuncMap()
     # add seer weights logic
 
-    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> Tuple[nn.Module, Dict]:
+    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> tuple[nn.Module, dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
         model = model_func()
         # check if we have a head, if yes add it

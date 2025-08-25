@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..utils.logging import tqdm
 from .base import HfQuantizer
@@ -70,16 +70,16 @@ class HiggsHfQuantizer(HfQuantizer):
                 " This is not supported. Please remove the CPU or disk device from the device_map."
             )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility.")
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16 and torch_dtype != torch.bfloat16:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("`dtype` is None. Setting `dtype=torch.float16` for FLUTE compatibility.")
+            dtype = torch.float16
+        elif dtype != torch.float16 and dtype != torch.bfloat16:
             raise ValueError(
-                f"Invalid `torch_dtype` {torch_dtype}. HIGGS quantization only supports `torch_dtype=torch.float16` or `torch_dtype=torch.bfloat16`."
+                f"Invalid `dtype` {dtype}. HIGGS quantization only supports `dtype=torch.float16` or `dtype=torch.bfloat16`."
             )
 
-        return torch_dtype
+        return dtype
 
     def create_quantized_param(
         self,
@@ -87,8 +87,8 @@ class HiggsHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         from ..integrations import quantize_with_higgs
 
@@ -123,13 +123,19 @@ class HiggsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_higgs_linear
 
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
+
         replace_with_higgs_linear(
             model,
             quantization_config=self.quantization_config,
+            modules_to_not_convert=self.modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 
@@ -158,7 +164,7 @@ class HiggsHfQuantizer(HfQuantizer):
             )
             self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import HiggsLinear
 
         higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
@@ -172,7 +178,7 @@ class HiggsHfQuantizer(HfQuantizer):
         return [key for key in missing_keys if not should_update(key)]
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return False
 
     def is_serializable(self, safe_serialization=None):
@@ -183,7 +189,7 @@ class HiggsHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         from ..integrations import HiggsLinear

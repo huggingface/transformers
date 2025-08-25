@@ -17,7 +17,6 @@
 import importlib
 import inspect
 import json
-import os
 import warnings
 from collections import OrderedDict
 
@@ -28,13 +27,7 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import (
-    FEATURE_EXTRACTOR_NAME,
-    PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    logging,
-)
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -52,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("aimv2", "CLIPProcessor"),
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
@@ -66,12 +60,22 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
+        ("cohere2_vision", "Cohere2VisionProcessor"),
         ("colpali", "ColPaliProcessor"),
+        ("colqwen2", "ColQwen2Processor"),
+        ("deepseek_vl", "DeepseekVLProcessor"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
+        ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
+        ("evolla", "EvollaProcessor"),
         ("flava", "FlavaProcessor"),
+        ("florence2", "Florence2Processor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
+        ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm4v", "Glm4vProcessor"),
+        ("glm4v_moe", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -85,6 +89,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("internvl", "InternVLProcessor"),
         ("janus", "JanusProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
+        ("kosmos-2.5", "Kosmos2_5Processor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llama4", "Llama4Processor"),
@@ -94,14 +100,18 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_onevision", "LlavaOnevisionProcessor"),
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
+        ("metaclip_2", "CLIPProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
+        ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
+        ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
+        ("perception_lm", "PerceptionLMProcessor"),
         ("phi4_multimodal", "Phi4MultimodalProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pixtral", "PixtralProcessor"),
@@ -111,6 +121,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
         ("sam", "SamProcessor"),
+        ("sam2", "Sam2Processor"),
         ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
@@ -118,6 +129,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
+        ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -131,6 +143,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltProcessor"),
         ("vipllava", "LlavaProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("voxtral", "VoxtralProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
@@ -176,7 +189,7 @@ class AutoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoProcessor is designed to be instantiated "
             "using the `AutoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -209,12 +222,12 @@ class AutoProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -228,7 +241,7 @@ class AutoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -256,7 +269,7 @@ class AutoProcessor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -271,9 +284,7 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {
-            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
-        }
+        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {
@@ -358,17 +369,21 @@ class AutoProcessor:
 
         has_remote_code = processor_auto_map is not None
         has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in processor_auto_map:
+                upstream_repo = processor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             processor_class = get_class_from_dynamic_module(
                 processor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                processor_class.register_for_auto_class()
+            processor_class.register_for_auto_class()
             return processor_class.from_pretrained(
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )

@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ..generation import GenerationConfig
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
@@ -57,6 +57,11 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=visual-question-answering).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     _pipeline_calls_generate = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
@@ -89,8 +94,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __call__(
         self,
-        image: Union["Image.Image", str, List["Image.Image"], List[str], "KeyDataset"],
-        question: Optional[Union[str, List[str]]] = None,
+        image: Union["Image.Image", str, list["Image.Image"], list[str], "KeyDataset"],
+        question: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         r"""
@@ -103,7 +108,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         - `pipeline([{"image": image, "question": question}, {"image": image, "question": question}])`
 
         Args:
-            image (`str`, `List[str]`, `PIL.Image`, `List[PIL.Image]` or `KeyDataset`):
+            image (`str`, `list[str]`, `PIL.Image`, `list[PIL.Image]` or `KeyDataset`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -122,7 +127,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 >>> oracle(image=KeyDataset(dataset, "image"), question="What's in this image?")
 
                 ```
-            question (`str`, `List[str]`):
+            question (`str`, `list[str]`):
                 The question(s) asked. If given a single question, it can be broadcasted to multiple images.
                 If multiple images and questions are given, each and every question will be broadcasted to all images
                 (same effect as a Cartesian product)
@@ -175,7 +180,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         )
         image_features = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
-            image_features = image_features.to(self.torch_dtype)
+            image_features = image_features.to(self.dtype)
         model_inputs.update(image_features)
         return model_inputs
 

@@ -17,7 +17,7 @@ Processor class for SAM.
 """
 
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -37,9 +37,9 @@ if is_tf_available():
 
 class SamImagesKwargs(ImagesKwargs):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[List[List[float]]]
-    input_labels: Optional[List[List[int]]]
-    input_boxes: Optional[List[List[List[float]]]]
+    input_points: Optional[list[list[float]]]
+    input_labels: Optional[list[list[int]]]
+    input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
 
 
@@ -67,13 +67,6 @@ class SamProcessor(ProcessorMixin):
 
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = [
-        "segmentation_maps",
-        "input_points",
-        "input_labels",
-        "input_boxes",
-    ]
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
@@ -82,14 +75,7 @@ class SamProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        # The following is to capture `segmentation_maps`, `input_points`, `input_labels` and `input_boxes`
-        # arguments that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context:
-        # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        *args,  # to be deprecated
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio: Optional[AudioInput] = None,
         video: Optional[VideoInput] = None,
         **kwargs,
@@ -102,7 +88,6 @@ class SamProcessor(ProcessorMixin):
             SamProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
         input_points = output_kwargs["images_kwargs"].pop("input_points", None)
         input_labels = output_kwargs["images_kwargs"].pop("input_labels", None)
@@ -303,7 +288,7 @@ class SamProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names))
+        return list(image_processor_input_names + ["original_sizes", "reshaped_input_sizes"])
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)

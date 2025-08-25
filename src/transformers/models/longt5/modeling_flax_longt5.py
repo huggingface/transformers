@@ -15,7 +15,7 @@
 """Flax LongT5 model."""
 
 import copy
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -90,7 +90,7 @@ def _split_into_blocks(x: jnp.ndarray, block_len: int, axis: int) -> jnp.ndarray
 
 def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
-    For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
+    For more information, see: https://huggingface.co/papers/2112.07916.
     """
     num_blocks = x.shape[block_axis]
 
@@ -99,7 +99,7 @@ def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, p
     # [batch_size, num_blocks, block_len] -> [batch_size, num_blocks + 2, block_len]
     x = jnp.pad(x, pad_width=pad, mode="constant", constant_values=pad_value)
 
-    blocks_list: List[np.array] = []
+    blocks_list: list[np.array] = []
     for i in range(3):
         # We use indexing approach here:
         # https://numpy.org/doc/stable/user/basics.indexing.html#dealing-with-variable-numbers-of-indices-within-programs
@@ -142,7 +142,7 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp
     return local_attention_mask[:, None, ...]
 
 
-def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
+def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
     This implementation is a simplified version of the original Flaxformr implementation adopted from:
@@ -1587,7 +1587,7 @@ LONGT5_DECODE_INPUTS_DOCSTRING = r"""
             be used by default.
 
             If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
@@ -1675,7 +1675,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: LongT5Config,
-        input_shape: Tuple[int] = (1, 1),
+        input_shape: tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -1691,7 +1691,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
@@ -1970,7 +1970,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
 LONGT5_START_DOCSTRING = r"""
     The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long
-    Sequences](https://arxiv.org/abs/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
+    Sequences](https://huggingface.co/papers/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
     Ni, Yun-Hsuan Sung and Yinfei Yang. It's an encoder-decoder transformer pre-trained in a text-to-text denoising
     generative setting. LongT5 model is an extension of T5 model, and it enables using one of the two different
     efficient attention mechanisms - (1) Local attention, or (2) Transient-Global attention.

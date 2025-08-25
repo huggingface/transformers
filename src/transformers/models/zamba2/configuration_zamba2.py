@@ -79,8 +79,8 @@ class Zamba2Config(PretrainedConfig):
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf).
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_mem_blocks (`int`, *optional*, defaults to 1):
@@ -125,6 +125,7 @@ class Zamba2Config(PretrainedConfig):
     ```"""
 
     model_type = "zamba2"
+    attribute_map = {"head_dim": "attention_head_dim"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

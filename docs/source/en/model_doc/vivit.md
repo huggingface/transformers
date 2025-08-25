@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2021-03-29 and added to Hugging Face Transformers on 2023-07-11.*
 
 # Video Vision Transformer (ViViT)
 
@@ -20,7 +21,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://arxiv.org/abs/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.
+The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://huggingface.co/papers/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.
 The paper proposes one of the first successful pure-transformer based set of models for video understanding.
 
 The abstract from the paper is the following:
@@ -42,7 +43,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```
 from transformers import VivitModel
-model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 

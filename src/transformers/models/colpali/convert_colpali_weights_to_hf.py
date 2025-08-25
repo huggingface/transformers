@@ -39,7 +39,7 @@ python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
 import argparse
 import glob
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import torch
 from huggingface_hub import snapshot_download
@@ -58,7 +58,7 @@ logger = logging.get_logger(__name__)
 ORIGINAL_DTYPE = torch.bfloat16
 
 
-def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
+def rename_state_dict_keys(state_dict: dict[str, Any]) -> dict[str, Any]:
     new_state_dict = {}
     for key, value in state_dict.items():
         new_key = key
@@ -70,7 +70,7 @@ def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     return new_state_dict
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> Dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
     directory_path = snapshot_download(
         repo_id=model_id,
         revision=revision,
@@ -130,7 +130,7 @@ def convert_colpali_weights_to_hf(
 
     # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
     # There are two ways to set the model's dtype:
-    # - Using `model.from_pretrained(..., torch_dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
+    # - Using `model.from_pretrained(..., dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
     # - Using `model.to(dtype_precision)` converts all values - including the hyperparameters - to the desired precision.
     # The following snippet allows a fine-grained control over the model's dtype, making sure that all
     # the new weights' dtypes match the original model.

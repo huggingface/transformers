@@ -15,7 +15,7 @@ import argparse
 import json
 import os
 import re
-from typing import Dict, Optional
+from typing import Optional
 
 import requests
 import torch
@@ -66,7 +66,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -211,14 +211,13 @@ def convert_tiktoken(tokenizer, output_dir):
 
 
 KEYS_TO_MODIFY_MAPPING = {
+    "^model": "model.text_model",
     "^encoder": "model.vqmodel.encoder",
     "^decoder": "model.vqmodel.decoder",
     "^post_quant_conv": "model.vqmodel.post_quant_conv",
     "^quant_conv": "model.vqmodel.quant_conv",
     "^quantize": "model.vqmodel.quantize",
-    "^model": "text_model.model",
-    r"lm_head\.weight": "text_model.lm_head.weight",
-    r"^text_model\.model\.vqmodel": "vqmodel",
+    r"lm_head\.weight": "lm_head.weight",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"\.q\.": ".q_proj.",
     r"\.k\.": ".k_proj.",
@@ -259,7 +258,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     # Convert and save processor
     tokenizer_tiktoken = AutoTokenizer.from_pretrained(llm_model_id, trust_remote_code=True)
     convert_tiktoken(tokenizer_tiktoken, output_dir)
-    extra_special_tokens = extra_special_tokens = {
+    extra_special_tokens = {
         "image_token": "<image>",
         "boi_token": "<|image start|>",
         "eoi_token": "<|image end|>",
@@ -314,7 +313,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         # Short inference on a few examples to check if generation makes sense
         print("Loading the checkpoint in a Emu3 model...")
         print("*" * 100)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
         processor = Emu3Processor.from_pretrained(output_dir)
 
         conversation = [
@@ -349,7 +348,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         print("*" * 100)
     elif test_inference and llm_model_id.endswith("Gen"):
         processor = Emu3Processor.from_pretrained(output_dir)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
 
         inputs = processor(
             text=[

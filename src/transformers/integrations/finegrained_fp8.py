@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
@@ -45,7 +45,7 @@ def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
     tl.store(s_ptr + pid, s)
 
 
-def act_quant(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, torch.Tensor]:
+def act_quant(x: torch.Tensor, block_size: int = 128) -> tuple[torch.Tensor, torch.Tensor]:
     assert x.is_contiguous()
     assert x.shape[-1] % block_size == 0
     y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
@@ -149,7 +149,7 @@ def w8a8_block_fp8_matmul_triton(
     B: torch.Tensor,
     As: torch.Tensor,
     Bs: torch.Tensor,
-    block_size: List[int],
+    block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """This function performs matrix multiplication with block-wise
@@ -231,7 +231,7 @@ def w8a8_block_fp8_matmul_compile(
     weight_q: torch.Tensor,  # [out_features, hidden_dim]
     input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
     weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: Optional[Tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    block_size: Optional[tuple[int, int]] = None,  # (M=128, N=128) for weights for example
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
@@ -300,7 +300,7 @@ class FP8Linear(nn.Linear):
         out_features: int,
         bias: bool = False,
         dtype=None,
-        block_size: Optional[Tuple[int, int]] = None,
+        block_size: Optional[tuple[int, int]] = None,
         device=None,
         activation_scheme="dynamic",
     ):

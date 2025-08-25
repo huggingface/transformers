@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -190,9 +190,9 @@ class MLCDVisionEmbeddings(CLIPVisionEmbeddings):
 class MLCDAttention(CLIPAttention):
     """Multi-headed attention with RoPE. Refer to papers:
     - Attention is all you need:
-        https://arxiv.org/abs/1706.03762
+        https://huggingface.co/papers/1706.03762
     - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-        https://arxiv.org/abs/2104.09864
+        https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):
@@ -203,10 +203,10 @@ class MLCDAttention(CLIPAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, seq_length = hidden_states.shape[:-1]
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
@@ -226,13 +226,7 @@ class MLCDAttention(CLIPAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -261,16 +255,16 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
                 Represents the hidden states from the previous layer or the input embeddings.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`):
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
                 A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
                 Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.FloatTensor`):
@@ -319,19 +313,19 @@ class MLCDEncoder(CLIPEncoder):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`):
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
                 A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
                 Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -362,21 +356,12 @@ class MLCDEncoder(CLIPEncoder):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states=hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -408,7 +393,7 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -454,10 +439,10 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
 
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -500,7 +485,7 @@ class MLCDVisionModel(CLIPVisionModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Example:
 

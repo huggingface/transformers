@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2022-03-30 and added to Hugging Face Transformers on 2023-08-29.*
 
 # ViTDet
 
@@ -18,7 +19,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://arxiv.org/abs/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.
+The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://huggingface.co/papers/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.
 VitDet leverages the plain [Vision Transformer](vit) for the task of object detection.
 
 The abstract from the paper is the following:

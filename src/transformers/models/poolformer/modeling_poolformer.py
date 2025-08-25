@@ -15,7 +15,7 @@
 """PyTorch PoolFormer model."""
 
 import collections.abc
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -65,7 +65,7 @@ class PoolFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class PoolFormerEmbeddings(nn.Module):
@@ -142,10 +142,10 @@ class PoolFormerLayer(nn.Module):
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones(num_channels), requires_grad=True
             )
             self.layer_scale_2 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones(num_channels), requires_grad=True
             )
 
     def forward(self, hidden_states):
@@ -246,7 +246,7 @@ class PoolFormerEncoder(nn.Module):
 
 @auto_docstring
 class PoolFormerPreTrainedModel(PreTrainedModel):
-    config_class = PoolFormerConfig
+    config: PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
     _no_split_modules = ["PoolFormerLayer"]
@@ -286,7 +286,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -349,7 +349,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

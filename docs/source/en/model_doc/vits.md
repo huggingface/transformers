@@ -8,6 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.-->
+*This model was released on 2021-06-11 and added to Hugging Face Transformers on 2023-09-01.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -17,7 +18,7 @@ specific language governing permissions and limitations under the License.-->
 
 # VITS
 
-[VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech)](https://hf.co/papers/2106.06103) is a end-to-end speech synthesis model, simplifying the traditional two-stage text-to-speech (TTS) systems. It's unique because it directly synthesizes speech from text using variational inference, adversarial learning, and normalizing flows to produce natural and expressive speech with diverse rhythms and intonations.
+[VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech)](https://huggingface.co/papers/2106.06103) is a end-to-end speech synthesis model, simplifying the traditional two-stage text-to-speech (TTS) systems. It's unique because it directly synthesizes speech from text using variational inference, adversarial learning, and normalizing flows to produce natural and expressive speech with diverse rhythms and intonations.
 
 You can find all the original VITS checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mms-tts) organization.
 
@@ -39,7 +40,7 @@ set_seed(555)
 pipe = pipeline(
     task="text-to-speech",
     model="facebook/mms-tts-eng",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 
@@ -63,8 +64,8 @@ from IPython.display import Audio
 from transformers import AutoTokenizer, VitsModel, set_seed
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16).to("cuda")
-inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto", dtype=torch.float16)
+inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)
 

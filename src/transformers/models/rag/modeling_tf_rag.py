@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -55,7 +54,7 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -115,21 +114,21 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: Optional[tf.Tensor] = None
-    past_key_values: List[tf.Tensor] | None = None
+    logits: tf.Tensor | None = None
+    past_key_values: list[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
     retrieved_doc_ids: tf.Tensor | None = None
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    question_enc_hidden_states: tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_hidden_states: tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -139,7 +138,7 @@ class TFRetrievAugLMOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -198,27 +197,27 @@ class TFRetrievAugLMOutput(ModelOutput):
             average in the self-attention heads.
     """
 
-    logits: Optional[tf.Tensor] = None
-    past_key_values: List[tf.Tensor] | None = None
+    logits: tf.Tensor | None = None
+    past_key_values: list[tf.Tensor] | None = None
     doc_scores: tf.Tensor | None = None
     retrieved_doc_embeds: tf.Tensor | None = None
     retrieved_doc_ids: tf.Tensor | None = None
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    question_enc_hidden_states: tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_hidden_states: tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 class TFRagPreTrainedModel(TFPreTrainedModel):
     r"""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
-    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
@@ -232,8 +231,8 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
-        generator_pretrained_model_name_or_path: Optional[str] = None,
+        question_encoder_pretrained_model_name_or_path: str | None = None,
+        generator_pretrained_model_name_or_path: str | None = None,
         retriever: RagRetriever = None,
         *model_args,
         **kwargs,
@@ -323,9 +322,9 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         }
 
         # remove question_encoder, generator kwargs from kwargs
-        for key in kwargs_question_encoder.keys():
+        for key in kwargs_question_encoder:
             del kwargs["question_encoder_" + key]
-        for key in kwargs_generator.keys():
+        for key in kwargs_generator:
             del kwargs["generator_" + key]
 
         # Load and initialize the question_encoder and generator
@@ -377,7 +376,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
             )
 
         # instantiate config with corresponding kwargs
-        config = kwargs.get("config", None)
+        config = kwargs.get("config")
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
                 question_encoder.config, generator.config, **kwargs
@@ -499,11 +498,11 @@ class TFRagModel(TFRagPreTrainedModel):
 
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
-        question_encoder: Optional[TFPreTrainedModel] = None,
-        generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,
-        load_weight_prefix: Optional[str] = None,
+        config: PretrainedConfig | None = None,
+        question_encoder: TFPreTrainedModel | None = None,
+        generator: TFPreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,
+        load_weight_prefix: str | None = None,
         **kwargs,
     ):
         assert config is not None or (question_encoder is not None and generator is not None), (
@@ -554,7 +553,7 @@ class TFRagModel(TFRagPreTrainedModel):
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         doc_scores: np.ndarray | tf.Tensor | None = None,
         context_input_ids: np.ndarray | tf.Tensor | None = None,
         context_attention_mask: np.ndarray | tf.Tensor | None = None,
@@ -568,27 +567,31 @@ class TFRagModel(TFRagPreTrainedModel):
         **kwargs,
     ) -> TFRetrievAugLMOutput:
         r"""
-        Returns:
+                        Returns:
 
-        Example:
+                        Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, RagRetriever, TFRagModel
-        >>> import torch
+                        ```python
+                        >>> from transformers import AutoTokenizer, RagRetriever, TFRagModel
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-base")
-        >>> retriever = RagRetriever.from_pretrained(
-        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
-        ... )
-        >>> # initialize with RagRetriever to do everything in one forward call
-        >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
+                        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-base")
+                        >>> retriever = RagRetriever.from_pretrained(
+                        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+                        ... )
+                        >>> # initialize with RagRetriever to do everything in one forward call
+                        >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
 
-        >>> input_dict = tokenizer.prepare_seq2seq_batch(
-        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
-        ... )
-        >>> input_ids = input_dict["input_ids"]
-        >>> outputs = model(input_ids)
-        ```"""
+                        >>> input_dict = tokenizer.prepare_seq2seq_batch(
+                        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+                        ... )
+                        >>> input_ids = input_dict["input_ids"]
+                        >>> outputs = model(input_ids)
+                        ```"""
         assert "decoder_cached_states" not in kwargs, (
             "Please use past_key_values to cache intermediate outputs"
         )  # from modeling_tf_bart.py
@@ -741,10 +744,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
-        question_encoder: Optional[TFPreTrainedModel] = None,
-        generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,
+        config: PretrainedConfig | None = None,
+        question_encoder: TFPreTrainedModel | None = None,
+        generator: TFPreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,
         **kwargs,
     ):
         assert config is not None or (question_encoder is not None and generator is not None), (
@@ -859,7 +862,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         doc_scores: np.ndarray | tf.Tensor | None = None,
         context_input_ids: np.ndarray | tf.Tensor | None = None,
         context_attention_mask: np.ndarray | tf.Tensor | None = None,
@@ -881,12 +884,12 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             `torch.nn.functional.log_softmax`.
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss according to Rag-Token model formulation See
-            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation. Indices should be
+            https://huggingface.co/papers/2005.11401 Section 2.1 for details about Rag-Token formulation. Indices should be
             in `[0, ..., config.vocab_size - 1]`.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1061,7 +1064,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Custom logits processors that complement the default logits processors built from arguments and a
                 model's config. If a logit processor is passed that is already created with the arguments or a model's
                 config an error is thrown.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -1321,10 +1324,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
-        question_encoder: Optional[TFPreTrainedModel] = None,
-        generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,
+        config: PretrainedConfig | None = None,
+        question_encoder: TFPreTrainedModel | None = None,
+        generator: TFPreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,
         **kwargs,
     ):
         assert config is not None or (question_encoder is not None and generator is not None), (
@@ -1373,34 +1376,34 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         doc_scores: np.ndarray | tf.Tensor | None = None,
         context_input_ids: np.ndarray | tf.Tensor | None = None,
         context_attention_mask: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-        exclude_bos_score: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        exclude_bos_score: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        reduce_loss: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        reduce_loss: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,  # needs kwargs for generation
-    ) -> Union[Tuple[tf.Tensor], TFRetrievAugLMMarginOutput]:
+    ) -> tuple[tf.Tensor] | TFRetrievAugLMMarginOutput:
         r"""
         exclude_bos_score (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when computing
             the loss.
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation See
-            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation. Indices should
+            https://huggingface.co/papers/2005.11401 Section 2.1 for details about Rag-Sequence formulation. Indices should
             be in `[0, ..., config.vocab_size - 1]`.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1647,7 +1650,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs will be passed to [`~generation.GenerationMixin.generate`]
 
         Return:

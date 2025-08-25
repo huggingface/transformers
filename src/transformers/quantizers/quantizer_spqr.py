@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -51,21 +51,21 @@ class SpQRHfQuantizer(HfQuantizer):
         if not is_spqr_available():
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
             logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
-        elif torch_dtype != torch.float16:
+        elif dtype != torch.float16:
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
                 "torch.float16 explicitly."
             )
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -83,7 +83,7 @@ class SpQRHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self):
         return False
 
     def is_serializable(self, safe_serialization=None):

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-09-14.*
 
 
 <div style="float: right;">
@@ -75,6 +76,10 @@ output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up
 ## PixtralVisionConfig
 
 [[autodoc]] PixtralVisionConfig
+
+## MistralCommonTokenizer
+
+[[autodoc]] MistralCommonTokenizer
 
 ## PixtralVisionModel
 

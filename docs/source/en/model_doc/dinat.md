@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-09-29 and added to Hugging Face Transformers on 2022-11-18.*
 
 # Dilated Neighborhood Attention Transformer
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://arxiv.org/abs/2209.15001)
+DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://huggingface.co/papers/2209.15001)
 by Ali Hassani and Humphrey Shi.
 
 It extends [NAT](nat) by adding a Dilated Neighborhood Attention pattern to capture global context,
@@ -53,7 +54,7 @@ src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/ma
 alt="drawing" width="600"/>
 
 <small> Neighborhood Attention with different dilation values.
-Taken from the <a href="https://arxiv.org/abs/2209.15001">original paper</a>.</small>
+Taken from the <a href="https://huggingface.co/papers/2209.15001">original paper</a>.</small>
 
 This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
 The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).

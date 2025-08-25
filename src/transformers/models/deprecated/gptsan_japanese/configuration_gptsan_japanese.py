@@ -67,7 +67,7 @@ class GPTSanJapaneseConfig(PretrainedConfig):
             during training.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
+            *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing.
         output_hidden_states (`bool`, *optional*, default to `False`):

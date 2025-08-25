@@ -125,10 +125,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_slow_fast_equivalence_batched_crop_to_patches(self):
         # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
@@ -144,10 +141,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_crop_to_patches(self):
         # test slow image processor
@@ -175,3 +169,34 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         self.assertEqual(len(processed_images[0]), 5)
         self.assertEqual(processed_images.shape[-2:], (20, 20))
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"crop_to_patches": False}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=20, width=20, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=60, width=60, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 10)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 10)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"crop_to_patches": True, "max_patches": 200}
+            )
+            self.assertEqual(num_patches, 50)

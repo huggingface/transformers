@@ -23,6 +23,7 @@ from pytest import mark
 
 from transformers import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -43,7 +44,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -61,7 +61,6 @@ if is_vision_available():
 
 
 class Siglip2ModelTesterMixin(ModelTesterMixin):
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -98,7 +97,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
         dtype = torch.float16
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Prepare inputs
@@ -120,10 +119,8 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
-                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype)
-                model_fa = model_class.from_pretrained(
-                    tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmp_dir, dtype=dtype)
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -180,7 +177,7 @@ class Siglip2VisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -346,7 +343,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
@@ -363,7 +359,7 @@ class Siglip2TextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -513,9 +509,9 @@ class Siglip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
 
     def get_config(self):
-        return Siglip2Config.from_text_vision_configs(
-            self.text_model_tester.get_config(),
-            self.vision_model_tester.get_config(),
+        return Siglip2Config(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
         )
 
     def create_and_check_model(
@@ -760,17 +756,19 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
 
         # verify the logits values
         # fmt: off
-        expected_logits_per_text = torch.tensor(
-            [
-                [  1.0195,  -0.0280,  -1.4468],
-                [ -4.5395,  -6.2269,  -1.5667],
-                [  4.1757,   5.0358,   3.5159],
-                [  9.4264,  10.1879,   6.3353],
-                [  2.4409,   3.1058,   4.5491],
-                [-12.3230, -13.7355, -13.4632],
+        expected_logits_per_texts = Expectations({
+            ("cuda", None): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
                 [  1.1520,   1.1687,  -1.9647],
-            ]
-        ).to(torch_device)
+            ],
+            ("rocm", (9, 5)): [
+                [  1.0236,  -0.0376,  -1.4464], [ -4.5358,  -6.2235,  -1.5628], [  4.1708,   5.0334,   3.5187],
+                [  9.4241,  10.1828,   6.3366], [  2.4371,   3.1062,   4.5530], [-12.3173, -13.7240, -13.4580],
+                [  1.1502,   1.1716,  -1.9623]
+            ],
+        })
+        EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)
         # fmt: on
 
-        torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.logits_per_text, EXPECTED_LOGITS_PER_TEXT, rtol=1e-3, atol=1e-3)
