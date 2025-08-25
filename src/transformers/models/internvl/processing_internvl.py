@@ -295,7 +295,7 @@ class InternVLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        # InternVL renames video inputs to `pixel_values` before returning
+        # Overwritten because InternVL renames video inputs to `pixel_values` before returning
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names
