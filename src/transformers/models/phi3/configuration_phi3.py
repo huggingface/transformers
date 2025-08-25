@@ -15,7 +15,10 @@
 
 """Phi-3 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -74,8 +77,6 @@ class Phi3Config(PretrainedConfig):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
@@ -123,29 +124,28 @@ class Phi3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32064,
-        hidden_size=3072,
-        intermediate_size=8192,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        resid_pdrop=0.0,
-        embd_pdrop=0.0,
-        attention_dropout=0.0,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        original_max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=1.0,
-        bos_token_id=1,
-        eos_token_id=32000,
-        pad_token_id=32000,
-        sliding_window=None,
+        vocab_size: Optional[int] = 32064,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 8192,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        resid_pdrop: Optional[float] = 0.0,
+        embd_pdrop: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        original_max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        partial_rotary_factor: Optional[float] = 1.0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 32000,
+        pad_token_id: Optional[int] = 32000,
+        sliding_window: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -167,9 +167,19 @@ class Phi3Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+
+        rope_config_validation(self)
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
@@ -186,55 +196,50 @@ class Phi3Config(PretrainedConfig):
         """
         Adjust the `type` of the `rope_scaling` configuration for backward compatibility.
         """
-        if self.rope_scaling is None:
-            return
-
-        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_type = self.rope_scaling.get("rope_type", None)
 
         # For backward compatibility if previous version used "su" or "yarn"
         if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
-            self.rope_scaling["type"] = "longrope"
+            self.rope_scaling["rope_type"] = "longrope"
 
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
         """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 3:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with three fields, `type`, `short_factor` and `long_factor`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
+        if not isinstance(self.rope_scaling, dict):
+            raise ValueError(f"`rope_scaling` must be a dictionary but got {self.rope_scaling}")
+        rope_scaling_type = self.rope_scaling.get("rope_type", None)
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
-        if not (
-            isinstance(rope_scaling_short_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
-            )
         rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
-        if not len(rope_scaling_short_factor) == rotary_ndims // 2:
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"
-            )
-        if not (
-            isinstance(rope_scaling_long_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
-            )
-        if not len(rope_scaling_long_factor) == rotary_ndims // 2:
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
-            )
+        if rope_scaling_type not in ["default", "longrope"]:
+            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
+
+        if rope_scaling_short_factor is not None:
+            if not (
+                isinstance(rope_scaling_short_factor, list)
+                and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
+            ):
+                raise ValueError(
+                    f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
+                )
+            if not len(rope_scaling_short_factor) == rotary_ndims // 2:
+                raise ValueError(
+                    f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"
+                )
+
+        if rope_scaling_long_factor is not None:
+            if not (
+                isinstance(rope_scaling_long_factor, list)
+                and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
+            ):
+                raise ValueError(
+                    f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
+                )
+            if not len(rope_scaling_long_factor) == rotary_ndims // 2:
+                raise ValueError(
+                    f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
+                )
 
 
 __all__ = ["Phi3Config"]

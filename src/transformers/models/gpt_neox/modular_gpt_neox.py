@@ -20,6 +20,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 
 
@@ -38,6 +39,10 @@ class GPTNeoXMLP(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
+
+
+class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -123,7 +128,9 @@ class GPTNeoXAttention(nn.Module):
 
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -132,7 +139,8 @@ class GPTNeoXAttention(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -141,7 +149,16 @@ class GPTNeoXAttention(nn.Module):
         qkv = self.query_key_value(hidden_states).view(hidden_shape).transpose(1, 2)
         query_states, key_states, value_states = qkv.chunk(3, dim=-1)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Cache QKV values
@@ -168,6 +185,7 @@ class GPTNeoXAttention(nn.Module):
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
             head_mask=head_mask,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -189,6 +207,7 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         self.attention = GPTNeoXAttention(config, layer_idx)
         self.mlp = GPTNeoXMLP(config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor],
@@ -199,7 +218,7 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         attn_output, attn_weights = self.attention(
@@ -238,10 +257,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "gpt_neox"
     _no_split_modules = ["GPTNeoXLayer"]
@@ -261,7 +276,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -345,9 +359,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
 
         hidden_states = self.emb_dropout(inputs_embeds)
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, layer in enumerate(self.layers):
@@ -363,7 +374,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = outputs[0]
