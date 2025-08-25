@@ -1944,15 +1944,17 @@ class GenerationMixin(ContinuousMixin):
             )
             generation_config.cache_implementation = None
 
-        # assisted decoding needs to roll-back the Cache, which is not supported if
+        # assisted decoding or contrastive search from the Hub needs to roll-back the Cache, which is not supported if
         # it has sliding layers - so if we use any of those 2, do not pass the config to DynamicCache, which
         # will result in creating a Cache with only full layers even if model uses sliding window
         generation_mode = generation_config.get_generation_mode(assistant_model)
-        dynamic_cache_kwargs = (
-            {"config": self.config}
-            if generation_mode not in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
-            else {}
-        )
+        if (
+            generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
+            or generation_config.cache_implementation == "dynamic_full"
+        ):
+            dynamic_cache_kwargs = {}
+        else:
+            dynamic_cache_kwargs = {"config": self.config}
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
@@ -1993,7 +1995,7 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
-            elif generation_config.cache_implementation == "dynamic":
+            elif "dynamic" in generation_config.cache_implementation:
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
