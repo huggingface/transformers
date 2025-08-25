@@ -166,17 +166,13 @@ if __name__ == "__main__":
     job = args.job
     report_repo_id = args.report_repo_id
 
-    # Find the origin directory based on machine type
-    origin = path
-    for p in path.iterdir():
-        if machine_type in p.name:
-            origin = p
-            break
-
     # Loop through model directories and create collated reports
-    for model_dir in sorted(origin.iterdir()):
+    for model_dir in sorted(path.iterdir()):
+        if not model_dir.name.startswith(machine_type):
+            continue
+
         # Create a new entry for the model
-        model_name = model_dir.name.removesuffix("_test_reports")
+        model_name = model_dir.name.removeprefix(machine_type).removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
         results = []
 

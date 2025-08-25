@@ -9,8 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Loading models
+    - local: models
+      title: 모델 로드하기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
     - local: how_to_hack_models
