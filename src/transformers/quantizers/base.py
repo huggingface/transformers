@@ -280,9 +280,9 @@ class HfQuantizer(ABC):
 
         return model
 
-    def get_cuda_warm_up_factor(self):
+    def get_accelerator_warm_up_factor(self):
         """
-        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
+        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up accelerator.
         A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
         we allocate half the memory of the weights residing in the empty model, etc...
         """
