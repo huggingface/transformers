@@ -114,6 +114,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     do_pad = False
     ignore_index = None
     valid_kwargs = EomtImageProcessorFastKwargs
+    call_only_args = ["images", "segmentation_maps", "instance_id_to_semantic_id"]
 
     def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
         super().__init__(**kwargs)

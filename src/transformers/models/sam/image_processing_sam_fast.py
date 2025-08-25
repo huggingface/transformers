@@ -91,9 +91,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-
+    call_only_args = ["images", "segmentation_maps"]
     valid_kwargs = SamFastImageProcessorKwargs
-
     do_pad = True
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}

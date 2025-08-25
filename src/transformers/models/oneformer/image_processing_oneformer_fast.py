@@ -355,6 +355,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     num_labels = None
     valid_kwargs = OneFormerFastImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
+    call_only_args = ["images", "task_inputs", "segmentation_maps", "instance_id_to_semantic_id"]
 
     def __init__(self, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
