@@ -24,7 +24,6 @@ from ... import (
     BitsAndBytesConfig,
     GenerationConfig,
     PreTrainedModel,
-    PreTrainedTokenizer,
     PretrainedConfig,
     LlamaForCausalLM,
 )

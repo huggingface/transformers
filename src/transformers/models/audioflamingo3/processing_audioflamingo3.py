@@ -4,13 +4,11 @@ from collections import defaultdict
 from typing import Dict, Optional, Sequence, Union
 
 import numpy as np
-import soundfile as sf
 import torch
-from librosa import resample as librosa_resample
-from pydub import AudioSegment
 from ... import AutoTokenizer, WhisperFeatureExtractor
 from ...processing_utils import ProcessorMixin
 from ...utils.hub import snapshot_download
+from ...utils import requires_backends
 
 from .configuration_audioflamingo3 import MEDIA_TOKENS
 
@@ -125,46 +123,35 @@ class AudioFlamingo3Processor(ProcessorMixin):
         return num_windows, full_length
 
     def _load_audio(self, file_path, target_sr=16000, duration=30.0, start=0.0):
+        requires_backends(self, ["librosa"])
+        import librosa
+
+        y, sr = librosa.load(file_path, sr=None, mono=False)
+        if y.ndim == 1: y = y[np.newaxis, :]
+        C, N = y.shape
+
         if file_path.endswith(".mp3"):
-            audio = AudioSegment.from_file(file_path)
-            if len(audio) > (start + duration) * 1000:
-                audio = audio[start * 1000 : (start + duration) * 1000]
-            if audio.frame_rate != target_sr:
-                audio = audio.set_frame_rate(target_sr)
-            if audio.channels > 1:
-                audio = audio.set_channels(1)
-            data = np.array(audio.get_array_of_samples())
-            if audio.sample_width == 2:
-                data = data.astype(np.float32) / np.iinfo(np.int16).max
-            elif audio.sample_width == 4:
-                data = data.astype(np.float32) / np.iinfo(np.int32).max
-            else:
-                raise ValueError("Unsupported bit depth: {}".format(audio.sample_width))
-
+            if (N / sr) * 1000.0 > (start + duration) * 1000.0:
+                s0, s1 = int(start * sr), int((start + duration) * sr)
+                y = y[:, max(0, s0):min(N, s1)]
+            y = y.mean(axis=0) if C > 1 else y[0]
+            if sr != target_sr and y.size: y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+            data = y.astype(np.float32, copy=False)
         else:
-            with sf.SoundFile(file_path) as audio:
-                original_sr = audio.samplerate
-                channels = audio.channels
-                max_frames = int((start + duration) * original_sr)
-                audio.seek(int(start * original_sr))
-                frames_to_read = min(max_frames, len(audio))
-                data = audio.read(frames_to_read)
-                if data.max() > 1 or data.min() < -1:
-                    data = data / max(abs(data.max()), abs(data.min()))
+            s0, s1 = int(start * sr), min(N, int((start + duration) * sr))
+            y = y[:, s0:s1] if s0 < N else y[:, 0:0]
+            y = y[0] if y.ndim == 2 and y.shape[0] > 1 else y.squeeze(0)
+            if sr != target_sr and y.size: y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+            data = y.astype(np.float64, copy=False)
 
-            if original_sr != target_sr:
-                if channels == 1:
-                    data = librosa_resample(data.flatten(), orig_sr=original_sr, target_sr=target_sr)
-                else:
-                    data = librosa_resample(data.T, orig_sr=original_sr, target_sr=target_sr)[0]
+        if data.size:
+            dmin, dmax = data.min(), data.max()
+            if dmin >= 0:
+                m = abs(dmax) or 1.0
+                data = 2 * data / m - 1.0
             else:
-                if channels != 1:
-                    data = data.T[0]
-
-        if data.min() >= 0:
-            data = 2 * data / abs(data.max()) - 1.0
-        else:
-            data = data / max(abs(data.max()), abs(data.min()))
+                m = max(abs(dmax), abs(dmin)) or 1.0
+                data = data / m
 
         assert len(data.shape) == 1, data.shape
         return data
