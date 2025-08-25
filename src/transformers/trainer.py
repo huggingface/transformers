@@ -439,7 +439,7 @@ class Trainer:
             args = TrainingArguments(output_dir=output_dir)
 
         # Fixes issues 28530 + 40217: Data collator automatic label detection sets label_names to ['label'] but changes ['label'] to ['labels'] if provided
-        if args.label_names == ['label']:
+        if args.label_names == ["label"]:
             logger.warning(
                 "Setting label_names=['label'] is redundant and may cause issues. "
                 "Removing it to use automatic label detection."
