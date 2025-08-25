@@ -719,7 +719,7 @@ In summary:"""
             " the Warring States period was a time of great change in China. The Zhou dynasty was in decline",
         )
         model.config._attn_implementation = "eager"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches sdpa"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
@@ -727,11 +727,11 @@ In summary:"""
         # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
 
         # model.config._attn_implementation = "flex_attention"
-        # new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        # new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         # with self.subTest("Eager matches Flex attention"):
         #     torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
         model.config._attn_implementation = "flash_attention_2"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
