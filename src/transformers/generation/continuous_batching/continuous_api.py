@@ -423,6 +423,7 @@ class ContinuousBatchingManager:
         manual_eviction: bool = False,
         max_queue_size=0,
         streaming: bool = True,
+        slice_inputs: bool = True,
     ):
         """Initialize the continuous batching manager.
 
@@ -451,6 +452,7 @@ class ContinuousBatchingManager:
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
         self.decode_stream = DecodeStream(skip_special_tokens=True)
+        self.slice_inputs = slice_inputs
 
     @traced
     def start(self):
@@ -649,6 +651,7 @@ class ContinuousBatchingManager:
                 scheduler(paged_attention_cache, self.manual_eviction),
                 self.streaming,
                 self.manual_eviction,
+                slice_inputs=self.slice_inputs,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
@@ -728,6 +731,7 @@ class ContinuousMixin:
         manual_eviction: bool = False,
         max_queue_size: int = 0,
         streaming: bool = False,
+        slice_inputs: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -757,6 +761,7 @@ class ContinuousMixin:
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
             streaming=streaming,
+            slice_inputs=slice_inputs,
         )
 
     @traced
@@ -766,6 +771,7 @@ class ContinuousMixin:
         inputs: list[list[int]],
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
+        slice_inputs: bool = True,
         **kwargs,
     ) -> list[list[int]]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -787,7 +793,7 @@ class ContinuousMixin:
             progress_bar = False
 
         # Initialize manager with the batch inputs
-        manager = self.init_continuous_batching(generation_config=generation_config)
+        manager = self.init_continuous_batching(generation_config=generation_config, slice_inputs=slice_inputs)
         manager.start()
         results = {}
         num_requests = len(inputs)

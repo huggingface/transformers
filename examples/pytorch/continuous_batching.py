@@ -96,6 +96,7 @@ def batch_generate(
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: Optional[str] = None,
     expected_outputs: Optional[list[str]] = None,
+    slice_inputs: bool = True,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -104,6 +105,7 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
+        slice_inputs=slice_inputs,  # TODO: move this to the generation config
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -179,6 +181,7 @@ if __name__ == "__main__":
         "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
     )
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
+    parser.add_argument("--slice-inputs", action="store_true", default=False)
     parser.add_argument("--use-cuda-graph", action="store_true", default=False)
     parser.add_argument("--compile", action="store_true", default=False)
 
@@ -189,10 +192,11 @@ if __name__ == "__main__":
     parser.add_argument("--metrics", action="store_true", default=False)
     args = parser.parse_args()
 
+    # If turned on, we setup metrics
     if args.metrics:
         setup_metrics()
 
-    # Set matmul precision
+    # Set matmul precision if not none
     if args.matmul_precision != "none":
         torch.set_float32_matmul_precision(args.matmul_precision)
 
@@ -204,8 +208,13 @@ if __name__ == "__main__":
         torch_dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
+
+    # If turned on, we compile the model
     if args.compile:
         model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
+    if args.slice_inputs:
+        assert not args.compile, "Slicing inputs requires is not the model to be compiled"
+        assert not args.use_cuda_graph, "Slicing inputs is not compatible with cuda graphs"
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
@@ -240,6 +249,7 @@ if __name__ == "__main__":
         generation_config,
         tokenizer,
         displayed_samples=-1,
+        slice_inputs=args.slice_inputs,
     )
 
     # Run batch generation
@@ -251,6 +261,7 @@ if __name__ == "__main__":
         displayed_samples=args.displayed,
         output_file=args.output_file,
         expected_outputs=expected_outputs,
+        slice_inputs=args.slice_inputs,
     )
 
 # Example usage:
