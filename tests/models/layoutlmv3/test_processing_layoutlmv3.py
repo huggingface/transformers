@@ -146,20 +146,6 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = LayoutLMv3Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
 
 # different use cases tests
 @require_torch
