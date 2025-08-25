@@ -25,7 +25,10 @@ import librosa
 import numpy as np
 import torch
 import torchaudio
+import json
+from copy import deepcopy
 
+from PIL import Image
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
@@ -163,6 +166,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         self.image_pattern = "\(<image>./</image>\)"
         self.audio_tag = "(<audio>./</audio>)"
         self.audio_pattern = "\(<audio>./</audio>\)"
+        self.terminators = ["<|im_end|>", "<|endoftext|>"]
         self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
 
     def __call__(
@@ -234,10 +238,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             use_image_id: for video understanding or omni understanding, use_image_id should be False
             use_tts_template: if the msgs contain audio, use_tts_template should be True
         """
-        import json
-        from copy import deepcopy
-        from PIL import Image
-
         if isinstance(msgs[0], list):
             batched = True
         else:
@@ -313,31 +313,17 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             max_length=max_inp_length,
         )
         return inputs
-    
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        output_ids = args[0]
-        result_text = []
-        for result in output_ids:
-            result = result[result != 0]
-            result_text.append(self.tokenizer.decode(
-                result, *args[1:], **kwargs).strip())
-        return result_text
-        # return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        result = args[0]
-        result = result[result != 0]
-        return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
+    def decode(self, outputs, batched=False):
+        result = self.decode_text(
+            outputs.sequences, self.tokenizer, self.terminators)
+        if not batched:
+            result = result[0]
+        if isinstance(result, list):
+            result = [i.replace(self.tokenizer.tts_end, "") for i in result]
+        else:
+            result = result.replace(self.tokenizer.tts_end, "")
+        return result
 
     def decode_text(self, result_ids, tokenizer, terminators):
         terminators = [tokenizer.convert_tokens_to_ids(i) for i in terminators]

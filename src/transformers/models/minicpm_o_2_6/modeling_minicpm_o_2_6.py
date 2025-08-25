@@ -45,6 +45,7 @@ from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPa
 from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring, LossKwargs
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation import GenerationMixin
+from transformers.generation.utils import GenerateOutput
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
@@ -78,6 +79,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class OmniOutput(ModelOutput):
     text: Optional[Union[str, List[str], Iterator]] = None
+    outputs: (GenerateOutput | torch.LongTensor) = None
     spk_embeds: Optional[torch.FloatTensor] = None
     audio_wav: Optional[np.ndarray] = None
     sampling_rate: Optional[int] = None
@@ -1019,54 +1021,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         return input_embeddings
 
-    # def forward(self, data = None, **kwargs):
-    #     r"""
-    #     Perform a forward pass with multimodal inputs including vision and optional audio features.
-
-    #     Args:
-    #         data (`Dict`):
-    #             A dictionary containing multimodal inputs required to compute embeddings:
-
-    #             - `pixel_values` (`torch.FloatTensor` of shape `(B, C, H, W)`): Image tensors used for visual embedding.
-    #             - `tgt_sizes` (`torch.LongTensor` of shape `(num_images, 2)`): Target spatial size (H, W) after patch embedding.
-    #             - `image_bound` (`torch.LongTensor` of shape `(num_images, 2)`): Token index boundaries in the input sequence for each image.
-    #             - `input_ids` (`torch.LongTensor`): Tokenized input ids including placeholders for multimodal tokens.
-    #             - `position_ids` (`torch.LongTensor`): Positional indices, will be cast to `torch.int64` if needed.
-    #             - `audio_values` (`torch.FloatTensor`, *optional*): Optional raw audio input, used if `config.init_audio` is True.
-
-    #         **kwargs:
-    #             Additional standard generation/model arguments passed to the underlying language model, e.g.:
-    #             - `attention_mask`
-    #             - `past_key_values`
-    #             - `use_cache`
-    #             - `output_attentions`
-    #             - `output_hidden_states`
-    #             - `return_dict`
-
-    #     Returns:
-    #         Model outputs from the underlying language model, depending on `return_dict`.
-    #     """
-    #     output_attentions = kwargs.pop('output_attentions') if kwargs.get('output_attentions', None) is not None else self.config.output_attentions
-    #     output_hidden_states = (
-    #         kwargs.pop('output_hidden_states') if kwargs.get('output_hidden_states', None) is not None else self.config.output_hidden_states
-    #     )
-    #     outputs = self.language_model(
-    #         output_attentions=output_attentions,
-    #         output_hidden_states=output_hidden_states,
-    #         **kwargs
-    #     )
-    #     hidden_states = outputs.last_hidden_state
-    #     # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-    #     slice_indices = slice(0, None)
-    #     logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-    #     return CausalLMOutputWithPast(
-    #         loss=None,
-    #         logits=logits,
-    #         past_key_values=outputs.past_key_values,
-    #         hidden_states=outputs.hidden_states,
-    #         attentions=outputs.attentions,
-    #     )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1180,13 +1134,42 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         audio_bounds=None,
         spk_bounds=None,
         attention_mask=None,
-        tokenizer=None,
+        processor=None,
         vision_hidden_states=None,
         stream=False,
+        generate_audio=False,
+        return_spk_embed=False,
+        return_dict=False,
+        batched=False,
+        use_tts_template=False,
+        sampling=False,
+        max_new_tokens=2048,
+        min_new_tokens=0,
         **kwargs,
     ):
         assert input_ids is not None
         assert len(input_ids) == len(pixel_values)
+
+        kwargs.pop("image_sizes")
+        if sampling:
+            generation_config = {
+                "top_p": 0.8,
+                "top_k": 100,
+                "temperature": 0.7,
+                "do_sample": True,
+                "repetition_penalty": 1.05,
+            }
+        else:
+            generation_config = {
+                "num_beams": 3,
+                "repetition_penalty": 1.2,
+            }
+        generation_config["max_new_tokens"] = max_new_tokens
+        generation_config["min_new_tokens"] = min_new_tokens
+        generation_config.update((k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
+
+        if generate_audio or return_spk_embed:
+            return_dict = True
 
         model_inputs = {
             "input_ids": input_ids,
@@ -1212,11 +1195,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             )
 
             if stream:
-                result = self._decode_stream(model_inputs["inputs_embeds"], tokenizer, **kwargs)
-                # if stream return TextIteratorStreamer and output is empty
-                outputs = {}
+                result = self._decode_stream(model_inputs["inputs_embeds"], processor.tokenizer, **generation_config)
             else:
-                terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
+                terminators = [processor.tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
                 outputs = super().generate(
                     inputs_embeds=model_inputs["inputs_embeds"],
                     pad_token_id=0,
@@ -1224,200 +1205,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     attention_mask=attention_mask,
                     output_hidden_states=True,
                     return_dict_in_generate=True,
-                    **kwargs,
+                    **generation_config,
                 )
-                result = self.processor.decode_text(outputs.sequences, tokenizer, self.terminators)
-
-        return result, outputs
-
-    def chat(
-        self,
-        image=None,
-        msgs=None,
-        tokenizer=None,
-        processor=None,
-        vision_hidden_states=None,
-        max_new_tokens=2048,
-        min_new_tokens=0,
-        sampling=True,
-        max_inp_length=32768,
-        stream=False,
-        chunk_input=True,
-        omni_input=False,
-        max_slice_nums=None,
-        use_image_id=None,
-        use_tts_template=False,
-        generate_audio=False,
-        return_spk_embed=False,
-        return_dict=False,
-        output_audio_path=None,
-        **kwargs,
-    ):
-        """
-        Unified chat function
-
-        Args:
-            image: use for batch_size=1 vqa, It is not recommended to continue to use this parameter
-            msgs: the input chat msgs, support text: (string)  / image: (PIL.Image) / audio (numpy.ndarray)
-            tokenizer: tokenizer for llm
-            processor: if None, use the default processor
-            max_new_tokens: the maximum length of the generation
-            min_new_tokens: the minimum length of the generation
-            sampling: whether to use sampling decoding or beam search decoding
-            max_inp_length: the maximum length of input
-            stream: whether to return generator, only used when tts is not required
-            chunk_input: whether to split audio into 1s chunks
-            omni_input: determine whether it is omni mode
-            max_slice_nums: control the maximum number of image slices
-            use_image_id: for video understanding or omni understanding, use_image_id should be False
-            use_tts_template: if the msgs contain audio, use_tts_template should be True
-            generate_audio: whether to generate audio output, only used when return_dict=True
-            return_spk_embed: whether to return spk embedding, only used when return_dict=True
-            return_dict: whether to return dict
-            output_audio_path: audio save path when generate_audio
-            **kwargs:
-        """
-        if isinstance(msgs[0], list):
-            batched = True
-        else:
-            batched = False
-
-        if generate_audio or return_spk_embed:
-            return_dict = True
-
-        msgs_list = msgs
-        images_list = image
-
-        if batched is False:
-            images_list, msgs_list = [images_list], [msgs_list]
-        else:
-            assert images_list is None, "Please integrate image to msgs when using batch inference."
-            images_list = [None] * len(msgs_list)
-        assert len(images_list) == len(msgs_list), "The batch dim of images_list and msgs_list should be the same."
-
-        if processor is None:
-            processor = self.processor
-
-        assert (
-            self.config.query_num == processor.image_processor.image_feature_size
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.patch_size == processor.image_processor.patch_size
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.use_image_id == processor.image_processor.use_image_id
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.slice_config.max_slice_nums == processor.image_processor.max_slice_nums
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.slice_mode == processor.image_processor.slice_mode
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-
-        prompts_lists = []
-        input_images_list = []
-        input_audios_list = []
-        audio_parts_list = []
-
-        for image, msgs in zip(images_list, msgs_list):
-            if isinstance(msgs, str):
-                msgs = json.loads(msgs)
-            copy_msgs = deepcopy(msgs)
-
-            assert len(msgs) > 0, "msgs is empty"
-            assert sampling or not stream, "if use stream mode, make sure sampling=True"
-
-            if image is not None and isinstance(copy_msgs[0]["content"], str):
-                copy_msgs[0]["content"] = [image, copy_msgs[0]["content"]]
-
-            images = []
-            audios = []
-            audio_parts = []
-            for i, msg in enumerate(copy_msgs):
-                role = msg["role"]
-                content = msg["content"]
-                assert role in ["system", "user", "assistant"]
-                if i == 0:
-                    assert role in ["user", "system"], "The role of first msg should be user"
-                if isinstance(content, str):
-                    content = [content]
-                cur_msgs = []
-                for c in content:
-                    if isinstance(c, Image.Image):
-                        images.append(c)
-                        cur_msgs.append("(<image>./</image>)")
-                    elif isinstance(c, np.ndarray):  # audio
-                        audios.append(c)
-                        audio_parts.append(i)
-                        cur_msgs.append("(<audio>./</audio>)")
-                        use_tts_template = True
-                    elif isinstance(c, str):
-                        cur_msgs.append(c)
-                if omni_input:
-                    msg["content"] = "".join(cur_msgs)
-                else:
-                    msg["content"] = "\n".join(cur_msgs)
-
-            prompts_lists.append(
-                processor.tokenizer.apply_chat_template(
-                    copy_msgs,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    chat_template=self.processor.default_tts_chat_template if use_tts_template else None,
-                )
-            )
-            if images:
-                input_images_list.append(images)
-            if audios:
-                input_audios_list.append(audios)
-                audio_parts_list.append(audio_parts)
-
-        inputs = processor(
-            prompts_lists,
-            input_images_list,
-            input_audios_list,
-            audio_parts=audio_parts_list,
-            max_slice_nums=max_slice_nums,
-            use_image_id=use_image_id,
-            chunk_input=chunk_input,
-            return_tensors="pt",
-            max_length=max_inp_length,
-        ).to(self.device)
-
-        if sampling:
-            generation_config = {
-                "top_p": 0.8,
-                "top_k": 100,
-                "temperature": 0.7,
-                "do_sample": True,
-                "repetition_penalty": 1.05,
-            }
-        else:
-            generation_config = {
-                "num_beams": 3,
-                "repetition_penalty": 1.2,
-            }
-
-        if min_new_tokens > 0:
-            generation_config["min_new_tokens"] = min_new_tokens
-
-        generation_config.update((k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
-
-        inputs.pop("image_sizes")
-        with torch.inference_mode():
-            res, outputs = self.generate(
-                **inputs,
-                tokenizer=tokenizer,
-                max_new_tokens=max_new_tokens,
-                vision_hidden_states=vision_hidden_states,
-                stream=stream,
-                **generation_config,
-            )
 
         if stream:
-
             def stream_gen():
-                for text in res:
+                for text in result:
                     for term in self.terminators:
                         text = text.replace(term, "")
                     yield text
@@ -1429,35 +1222,28 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         else:
             spk_embeds = wav_numpy = sr = None
-
-            if batched:
-                answer = res
-            else:
-                answer = res[0]
-
-                if use_tts_template and generate_audio:
-                    mel_spec = self._generate_mel_spec(inputs, outputs, answer, tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0})
-                    wav_numpy, sr = self.decode_mel_to_audio(mel_spec, output_audio_path)
+            
+            if not batched and use_tts_template and generate_audio:
+                # todo 这个地方怎么处理，必须得decode一次
+                result = processor.decode_text(outputs.sequences, processor.tokenizer, self.terminators)
+                mel_spec = self._generate_mel_spec(model_inputs, outputs, result[0], tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0})
+                wav_numpy, sr = self.decode_mel_to_audio(mel_spec, kwargs.get('output_audio_path', None))
 
             if return_spk_embed:
-                spk_embeds = self._get_last_spk_embeds(inputs, outputs)
-
-            if isinstance(answer, list):
-                answer = [i.replace(tokenizer.tts_end, "") for i in answer]
-            else:
-                answer = answer.replace(tokenizer.tts_end, "")
+                spk_embeds = self._get_last_spk_embeds(model_inputs, outputs)
 
             if return_dict:
-                return OmniOutput(text=answer, spk_embeds=spk_embeds, audio_wav=wav_numpy, sampling_rate=sr)
+                return OmniOutput(outputs=outputs, spk_embeds=spk_embeds, audio_wav=wav_numpy, sampling_rate=sr)
             else:
-                return answer
+                return outputs
+            
 
     @torch.inference_mode()
     def streaming_prefill(
         self,
         session_id,
         msgs,
-        tokenizer,
+        processor,
         omni_input=True,
         max_slice_nums=None,
         ls_temperature=1.0,
@@ -1520,15 +1306,15 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             self.reset_session()
             self.session_id = session_id
 
-            prompt = tokenizer.apply_chat_template(
-                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=self.processor.default_tts_chat_template
+            prompt = processor.tokenizer.apply_chat_template(
+                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=processor.default_tts_chat_template
             )
             add_special_tokens = True  # add bos
         else:
             prompt = copy_msgs[0]["content"]
             add_special_tokens = False
 
-        model_inputs = self.processor(
+        model_inputs = processor(
             [prompt],
             [images] if images else None,
             [audios] if audios else None,
@@ -1661,7 +1447,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
     def streaming_generate(
         self,
         session_id,
-        tokenizer,
+        processor,
         max_new_tokens=512,
         min_new_tokens=0,
         sampling=True,
@@ -1673,6 +1459,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         Streaming video/audio input and output audio stream
         Args:
         """
+        tokenizer = processor.tokenizer
         if sampling:
             generation_config = {
                 "top_p": 0.8,
