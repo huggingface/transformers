@@ -24,14 +24,6 @@ from ...utils.metrics import attach_tracer, traced
 from .core import RequestState, get_device_and_memory_breakdown, logger
 
 
-T = TypeVar("T")
-
-
-def getattr_no_none(obj: Any, attr: str, default: T) -> T:
-    x = getattr(obj, attr, None)
-    return x if x is not None else default
-
-
 @attach_tracer()
 class PagedAttentionCache:
     def __init__(
@@ -58,8 +50,10 @@ class PagedAttentionCache:
         self.device = device
 
         # Extract model dimensions
-        self.num_key_value_heads: int = getattr_no_none(config, "num_key_value_heads", config.num_attention_heads)
-        self.head_dim: int = getattr_no_none(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        kv_heads = getattr(config, "num_key_value_heads", None)
+        self.num_key_value_heads: int = kv_heads if kv_heads is not None else config.num_attention_heads
+        head_dim = getattr(config, "head_dim", None)
+        self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
 
         self.num_hidden_layers = config.num_hidden_layers
         self.block_size = getattr(generation_config, "block_size", 32)
