@@ -394,7 +394,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
     and is why Mamba is called **selective** state spaces)
 
     The are a few differences between this and Mamba2Mixer:
-    - The variable use_precomputed_states is slightly different due to the HybridCache structure
+    - The variable use_precomputed_states is slightly different due to the hybrid cache structure
     - There's a few non-obvious bugs fixed with batching in the slow path that exist in main
     - Some extra variables that our layer doesn't need have been removed
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
@@ -1665,12 +1665,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @auto_docstring
     def forward(

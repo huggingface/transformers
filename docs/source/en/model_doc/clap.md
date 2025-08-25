@@ -43,12 +43,12 @@ The example below demonstrates how to extract text embeddings with the [`AutoMod
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-model = AutoModel.from_pretrained("laion/clap-htsat-unfused", torch_dtype=torch.float16, device_map="auto")
+model = AutoModel.from_pretrained("laion/clap-htsat-unfused", dtype=torch.float16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
 texts = ["the sound of a cat", "the sound of a dog", "music playing"]
 
-inputs = tokenizer(texts, padding=True, return_tensors="pt").to("cuda")
+inputs = tokenizer(texts, padding=True, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     text_features = model.get_text_features(**inputs)

@@ -124,6 +124,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
@@ -158,6 +159,8 @@ if TYPE_CHECKING:
     from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
+    from .hunyuan_v1_dense import *
+    from .hunyuan_v1_moe import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -241,6 +244,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .opt import *
+    from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
@@ -292,6 +296,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
+    from .seed_oss import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
@@ -358,6 +363,7 @@ if TYPE_CHECKING:
     from .wavlm import *
     from .whisper import *
     from .x_clip import *
+    from .xcodec import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *

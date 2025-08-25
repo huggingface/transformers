@@ -149,7 +149,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
@@ -183,7 +183,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners

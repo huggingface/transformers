@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_nltk,
     require_sentencepiece,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     to_2tuple,
@@ -393,7 +392,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
