@@ -1107,9 +1107,6 @@ class TFWhisperMainLayer(keras.layers.Layer):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
