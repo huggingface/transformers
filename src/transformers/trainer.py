@@ -2237,7 +2237,9 @@ class Trainer:
         self.is_in_train = True
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
-        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)):
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
             self._align_special_tokens()
 
         # Attach NEFTune hooks if necessary
@@ -2618,7 +2620,7 @@ class Trainer:
                     # Since we perform prefetching, we need to manually set sync_gradients
                     self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
-                    if self.args.include_num_input_tokens_seen:
+                    if self.args.include_num_input_tokens_seen not in ["no", False]:
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
                         if main_input_name not in inputs:
                             logger.warning(
@@ -2627,7 +2629,25 @@ class Trainer:
                                 "a `main_input_name` attribute to the model class you are using."
                             )
                         else:
-                            input_tokens = inputs[main_input_name].numel()
+                            if self.args.include_num_input_tokens_seen == "non_padding":
+                                if "attention_mask" in inputs:
+                                    input_tokens = inputs["attention_mask"].sum()
+                                elif (
+                                    self.processing_class is not None
+                                    and hasattr(self.processing_class, "pad_token_id")
+                                    and self.processing_class.pad_token_id is not None
+                                ):
+                                    input_tokens = (
+                                        inputs[main_input_name] != self.processing_class.pad_token_id
+                                    ).sum()
+                                else:
+                                    logger.warning(
+                                        "Could not determine method to count non-padding tokens, falling back to counting all tokens."
+                                    )
+                                    input_tokens = inputs[main_input_name].numel()
+                            else:
+                                input_tokens = inputs[main_input_name].numel()
+
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
                             self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
                     if rng_to_sync:
