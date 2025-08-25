@@ -37,7 +37,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 quant_config = QuantoConfig(weights="int8")
 model = transformers.AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B", 
-    torch_dtype="auto", 
+    dtype="auto", 
     device_map="auto", 
     quantization_config=quant_config
 )
@@ -54,7 +54,7 @@ from transformers import AutoModelForSpeechSeq2Seq, QuantoConfig
 quant_config = QuantoConfig(weights="int8")
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
   "openai/whisper-large-v2",
-  torch_dtype="auto",
+  dtype="auto",
   device_map="auto",
   quantization_config=quant_config
 )

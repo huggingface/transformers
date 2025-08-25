@@ -361,6 +361,13 @@ class ServeArguments:
         },
     )
     torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    dtype: Optional[str] = field(
         default="auto",
         metadata={
             "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
@@ -433,6 +440,12 @@ class ServeArguments:
             ),
         },
     )
+
+    def __post_init__(self):
+        """Only used for BC `torch_dtype` argument."""
+        # In this case only the BC torch_dtype was given
+        if self.torch_dtype is not None and self.dtype == "auto":
+            self.dtype = self.torch_dtype
 
 
 class ServeCommand(BaseTransformersCLICommand):
@@ -633,6 +646,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 allow_credentials=True,
                 allow_methods=["*"],
                 allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+        else:
+            logger.warning_once(
+                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
             )
 
         @app.post("/v1/chat/completions")
@@ -1456,11 +1476,11 @@ class ServeCommand(BaseTransformersCLICommand):
         if args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `torch_dtype`
-                bnb_4bit_compute_dtype=args.torch_dtype,
+                # For consistency with model weights, we use the same value as `dtype`
+                bnb_4bit_compute_dtype=args.dtype,
                 bnb_4bit_quant_type=args.bnb_4bit_quant_type,
                 bnb_4bit_use_double_quant=args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=args.torch_dtype,
+                bnb_4bit_quant_storage=args.dtype,
             )
         elif args.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
@@ -1517,13 +1537,13 @@ class ServeCommand(BaseTransformersCLICommand):
             trust_remote_code=args.trust_remote_code,
         )
 
-        torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
 
         model_kwargs = {
             "revision": revision,
             "attn_implementation": args.attn_implementation,
-            "torch_dtype": torch_dtype,
+            "dtype": dtype,
             "device_map": "auto",
             "trust_remote_code": args.trust_remote_code,
         }
