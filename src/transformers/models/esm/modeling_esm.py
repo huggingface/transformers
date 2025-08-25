@@ -265,7 +265,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    relative_position_scores: Optional[torch.Tensor] = None,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -279,7 +278,30 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    if relative_position_scores is not None:
+    if hasattr(module, "position_embedding_type") and module.position_embedding_type in [
+        "relative_key",
+        "relative_key_query",
+    ]:
+        if module.config._attn_implementation != "eager":
+            raise ValueError(
+                f"ESM {module.config._attn_implementation} attention does not support {module.position_embedding_type} embeddings. "
+                "Set attention explicitly to 'eager' with `model.set_attn_implementation('eager')`"
+            )
+
+        seq_length = query.shape[2]
+        position_ids_l = torch.arange(seq_length, dtype=torch.long, device=attn_weights.device).view(-1, 1)
+        position_ids_r = torch.arange(seq_length, dtype=torch.long, device=attn_weights.device).view(1, -1)
+        distance = position_ids_l - position_ids_r
+        positional_embedding = module.distance_embedding(distance + module.max_position_embeddings - 1)
+        positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
+
+        if module.position_embedding_type == "relative_key":
+            relative_position_scores = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+        elif module.position_embedding_type == "relative_key_query":
+            relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key, positional_embedding)
+            relative_position_scores = relative_position_scores_query + relative_position_scores_key
+
         attn_weights = attn_weights + relative_position_scores
 
     if head_mask is not None:
@@ -335,7 +357,7 @@ class EsmSelfAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length = hidden_states.shape[:-1]
-        hidden_shape = (batch_size, -1, self.num_attention_heads, self.attention_head_size)
+        hidden_shape = (batch_size, seq_length, -1, self.attention_head_size)
 
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
@@ -351,28 +373,8 @@ class EsmSelfAttention(nn.Module):
         # ESM code and fix rotary embeddings.
         query_layer = query_layer * self.attention_head_size**-0.5
 
-        relative_position_scores = None
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
-        elif self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            if self.config._attn_implementation != "eager":
-                raise ValueError(
-                    f"ESM {self.config._attn_implementation} attention does not support {self.position_embedding_type} embeddings. "
-                    "Set attention explicitly to 'eager' with `model.set_attn_implementation('eager')`"
-                )
-
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                relative_position_scores = relative_position_scores_query + relative_position_scores_key
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -387,7 +389,6 @@ class EsmSelfAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             head_mask=head_mask,
-            relative_position_scores=relative_position_scores,
             **kwargs,
         )
 

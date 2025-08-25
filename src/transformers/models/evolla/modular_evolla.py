@@ -37,7 +37,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..esm.modeling_esm import (
     EsmAttention,
     EsmEmbeddings,
@@ -122,8 +122,8 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
 
         return (
-            apply_rotary_pos_emb_esm(q, self._cos_cached, self._sin_cached),
-            apply_rotary_pos_emb_esm(k, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb_esm(q, self._cos_cached, self._sin_cached).to(dtype=q.dtype),
+            apply_rotary_pos_emb_esm(k, self._cos_cached, self._sin_cached).to(dtype=k.dtype),
         )
 
 
@@ -146,7 +146,7 @@ class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = config.attention_probs_dropout_prob
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
@@ -159,6 +159,7 @@ class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
 
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
+        self.scaling = 1.0
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
@@ -194,6 +195,16 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     config: SaProtConfig
     _no_split_modules = ["EvollaSaProtLayer"]
     _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": EvollaSaProtLayer,
+        "attentions": [OutputRecorder(EvollaSaProtSelfAttention, index=1, layer_name="attention")],
+        "cross_attentions": [
+            OutputRecorder(EvollaSaProtSelfAttention, index=1, layer_name="crossattention"),
+        ],
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -231,7 +242,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
