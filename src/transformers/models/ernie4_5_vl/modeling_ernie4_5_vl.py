@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Ernie VL model"""
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -24,7 +24,8 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, logging
 from .configuration_ernie4_5_vl import (
     Ernie4_5_VLConfig,
     Ernie4_5_VLTextConfig,
@@ -1248,18 +1249,27 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        #past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        images: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        images: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         grid_thw: Optional[torch.Tensor] = None,
-        **kwargs,
+        #pixel_values: Optional[torch.Tensor] = None,
+        #pixel_values_videos: Optional[torch.FloatTensor] = None,
+        #image_grid_thw: Optional[torch.LongTensor] = None,
+        #video_grid_thw: Optional[torch.LongTensor] = None,
+        #rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        #second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
@@ -1369,19 +1379,13 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         images=None,
         past_key_values=None,
         inputs_embeds=None,
-        image_position_ids=None,
-        image_attention_mask=None,
         token_type_ids=None,
-        image_type_ids=None,
         grid_thw=None,
         **kwargs,
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
-            image_type_ids = (
-                image_type_ids[:, -1:] if image_type_ids is not None else None
-            )
 
         #attention_mask = kwargs.get("attention_mask")  # non-fa usage
         attention_mask = None
@@ -1398,9 +1402,6 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
                 "use_cache": True,
                 "attention_mask": attention_mask,
                 "images": images,
-                "image_position_ids": image_position_ids,
-                "image_attention_mask": image_attention_mask,
-                "image_type_ids": image_type_ids,
                 "token_type_ids": torch.cat(
                     [
                         token_type_ids,
@@ -1419,33 +1420,49 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        #past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        images: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        images: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         grid_thw: Optional[torch.Tensor] = None,
-        **kwargs,
+        #pixel_values: Optional[torch.Tensor] = None,
+        #pixel_values_videos: Optional[torch.FloatTensor] = None,
+        #image_grid_thw: Optional[torch.LongTensor] = None,
+        #video_grid_thw: Optional[torch.LongTensor] = None,
+        #rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        #second_per_grid_ts: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         outputs = self.model(
             input_ids=input_ids,
-            position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,  # TODO: use our cache class
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            labels=labels,
+            return_dict=True,
             images=images,
-            return_dict=return_dict,
             token_type_ids=token_type_ids,
             grid_thw=grid_thw,
+            #pixel_values=pixel_values,
+            #pixel_values_videos=pixel_values_videos,
+            #image_grid_thw=image_grid_thw,
+            #video_grid_thw=video_grid_thw,
+            #rope_deltas=rope_deltas,
+            cache_position=cache_position,
+            #second_per_grid_ts=second_per_grid_ts,
             **kwargs,
         )
 
