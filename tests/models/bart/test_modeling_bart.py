@@ -1239,7 +1239,13 @@ class BartModelIntegrationTests(unittest.TestCase):
         ).input_ids.to(torch_device)
 
         outputs = bart_model.generate(
-            input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1, trust_remote_code=True
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            num_beams=1,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
         )
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 

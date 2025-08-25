@@ -555,7 +555,14 @@ class OPTGenerationTest(unittest.TestCase):
         opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
         input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256, trust_remote_code=True)
+        outputs = opt_model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=5,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

@@ -793,23 +793,8 @@ class TFGenerationMixin:
                 )
 
         # 8. determine generation mode
-        is_contrastive_search_gen_mode = (
-            generation_config.top_k is not None
-            and generation_config.top_k > 1
-            and generation_config.do_sample is False
-            and generation_config.penalty_alpha is not None
-            and generation_config.penalty_alpha > 0
-        )
-        is_greedy_gen_mode = (
-            not is_contrastive_search_gen_mode
-            and (generation_config.num_beams == 1)
-            and generation_config.do_sample is False
-        )
-        is_beam_gen_mode = (
-            not is_contrastive_search_gen_mode
-            and (generation_config.num_beams > 1)
-            and generation_config.do_sample is False
-        )
+        is_greedy_gen_mode = (generation_config.num_beams == 1) and generation_config.do_sample is False
+        is_beam_gen_mode = (generation_config.num_beams > 1) and generation_config.do_sample is False
         is_sample_gen_mode = (generation_config.num_beams == 1) and generation_config.do_sample is True
         is_beam_sample_gen_mode = (generation_config.num_beams > 1) and generation_config.do_sample is True
 

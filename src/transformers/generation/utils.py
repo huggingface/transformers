@@ -324,10 +324,8 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 # TODO (joao): remove the equivalent classes and typing shortcuts below in v5
 # Equivalent classes (kept for retrocompatibility purposes)
 GreedySearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
-ContrastiveSearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
 SampleDecoderOnlyOutput = GenerateDecoderOnlyOutput
 
-ContrastiveSearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
 GreedySearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
 SampleEncoderDecoderOutput = GenerateEncoderDecoderOutput
 
@@ -341,7 +339,6 @@ GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoder
 SampleOutput = Union[SampleEncoderDecoderOutput, SampleDecoderOnlyOutput]
 BeamSearchOutput = Union[BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput]
 BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput]
-ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, ContrastiveSearchDecoderOnlyOutput]
 
 # Typing shortcuts
 GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]

@@ -86,10 +86,6 @@ generation_output[:2]
 
 [[autodoc]] generation.TFBeamSampleDecoderOnlyOutput
 
-[[autodoc]] generation.TFContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFContrastiveSearchDecoderOnlyOutput
-
 ### FLAX [[transformers.generation.FlaxSampleOutput]]
 
 [[autodoc]] generation.FlaxSampleOutput

@@ -554,7 +554,14 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         )
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(
