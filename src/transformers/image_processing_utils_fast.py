@@ -304,9 +304,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
         """
         if image.dtype == torch.uint8:
-            image = image.float() / 256
+            image = image.float() / 255
             image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
-            image = image * 256
+            image = image * 255
             image = torch.where(image > 255, 255, image)
             image = torch.where(image < 0, 0, image)
             image = image.round().to(torch.uint8)
