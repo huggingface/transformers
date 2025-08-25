@@ -28,7 +28,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -707,4 +711,14 @@ class GptOssForSequenceClassification(GenericForSequenceClassification, GptOssPr
     pass
 
 
-__all__ = ["GptOssForCausalLM", "GptOssForSequenceClassification", "GptOssModel", "GptOssPreTrainedModel"]
+class GptOssForTokenClassification(GenericForTokenClassification, GptOssPreTrainedModel):
+    pass
+
+
+__all__ = [
+    "GptOssForCausalLM",
+    "GptOssForSequenceClassification",
+    "GptOssForTokenClassification",
+    "GptOssModel",
+    "GptOssPreTrainedModel",
+]
