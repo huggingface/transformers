@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_videoprism import *
     from .modeling_videoprism import *
     from .video_processing_videoprism import *
+    from .tokenization_videoprism import *
 else:
     import sys
 

@@ -687,6 +687,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("video_llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("videoprism", ("VideoPrismTokenizer" if is_sentencepiece_available() else None,)),
         ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),

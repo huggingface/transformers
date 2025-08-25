@@ -6,7 +6,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
 
-from transformers import VideoPrismClip, VideoPrismConfig, VideoPrismModel
+from transformers import VideoPrismClip, VideoPrismConfig, VideoPrismModel, VideoPrismTokenizer
 
 
 def get_checkpoint_info(model_type="backbone", model_size="base"):
@@ -277,7 +277,7 @@ def transform_state(state, checkpoint_info):
         raise ValueError(f"Unsupported model type: {checkpoint_info['model_type']}")
 
 
-def prepare_video():
+def prepare_video():   # ? borrowed from vivit convert_weights, but not helpful here
     file = hf_hub_download(
         repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_32_frames.npy", repo_type="dataset"
     )
@@ -337,6 +337,25 @@ def pad_and_stack(input_ids_list, pad_token_id=0, max_length=None):
 def ids_to_attention_mask(input_ids: torch.Tensor, pad_token_id: int = 0) -> torch.Tensor:
     return (input_ids != pad_token_id).long()
 
+
+def prepare_texts():
+    tokenizer = VideoPrismTokenizer(
+    # tokenizer_object=sp,
+    vocab_file="./sentencepiece.model",
+    unk_token="<unk>",
+    pad_token="<pad>",
+    eos_token="</s>",
+    bos_token="<s>",  # Optional, if your model uses BOS
+    )
+
+    TEXT_QUERY_CSV = 'playing drums,sitting,playing flute,playing at playground,concert'  # @param {type: "string"}
+    PROMPT_TEMPLATE = 'a video of {}.'
+
+    text_queries = TEXT_QUERY_CSV.split(',')
+    text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]
+
+    outputs = tokenizer(text_queries, max_length=64, padding="max_length", truncation=True, return_tensors="pt")
+    return outputs["input_ids"], outputs["attention_mask"]
 
 def convert(
     model_type="backbone",
@@ -448,18 +467,20 @@ def convert(
                 print("Inference successful, output matches expected tensor.")
 
             elif checkpoint_info["model_type"] == "lvt":
-                sentences = [
-                    [262, 266, 768, 267, 1376, 14293, 259],
-                    [262, 266, 768, 267, 2865, 259],
-                    [262, 266, 768, 267, 1376, 20682, 259],
-                    [262, 266, 768, 267, 1376, 289, 10691, 259],
-                    [262, 266, 768, 267, 4605, 259],
-                ]
-                input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
-                mask = ids_to_attention_mask(input_ids)
-                # print(input_ids)
-                # print(mask)
+                # sentences = [
+                #     [262, 266, 768, 267, 1376, 14293, 259],
+                #     [262, 266, 768, 267, 2865, 259],
+                #     [262, 266, 768, 267, 1376, 20682, 259],
+                #     [262, 266, 768, 267, 1376, 289, 10691, 259],
+                #     [262, 266, 768, 267, 4605, 259],
+                # ]
+                # input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
+                # mask = ids_to_attention_mask(input_ids)
+
+
                 print(input_vid[0, -1, 0, :3, :3])
+                input_ids, mask = prepare_texts()
+
                 outputs = model(input_vid, input_ids, mask, return_dict=True)
                 lvt_video_base_expected_tensor = torch.tensor(
                     [
@@ -531,7 +552,7 @@ def convert(
 
 if __name__ == "__main__":
     convert(
-        model_type="backbone",
+        model_type="lvt",
         model_size="base",
         convert=False,
         upload=False,

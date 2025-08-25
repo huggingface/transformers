@@ -958,7 +958,7 @@ class VideoPrismClip(VideoPrismPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        print(text_encoder_output[0].shape, "-------------------------------")
+
         text_embeddings = text_encoder_output[0][:, -1]  # ? the cls tokens (B, 1, 768)
 
         if self.normalize:

@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import ModelOutput, auto_docstring, logging
+from ..t5.tokenization_t5 import T5Tokenizer
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
     VivitEmbeddings,
@@ -18,6 +19,7 @@ from ..vivit.modeling_vivit import (
     VivitPreTrainedModel,
     VivitTubeletEmbeddings,
 )
+
 
 
 torch.set_printoptions(precision=6)
@@ -801,9 +803,62 @@ class VideoPrismClip(VideoPrismPreTrainedModel):
             )
 
 
+class VideoPrismTokenizer(T5Tokenizer):
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A sequence has the following format:
+
+        - single sequence: `X </s>`
+        - pair of sequences: `A </s> B </s>`
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        # token_ids_0 = self._add_eos_if_not_present(token_ids_0)
+        if token_ids_1 is None:
+            return token_ids_0
+        else:
+            # token_ids_1 = self._add_eos_if_not_present(token_ids_1)
+            return token_ids_0 + token_ids_1
+
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. VIDEOPRISM does not make
+        use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of zeros.
+        """
+
+        if token_ids_1 is None:
+            return len(token_ids_0) * [0]
+        return len(token_ids_0 + token_ids_1) * [0]
+
+
+
 __all__ = [
     "VideoPrismConfig",
     "VideoPrismModel",
     "VideoPrismPreTrainedModel",
     "VideoPrismClip",
+    "VideoPrismTokenizer",
 ]
