@@ -104,7 +104,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(
         self,
