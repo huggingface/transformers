@@ -45,10 +45,7 @@ from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from transformers.utils import is_torchao_available
-
-
-if is_torchao_available():
-    from torchao.quantization import Int4WeightOnlyConfig
+Int4WeightOnlyConfig = None
 
 from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
@@ -901,6 +898,13 @@ def _load_state_dict_into_meta_model(
     return disk_offload_index, cpu_offload_index
 
 
+def _is_int4_weight_only_config(obj):
+    if not is_torchao_available():
+        return False
+    from torchao.quantization import Int4WeightOnlyConfig
+    return isinstance(obj, Int4WeightOnlyConfig)
+
+
 def load_shard_file(args):
     (
         shard_file,
@@ -942,7 +946,7 @@ def load_shard_file(args):
         and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
         and (
             hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-            or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+            or _is_int4_weight_only_config(hf_quantizer.quantization_config.quant_type)
         )
     ):
         map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
