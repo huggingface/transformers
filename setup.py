@@ -122,7 +122,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
-    "jieba",
     "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
@@ -161,7 +160,6 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rhoknp>=1.1.0,<1.3.1",
-    "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.11.2",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
@@ -356,7 +354,6 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "sacremoses",
-        "rjieba",
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
