@@ -460,7 +460,7 @@ OBJECTS_TO_IGNORE = {
     "ZeroShotObjectDetectionPipeline",
     "Llama4TextConfig",
 }
-# In addition to the objects above, we also ignore objects with a certain prefix. If you add an item to the list
+# In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
 OBJECT_TO_IGNORE_PREFIXES = [
     "_",  # Private objects are not documented
