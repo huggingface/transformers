@@ -260,10 +260,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("DeepseekV3 is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
     @unittest.skip("DeepseekV3 doesn't support contrastive generation")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
