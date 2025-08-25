@@ -36,7 +36,7 @@ class VivitConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_frames (`int`, *optional*, defaults to 32):
             The number of frames in each video.
-        tubelet_size (`List[int]`, *optional*, defaults to `[2, 16, 16]`):
+        tubelet_size (`list[int]`, *optional*, defaults to `[2, 16, 16]`):
             The size (resolution) of each tubelet.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.

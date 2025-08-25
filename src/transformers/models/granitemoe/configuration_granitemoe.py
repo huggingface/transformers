@@ -54,8 +54,8 @@ class GraniteMoeConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -97,9 +97,9 @@ class GraniteMoeConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 8): total number of experts
         num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
 
     ```python
     >>> from transformers import GraniteMoeModel, GraniteMoeConfig
@@ -166,6 +166,8 @@ class GraniteMoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        # this model has rope embedding type, hardcoded for BC
+        self.position_embedding_type = "rope"
 
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

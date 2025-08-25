@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -355,7 +354,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -517,8 +515,10 @@ class ChineseCLIPModelTester:
         return config, input_ids, token_type_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return ChineseCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return ChineseCLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
@@ -649,8 +649,8 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

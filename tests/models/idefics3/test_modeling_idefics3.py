@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -97,6 +95,7 @@ class Idefics3VisionText2TextModelTester:
         image_token_id=57,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -149,6 +148,7 @@ class Idefics3VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.seq_length
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -194,6 +194,7 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Compile not yet supported in idefics3 models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -368,12 +369,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
@@ -382,6 +378,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @unittest.skip(reason="Compile not yet supported in Idefics3 models end-to-end")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -531,7 +528,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 

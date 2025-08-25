@@ -101,7 +101,7 @@ rendered properly in your Markdown viewer.
 
 ### Byte-Pair Encoding（BPE）
 
-Byte-Pair Encoding（BPE）は、[Neural Machine Translation of Rare Words with Subword Units（Sennrich et al., 2015）](https://arxiv.org/abs/1508.07909)で導入されました。BPEは、トレーニングデータを単語に分割するプリトークナイザに依存しています。プリトークナイゼーションは、空白のトークナイゼーションなど、非常に単純なものであることがあります。例えば、[GPT-2](model_doc/gpt2)、[RoBERTa](model_doc/roberta)です。より高度なプリトークナイゼーションには、ルールベースのトークナイゼーション（[XLM](model_doc/xlm)、[FlauBERT](model_doc/flaubert)などが大部分の言語にMosesを使用）や、[GPT](model_doc/gpt)（Spacyとftfyを使用してトレーニングコーパス内の各単語の頻度を数える）などが含まれます。
+Byte-Pair Encoding（BPE）は、[Neural Machine Translation of Rare Words with Subword Units（Sennrich et al., 2015）](https://huggingface.co/papers/1508.07909)で導入されました。BPEは、トレーニングデータを単語に分割するプリトークナイザに依存しています。プリトークナイゼーションは、空白のトークナイゼーションなど、非常に単純なものであることがあります。例えば、[GPT-2](model_doc/gpt2)、[RoBERTa](model_doc/roberta)です。より高度なプリトークナイゼーションには、ルールベースのトークナイゼーション（[XLM](model_doc/xlm)、[FlauBERT](model_doc/flaubert)などが大部分の言語にMosesを使用）や、[GPT](model_doc/gpt)（Spacyとftfyを使用してトレーニングコーパス内の各単語の頻度を数える）などが含まれます。
 
 プリトークナイゼーションの後、一意の単語セットが作成され、各単語がトレーニングデータで出現した頻度が決定されます。次に、BPEはベース語彙を作成し、ベース語彙の二つのシンボルから新しいシンボルを形成するためのマージルールを学習します。このプロセスは、語彙が所望の語彙サイズに達するまで続けられます。なお、所望の語彙サイズはトークナイザをトレーニングする前に定義するハイパーパラメータであることに注意してください。
 
@@ -151,7 +151,7 @@ WordPieceは、[BERT](model_doc/bert)、[DistilBERT](model_doc/distilbert)、お
 
 ### Unigram
 
-Unigramは、[Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf) で導入されたサブワードトークナイゼーションアルゴリズムです。 BPEやWordPieceとは異なり、Unigramはベースボキャブラリを多数のシンボルで初期化し、各シンボルを削減してより小さなボキャブラリを取得します。 ベースボキャブラリは、事前にトークン化されたすべての単語と最も一般的な部分文字列に対応する可能性があります。 Unigramはtransformersのモデルの直接の使用には適していませんが、[SentencePiece](#sentencepiece)と組み合わせて使用されます。
+Unigramは、[Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018)](https://huggingface.co/papers/1804.10959) で導入されたサブワードトークナイゼーションアルゴリズムです。 BPEやWordPieceとは異なり、Unigramはベースボキャブラリを多数のシンボルで初期化し、各シンボルを削減してより小さなボキャブラリを取得します。 ベースボキャブラリは、事前にトークン化されたすべての単語と最も一般的な部分文字列に対応する可能性があります。 Unigramはtransformersのモデルの直接の使用には適していませんが、[SentencePiece](#sentencepiece)と組み合わせて使用されます。
 
 各トレーニングステップで、Unigramアルゴリズムは現在のボキャブラリとユニグラム言語モデルを使用してトレーニングデータ上の損失（通常は対数尤度として定義）を定義します。その後、ボキャブラリ内の各シンボルについて、そのシンボルがボキャブラリから削除された場合に全体の損失がどれだけ増加するかを計算します。 Unigramは、損失の増加が最も低いp（通常は10％または20％）パーセントのシンボルを削除します。つまり、トレーニングデータ全体の損失に最も影響を与えない、最も損失の少ないシンボルを削除します。 このプロセスは、ボキャブラリが望ましいサイズに達するまで繰り返されます。 Unigramアルゴリズムは常にベース文字を保持するため、任意の単語をトークン化できます。
 
@@ -172,7 +172,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 
 ### SentencePiece
 
-これまでに説明したすべてのトークン化アルゴリズムには同じ問題があります。それは、入力テキストが単語を区切るためにスペースを使用していると仮定しているということです。しかし、すべての言語が単語を区切るためにスペースを使用しているわけではありません。この問題を一般的に解決するための1つの方法は、言語固有の前トークナイザーを使用することです（例：[XLM](model_doc/xlm)は特定の中国語、日本語、およびタイ語の前トークナイザーを使用しています）。より一般的にこの問題を解決するために、[SentencePiece：ニューラルテキスト処理のためのシンプルで言語非依存のサブワードトークナイザーおよびデトークナイザー（Kudo et al.、2018）](https://arxiv.org/pdf/1808.06226.pdf) は、入力を生の入力ストリームとして扱い、スペースを使用する文字のセットに含めます。それからBPEまたはunigramアルゴリズムを使用して適切な語彙を構築します。
+これまでに説明したすべてのトークン化アルゴリズムには同じ問題があります。それは、入力テキストが単語を区切るためにスペースを使用していると仮定しているということです。しかし、すべての言語が単語を区切るためにスペースを使用しているわけではありません。この問題を一般的に解決するための1つの方法は、言語固有の前トークナイザーを使用することです（例：[XLM](model_doc/xlm)は特定の中国語、日本語、およびタイ語の前トークナイザーを使用しています）。より一般的にこの問題を解決するために、[SentencePiece：ニューラルテキスト処理のためのシンプルで言語非依存のサブワードトークナイザーおよびデトークナイザー（Kudo et al.、2018）](https://huggingface.co/papers/1808.06226) は、入力を生の入力ストリームとして扱い、スペースを使用する文字のセットに含めます。それからBPEまたはunigramアルゴリズムを使用して適切な語彙を構築します。
 
 たとえば、[`XLNetTokenizer`]はSentencePieceを使用しており、そのために前述の例で`"▁"`文字が語彙に含まれていました。SentencePieceを使用したデコードは非常に簡単で、すべてのトークンを単純に連結し、`"▁"`はスペースに置換されます。
 

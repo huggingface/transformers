@@ -56,7 +56,7 @@ ACCEPTABLE_CHECKPOINTS = [
 
 
 def load_state_dict(checkpoint_path):
-    sd = torch.load(checkpoint_path, map_location="cpu")
+    sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     return sd
 
 

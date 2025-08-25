@@ -80,7 +80,7 @@ class MambaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
         use_mambapy (`bool`, *optional*, defaults to `False`):
-            Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not avaiable. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+            Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
 
 
     Example:

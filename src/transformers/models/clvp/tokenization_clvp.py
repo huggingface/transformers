@@ -17,7 +17,7 @@
 import json
 import os
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import regex as re
 
@@ -34,7 +34,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-@lru_cache()
+@lru_cache
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -258,22 +258,22 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -300,7 +300,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
             # if the token is "Ġ" we replace it with "[SPACE]" (if "[SPACE]" is present in the vocab), otherwise we keep the "Ġ".
             bpe_tokens.extend(
-                "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token
+                "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder else bpe_token
                 for bpe_token in self.bpe(token).split(" ")
             )
 
@@ -334,7 +334,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         return text
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

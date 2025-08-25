@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -219,7 +218,8 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -925,7 +925,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for FLAVA
+    # override as the `logit_scale` parameter initialization is different for FLAVA
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -934,7 +934,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale" or name == "flava.logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -1001,8 +1001,8 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict.pop("text_model.embeddings.token_type_ids", None)
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -240,7 +239,7 @@ class TFMobileBertEmbeddings(keras.layers.Layer):
 
         if self.trigram_input:
             # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
-            # Devices (https://arxiv.org/abs/2004.02984)
+            # Devices (https://huggingface.co/papers/2004.02984)
             #
             # The embedding table in BERT models accounts for a substantial proportion of model size. To compress
             # the embedding layer, we reduce the embedding dimension to 128 in MobileBERT.
@@ -1063,10 +1062,10 @@ class TFMobileBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    prediction_logits: Optional[tf.Tensor] = None
-    seq_relationship_logits: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    prediction_logits: tf.Tensor | None = None
+    seq_relationship_logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 MOBILEBERT_START_DOCSTRING = r"""
@@ -1191,11 +1190,11 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFBaseModelOutputWithPooling:
         outputs = self.mobilebert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1252,13 +1251,13 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         next_sentence_label: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMobileBertForPreTrainingOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFMobileBertForPreTrainingOutput:
         r"""
         Return:
 
@@ -1369,12 +1368,12 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMaskedLMOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFMaskedLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1471,12 +1470,12 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         next_sentence_label: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFNextSentencePredictorOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFNextSentencePredictorOutput:
         r"""
         Return:
 
@@ -1587,12 +1586,12 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFSequenceClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1687,13 +1686,13 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFQuestionAnsweringModelOutput:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1796,12 +1795,12 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFMultipleChoiceModelOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1914,12 +1913,12 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFTokenClassifierOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFTokenClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.

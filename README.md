@@ -44,7 +44,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
@@ -59,18 +59,28 @@ limitations under the License.
 </h3>
 
 <h3 align="center">
-    <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-Transformers is a library of pretrained text, computer vision, audio, video, and multimodal models for inference and training. Use Transformers to fine-tune models on your data, build inference applications, and for generative AI use cases across multiple modalities.
 
-There are over 500K+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer 
+vision, audio, video, and multimodal model, for both inference and training. 
+
+It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the 
+pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training 
+frameworks (Axolotl, Unsloth, DeepSpeed, FSDP, PyTorch-Lightning, ...), inference engines (vLLM, SGLang, TGI, ...),
+and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model definition from `transformers`.
+
+We pledge to help support new state-of-the-art models and democratize their usage by having their model definition be
+simple, customizable, and efficient.
+
+There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
 ## Installation
 
-Transformers works with Python 3.9+ [PyTorch](https://pytorch.org/get-started/locally/) 2.0+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
+Transformers works with Python 3.9+ [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -78,7 +88,6 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 # venv
 python -m venv .my-env
 source .my-env/bin/activate
-
 # uv
 uv venv .my-env
 source .my-env/bin/activate
@@ -88,10 +97,10 @@ Install Transformers in your virtual environment.
 
 ```py
 # pip
-pip install transformers
+pip install "transformers[torch]"
 
 # uv
-uv pip install transformers
+uv pip install "transformers[torch]"
 ```
 
 Install Transformers from source if you want the latest changes in the library or are interested in contributing. However, the *latest* version may not be stable. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter an error.
@@ -99,7 +108,12 @@ Install Transformers from source if you want the latest changes in the library o
 ```shell
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install .
+
+# pip
+pip install .[torch]
+
+# uv
+uv pip install .[torch]
 ```
 
 ## Quickstart
@@ -121,7 +135,7 @@ To chat with a model, the usage pattern is the same. The only difference is you 
 > [!TIP]
 > You can also chat with a model directly from the command line.
 > ```shell
-> transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
 
 ```py
@@ -133,7 +147,7 @@ chat = [
     {"role": "user", "content": "Hey, can you tell me any fun things to do in New York?"}
 ]
 
-pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", dtype=torch.bfloat16, device_map="auto")
 response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
@@ -228,7 +242,7 @@ pipeline(
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
 - The training API is optimized to work with PyTorch models provided by Transformers. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
-- The [example scripts]((https://github.com/huggingface/transformers/tree/main/examples)) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
+- The [example scripts](https://github.com/huggingface/transformers/tree/main/examples) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
 
 ## 100 projects using Transformers
 
@@ -266,8 +280,8 @@ Expand each modality below to see a few example models for various use cases.
 - Automatic mask generation with [SAM](https://huggingface.co/facebook/sam-vit-base)
 - Depth estimation with [DepthPro](https://huggingface.co/apple/DepthPro-hf)
 - Image classification with [DINO v2](https://huggingface.co/facebook/dinov2-base)
-- Keypoint detection with [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor)
-- Keypoint matching with [SuperGlue](https://huggingface.co/magic-leap-community/superglue)
+- Keypoint detection with [SuperPoint](https://huggingface.co/magic-leap-community/superpoint)
+- Keypoint matching with [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor)
 - Object detection with [RT-DETRv2](https://huggingface.co/PekingU/rtdetr_v2_r50vd)
 - Pose Estimation with [VitPose](https://huggingface.co/usyd-community/vitpose-base-simple)
 - Universal segmentation with [OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_swin_large)

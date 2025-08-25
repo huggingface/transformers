@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -287,7 +286,8 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -365,7 +365,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             [num_patches, self.model_tester.embed_dim],
         )
 
-        if not model_class.__name__ == "Swinv2Backbone":
+        if model_class.__name__ != "Swinv2Backbone":
             reshaped_hidden_states = outputs.reshaped_hidden_states
             self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
@@ -491,7 +491,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_fp16(self):
         model = Swinv2ForImageClassification.from_pretrained(
-            "microsoft/swinv2-tiny-patch4-window8-256", torch_dtype=torch.float16
+            "microsoft/swinv2-tiny-patch4-window8-256", dtype=torch.float16
         ).to(torch_device)
         image_processor = self.default_image_processor
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -474,7 +473,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 

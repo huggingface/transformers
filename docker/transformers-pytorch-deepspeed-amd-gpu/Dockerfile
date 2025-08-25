@@ -48,3 +48,6 @@ RUN python3 -c "from deepspeed.launcher.runner import main"
 
 # Remove nvml as it is not compatible with ROCm
 RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
+
+# `kernels` may causes many failing tests
+RUN python3 -m pip uninstall -y kernels

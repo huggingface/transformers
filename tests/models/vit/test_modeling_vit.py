@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -323,7 +322,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = ViTModel.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
+        model = ViTModel.from_pretrained("facebook/dino-vits8", dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
         image = prepare_img()

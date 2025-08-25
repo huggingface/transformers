@@ -1,8 +1,9 @@
 import enum
 import itertools
 import types
-from typing import Dict
+from typing import Any, overload
 
+from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -18,6 +19,8 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
+ChatType = list[dict[str, str]]
+
 
 class ReturnType(enum.Enum):
     TENSORS = 0
@@ -30,7 +33,7 @@ class Chat:
     to this format because the rest of the pipeline code tends to assume that lists of messages are
     actually a batch of samples rather than messages in the same conversation."""
 
-    def __init__(self, messages: Dict):
+    def __init__(self, messages: dict):
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
@@ -40,10 +43,16 @@ class Chat:
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
-    Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats,
-    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
-    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+    Language generation pipeline using any `ModelWithLMHead` or `ModelForCausalLM`. This pipeline predicts the words
+    that will follow a specified text prompt. When the underlying model is a conversational model, it can also accept
+    one or more chats, in which case the pipeline will operate in chat mode and will continue the chat(s) by adding
+    its response(s). Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - do_sample: True
+    - temperature: 0.7
 
     Examples:
 
@@ -95,6 +104,19 @@ class TextGenerationPipeline(Pipeline):
     begging for his blessing. <eod> </s> <eos>
     """
 
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        do_sample=True,  # free-form text generation often uses sampling
+        temperature=0.7,
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
@@ -135,10 +157,11 @@ class TextGenerationPipeline(Pipeline):
         truncation=None,
         max_length=None,
         continue_final_message=None,
+        skip_special_tokens=None,
         **generate_kwargs,
     ):
+        # preprocess kwargs
         preprocess_params = {}
-
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
             add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
@@ -171,10 +194,20 @@ class TextGenerationPipeline(Pipeline):
 
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
-
         preprocess_params.update(generate_kwargs)
-        forward_params = generate_kwargs
 
+        # forward kwargs
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            generate_kwargs["eos_token_id"] = stop_sequence_ids
+        forward_params = generate_kwargs
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        # postprocess kwargs
         postprocess_params = {}
         if return_full_text is not None and return_type is None:
             if return_text is not None:
@@ -192,16 +225,8 @@ class TextGenerationPipeline(Pipeline):
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
         if continue_final_message is not None:
             postprocess_params["continue_final_message"] = continue_final_message
-
-        if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            generate_kwargs["eos_token_id"] = stop_sequence_ids
-
-        if self.assistant_model is not None:
-            forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
-            forward_params["tokenizer"] = self.tokenizer
-            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+        if skip_special_tokens is not None:
+            postprocess_params["skip_special_tokens"] = skip_special_tokens
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -216,12 +241,24 @@ class TextGenerationPipeline(Pipeline):
 
         return super()._parse_and_tokenize(*args, **kwargs)
 
+    @overload
+    def __call__(self, text_inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
+
+    @overload
+    def __call__(self, text_inputs: ChatType, **kwargs: Any) -> list[dict[str, ChatType]]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[ChatType], **kwargs: Any) -> list[list[dict[str, ChatType]]]: ...
+
     def __call__(self, text_inputs, **kwargs):
         """
         Complete the prompt(s) given as inputs.
 
         Args:
-            text_inputs (`str`, `List[str]`, List[Dict[str, str]], or `List[List[Dict[str, str]]]`):
+            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
@@ -303,7 +340,7 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,
+            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
 
@@ -386,7 +423,7 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
-            other_outputs = {k: v for k, v in output.items() if k != "sequences"}
+            other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}
             out_b = generated_sequence.shape[0]
 
             if self.framework == "pt":
@@ -418,7 +455,8 @@ class TextGenerationPipeline(Pipeline):
             "input_ids": input_ids,
             "prompt_text": prompt_text,
         }
-        model_outputs.update(other_outputs)
+        if other_outputs:
+            model_outputs.update({"additional_outputs": other_outputs})
         return model_outputs
 
     def postprocess(
@@ -427,6 +465,7 @@ class TextGenerationPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         clean_up_tokenization_spaces=True,
         continue_final_message=None,
+        skip_special_tokens=None,
     ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
@@ -445,6 +484,7 @@ class TextGenerationPipeline(Pipeline):
                     if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
                         splitted_keys[k] = v.numpy().tolist()
 
+        skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
@@ -452,7 +492,7 @@ class TextGenerationPipeline(Pipeline):
                 # Decode text
                 text = self.tokenizer.decode(
                     sequence,
-                    skip_special_tokens=True,
+                    skip_special_tokens=skip_special_tokens,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
@@ -463,7 +503,7 @@ class TextGenerationPipeline(Pipeline):
                     prompt_length = len(
                         self.tokenizer.decode(
                             input_ids[0],
-                            skip_special_tokens=True,
+                            skip_special_tokens=skip_special_tokens,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )

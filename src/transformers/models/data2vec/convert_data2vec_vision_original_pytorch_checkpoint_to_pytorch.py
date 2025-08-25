@@ -185,18 +185,12 @@ def load_beit_model(args, is_finetuned, is_large):
         missing_keys = warn_missing_keys
 
         if len(missing_keys) > 0:
-            print(
-                "Weights of {} not initialized from pretrained model: {}".format(
-                    model.__class__.__name__, missing_keys
-                )
-            )
+            print(f"Weights of {model.__class__.__name__} not initialized from pretrained model: {missing_keys}")
         if len(unexpected_keys) > 0:
-            print("Weights from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys))
+            print(f"Weights from pretrained model not used in {model.__class__.__name__}: {unexpected_keys}")
         if len(ignore_missing_keys) > 0:
             print(
-                "Ignored weights of {} not initialized from pretrained model: {}".format(
-                    model.__class__.__name__, ignore_missing_keys
-                )
+                f"Ignored weights of {model.__class__.__name__} not initialized from pretrained model: {ignore_missing_keys}"
             )
         if len(error_msgs) > 0:
             print("\n".join(error_msgs))
@@ -224,7 +218,7 @@ def load_beit_model(args, is_finetuned, is_large):
     )
     patch_size = model.patch_embed.patch_size
     args.window_size = (args.input_size // patch_size[0], args.input_size // patch_size[1])
-    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu")
+    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu", weights_only=True)
 
     print(f"Load ckpt from {args.beit_checkpoint}")
     checkpoint_model = None

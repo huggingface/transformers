@@ -54,9 +54,9 @@ class KerasMetricCallback(keras.callbacks.Callback):
             metric names to numerical values.
         eval_dataset (`tf.data.Dataset` or `dict` or `tuple` or `np.ndarray` or `tf.Tensor`):
             Validation data to be used to generate predictions for the `metric_fn`.
-        output_cols (`List[str], *optional*):
+        output_cols (`list[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
-        label_cols ('`List[str]`, *optional*'):
+        label_cols ('`list[str]`, *optional*'):
             A list of columns to be retained from the input dataset as the labels. Will be autodetected if this is not
             supplied.
         batch_size (`int`, *optional*):
@@ -162,12 +162,12 @@ class KerasMetricCallback(keras.callbacks.Callback):
     def _postprocess_predictions_or_labels(self, inputs):
         if isinstance(inputs[0], dict):
             outputs = {}
-            for key in inputs[0].keys():
+            for key in inputs[0]:
                 outputs[key] = self._concatenate_batches([batch[key] for batch in inputs])
             # If it's a dict with only one key, just return the array
             if len(outputs) == 1:
                 outputs = list(outputs.values())[0]
-        elif isinstance(inputs[0], list) or isinstance(inputs[0], tuple):
+        elif isinstance(inputs[0], (tuple, list)):
             outputs = []
             for input_list in zip(*inputs):
                 outputs.append(self._concatenate_batches(input_list))
@@ -242,7 +242,7 @@ class KerasMetricCallback(keras.callbacks.Callback):
                 labels = {key: batch[key].numpy() for key in self.label_cols}
             elif isinstance(labels, dict):
                 labels = {key: array.numpy() for key, array in labels.items()}
-            elif isinstance(labels, list) or isinstance(labels, tuple):
+            elif isinstance(labels, (list, tuple)):
                 labels = [array.numpy() for array in labels]
             elif isinstance(labels, tf.Tensor):
                 labels = labels.numpy()
@@ -306,7 +306,7 @@ class PushToHubCallback(keras.callbacks.Callback):
             Will default to the name of `output_dir`.
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
+            `hf auth login`.
         checkpoint (`bool`, *optional*, defaults to `False`):
             Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
             resumed. Only usable when `save_strategy` is `"epoch"`.

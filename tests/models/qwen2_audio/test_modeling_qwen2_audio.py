@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
+import pytest
 
 from transformers import (
     AutoProcessor,
@@ -30,11 +30,11 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -133,14 +133,12 @@ class Qwen2AudioModelTester:
 
 
 @require_torch
-class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2AudioForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
-    # Doesn't run generation tests. TODO eustache/joao: some generation tests are broken, the errors seem cache-related
-    all_generative_model_classes = ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -150,6 +148,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
         self.config_tester = ConfigTester(self, config_class=Qwen2AudioConfig, has_text_modality=False)
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -157,7 +156,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @require_torch_sdpa
+    @unittest.skip(reason="Qwen2 Audio does not support right padding.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:

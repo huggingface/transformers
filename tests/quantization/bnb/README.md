@@ -67,7 +67,7 @@ Same solution as above.
 
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
-Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as described in the next section.
+Run your script by prepending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as described in the next section.
 
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 

@@ -34,7 +34,6 @@ import collections
 import os
 import re
 import tempfile
-from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
@@ -110,7 +109,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
@@ -124,7 +123,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
 ]
 
 
-def camel_case_split(identifier: str) -> List[str]:
+def camel_case_split(identifier: str) -> list[str]:
     """
     Split a camel-cased name into words.
 
@@ -213,7 +212,7 @@ def get_frameworks_table() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
     """
     Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 

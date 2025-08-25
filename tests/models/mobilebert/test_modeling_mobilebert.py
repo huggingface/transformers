@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
@@ -387,6 +387,7 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(lower_bound and upper_bound)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-14 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Speech2Text2
 
@@ -27,7 +28,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Speech2Text2 model is used together with [Wav2Vec2](wav2vec2) for Speech Translation models proposed in
-[Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://arxiv.org/abs/2104.06678) by
+[Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://huggingface.co/papers/2104.06678) by
 Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
 
 Speech2Text2 is a *decoder-only* transformer model that can be used with any speech *encoder-only*, such as
@@ -61,19 +62,16 @@ predicted token ids.
 - Step-by-step Speech Translation
 
 ```python
->>> import torch
 >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
 >>> from datasets import load_dataset
->>> import soundfile as sf
 
 >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
 
->>> def map_to_array(batch):
-...     speech, _ = sf.read(batch["file"])
-...     batch["speech"] = speech
-...     return batch
+>>> def map_to_array(example):
+...     example["speech"] = example["audio"]["array"]
+...     return example
 
 
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

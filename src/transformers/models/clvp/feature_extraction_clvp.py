@@ -17,7 +17,7 @@
 Feature extractor class for CLVP
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -49,9 +49,9 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             The default length of raw audio in seconds. If `max_length` is not set during `__call__` then it will
             automatically be set to default_audio_length * `self.sampling_rate`.
         hop_length (`int`, *optional*, defaults to 256):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
         n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
@@ -130,7 +130,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         sampling_rate: Optional[int] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
@@ -148,7 +148,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         seconds long and then the log-mel spectrogram is extracted from it.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -230,7 +230,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             self._np_extract_fbank_features(waveform).astype(np.float32) for waveform in input_features[0]
         ]
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features

@@ -146,7 +146,7 @@ To get an even better understanding of the data, visualize an example in the dat
 >>> annotations = cppe5["train"][2]["objects"]
 >>> draw = ImageDraw.Draw(image)
 
->>> categories = cppe5["train"].features["objects"].feature["category"].names
+>>> categories = cppe5["train"].features["objects"]["category"].feature.names
 
 >>> id2label = {index: x for index, x in enumerate(categories, start=0)}
 >>> label2id = {v: k for k, v in id2label.items()}
@@ -243,7 +243,7 @@ and it uses the exact same dataset as an example. Apply some geometric and color
 ... )
 ```
 
-The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': List[Dict]}`,
+The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': list[Dict]}`,
  where each dictionary is a COCO object annotation. Let's add a function to reformat annotations for a single example:
 
 ```py
@@ -252,9 +252,9 @@ The `image_processor` expects the annotations to be in the following format: `{'
 
 ...     Args:
 ...         image_id (str): image id. e.g. "0001"
-...         categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
-...         areas (List[float]): list of corresponding areas to provided bounding boxes
-...         bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
+...         categories (list[int]): list of categories/class labels corresponding to provided bounding boxes
+...         areas (list[float]): list of corresponding areas to provided bounding boxes
+...         bboxes (list[tuple[float]]): list of bounding boxes provided in COCO format
 ...             ([center_x, center_y, width, height] in absolute coordinates)
 
 ...     Returns:
@@ -397,7 +397,7 @@ Intermediate format of boxes used for training is `YOLO` (normalized) but we wil
 
 ...     Args:
 ...         boxes (torch.Tensor): Bounding boxes in YOLO format
-...         image_size (Tuple[int, int]): Image size in format (height, width)
+...         image_size (tuple[int, int]): Image size in format (height, width)
 
 ...     Returns:
 ...         torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
@@ -1488,9 +1488,9 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
 ```py
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> from transformers import infer_device
+
+>>> device = infer_device()
 >>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)

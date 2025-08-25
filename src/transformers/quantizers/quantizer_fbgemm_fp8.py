@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
-from packaging import version
+from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 
@@ -48,9 +45,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+        if not is_torch_available():
             raise ImportError(
-                "Using fbgemm fp8 quantization requires torch > 2.1.0"
+                "Using fbgemm fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
         if not is_fbgemm_gpu_available():
@@ -74,7 +71,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
@@ -92,28 +89,28 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bloat16` due to "
+                "Overriding dtype=%s with `dtype=torch.bloat16` due to "
                 "requirements of `fbgemm-gpu` to enable model loading in fp8. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.bfloat16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype == torch.float16:
+        elif dtype == torch.float16:
             raise ValueError(
-                "You cannot use FP8 with torch_dtype=torch.float16.We recommend you passing torch_dtype=torch.bfloat16"
+                "You cannot use FP8 with dtype=torch.float16.We recommend you passing dtype=torch.bfloat16"
             )
-        return torch_dtype
+        return dtype
 
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ):
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
@@ -144,8 +141,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights into weight and weight_scale
@@ -207,7 +204,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
@@ -229,12 +226,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, FbgemmFp8Linear) or isinstance(module, FbgemmFp8Llama4TextExperts):
+            if isinstance(module, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
@@ -243,6 +240,53 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     ):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
+
+    def update_tp_plan(self, config):
+        if "Llama4" in config.__class__.__name__:
+            text_plan = {
+                # We are using a different tp plan with local_colwise and local_rowwise for the attention because fbgemm operations cannot be parallelized
+                # With local_colwise and local_rowwise, all the operations are done locally, and we add a gather operation to gather the results instead of
+                # using dtensors
+                "layers.*.self_attn.q_proj.weight": "local_colwise",
+                "layers.*.self_attn.q_proj.weight_scale": "local_colwise",
+                "layers.*.self_attn.k_proj.weight": "local_colwise",
+                "layers.*.self_attn.k_proj.weight_scale": "local_colwise",
+                "layers.*.self_attn.v_proj.weight": "local_colwise",
+                "layers.*.self_attn.v_proj.weight_scale": "local_colwise",
+                "layers.*.self_attn.o_proj.weight": "local_rowwise",
+                "layers.*.self_attn": "gather",
+                # We keep the same sequence_parallel plan for layernorms
+                "layers.*.input_layernorm.weight": "sequence_parallel",
+                "layers.*.post_attention_layernorm.weight": "sequence_parallel",
+                "norm.weight": "sequence_parallel",
+                # We keep the same local_colwise and local_rowwise plan for the feed forward shared expert
+                # We also add scales for the shared expert, for local_colwise the scale is also local_colwise
+                # For local_rowwise the scale is replicated, so we don't need to add it
+                "layers.*.feed_forward.shared_expert.gate_proj.weight": "local_colwise",
+                "layers.*.feed_forward.shared_expert.gate_proj.weight_scale": "local_colwise",
+                "layers.*.feed_forward.shared_expert.up_proj.weight": "local_colwise",
+                "layers.*.feed_forward.shared_expert.up_proj.weight_scale": "local_colwise",
+                "layers.*.feed_forward.shared_expert.down_proj.weight": "local_rowwise",
+                "layers.*.feed_forward.experts": "local",
+                "layers.*.feed_forward": "gather",
+                "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
+                "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+                # For Fused implementation we use local_packed_rowwise for the gate_up_proj, and the same for the packed scales
+                # We use local_colwise for the down_proj, and the scales are replicated so we don't add them
+                "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",
+                "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
+                "layers.*.feed_forward.experts.down_proj": "local_colwise",
+            }
+            if config.get_text_config() is not None:
+                config.get_text_config().base_model_tp_plan = text_plan
+            else:
+                config.base_model_tp_plan = text_plan
+            return config
+
+        return config
 
     def is_serializable(self, safe_serialization=None):
         return True
