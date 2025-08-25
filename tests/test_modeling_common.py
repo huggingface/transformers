@@ -4313,8 +4313,10 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
-        Tests that the given attention implementation can work with packed sequences and infers the mask
-        from position ids. This test requires the model to use new attention mask API which handles packing.
+        Tests whether flash attention can continue its generation from given position ids.
+
+        NOTE: This serves as regression check as we had instances where flash attention entered the varlen
+        path here. It should now always enter the base `flash_fn`.
         """
 
         max_new_tokens = 2
