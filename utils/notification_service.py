@@ -1091,6 +1091,7 @@ if __name__ == "__main__":
                 "commit page."
             )
         ci_title = ci_title.strip().split("\n")[0].strip()
+        ci_title = "Fix typo and improve GPU kernel check error message in MXFP4 quantization (#40349) (#40408)"
 
         # Retrieve the PR title and author login to complete the report
         commit_number = ci_url.split("/")[-1]
@@ -1112,9 +1113,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: GH_{merged_by}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author} | Merged by: GH_{merged_by}"
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
