@@ -171,7 +171,7 @@ def check_outputs(model_path, huggingface_repo_id):
     # Load converted model
     converted_model = TimesFmModelForPrediction.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         attn_implementation="sdpa",
     ).to("cuda" if torch.cuda.is_available() else "cpu")
     converted_model.eval()  # Set to evaluation mode

@@ -450,7 +450,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 answers.append(answer)
             if len(answer) == 0:
-                raise PipelineException("Empty answer")
+                raise PipelineException("Table question answering", self.model.name_or_path, "Empty answer")
         else:
             answers = [{"answer": answer} for answer in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)]
 

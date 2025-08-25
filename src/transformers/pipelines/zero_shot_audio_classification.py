@@ -128,7 +128,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
         if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)

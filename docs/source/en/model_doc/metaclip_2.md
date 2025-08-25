@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-07-31.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-20.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -49,7 +49,7 @@ from transformers import pipeline
 clip = pipeline(
    task="zero-shot-image-classification",
    model="facebook/metaclip-2-worldwide-huge-quickgelu",
-   torch_dtype=torch.bfloat16,
+   dtype=torch.bfloat16,
    device=0
 )
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
@@ -65,7 +65,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", dtype=torch.bfloat16, attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -129,6 +129,3 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 [[autodoc]] MetaClip2ForImageClassification
     - forward
-
-</pt>
-<tf>

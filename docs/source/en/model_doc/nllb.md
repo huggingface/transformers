@@ -45,7 +45,7 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", dtype=torch.float16, device=0)
 pipeline("UN Chief says there is no military solution in Syria")
 ```
 
@@ -56,7 +56,7 @@ pipeline("UN Chief says there is no military solution in Syria")
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", torch_dtype="auto", attn_implementaiton="sdpa")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementaiton="sdpa")
 
 article = "UN Chief says there is no military solution in Syria"
 inputs = tokenizer(article, return_tensors="pt")
@@ -89,7 +89,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B"
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
 
 article = "UN Chief says there is no military solution in Syria"
-inputs = tokenizer(article, return_tensors="pt").to("cuda")
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
 translated_tokens = model.generate(
     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30,
 )
