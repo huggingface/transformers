@@ -318,7 +318,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = Qwen2ForCausalLM.from_pretrained(
-            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048, dtype=float16
+            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048, dtype=torch.float16
         ).to(torch_device)
         # we need a long text to test sliding window
         # fmt: off
