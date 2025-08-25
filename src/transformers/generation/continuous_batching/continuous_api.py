@@ -262,8 +262,10 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
-        logger.info(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+        logger.debug(
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
+            f"Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. "
+            f"cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
@@ -666,7 +668,7 @@ class ContinuousBatchingManager:
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
         device, total, reserved, allocated = get_device_and_memory_breakdown()
-        logger.info(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
+        logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if self.current_batch == 0:
                 self.warmup(batch_processor)
@@ -780,8 +782,8 @@ class ContinuousMixin:
         """
         if not inputs:
             return []
-        if logger.getEffectiveLevel() <= logging.INFO:
-            logger.warning("Progress bar is disabled when logger level is less than INFO")
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.warning("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
 
         # Initialize manager with the batch inputs
