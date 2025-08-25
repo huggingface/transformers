@@ -313,7 +313,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         processor = self.get_processor()
 
-        text = self.prepare_text_inputs(modality="image")
+        text = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(text=text, images=image_input, return_tensors="pt")
 
