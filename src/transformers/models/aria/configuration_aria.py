@@ -137,7 +137,7 @@ class AriaTextConfig(PretrainedConfig):
     attribute_map = {
         "num_experts": "moe_num_experts",
         "num_experts_per_tok": "moe_topk",
-        "num_shared_experts": "moe_num_shared_experts",
+        "num_experts_shared": "moe_num_shared_experts",
     }
     # Default tensor parallel plan for base model `AriaTextModel`
     base_model_tp_plan = {
