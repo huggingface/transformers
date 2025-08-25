@@ -14,12 +14,11 @@
 # limitations under the License.
 """PyTorch ConvNextV2 model."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -31,6 +30,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -91,34 +91,30 @@ class ConvNextV2GRN(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNextV2
-class ConvNextV2LayerNorm(nn.Module):
+class ConvNextV2LayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNextV2
@@ -172,21 +168,21 @@ class ConvNextV2Layer(nn.Module):
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.drop_path = ConvNextV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        input = hidden_states
-        x = self.dwconv(hidden_states)
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
+        features = self.dwconv(features)
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        x = x.permute(0, 2, 3, 1)
-        x = self.layernorm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.grn(x)
-        x = self.pwconv2(x)
+        features = features.permute(0, 2, 3, 1)
+        features = self.layernorm(features)
+        features = self.pwconv1(features)
+        features = self.act(features)
+        features = self.grn(features)
+        features = self.pwconv2(features)
         # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        x = x.permute(0, 3, 1, 2)
+        features = features.permute(0, 3, 1, 2)
 
-        x = input + self.drop_path(x)
-        return x
+        features = residual + self.drop_path(features)
+        return features
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNeXT->ConvNeXTV2, ConvNext->ConvNextV2
@@ -205,21 +201,25 @@ class ConvNextV2Stage(nn.Module):
         super().__init__()
 
         if in_channels != out_channels or stride > 1:
-            self.downsampling_layer = nn.Sequential(
-                ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
+            self.downsampling_layer = nn.ModuleList(
+                [
+                    ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                    nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
+                ]
             )
         else:
-            self.downsampling_layer = nn.Identity()
+            self.downsampling_layer = nn.ModuleList()
         drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.Sequential(
-            *[ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+        self.layers = nn.ModuleList(
+            [ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        hidden_states = self.downsampling_layer(hidden_states)
-        hidden_states = self.layers(hidden_states)
-        return hidden_states
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        for layer in self.downsampling_layer:
+            features = layer(features)
+        for layer in self.layers:
+            features = layer(features)
+        return features
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextV2
@@ -246,29 +246,16 @@ class ConvNextV2Encoder(nn.Module):
             prev_chs = out_chs
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
-        all_hidden_states = () if output_hidden_states else None
+        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+    ) -> BaseModelOutputWithNoAttention:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.stages):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
+        for layer_module in self.stages:
             hidden_states = layer_module(hidden_states)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @auto_docstring
@@ -310,36 +297,25 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(
+            embedding_output, output_hidden_states=output_hidden_states
         )
-
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
 
         # global average pooling, (N, C, H, W) -> (N, C)
         pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -363,60 +339,32 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
         self.convnextv2 = ConvNextV2Model(config)
 
         # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        if config.num_labels > 0:
+            self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels)
+        else:
+            self.classifier = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
+        self, pixel_values: Optional[torch.FloatTensor] = None, labels: Optional[torch.LongTensor] = None, **kwargs
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.convnextv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnextv2(pixel_values, **kwargs)
+        pooled_output = outputs.pooler_output
         logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
@@ -432,6 +380,8 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -449,12 +399,12 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -474,37 +424,22 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         embedding_output = self.embeddings(pixel_values)
+        outputs: BaseModelOutputWithPoolingAndNoAttention = self.encoder(embedding_output, output_hidden_states=True)
+        hidden_states = outputs.hidden_states
 
-        outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=True,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        feature_maps = ()
+        feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = self.hidden_states_norms[stage](hidden_state)
-                feature_maps += (hidden_state,)
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (hidden_states,)
-            return output
+                feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=feature_maps,
+            feature_maps=tuple(feature_maps),
             hidden_states=hidden_states if output_hidden_states else None,
-            attentions=None,
         )
 
 

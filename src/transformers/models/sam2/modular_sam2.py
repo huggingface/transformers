@@ -981,8 +981,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
 
 
 class Sam2LayerNorm(SamLayerNorm):
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
+    pass
 
 
 class Sam2MaskDecoder(SamMaskDecoder):
