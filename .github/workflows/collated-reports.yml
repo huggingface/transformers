@@ -27,6 +27,7 @@ jobs:
       - uses: actions/download-artifact@v4
 
       - name: Collated reports
+        working-directory: /transformers
         shell: bash
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
@@ -35,7 +36,7 @@ jobs:
         run: |
           pip install huggingface_hub
           python3 utils/collated_reports.py                  \
-            --path /transformers/reports/                    \
+            --path .                                         \
             --machine-type ${{ inputs.machine_type }}        \
             --commit-hash ${{ env.CI_SHA }}                  \
             --job ${{ inputs.job }}                          \
