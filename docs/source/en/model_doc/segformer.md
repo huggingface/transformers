@@ -29,7 +29,7 @@ You can find all the original SegFormer checkpoints under the [NVIDIA](https://h
 > [!TIP]
 > This model was contributed by [nielsr](https://huggingface.co/nielsr).
 >
-> Click on the SegFormer models in the right sidebar for more examples of how to apply SegFormer to different tasks like **semantic segmentation** and **image classification**.
+> Click on the SegFormer models in the right sidebar for more examples of how to apply SegFormer to different vision tasks.
 
 The example below demonstrates how to run **semantic segmentation** with [`Pipeline`] or the [`AutoModel`] class.
 
