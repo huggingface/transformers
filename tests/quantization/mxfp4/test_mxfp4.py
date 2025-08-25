@@ -541,3 +541,44 @@ class Mxfp4ModelTest(unittest.TestCase):
         quantized_mem = quantized_model.get_memory_footprint()
         dequantized_mem = dequantized_model.get_memory_footprint()
         self.assertLess(quantized_mem, dequantized_mem)
+
+    def test_gpt_oss_multi_turn_generation(self):
+        """
+        An integration test to ensure multi-turn chat works with GPT-OSS, specifically testing the fix
+        for the tensor shape mismatch in the MXFP4 MLP layer. This test was failing before the fix
+        when Mxfp4Config(dequantize=False) i.e using this quantized version
+        """
+
+        # we want dequantize=False to test for multi-turn
+        quantization_config = Mxfp4Config(dequantize=False)
+        model = GptOssForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        # Turn 1: Initial question
+        prompt_1 = "Who directed the movie Inception?"
+        inputs_1 = tokenizer(prompt_1, return_tensors="pt").to(model.device)
+
+        # This first generation uses a 3D tensor internally
+        output_1_ids = model.generate(**inputs_1, max_new_tokens=20)
+        response_1 = tokenizer.decode(output_1_ids[0], skip_special_tokens=True)
+
+        # Turn 2: Follow-up question
+        prompt_2 = response_1 + "\nAnd what other movies has he directed?"
+        inputs_2 = tokenizer(prompt_2, return_tensors="pt").to(model.device)
+
+        # This is the step that would previously crash with the `num_stages` assertion error.
+        try:
+            output_2_ids = model.generate(**inputs_2, max_new_tokens=50)
+            response_2 = tokenizer.decode(output_2_ids[0], skip_special_tokens=True)
+        except Exception as e:
+            self.fail(f"Multi-turn generation failed with MXFP4. Error: {e}")
+
+        # Assert that we got a coherent, non-empty response
+        # It will tell that our multi-turn has success
+        self.assertIn("Inception", response_1)
+        self.assertTrue(len(response_2) > len(prompt_2))
