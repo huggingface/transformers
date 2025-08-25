@@ -127,8 +127,9 @@ class KeyeTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KeyeTextModel`]. It is used to instantiate a
     Keye model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Keye-VL-8B-Preview [Kwai-Keye/Keye-VL-8B-Preview](https://huggingface.co/Kwai-Keye).
+    with the defaults will yield a similar configuration to that of Keye-VL-8B-Preview.
+
+    e.g. [Kwai-Keye/Keye-VL-8B-Preview](https://huggingface.co/Kwai-Keye/Keye-VL-8B-Preview).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
