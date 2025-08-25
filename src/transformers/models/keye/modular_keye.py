@@ -363,6 +363,7 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
             **kwargs,
         )
         self.attention_bias = attention_bias
+        del self.max_window_layers
 
 
 class KeyeConfig(Qwen2_5_VLConfig):
