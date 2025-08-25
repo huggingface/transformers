@@ -255,3 +255,14 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4)
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities=["image", "video"])
+        image_input = self.prepare_image_inputs()
+        video_inputs = self.prepare_video_inputs()
+        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
+        inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

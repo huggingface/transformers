@@ -306,7 +306,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
+        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", dtype=torch.float16)
         model.to(torch_device)
         image_processor = PvtImageProcessor(size=224)
 

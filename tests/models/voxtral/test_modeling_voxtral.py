@@ -256,7 +256,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -289,7 +289,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -327,7 +327,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -357,7 +357,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -412,7 +412,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -467,7 +467,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -489,7 +489,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
         """
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
         inputs = self.processor.apply_transcription_request(
             language="en",

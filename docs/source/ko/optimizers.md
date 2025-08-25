@@ -180,7 +180,7 @@ args = TrainingArguments(
 pip install torch-optimi
 ```
 
-[StableAdamW](https://arxiv.org/pdf/2304.13013)는 AdamW와 AdaFactor를 결합한 하이브리드 옵티마이저입니다. AdaFactor의 업데이트 클리핑(update clipping)이 AdamW에 도입되어 별도의 그래디언트 클리핑(gradient clipping)이 필요 없습니다. 그 외의 동작에서는 AdamW와 완벽히 호환되는 대체제로 사용할 수 있습니다.
+[StableAdamW](https://huggingface.co/papers/2304.13013)는 AdamW와 AdaFactor를 결합한 하이브리드 옵티마이저입니다. AdaFactor의 업데이트 클리핑(update clipping)이 AdamW에 도입되어 별도의 그래디언트 클리핑(gradient clipping)이 필요 없습니다. 그 외의 동작에서는 AdamW와 완벽히 호환되는 대체제로 사용할 수 있습니다.
 
 > [!TIP]
 > 배치(batch) 크기가 크거나 훈련 손실(training loss)이 계속해서 급격하게 변동한다면, beta_2 값을 [0.95, 0.99] 사이로 줄여보세요.
