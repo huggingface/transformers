@@ -333,7 +333,7 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     # `flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`
-    # Impossible to test it with this model.
+    # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     @require_flash_attn
     @slow
