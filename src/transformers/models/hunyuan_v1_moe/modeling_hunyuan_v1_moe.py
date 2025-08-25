@@ -362,6 +362,8 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
         "attentions": HunYuanMoEV1Attention,
     }
 
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
