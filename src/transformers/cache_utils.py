@@ -932,6 +932,8 @@ class Cache:
         """
         if layer_idx < len(self.layers):
             return self.layers[layer_idx].keys, self.layers[layer_idx].values
+        # elif len(self.layers) == 0:
+        #     return None, None
         else:
             raise KeyError(
                 f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"

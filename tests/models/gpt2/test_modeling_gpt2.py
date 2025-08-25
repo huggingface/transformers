@@ -837,6 +837,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_gpt2(self):
         article = (

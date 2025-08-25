@@ -1569,6 +1569,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0])
         self.assertEqual(translation, expected_translation)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_t5(self):
         article = (

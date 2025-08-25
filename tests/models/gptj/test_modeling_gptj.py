@@ -541,6 +541,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
+    # TODO joao, manuel: remove this in v4.62.0
     @tooslow
     def test_contrastive_search_gptj(self):
         article = (

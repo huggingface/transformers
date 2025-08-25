@@ -309,3 +309,12 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities="image")
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=text, images=image_input, return_tensors="pt")
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

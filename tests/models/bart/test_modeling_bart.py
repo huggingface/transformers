@@ -1205,6 +1205,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         generated_summaries = tok.batch_decode(hypotheses_batch.tolist())
         assert generated_summaries == EXPECTED
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_bart(self):
         article = (

@@ -543,6 +543,7 @@ class OPTGenerationTest(unittest.TestCase):
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_opt(self):
         article = (

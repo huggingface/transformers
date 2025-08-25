@@ -110,6 +110,8 @@ else:
         "BeamSearchDecoderOnlyOutput",
         "BeamSampleEncoderDecoderOutput",
         "BeamSampleDecoderOnlyOutput",
+        "ContrastiveSearchEncoderDecoderOutput",
+        "ContrastiveSearchDecoderOnlyOutput",
         "GenerateBeamDecoderOnlyOutput",
         "GenerateBeamEncoderDecoderOutput",
         "GenerateDecoderOnlyOutput",
@@ -156,6 +158,8 @@ else:
         "TFBeamSearchDecoderOnlyOutput",
         "TFBeamSampleEncoderDecoderOutput",
         "TFBeamSampleDecoderOnlyOutput",
+        "TFContrastiveSearchEncoderDecoderOutput",
+        "TFContrastiveSearchDecoderOnlyOutput",
     ]
 
 try:
@@ -262,6 +266,8 @@ if TYPE_CHECKING:
             BeamSampleEncoderDecoderOutput,
             BeamSearchDecoderOnlyOutput,
             BeamSearchEncoderDecoderOutput,
+            ContrastiveSearchDecoderOnlyOutput,
+            ContrastiveSearchEncoderDecoderOutput,
             GenerateBeamDecoderOnlyOutput,
             GenerateBeamEncoderDecoderOutput,
             GenerateDecoderOnlyOutput,
@@ -308,6 +314,8 @@ if TYPE_CHECKING:
             TFBeamSampleEncoderDecoderOutput,
             TFBeamSearchDecoderOnlyOutput,
             TFBeamSearchEncoderDecoderOutput,
+            TFContrastiveSearchDecoderOnlyOutput,
+            TFContrastiveSearchEncoderDecoderOutput,
             TFGenerationMixin,
             TFGreedySearchDecoderOnlyOutput,
             TFGreedySearchEncoderDecoderOutput,

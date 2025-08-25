@@ -227,6 +227,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
+    # TODO joao, manuel: remove this in v4.62.0
     # TODO: check why we have the following strange situation.
     # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
     @run_test_using_subprocess
@@ -248,7 +249,14 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
+            **model_inputs,
+            max_new_tokens=64,
+            top_p=None,
+            temperature=1,
+            do_sample=False,
+            dola_layers="low",
+            trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
