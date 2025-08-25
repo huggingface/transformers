@@ -36,7 +36,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -633,7 +632,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_size = high_res_size if high_res_size is not None else self.high_res_size
         high_res_size_dict = get_size_dict(high_res_size)
 
-        images = make_list_of_images(images)
+        images = self.fetch_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -804,9 +804,15 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             else high_res_resample
         )
 
+        low_res_resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[low_res_resample]
+            if isinstance(low_res_resample, (int, PILImageResampling))
+            else low_res_resample
+        )
+
         kwargs["size"] = size
         kwargs["high_res_size"] = high_res_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["high_res_image_mean"] = high_res_image_mean
@@ -969,7 +975,6 @@ class DeepseekVLHybridProcessor(DeepseekVLProcessor):
 
         # process images if pixel_values are provided
         if images is not None:
-            images = make_flat_list_of_images(images)
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             data["pixel_values"] = inputs["pixel_values"]
             data["high_res_pixel_values"] = inputs["high_res_pixel_values"]
