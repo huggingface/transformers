@@ -289,16 +289,21 @@ def mlp_forward(self, hidden_states):
     else:
         routing = triton_kernels_hub.routing.routing
 
-        routing = routing
-    batch_size = hidden_states.shape[0]
-    hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
+    is_3d = hidden_states.ndim == 3
+    if is_3d:
+        batch_size, seq_len, _ = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
+
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
 
     with torch.cuda.device(router_logits.device):
         routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
 
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
-    routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
+
+    if is_3d:
+        routed_out = routed_out.reshape(batch_size, seq_len, self.router.hidden_dim)
+
     return routed_out, router_logits
 
 

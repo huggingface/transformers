@@ -31,7 +31,12 @@ from transformers.utils import (
 
 
 if is_torch_available():
+    from types import SimpleNamespace
+
     import torch
+
+    from transformers.integrations.mxfp4 import mlp_forward
+    from transformers.testing_utils import torch_device
 
 
 class Mxfp4ConfigTest(unittest.TestCase):
@@ -194,7 +199,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -208,7 +213,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available but model is pre-quantized and dequantize is False"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -364,6 +369,63 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(quantized_w.dtype, torch.uint8)
         self.assertIsNotNone(flex_data)
         self.assertIsNotNone(mx_ctx)
+
+    @require_torch
+    @patch("torch.cuda.device")
+    @patch("transformers.integrations.mxfp4.triton_kernels_hub", create=True)
+    def test_mlp_forward_dimensionality(self, mock_triton_hub, mock_cuda_device):
+        """
+        Tests that the `mlp_forward` function correctly handles 2D and 3D tensors,
+        preserving the input dimensionality in the output. This is a regression
+        test for an issue seen in multi-turn chat scenarios.
+        """
+        # 1. Setup
+        hidden_dim = 32
+        num_experts = 4
+        top_k = 1
+
+        # Mock the routing function from the triton kernel
+        mock_routing_data = SimpleNamespace()  # Dummy object
+        mock_gather_idx = torch.zeros(10, dtype=torch.int32, device=torch_device)
+        mock_scatter_idx = torch.zeros(10, dtype=torch.int32, device=torch_device)
+        mock_triton_hub.routing.routing.return_value = (mock_routing_data, mock_gather_idx, mock_scatter_idx)
+
+        # Mock the 'self' object that mlp_forward is bound to
+        mock_self = SimpleNamespace()
+        mock_self.router = SimpleNamespace(
+            hidden_dim=hidden_dim,
+            weight=torch.randn((num_experts * top_k, hidden_dim), device=torch_device),
+            bias=torch.randn(num_experts * top_k, device=torch_device),
+            top_k=top_k,
+        )
+
+        # The experts function should return a tensor of the same shape as its input
+        def mock_experts_forward(hidden_states, *args, **kwargs):
+            return hidden_states
+
+        mock_self.experts = mock_experts_forward
+
+        # 2. Test with 2D input
+        hidden_states_2d = torch.randn(10, hidden_dim, device=torch_device)
+        output_2d, _ = mlp_forward(mock_self, hidden_states_2d)
+
+        self.assertEqual(len(output_2d.shape), 2, "Output should be 2D for 2D input")
+        self.assertEqual(hidden_states_2d.shape, output_2d.shape, "Shape should be preserved for 2D input")
+
+        # 3. Test with 3D input
+        hidden_states_3d = torch.randn(2, 5, hidden_dim, device=torch_device)
+        # The mock routing indices need to match the flattened input size
+        num_tokens = hidden_states_3d.shape[0] * hidden_states_3d.shape[1]
+        mock_triton_hub.routing.routing.return_value = (
+            mock_routing_data,
+            torch.zeros(num_tokens, dtype=torch.int32, device=torch_device),
+            torch.zeros(num_tokens, dtype=torch.int32, device=torch_device),
+        )
+
+        output_3d, _ = mlp_forward(mock_self, hidden_states_3d)
+
+        self.assertEqual(len(output_3d.shape), 3, "Output should be 3D for 3D input")
+        self.assertEqual(hidden_states_3d.shape, output_3d.shape, "Shape should be preserved for 3D input")
 
 
 @require_torch
