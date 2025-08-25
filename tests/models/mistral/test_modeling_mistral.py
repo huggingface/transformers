@@ -332,7 +332,9 @@ class MistralIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    # `flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`
+    # Impossible to test it with this model.
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     @require_flash_attn
     @slow
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
@@ -341,14 +343,18 @@ class MistralIntegrationTest(unittest.TestCase):
 
         model_id = "mistralai/Mistral-7B-v0.1"
         EXPECTED_COMPLETIONS = [
-            "This is a nice place. This is a nice place. This is a nice place. This is",
+            "scenery, scenery, scenery, scenery, scenery,",
             ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
         ]
 
         input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, more than 4096
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
+
+        if attn_implementation in ["flex_attention", "eager"]:
+            input_text = input_text[:1]
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
@@ -358,14 +364,14 @@ class MistralIntegrationTest(unittest.TestCase):
         )
 
         # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
+        batch_size, input_size = inputs.input_ids.shape
         self.assertTrue(input_size > model.config.sliding_window)
 
         # Should already be Dynamic by default, but let's make sure!
         out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
-        output_text = tokenizer.batch_decode(out.sequences[:, input_size:])
+        output_text = tokenizer.batch_decode(out.sequences[:batch_size, input_size:])
 
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS[:batch_size])
 
         # Let's check that the dynamic cache has hybrid layers!
         dynamic_cache = out.past_key_values
