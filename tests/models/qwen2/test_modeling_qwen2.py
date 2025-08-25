@@ -18,7 +18,6 @@ import unittest
 
 import pytest
 from packaging import version
-from sympy.codegen.ast import float16
 
 from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
@@ -713,7 +712,7 @@ In summary:"""
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
         generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
 
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279, 467, 19859, 4180, 4168, 572, 264, 882, 315, 2244, 2297, 304, 5616, 13, 576, 66827, 66846, 572, 304, 17704]], dtype=torch.long)) # fmt: skip
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279, 467, 19859, 4180, 4168, 572, 264, 882, 315, 2244, 2297, 304, 5616, 13, 576, 66827, 66846, 572, 304, 17704]], dtype=torch.long))  # fmt: skip
         self.assertEqual(
             tokenizer.decode(generated_ids[0]),
             " the Warring States period was a time of great change in China. The Zhou dynasty was in decline",

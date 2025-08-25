@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch GLM-4.1V model."""
 
 import copy
-import gc
 import unittest
 
 from transformers import (
@@ -25,6 +24,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -309,8 +309,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
         ]
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test(self):
