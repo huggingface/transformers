@@ -2525,8 +2525,9 @@ class GenerationMixin(ContinuousMixin):
                     "Contrastive search requires `trust_remote_code=True` in your `generate` call, since "
                     "it loads https://hf.co/transformers-community/contrastive-search."
                 )
-
-            return self.generate(
+            # Avoid calling the model-defined `generate` method, since some models (e.g. Janus, Whisper) override it.
+            return GenerationMixin.generate(
+                self,
                 inputs,
                 custom_generate="transformers-community/contrastive-search",
                 generation_config=generation_config,
