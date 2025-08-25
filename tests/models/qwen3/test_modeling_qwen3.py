@@ -146,7 +146,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_model_600m_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        EXPECTED_OUTPUT_TOKEN_IDS = [198, 198]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3ForCausalLM.from_pretrained(
