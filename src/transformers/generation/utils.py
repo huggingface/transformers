@@ -2482,17 +2482,23 @@ class GenerationMixin(ContinuousMixin):
                 streamer=streamer,
                 **model_kwargs,
             )
+        # TODO joao, manuel: remove this in v4.62.0
         elif generation_mode == GenerationMode.DOLA_GENERATION:
+            logger.warning_once(
+                "DoLa generation was moved to a `custom_generate` repo: https://hf.co/transformers-community/dola. "
+                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/dola'` "
+                "to your `generate` call before v4.62.0."
+            )
             if not trust_remote_code:
                 raise ValueError(
-                    "DoLa Decoding has been moved to a `custom_generate` repository. "
-                    "To use it, add `trust_remote_code=True` to your `generate` call."
+                    "DoLa generation requires `trust_remote_code=True` in your `generate` call, since "
+                    "it loads https://hf.co/transformers-community/dola."
                 )
             return self.generate(
                 inputs,
                 custom_generate="transformers-community/dola",
                 generation_config=generation_config,
-                dola_layers=generation_config.dola_layers,
+                trust_remote_code=trust_remote_code,
                 **kwargs,
             )
 

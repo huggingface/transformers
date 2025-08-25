@@ -5142,6 +5142,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "use_cache": True,
             "dola_layers": "low",
             "trust_remote_code": True,
+            "custom_generate": "transformers-community/dola",
         }
         torch.manual_seed(0)
         output_dola = model.generate(**generation_kwargs, **model_inputs)

@@ -140,8 +140,6 @@ class GenerationConfig(PushToHubMixin):
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
-        dola_layers (`str` or `list[int]`, *optional*):
-            Deprecated, to be removed in v4.58.0. See https://huggingface.co/transformers-community/dola for more details.
 
         > Parameters that control the cache
 
@@ -530,6 +528,18 @@ class GenerationConfig(PushToHubMixin):
                 logger.warning(
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
+                    f"current flags) is {generation_mode} -- some of the set flags will be ignored."
+                )
+
+        # DoLa generation may extend some generation modes
+        # TODO joao, manuel: remove this in v4.62.0
+        if self.dola_layers is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.DOLA_GENERATION
+            else:
+                logger.warning(
+                    "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
+                    "is only supported with Greedy Search and Sample.  However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
         return generation_mode
