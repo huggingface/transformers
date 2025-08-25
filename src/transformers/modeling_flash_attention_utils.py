@@ -409,6 +409,22 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
+    # Validate query_length only when not compiling to avoid graph breaks
+    try:
+        if not torch._dynamo.is_compiling():
+            actual_query_length = query.shape[1]
+            if query_length != actual_query_length:
+                logger.warning_once(
+                    f"query_length parameter ({query_length}) does not match query.shape[1] ({actual_query_length}). "
+                    f"Using query.shape[1] ({actual_query_length}) instead. "
+                    f"This may indicate QKV tensors were modified after query_length was calculated."
+                )
+                query_length = actual_query_length
+    except (AttributeError, RuntimeError):
+        # torch._dynamo.is_compiling() might not be available in all torch versions
+        # or might raise RuntimeError in some contexts, so we catch and ignore
+        pass
+
     kv_length = key.shape[1]
     is_packed_sequence = query_length == kv_length
 
