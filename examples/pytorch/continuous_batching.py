@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
 
-MODEL_ID = "meta-llama/Llama-3.2-3b-Instruct"
+MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 
 
 def generate_simple(
@@ -42,6 +42,33 @@ def generate_simple(
         decoded_outputs.append(decoded_output)
 
     return decoded_outputs
+
+
+def setup_metrics():
+    try:
+        from opentelemetry import metrics, trace
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+
+        resource = Resource.create({"service.name": "transformers"})
+        metrics_exporter = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
+            export_interval_millis=1000
+        )
+        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
+        metrics.set_meter_provider(meter_provider)
+        trace_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(tracer_provider)
+    except Exception as e:
+        print(f"Error setting up metrics: {e}")
 
 
 def batch_generate(
@@ -142,7 +169,11 @@ if __name__ == "__main__":
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
     parser.add_argument("--output-file", type=str, default=None)
     parser.add_argument("--compare", action="store_true", default=False)
+    parser.add_argument("--metrics", action="store_true", default=False)
     args = parser.parse_args()
+
+    if args.metrics:
+        setup_metrics()
 
     # Set matmul precision
     if args.matmul_precision != "none":
