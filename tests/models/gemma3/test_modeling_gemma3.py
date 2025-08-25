@@ -81,68 +81,6 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.model_tester = Gemma3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
-    def test_eager_matches_fa2_generate(self):
-        pass
-
-    @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -375,66 +313,15 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
-    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip(
@@ -490,7 +377,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_bf16(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -521,7 +408,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -587,7 +474,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         crop_config = {
             "images_kwargs": {
@@ -632,7 +519,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         crop_config = {
             "images_kwargs": {
                 "do_pan_and_scan": True,
@@ -703,7 +590,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_multiimage(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -745,7 +632,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
@@ -773,7 +660,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -802,7 +689,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
-        we need to correctly slice the attention mask in all cases (because we use a HybridCache).
+        we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
         Outputs for every attention functions should be coherent and identical.
         """
         model_id = "google/gemma-3-1b-it"
@@ -818,15 +705,14 @@ class Gemma3IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        # cache_implementation="hybrid" an in the original transformers implementation
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="hybrid")[
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="static")[
             :, input_size:
         ]
         output_text = tokenizer.batch_decode(out)
@@ -844,7 +730,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-1b-it"
         model = AutoModelForCausalLM.from_pretrained(model_id)
         self.assertEqual(model.config.cache_implementation, "hybrid")
-        # Export + HybridCache
+
+        # Export + hybrid cache
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(

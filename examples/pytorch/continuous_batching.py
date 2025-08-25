@@ -14,7 +14,7 @@ model = (
     AutoModelForCausalLM.from_pretrained(
         model_id,
         attn_implementation="paged_attention|kernels-community/flash-attn",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     .eval()
     .cuda()

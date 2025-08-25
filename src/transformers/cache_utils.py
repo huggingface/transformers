@@ -932,6 +932,8 @@ class Cache:
         """
         if layer_idx < len(self.layers):
             return self.layers[layer_idx].keys, self.layers[layer_idx].values
+        # elif len(self.layers) == 0:
+        #     return None, None
         else:
             raise KeyError(
                 f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"
@@ -1144,7 +1146,7 @@ class StaticCache(Cache):
 class QuantizedCache(Cache):
     """
     A quantizer cache similar to what is described in the
-    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for keys and values
     by applying quantization.
     The cache has two types of storage, one for original precision and one for the
