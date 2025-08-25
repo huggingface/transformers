@@ -21,7 +21,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .core import RequestState, get_device_and_memory_breakdown, logger
+from .classes import RequestState, get_device_and_memory_breakdown, logger
 
 
 @attach_tracer()

@@ -30,7 +30,7 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .core import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .classes import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
