@@ -516,11 +516,15 @@ if is_torch_available():
             self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
             self.fc = nn.Linear(hidden_size, vocab_size)
 
-        def forward(self, input_ids, **kwargs):
+        def forward(self, input_ids, labels=None, **kwargs):
             embedded = self.embedding(input_ids)
             lstm_out, _ = self.lstm(embedded)
             logits = self.fc(lstm_out)
-            return logits
+            if labels is None:
+                return logits
+
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+            return loss, logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
         import numpy as np
@@ -4558,10 +4562,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4581,11 +4585,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
@@ -5020,6 +5024,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_trainer_works_without_model_config(self):
+        """
+        Tests that models without a `config` parameter can still be trained.
+        This is useful for preserving compatibility with third parties that train different models using the
+        transformers Trainer.
+
+        If this test fails, it doesn't imply that there's issues with transformers, but perhaps with third
+        parties.
+        """
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
+        # Note that this class does not have a config attribute
+
+        train_dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in train_dataset.examples:
+            example["labels"] = example["input_ids"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir,
+                report_to="none",
+                max_steps=5,
+                per_device_train_batch_size=1,
+                remove_unused_columns=False,
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=train_dataset,
+            )
+            trainer.train()
 
 
 @require_torch

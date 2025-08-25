@@ -683,7 +683,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "ydshieh/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -720,7 +720,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "ydshieh/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -763,7 +763,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation="flash_attention_2",
         )
         processor = AutoProcessor.from_pretrained(repo)

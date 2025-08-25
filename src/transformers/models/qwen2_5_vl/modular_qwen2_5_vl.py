@@ -142,7 +142,7 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
 
 class Qwen2_5_VLVisionAttention(VisionAttention):
     def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.dim = config.hidden_size
 
 

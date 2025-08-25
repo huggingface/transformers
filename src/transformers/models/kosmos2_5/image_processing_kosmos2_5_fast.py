@@ -65,7 +65,7 @@ class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
     max_patches (`int`, *optional*, defaults to 4096):
         The maximum number of patches to extract from the image as per the
-        [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
+        [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
     """
 
     patch_size: Optional[dict[str, int]]
@@ -93,7 +93,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 4096):
             The maximum number of patches to extract from the image as per the
-            [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
+            [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
         """
         # return super().preprocess(images, **kwargs)
         # TODO: revert once the issue is fixed: https://huggingface.slack.com/archives/C02TXKQQLE5/p1743411133979019
