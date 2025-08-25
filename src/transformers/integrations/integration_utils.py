@@ -41,7 +41,7 @@ from transformers.utils.import_utils import _is_package_available
 if os.getenv("WANDB_MODE") == "offline":
     print("⚙️  Running in WANDB offline mode")
 
-from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
+from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
 from ..utils import (
     PushToHubMixin,
@@ -55,6 +55,9 @@ from ..utils import (
 
 
 logger = logging.get_logger(__name__)
+
+if is_tf_available():
+    from .. import TFPreTrainedModel
 
 if is_torch_available():
     import torch
