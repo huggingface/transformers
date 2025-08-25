@@ -18,6 +18,18 @@ from typing import Union
 import numpy as np
 from parameterized import parameterized
 
+import unittest
+import json
+import torch
+from transformers.generation.logits_processor_base import LogitsProcessor, LogitsProcessorList
+from transformers.generation.logits_process import (
+    LogitProcessorRegistry,
+    ConfigurableLogitsProcessorList,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+)
+from transformers.generation.configuration_utils import GenerationConfig
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
@@ -1391,3 +1403,148 @@ class LogitsProcessorTest(unittest.TestCase):
         check_eos_logits(out=out, logits=logits, batch=1, channel=0, eos=eos)
         self.assertTrue(delay_pattern_processor.active_batches.all())
         self.assertTrue((delay_pattern_processor.delay_pattern == torch.tensor(delay_pattern) - 1).all())
+
+class TestLogitProcessorRegistry(unittest.TestCase):
+    
+    def test_register_and_get_processor(self):
+        """Test processor registration and retrieval."""
+        
+        # Test getting built-in processor
+        temp_class = LogitProcessorRegistry.get_processor_class("TemperatureLogitsWarper")
+        self.assertEqual(temp_class, TemperatureLogitsWarper)
+        
+        # Test creating processor from config
+        config = {"type": "TemperatureLogitsWarper", "temperature": 0.8}
+        processor = LogitProcessorRegistry.create_processor(config)
+        self.assertIsInstance(processor, TemperatureLogitsWarper)
+    
+    def test_invalid_processor(self):
+        """Test handling of invalid processor names."""
+        with self.assertRaises(ValueError):
+            LogitProcessorRegistry.get_processor_class("NonExistentProcessor")
+    
+    def test_create_processor_invalid_args(self):
+        """Test handling of invalid arguments."""
+        config = {"type": "TemperatureLogitsWarper", "invalid_arg": "value"}
+        with self.assertRaises(ValueError):
+            LogitProcessorRegistry.create_processor(config)
+
+class TestConfigurableLogitsProcessorList(unittest.TestCase):
+    
+    def test_from_config_dict_list(self):
+        """Test creating from list of dictionaries."""
+        config = [
+            {"type": "TemperatureLogitsWarper", "temperature": 0.8},
+            {"type": "TopKLogitsWarper", "top_k": 50}
+        ]
+        
+        processor_list = ConfigurableLogitsProcessorList.from_config(config)
+        self.assertEqual(len(processor_list), 2)
+        self.assertIsInstance(processor_list[0], TemperatureLogitsWarper)
+        self.assertIsInstance(processor_list[1], TopKLogitsWarper)
+    
+    def test_from_config_json_string(self):
+        """Test creating from JSON string."""
+        config_dict = [
+            {"type": "TemperatureLogitsWarper", "temperature": 0.8}
+        ]
+        config_json = json.dumps(config_dict)
+        
+        processor_list = ConfigurableLogitsProcessorList.from_config(config_json)
+        self.assertEqual(len(processor_list), 1)
+        self.assertIsInstance(processor_list[0], TemperatureLogitsWarper)
+    
+    def test_invalid_json(self):
+        """Test handling of invalid JSON."""
+        with self.assertRaises(ValueError):
+            ConfigurableLogitsProcessorList.from_config("{invalid json}")
+    
+    def test_invalid_config_format(self):
+        """Test handling of invalid configuration format."""
+        with self.assertRaises(ValueError):
+            ConfigurableLogitsProcessorList.from_config("not a list")
+    
+    def test_to_config(self):
+        """Test converting back to configuration."""
+        config = [
+            {"type": "TemperatureLogitsWarper", "temperature": 0.8}
+        ]
+        
+        processor_list = ConfigurableLogitsProcessorList.from_config(config)
+        back_to_config = processor_list.to_config()
+        
+        self.assertEqual(len(back_to_config), 1)
+        self.assertEqual(back_to_config[0]["type"], "TemperatureLogitsWarper")
+
+
+class TestGenerationConfigIntegration(unittest.TestCase):
+    """Test integration of logit processors with GenerationConfig"""
+    
+    def test_generation_config_with_logit_processors(self):
+        """Test that GenerationConfig can accept and process logit_processors parameter."""
+        # Test with list of dicts
+        processors_config = [
+            {"type": "TemperatureLogitsWarper", "temperature": 0.8},
+            {"type": "TopKLogitsWarper", "top_k": 50}
+        ]
+        
+        gen_config = GenerationConfig(logit_processors=processors_config)
+        self.assertEqual(gen_config.logit_processors, processors_config)
+        
+        # Test get_logit_processors method
+        processors = gen_config.get_logit_processors()
+        self.assertIsInstance(processors, ConfigurableLogitsProcessorList)
+        self.assertEqual(len(processors), 2)
+        self.assertIsInstance(processors[0], TemperatureLogitsWarper)
+        self.assertEqual(processors[0].temperature, 0.8)
+        self.assertIsInstance(processors[1], TopKLogitsWarper)
+        self.assertEqual(processors[1].top_k, 50)
+        
+        # Test with JSON string
+        json_config = json.dumps(processors_config)
+        gen_config_json = GenerationConfig(logit_processors=json_config)
+        processors_json = gen_config_json.get_logit_processors()
+        self.assertIsInstance(processors_json, ConfigurableLogitsProcessorList)
+        self.assertEqual(len(processors_json), 2)
+        
+        # Test with empty list
+        gen_config_empty = GenerationConfig(logit_processors=[])
+        processors_empty = gen_config_empty.get_logit_processors()
+        self.assertIsInstance(processors_empty, ConfigurableLogitsProcessorList)
+        self.assertEqual(len(processors_empty), 0)
+        
+        # Test with None
+        gen_config_none = GenerationConfig(logit_processors=None)
+        processors_none = gen_config_none.get_logit_processors()
+        self.assertIsNone(processors_none)
+        
+        # Test that other GenerationConfig parameters work alongside logit_processors
+        gen_config_combined = GenerationConfig(
+            logit_processors=processors_config,
+            max_length=100,
+            temperature=0.7,  # This is separate from the processor temperature
+            top_k=10,  # This is separate from the processor top_k
+            do_sample=True
+        )
+        self.assertEqual(gen_config_combined.logit_processors, processors_config)
+        self.assertEqual(gen_config_combined.max_length, 100)
+        self.assertEqual(gen_config_combined.temperature, 0.7)
+        self.assertEqual(gen_config_combined.top_k, 10)
+        self.assertTrue(gen_config_combined.do_sample)
+        
+        # Test serialization and deserialization
+        config_dict = gen_config.to_dict()
+        self.assertIn("logit_processors", config_dict)
+        self.assertIsInstance(config_dict["logit_processors"], str)  # Should be JSON string
+        
+        # Test loading from dict
+        gen_config_loaded = GenerationConfig.from_dict(config_dict)
+        self.assertIsInstance(gen_config_loaded.logit_processors, list)
+        self.assertEqual(gen_config_loaded.logit_processors, processors_config)
+        
+        # Verify loaded config produces same processors
+        processors_loaded = gen_config_loaded.get_logit_processors()
+        self.assertIsInstance(processors_loaded, ConfigurableLogitsProcessorList)
+        self.assertEqual(len(processors_loaded), 2)
+        self.assertIsInstance(processors_loaded[0], TemperatureLogitsWarper)
+        self.assertEqual(processors_loaded[0].temperature, 0.8)
