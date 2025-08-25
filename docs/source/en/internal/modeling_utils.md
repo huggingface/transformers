@@ -53,31 +53,3 @@ Most of those are only useful if you are studying the code of the models in the 
 [[autodoc]] pytorch_utils.prune_conv1d_layer
 
 [[autodoc]] pytorch_utils.prune_linear_layer
-
-## TensorFlow custom layers
-
-[[autodoc]] modeling_tf_utils.TFConv1D
-
-[[autodoc]] modeling_tf_utils.TFSequenceSummary
-
-## TensorFlow loss functions
-
-[[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMaskedLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMultipleChoiceLoss
-
-[[autodoc]] modeling_tf_utils.TFQuestionAnsweringLoss
-
-[[autodoc]] modeling_tf_utils.TFSequenceClassificationLoss
-
-[[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
-
-## TensorFlow Helper Functions
-
-[[autodoc]] modeling_tf_utils.get_initializer
-
-[[autodoc]] modeling_tf_utils.keras_serializable
-
-[[autodoc]] modeling_tf_utils.shape_list

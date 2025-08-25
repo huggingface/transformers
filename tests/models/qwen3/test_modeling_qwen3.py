@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -168,7 +167,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_600m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [198, 198]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -216,9 +214,9 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16)
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", dtype=torch.float16)
         assistant_model = Qwen3ForCausalLM.from_pretrained(
-            "Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen3-0.6B-Base", device_map="auto", dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -272,7 +270,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         model = Qwen3ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

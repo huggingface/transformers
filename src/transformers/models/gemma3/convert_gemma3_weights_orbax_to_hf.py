@@ -479,13 +479,13 @@ def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tenso
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights, config.vision_config.torch_dtype)
+            update_tree(path, weights, config.vision_config.dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if config.vision_config is None:
                     path = path[len("language_model.") :]
 
-                update_tree(path, weights, config.text_config.torch_dtype)
+                update_tree(path, weights, config.text_config.dtype)
 
     if config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
@@ -502,12 +502,12 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
+    config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
 
     if variant == _VARIANT_GEMMA_3_1B:
         config.vision_config = None
     else:
-        config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+        config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
 
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat

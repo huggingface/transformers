@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -179,7 +178,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
     def test_model_450m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -221,10 +219,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
-        assistant_model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16
-        )
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
+        assistant_model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -261,7 +257,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ],
             ("rocm", (9, 5)): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+                "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
             ]
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
@@ -279,7 +275,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
