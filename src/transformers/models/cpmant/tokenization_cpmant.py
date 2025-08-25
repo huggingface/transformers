@@ -18,11 +18,11 @@ import collections
 import os
 from typing import Optional
 
-from transformers.utils import is_jieba_available, requires_backends
+from transformers.utils import is_rjieba_available, requires_backends
 
 
-if is_jieba_available():
-    import jieba
+if is_rjieba_available():
+    import rjieba
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -119,7 +119,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         padding_side="left",
         **kwargs,
     ):
-        requires_backends(self, ["jieba"])
+        requires_backends(self, ["rjieba"])
         self.bod_token = bod_token
         self.eod_token = eod_token
         self.encoder = load_vocab(vocab_file)
@@ -169,7 +169,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         """Tokenize a string."""
         output_tokens = []
-        for x in jieba.cut(text, cut_all=False):
+        for x in rjieba.cut(text, False):
             output_tokens.extend(self.wordpiece_tokenizer.tokenize(x))
         return output_tokens
 

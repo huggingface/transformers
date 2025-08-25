@@ -122,7 +122,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
-    "jieba",
     "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
