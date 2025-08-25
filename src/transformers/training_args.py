@@ -2216,7 +2216,12 @@ class TrainingArguments:
                     "`use_configured_state:False` instead or setup your `Accelerator` or `PartialState` properly."
                 )
         else:
-            AcceleratorState._reset_state(reset_partial_state=True)
+            # 🚨 FIX: Check if accelerator state already exists before resetting
+            # This prevents silently resetting existing accelerator state from external code
+            if hasattr(AcceleratorState, '_shared_state') and AcceleratorState._shared_state:
+                logger.debug("Preserving existing accelerator state - state already configured externally")
+            else:
+                AcceleratorState._reset_state(reset_partial_state=True)
             self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
