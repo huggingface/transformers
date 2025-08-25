@@ -81,6 +81,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moshi", "EncodecFeatureExtractor"),
         ("nat", "ViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
+        ("parakeet", "ParakeetFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
