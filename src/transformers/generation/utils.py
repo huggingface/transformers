@@ -2504,7 +2504,8 @@ class GenerationMixin(ContinuousMixin):
                     "DoLa generation requires `trust_remote_code=True` in your `generate` call, since "
                     "it loads https://hf.co/transformers-community/dola."
                 )
-            return self.generate(
+            return GenerationMixin.generate(
+                self,
                 inputs,
                 custom_generate="transformers-community/dola",
                 generation_config=generation_config,
