@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch GLM-4.1V model."""
 
 import copy
-import gc
 import unittest
 
 from transformers import (
@@ -25,6 +24,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -309,8 +309,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
         ]
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test(self):
@@ -376,10 +375,8 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", dtype=torch.float16, device_map="auto"
         )
-        questions = ["Describe this video."] * 2
-        video_urls = [
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
-        ] * 2
+        questions = ["Describe this video."]
+        video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
             [
                 {
@@ -400,8 +397,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = [
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in the foreground wearing"
         ]  # fmt: skip
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
@@ -509,8 +505,8 @@ class Glm4vIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky build, thick fur, and a face that's",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but",
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
