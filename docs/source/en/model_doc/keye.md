@@ -356,3 +356,6 @@ print(output_text)
 
 [[autodoc]] KeyeVideoProcessor
 
+## KeyeImageProcessor
+
+[[autodoc]] KeyeImageProcessor
