@@ -123,9 +123,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
-        this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
+        this method forwards the `videos` and `kwargs` arguments to LlavaNextVideoImageProcessor's
         [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
