@@ -1150,6 +1150,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
     ):
         assert input_ids is not None
         assert len(input_ids) == len(pixel_values)
+        assert sampling or not stream, "if use stream mode, make sure sampling=True"
 
         kwargs.pop("image_sizes")
         if sampling:
