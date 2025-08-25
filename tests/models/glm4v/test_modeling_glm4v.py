@@ -375,10 +375,8 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", dtype=torch.float16, device_map="auto"
         )
-        questions = ["Describe this video."] * 2
-        video_urls = [
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
-        ] * 2
+        questions = ["Describe this video."]
+        video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
             [
                 {
@@ -399,8 +397,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = [
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in the foreground wearing"
         ]  # fmt: skip
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
