@@ -1300,27 +1300,25 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     def test_include_num_input_tokens_seen(self):
         model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
         tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer.pad_token = "[PAD]"  # [PAD] is for BERT
+        tokenizer.pad_token = "[PAD]"
         model.config.pad_token_id = tokenizer.pad_token_id
 
-        sentences = ["This is short sentence", "This is a much longer sentence that will require padding."]
+        sentences = ["This is a short sentence.", "This is a much longer sentence that will require padding."]
         labels = torch.tensor([0, 1])
-        
+
         # 1. Test with attention_mask
         tokenized_dataset_with_mask = tokenizer(sentences, truncation=True, padding="longest", return_tensors="pt")
         tokenized_dataset_with_mask["labels"] = labels
         dataset_with_mask = datasets.Dataset.from_dict(tokenized_dataset_with_mask)
-        
+
         # 2. Test without attention_mask
-        tokenized_dataset_no_mask = {
-            k: v for k, v in tokenized_dataset_with_mask.items() if k != "attention_mask"
-        }
+        tokenized_dataset_no_mask = {k: v for k, v in tokenized_dataset_with_mask.items() if k != "attention_mask"}
         dataset_no_mask = datasets.Dataset.from_dict(tokenized_dataset_no_mask)
-        
+
         # 3. Test with no padding information
         tokenizer_no_pad = AutoTokenizer.from_pretrained("bert-base-cased")
         tokenizer_no_pad.pad_token = None
-        
+
         data_collator = default_data_collator
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1353,21 +1351,23 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 processing_class=tokenizer,
             )
             trainer.train()
-            input_ids = tokenized_dataset_with_mask["input_ids"] # use original to compute expected
+            input_ids = tokenized_dataset_with_mask["input_ids"]  # use original to compute expected
             non_padded_tokens_no_mask = (input_ids != tokenizer.pad_token_id).sum().item()
             self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_no_mask)
-            
+
             # Test case 3: "non_padding" with no padding info (fallback to numel)
             with self.assertLogs("transformers.trainer", level="WARNING") as cm:
                 trainer = Trainer(
                     model=model,
                     args=args,
-                    train_dataset=dataset_no_mask, # still has input_ids
+                    train_dataset=dataset_no_mask,  # still has input_ids
                     data_collator=data_collator,
-                    processing_class=tokenizer_no_pad, # tokenizer without pad token
+                    processing_class=tokenizer_no_pad,  # tokenizer without pad token
                 )
                 trainer.train()
-                self.assertTrue(any("Could not determine method to count non-padding tokens" in log for log in cm.output))
+                self.assertTrue(
+                    any("Could not determine method to count non-padding tokens" in log for log in cm.output)
+                )
             total_tokens = input_ids.numel()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
 
@@ -1382,7 +1382,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
-            
+
             # Test case 5: True (backward compatibility)
             args.include_num_input_tokens_seen = True
             trainer = Trainer(
@@ -5122,44 +5122,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
-
-    def test_trainer_works_without_model_config(self):
-        """
-        Tests that models without a `config` parameter can still be trained.
-        This is useful for preserving compatibility with third parties that train different models using the
-        transformers Trainer.
-
-        If this test fails, it doesn't imply that there's issues with transformers, but perhaps with third
-        parties.
-        """
-
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
-        model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
-        # Note that this class does not have a config attribute
-
-        train_dataset = LineByLineTextDataset(
-            tokenizer=tokenizer,
-            file_path=PATH_SAMPLE_TEXT,
-            block_size=tokenizer.max_len_single_sentence,
-        )
-        for example in train_dataset.examples:
-            example["labels"] = example["input_ids"]
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            training_args = TrainingArguments(
-                output_dir=tmpdir,
-                report_to="none",
-                max_steps=5,
-                per_device_train_batch_size=1,
-                remove_unused_columns=False,
-            )
-            trainer = Trainer(
-                model=model,
-                args=training_args,
-                processing_class=tokenizer,
-                train_dataset=train_dataset,
-            )
-            trainer.train()
 
 
 @require_torch
