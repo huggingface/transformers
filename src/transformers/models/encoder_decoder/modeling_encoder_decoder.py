@@ -194,9 +194,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 

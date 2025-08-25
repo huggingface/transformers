@@ -143,7 +143,7 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
 class KyutaiSpeechToTextConv1dPaddingCache:
     """
     Padding cache for KyutaiSpeechToTextConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
 
     A padding cache is a list of cached partial hidden states for each convolution layer.
     Hidden states are cached from the previous call to the KyutaiSpeechToTextConv1d forward pass, given the padding size.
@@ -1088,12 +1088,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring
