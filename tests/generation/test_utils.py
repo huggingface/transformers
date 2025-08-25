@@ -443,6 +443,7 @@ class GenerationTesterMixin:
             output_logits=output_logits,
             return_dict_in_generate=return_dict_in_generate,
             use_cache=use_cache,
+            trust_remote_code=True,
             **logits_processor_kwargs,
             **contrastive_search_kwargs,
             **inputs_dict,
@@ -1060,6 +1061,7 @@ class GenerationTesterMixin:
                 "use_cache": True,
                 "return_dict_in_generate": True,
                 "output_scores": True,
+                "trust_remote_code": True,
             }
 
             low_output = model.generate(**inputs_dict, **generate_kwargs, low_memory=True)
@@ -3508,10 +3510,20 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles[1], return_tensors="pt").input_ids.to(torch_device)
 
         output_sequences_batched = model.generate(
-            input_ids=input_ids_batched, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+            input_ids=input_ids_batched,
+            penalty_alpha=0.6,
+            top_k=4,
+            return_dict_in_generate=True,
+            output_scores=True,
+            trust_remote_code=True,
         )
         output_sequences = model.generate(
-            input_ids=input_ids, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+            input_ids=input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            return_dict_in_generate=True,
+            output_scores=True,
+            trust_remote_code=True,
         )
 
         batched_out = tokenizer.decode(output_sequences_batched.sequences[1], skip_special_tokens=True)
@@ -5165,6 +5177,46 @@ class GenerationIntegrationTests(unittest.TestCase):
                         incremental_outputs.past_key_values[layer_idx][kv_idx],
                     )
                 )
+
+    @pytest.mark.generate
+    @parameterized.expand(
+        [
+            ("transformers-community/dola", {"dola_layers": "low"}),
+            ("transformers-community/contrastive-search", {"penalty_alpha": 0.6, "top_k": 4}),
+        ]
+    )
+    def test_hub_generation(self, custom_generate, extra_kwargs):
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM",
+            device_map=torch_device,
+            attn_implementation="eager",
+        ).eval()
+        model_inputs = {
+            "input_ids": torch.tensor([[1, 22557, 28725, 1526, 28808]], device=torch_device),
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1]], device=torch_device),
+        }
+        # Sets generation arguments such that:
+        # a) no EOS is generated, to ensure generation doesn't break early
+        # b) there are at least two forward passes in the main model, to ensure the input preparation of
+        #    the main model is correct
+        generation_kwargs = {
+            "eos_token_id": -1,  # see a)
+            "max_new_tokens": 4,  # see b)
+            "num_beams": 1,
+            "do_sample": True,
+            "output_scores": True,
+            "output_logits": True,
+            "output_hidden_states": True,
+            "output_attentions": True,
+            "return_dict_in_generate": True,
+            "use_cache": True,
+            "trust_remote_code": True,
+            "custom_generate": custom_generate,
+        }
+        generation_kwargs.update(extra_kwargs)
+        torch.manual_seed(0)
+        output = model.generate(**generation_kwargs, **model_inputs)
+        self.assertEqual(output.sequences.shape, (1, 9))
 
 
 @require_torch

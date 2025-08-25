@@ -86,7 +86,6 @@ class GenerationConfig(PushToHubMixin):
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
-        - *contrastive search* if `penalty_alpha>0.` and `top_k>1`
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
@@ -139,8 +138,6 @@ class GenerationConfig(PushToHubMixin):
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
-        penalty_alpha (`float`, *optional*):
-            The values balance the model confidence and the degeneration penalty in contrastive search decoding.
         dola_layers (`str` or `list[int]`, *optional*):
             The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
             be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
@@ -265,9 +262,6 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
-        low_memory (`bool`, *optional*):
-            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
-            Used with beam search and contrastive search.
         watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
@@ -619,9 +613,7 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if (
-                self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
-            ):  # contrastive search uses top_k
+            if self.top_k is not None and self.top_k != 50:
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
