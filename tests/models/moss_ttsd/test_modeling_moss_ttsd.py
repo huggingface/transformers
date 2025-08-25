@@ -66,8 +66,8 @@ class MossTTSDModelTester:
         num_choices=4,
         scope=None,
         channels=8,  # Updated to match processor default
-        speech_vocab_size=1024,  # Updated to more realistic value
-        speech_token_range=[151665, 152689],  # Updated to match processor default
+        speech_vocab_size=1025,  # Updated to more realistic value
+        speech_token_range=(151665, 152689),  # Updated to match processor default
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -403,8 +403,8 @@ class MossTTSDModelIntegrationTest(unittest.TestCase):
             num_attention_heads=4,
             intermediate_size=256,
             channels=8,
-            speech_vocab_size=1024,
-            speech_token_range=[50000, 51023],
+            speech_vocab_size=1025,
+            speech_token_range=(50000, 51023),
             max_position_embeddings=128,
         )
 
