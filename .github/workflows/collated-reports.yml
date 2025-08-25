@@ -27,7 +27,6 @@ jobs:
       - uses: actions/download-artifact@v4
 
       - name: Collated reports
-        working-directory: /transformers
         shell: bash
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
