@@ -296,7 +296,7 @@ def register_quantizer(name: str):
 
 
 def get_hf_quantizer(
-    config, quantization_config, torch_dtype, from_tf, from_flax, device_map, weights_only, user_agent
+    config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent
 ):
     pre_quantized = hasattr(config, "quantization_config")
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
@@ -319,13 +319,13 @@ def get_hf_quantizer(
 
     if hf_quantizer is not None:
         hf_quantizer.validate_environment(
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             from_tf=from_tf,
             from_flax=from_flax,
             device_map=device_map,
             weights_only=weights_only,
         )
-        torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
+        dtype = hf_quantizer.update_dtype(dtype)
         device_map = hf_quantizer.update_device_map(device_map)
         config = hf_quantizer.update_tp_plan(config)
 
@@ -333,4 +333,4 @@ def get_hf_quantizer(
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):
             quant_method = hf_quantizer.quantization_config.quant_method
             user_agent["quant"] = getattr(quant_method, "value", quant_method)
-    return hf_quantizer, config, torch_dtype, device_map
+    return hf_quantizer, config, dtype, device_map
