@@ -178,9 +178,9 @@ class KeyeVisionEmbeddings(nn.Module):
             img_tokens = img_tokens + pos
             outs.append(img_tokens.view(-1, img_tokens.size(-1)))  # (t*h*w, D)
 
-        y = torch.cat(outs, dim=0)  # (L_total, D)
-        y = y.view(B, L, -1)
-        return y
+        embeddings = torch.cat(outs, dim=0)  # (L_total, D)
+        embeddings = embeddings.view(B, L, -1)
+        return embeddings
 
 
 def rotate_half(x):
