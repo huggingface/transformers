@@ -127,6 +127,10 @@ class TextToAudioPipeline(Pipeline):
                 sampling_rate = getattr(config, sampling_rate_name, None)
                 if sampling_rate is not None:
                     self.sampling_rate = sampling_rate
+                elif getattr(config, "codec_config", None) is not None:
+                    sampling_rate = getattr(config.codec_config, sampling_rate_name, None)
+                    if sampling_rate is not None:
+                        self.sampling_rate = sampling_rate
 
         # last fallback to get the sampling rate based on processor
         if self.sampling_rate is None and not self.no_processor and hasattr(self.processor, "feature_extractor"):
@@ -247,10 +251,15 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
+        if self.model.config.model_type == "csm":
+            waveform_key = "audio"
+        else:
+            waveform_key = "waveform"
+
         # We directly get the waveform
         if self.no_processor:
             if isinstance(audio, dict):
-                waveform = audio["waveform"]
+                waveform = audio[waveform_key]
             elif isinstance(audio, tuple):
                 waveform = audio[0]
             else:
@@ -259,7 +268,10 @@ class TextToAudioPipeline(Pipeline):
         else:
             waveform = self.processor.decode(audio)
 
-        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
+        if isinstance(audio, list):
+            output_dict["audio"] = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
+        else:
+            output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict
