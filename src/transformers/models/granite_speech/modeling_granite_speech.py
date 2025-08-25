@@ -283,7 +283,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechConfig
 
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):

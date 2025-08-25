@@ -185,7 +185,9 @@ class PagedAttentionCache:
             # self.num_key_value_heads //= tp_size
 
         self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            config.head_dim
+            if hasattr(config, "head_dim") and config.head_dim is not None
+            else config.hidden_size // config.num_attention_heads
         )
         self.num_hidden_layers = config.num_hidden_layers
 
@@ -799,8 +801,8 @@ class ContinuousBatchProcessor:
             "input_ids": self.input_ids,
             "position_ids": self.position_ids,
             "attention_mask": self.attention_mask,
-            "cumulative_seqlens_q": self.cumulative_seqlens_q,
-            "cumulative_seqlens_k": self.cumulative_seqlens_k,
+            "cu_seq_lens_q": self.cumulative_seqlens_q,
+            "cu_seq_lens_k": self.cumulative_seqlens_k,
             "write_index": self.write_index,
             "read_index": self.read_index,
             "logits_indices": self.logits_indices,
@@ -1236,7 +1238,7 @@ class ContinuousBatchingManager:
         # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
         if hasattr(self.logit_processor, "set_continuous_batching_context"):
             self.logit_processor.set_continuous_batching_context(
-                batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
+                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
         return self.logit_processor(batch_data["input_ids"], logits)
 
@@ -1259,7 +1261,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 num_requests=len(self.input_queue.queue),
-                tp_size=getattr(self.model, "_tp_size", 8),  # TODO quantized converted don't set this
+                tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
 
             scheduler = None

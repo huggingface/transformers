@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-02-11 and added to Hugging Face Transformers on 2023-03-01.*
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -43,7 +44,7 @@ pipeline = pipeline(
     task="zero-shot-image-classification",
     model="kakaobrain/align-base",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 candidate_labels = [
@@ -65,18 +66,18 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
 
 processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
-model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base").to("cuda")
+model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base", device_map="auto")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = requests.get(url, stream=True)
 inputs = Image.open(image.raw).convert("RGB")
 
-image_inputs = processor(images=inputs, return_tensors="pt").to("cuda")
+image_inputs = processor(images=inputs, return_tensors="pt").to(model.device)
 with torch.no_grad():
     image_embeds = model.get_image_features(**image_inputs)
 
 candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
-text_inputs = processor(text=candidate_labels, padding=True, return_tensors="pt").to("cuda")
+text_inputs = processor(text=candidate_labels, padding=True, return_tensors="pt").to(model.device)
 with torch.no_grad():
     text_embeds = model.get_text_features(**text_inputs)
 

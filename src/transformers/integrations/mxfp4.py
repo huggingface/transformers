@@ -160,7 +160,7 @@ class Mxfp4GptOssExperts(nn.Module):
             torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
         self.alpha = 1.702
-
+        self.limit = getattr(config, "swiglu_limit", 7.0)
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
@@ -216,7 +216,7 @@ def routing_torch_dist(
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
-        rank = int(os.environ.get("LOCAL_RANK", 0))
+        rank = int(os.environ.get("LOCAL_RANK", "0"))
         replace_value = -1
 
         n_tokens = logits.shape[0]
@@ -272,7 +272,7 @@ def routing_torch_dist(
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
 
-    if dist.is_available() and dist.is_initialized():
+    if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing

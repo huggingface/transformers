@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-02-29 and added to Hugging Face Transformers on 2024-02-28.*
 
 # Starcoder2
 
@@ -48,7 +49,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 
 >>> prompt = "def print_hello_world():"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
 >>> tokenizer.batch_decode(generated_ids)[0]
