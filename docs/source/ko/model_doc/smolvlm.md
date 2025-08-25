@@ -71,7 +71,7 @@ conversation = [
         "role": "user",
         "content":[
             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-            {"type": "text", "text": "Describe this image."}
+            {"type": "text", "text": "이 이미지에 대해 설명해주세요."}
         ]
     }
 ]
@@ -95,7 +95,7 @@ conversation = [
         "role": "user",
         "content": [
             {"type": "video", "path": "/path/to/video.mp4"},
-            {"type": "text", "text": "Describe this video in detail"}
+            {"type": "text", "text": "이 비디오에 대해 자세히 설명해주세요."}
         ]
     },
 ]
@@ -134,7 +134,7 @@ conversation1 = [
         "role": "user",
         "content": [
             {"type": "image", "path": "/path/to/image.jpg"},
-            {"type": "text", "text": "Describe this image."}
+            {"type": "text", "text": "이 이미지에 대해 설명해주세요."}
         ]
     }
 ]
@@ -146,14 +146,14 @@ conversation2 = [
         "content": [
             {"type": "image", "path": "/path/to/image.jpg"},
             {"type": "image", "path": "/path/to/image.jpg"},
-            {"type": "text", "text": "What is written in the pictures?"}
+            {"type": "text", "text": "그림에 무엇이 적혀있나요?"}
         ]
     }
 ]
 
 # 텍스트만 포함하고 있는 구성
 conversation3 = [
-    {"role": "user","content": "who are you?"}
+    {"role": "user","content": "당신은 누구인가요?"}
 ]
 
 
