@@ -343,3 +343,6 @@ class KeyeVideoProcessor(BaseVideoProcessor):
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames // temporal_patch_size
         return grid_t * grid_h * grid_w
+
+
+__all__ = ["KeyeVideoProcessor"]
