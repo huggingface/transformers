@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -55,6 +55,7 @@ from transformers.models.siglip.modeling_siglip import (
 
 from ...activations import GELUActivation
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -74,6 +75,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import (
     ALL_ATTENTION_FUNCTIONS,
 )
@@ -196,12 +198,12 @@ class KeyeVisionConfig(KeyeVisionConfig):
         self.initializer_range = initializer_range
 
 
-class KeyeTextConfig(Qwen2_5_VLTextConfig):
+class KeyeTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KeyeTextModel`]. It is used to instantiate a
-    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    Keye model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+    Keye-VL-8B-Preview [Kwai-Keye/Keye-VL-8B-Preview](https://huggingface.co/Kwai-Keye).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -244,9 +246,6 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -301,7 +300,7 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
     >>> # Initializing a Keye style configuration
     >>> configuration = KeyeConfig()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> # Initializing a model from the Keye configuration
     >>> model = KeyeTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -310,6 +309,22 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
 
     model_type = "keye_text"
     base_config_key = "text_config"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Keye`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -328,7 +343,6 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
         rope_theta=1000000.0,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=80,
         layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
@@ -337,33 +351,48 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
         attention_bias=False,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            use_sliding_window=use_sliding_window,
-            sliding_window=sliding_window,
-            max_window_layers=max_window_layers,
-            layer_types=layer_types,
-            attention_dropout=attention_dropout,
-            rope_scaling=rope_scaling,
-            image_token_id=image_token_id,
-            video_token_id=video_token_id,
-            attention_bias=attention_bias,
-            **kwargs,
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
+
+        if layer_types is None:
+            layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+
+        self.layer_types = layer_types
+        layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        # and change type from 'mrope' to 'default' because `mrope` does default RoPE calculations
+        # one can set it to "linear"/"dynamic" etc. to have scaled RoPE
+        # TODO: @raushan update config in the hub
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            if self.rope_scaling["type"] == "mrope":
+                self.rope_scaling["type"] = "default"
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self, ignore_keys={"mrope_section"})
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.attention_bias = attention_bias
-        del self.max_window_layers
 
 
 class KeyeConfig(Qwen2_5_VLConfig):

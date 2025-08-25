@@ -126,9 +126,9 @@ class KeyeVisionConfig(PretrainedConfig):
 class KeyeTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KeyeTextModel`]. It is used to instantiate a
-    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    Keye model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+    Keye-VL-8B-Preview [Kwai-Keye/Keye-VL-8B-Preview](https://huggingface.co/Kwai-Keye).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -171,9 +171,6 @@ class KeyeTextConfig(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -228,7 +225,7 @@ class KeyeTextConfig(PretrainedConfig):
     >>> # Initializing a Keye style configuration
     >>> configuration = KeyeConfig()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> # Initializing a model from the Keye configuration
     >>> model = KeyeTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -271,7 +268,6 @@ class KeyeTextConfig(PretrainedConfig):
         rope_theta=1000000.0,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=80,
         layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
@@ -303,14 +299,10 @@ class KeyeTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
 
+        if layer_types is None:
+            layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+
         self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
