@@ -240,7 +240,8 @@ if __name__ == "__main__":
     # If no output file is provided, we pick a name based on the args
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
-        args.output_file = f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}.json"
+        attn = args.attn.replace("|", "_").replace("/", "_")
+        args.output_file = f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
 
     # Run warmup batch generation
     batch_generate(
