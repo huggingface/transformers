@@ -375,6 +375,7 @@ class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
                 inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 loss = model(**inputs).loss
+                assert loss is not None, f"model={model}\nmodel_class={model_class}\ninputs={inputs}\nloss={loss}"
                 loss.backward()
                 optimizer.step()
 
