@@ -435,6 +435,7 @@ class KeyeImageProcessor(Qwen2VLImageProcessor):
             merge_size (`int`, *optional*, defaults to 2):
                 The merge size of the vision encoder to llm encoder.
     """
+
     def __init__(
         self,
         do_resize: bool = True,
