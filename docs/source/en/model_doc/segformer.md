@@ -22,7 +22,7 @@ in your Markdown viewer.
 
 # SegFormer
 
-[SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://huggingface.co/papers/2105.15203) is a semantic segmentation model that combines a **hierarchical Transformer encoder** (Mix Transformer, MiT) with a **lightweight all-MLP decoder**. It avoids positional encodings and complex decoders, yet achieves **state-of-the-art performance** on benchmarks like ADE20K and Cityscapes while being efficient and robust.
+[SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://huggingface.co/papers/2105.15203) is a semantic segmentation model that combines a hierarchical Transformer encoder (Mix Transformer, MiT) with a lightweight all-MLP decoder. It avoids positional encodings and complex decoders and achieves state-of-the-art performance on benchmarks like ADE20K and Cityscapes. This simple and lightweight design is more efficient and scalable.
 
 You can find all the original SegFormer checkpoints under the [Nvidia](https://huggingface.co/nvidia/models?search=segformer) organization.
 
