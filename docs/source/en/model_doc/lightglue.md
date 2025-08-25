@@ -30,9 +30,23 @@ You can find all the original LightGlue checkpoints under the [ETH-CVG](https://
 >
 > Click on the LightGlue models in the right sidebar for more examples of how to apply LightGlue to different computer vision tasks.
 
-The example below demonstrates how to match keypoints between two images with the [`AutoModel`] class.
+The example below demonstrates how to match keypoints between two images with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+from transformers import pipeline
+
+keypoint_matcher = pipeline(task="keypoint-matching", model="ETH-CVG/lightglue_superpoint")
+
+url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+
+results = keypoint_matcher([url_0, url_1], threshold=0.9)
+print(results[0])
+# {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
+```
 <hfoption id="AutoModel">
 
 ```py
