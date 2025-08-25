@@ -127,6 +127,8 @@ class DeepseekV2Config(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts_per_tok": "top_k",
+        "num_shared_experts": "n_shared_experts",
+        "num_experts": "n_routed_experts",
     }
 
     base_model_tp_plan = {
