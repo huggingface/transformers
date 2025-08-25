@@ -5114,6 +5114,39 @@ class GenerationIntegrationTests(unittest.TestCase):
                     )
                 )
 
+    @pytest.mark.generate
+    def test_dola_hub_runs(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM",
+            device_map=torch_device,
+            attn_implementation="eager",
+        ).eval()
+        model_inputs = {
+            "input_ids": torch.tensor([[1, 22557, 28725, 1526, 28808]], device=torch_device),
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1]], device=torch_device),
+        }
+        # Sets dola generation arguments such that:
+        # a) no EOS is generated, to ensure generation doesn't break early
+        # b) there are at least two forward passes in the main model, to ensure the input preparation of
+        #    the main model is correct
+        generation_kwargs = {
+            "eos_token_id": -1,  # see a)
+            "max_new_tokens": 4,  # see b)
+            "num_beams": 1,
+            "do_sample": True,
+            "output_scores": True,
+            "output_logits": True,
+            "output_hidden_states": True,
+            "output_attentions": True,
+            "return_dict_in_generate": True,
+            "use_cache": True,
+            "dola_layers": "low",
+            "trust_remote_code": True,
+        }
+        torch.manual_seed(0)
+        output_dola = model.generate(**generation_kwargs, **model_inputs)
+        self.assertEqual(output_dola.sequences.shape, (1, 9))
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
