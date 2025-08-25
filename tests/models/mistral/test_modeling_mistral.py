@@ -172,6 +172,7 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2

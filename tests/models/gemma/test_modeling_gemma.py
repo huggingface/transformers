@@ -486,6 +486,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    # TODO joao, manuel: remove this in v4.62.0
     def test_model_2b_bf16_dola(self):
         model_id = "google/gemma-2b"
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
