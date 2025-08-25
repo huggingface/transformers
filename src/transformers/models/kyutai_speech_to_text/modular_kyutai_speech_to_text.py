@@ -313,6 +313,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         model_kwargs: Optional[dict[str, torch.Tensor]] = None,
     ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
+            self,
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,

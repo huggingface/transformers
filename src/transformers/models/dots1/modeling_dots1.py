@@ -363,7 +363,7 @@ class Dots1TopkRouter(nn.Module):
 
 class Dots1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Dots1Config, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Dots1Attention(config=config, layer_idx=layer_idx)

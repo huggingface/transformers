@@ -752,7 +752,7 @@ class Sam2MaskEmbedding(nn.Module):
 
 class Sam2PromptEncoder(nn.Module):
     def __init__(self, config: Sam2PromptEncoderConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.shared_embedding = Sam2PositionalEmbedding(config)
         self.mask_embed = Sam2MaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
@@ -921,7 +921,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
         """
-        super().__init__()
+        nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size)
 

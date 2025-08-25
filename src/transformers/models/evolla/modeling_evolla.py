@@ -236,7 +236,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 class EvollaSaProtSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):

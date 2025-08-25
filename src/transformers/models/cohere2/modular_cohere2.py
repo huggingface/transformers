@@ -271,7 +271,7 @@ class Cohere2LayerNorm(CohereLayerNorm):
     pass
 
 
-class Cohere2Attention(CohereAttention, nn.Module):
+class Cohere2Attention(CohereAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Cohere2Config, layer_idx: Optional[int] = None):

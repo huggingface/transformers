@@ -385,7 +385,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
 
 class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)

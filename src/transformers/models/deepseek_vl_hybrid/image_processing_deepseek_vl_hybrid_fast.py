@@ -94,6 +94,7 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
@@ -102,7 +103,10 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
             high_res_background_color = (127, 127, 127)
         else:
             high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
-        super().__init__(**kwargs)
+        if kwargs.get("image_mean") is None:
+            background_color = (127, 127, 127)
+        else:
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)
 

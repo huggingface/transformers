@@ -37,7 +37,7 @@ class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
     """
 
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         dim = config.hidden_size // config.num_attention_heads
         base = config.rotary_embedding_base
 
@@ -133,7 +133,7 @@ class Wav2Vec2BertFeatureProjection(nn.Module):
 
 class Wav2Vec2BertFeedForward(nn.Module):
     def __init__(self, config, act_fn=None, hidden_size=None):
-        super().__init__()
+        nn.Module.__init__(self)
         act_fn = act_fn if act_fn is not None else config.hidden_act
         hidden_size = hidden_size if hidden_size is not None else config.hidden_size
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)

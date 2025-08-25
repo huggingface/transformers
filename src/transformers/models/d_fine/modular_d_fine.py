@@ -898,7 +898,7 @@ class DFineModel(RTDetrModel):
 
 class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
-        DFinePreTrainedModel.__init__(config)
+        DFinePreTrainedModel.__init__(self, config)
 
         # D-FINE encoder-decoder model
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
