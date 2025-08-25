@@ -6,8 +6,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
 
-from transformers import VideoPrismClip, VideoPrismConfig, VideoPrismModel, VideoPrismTokenizer
-
+from transformers import VideoPrismClip, VideoPrismConfig, VideoPrismModel, VideoPrismTokenizer, VideoPrismTokenizerFast
 
 def get_checkpoint_info(model_type="backbone", model_size="base"):
     backbone_base = {
@@ -339,7 +338,7 @@ def ids_to_attention_mask(input_ids: torch.Tensor, pad_token_id: int = 0) -> tor
 
 
 def prepare_texts():
-    tokenizer = VideoPrismTokenizer(
+    tokenizer = VideoPrismTokenizerFast(
     # tokenizer_object=sp,
     vocab_file="./sentencepiece.model",
     unk_token="<unk>",
@@ -462,10 +461,10 @@ def convert(
                 )
                 print(outputs.last_hidden_state.shape)
                 print(outputs.last_hidden_state[0, :3, :3])
-                # assert torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_tensor, atol=1e-5), (
-                #     "Output does not match expected tensor."
-                # )
-                # print("Inference successful, output matches expected tensor.")
+                assert torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_tensor, atol=1e-5), (
+                    "Output does not match expected tensor."
+                )
+                print("Inference successful, output matches expected tensor.")
 
             elif checkpoint_info["model_type"] == "lvt":
                 # sentences = [

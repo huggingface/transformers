@@ -641,7 +641,7 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,  # ? (B, T=16, C=3, H=288, W=288)
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,  # ? unused at the moment
+        interpolate_pos_encoding: bool = False,  #! unused at the moment
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor, ...], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

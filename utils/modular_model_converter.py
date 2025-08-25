@@ -1072,6 +1072,7 @@ def replace_class_node(
 TYPE_TO_FILE_TYPE = {
     "Config": "configuration",
     "Tokenizer": "tokenization",
+    "TokenizerFast": "tokenization*_fast",
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
