@@ -1280,7 +1280,7 @@ class MoshiModel(MoshiPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

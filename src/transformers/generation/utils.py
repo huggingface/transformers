@@ -2000,7 +2000,7 @@ class GenerationMixin(ContinuousMixin):
             elif generation_config.cache_implementation == "dynamic":
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
-        # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
+        # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
