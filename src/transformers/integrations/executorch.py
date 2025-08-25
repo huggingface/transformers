@@ -494,16 +494,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 "The model must have a generation config to be exported with static caching. "
                 "Please set `generation_config` in `model`."
             )
-        if "batch_size" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a batch_size in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"batch_size": 1, ...} ...)'
-            )
-        if "max_cache_len" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a max_cache_len in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"max_cache_len": 4096, ...} ...)'
-            )
         if not generation_config.use_cache:
             raise AssertionError(
                 "The model must have caching enabled to be exported with static caching. "
@@ -515,15 +505,18 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 "Please set `generation_config.cache_implementation='static'`."
             )
 
+        cache_config = {} if generation_config.cache_config is None else generation_config.cache_config
+        batch_size = cache_config.get("batch_size", 1)
+        max_cache_len = cache_config.get("max_cache_len", 4096)
+        device = cache_config.get("device", self.model.device)
+
         self.model = model
         self.static_cache = StaticCache(
-            max_cache_len=generation_config.cache_config.get("max_cache_len"),
+            max_cache_len=max_cache_len,
             config=config,
         )
-        batch_size = generation_config.cache_config.get("batch_size")
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -659,28 +652,21 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
                 "The model must have a generation config to be exported with static caching. "
                 "Please set `generation_config` in `model`."
             )
-        if "batch_size" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a batch_size in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"batch_size": 1, ...} ...)'
-            )
-        if "max_cache_len" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a max_cache_len in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"max_cache_len": 4096, ...} ...)'
-            )
+        cache_config = {} if generation_config.cache_config is None else generation_config.cache_config
+        batch_size = cache_config.get("batch_size", 1)
+        max_cache_len = cache_config.get("max_cache_len", 4096)
+        device = cache_config.get("device", self.model.device)
+
         if not config.use_cache:
             raise AssertionError("Model must have caching enabled.")
 
         # Initialize the cache
-        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        max_batch_size = generation_config.cache_config.get("batch_size")
-        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
-        self.cache.early_initialization(max_batch_size, num_heads, head_dim, dtype, device)
+        self.cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
 
         # Register all key and value cache tensors as buffers
         for i in range(len(self.cache)):
