@@ -1100,8 +1100,6 @@ class DFineCSPRepLayer(nn.Module):
         self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
         super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
         activation = config.activation_function
 
         hidden_channels = int(out_channels * expansion)

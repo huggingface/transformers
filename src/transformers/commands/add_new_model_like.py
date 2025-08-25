@@ -552,22 +552,30 @@ def create_new_model_like(
     model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
     subprocess.run(
         ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
+        check=False,
         cwd=REPO_PATH,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
         ["ruff", "format", new_module_folder, tests_folder, model_init_file],
+        check=False,
         cwd=REPO_PATH,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"],
+        check=False,
+        cwd=REPO_PATH,
+        stdout=subprocess.DEVNULL,
     )
-    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
+    subprocess.run(["python", "utils/sort_auto_mappings.py"], check=False, cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
     # 10. Run the modular conversion
     subprocess.run(
-        ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["python", "utils/modular_model_converter.py", new_lowercase_name],
+        check=False,
+        cwd=REPO_PATH,
+        stdout=subprocess.DEVNULL,
     )
 
 
