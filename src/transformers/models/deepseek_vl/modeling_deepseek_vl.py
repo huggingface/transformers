@@ -274,12 +274,6 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
     def prepare_embeddings_for_image_generation(self) -> torch.Tensor:
         raise AttributeError("Not needed for DeepseekVL")
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
