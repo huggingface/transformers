@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-03-24 and added to Hugging Face Transformers on 2022-03-28.*
 
 # DPT
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The DPT model was proposed in [Vision Transformers for Dense Prediction](https://arxiv.org/abs/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.
+The DPT model was proposed in [Vision Transformers for Dense Prediction](https://huggingface.co/papers/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.
 DPT is a model that leverages the [Vision Transformer (ViT)](vit) as backbone for dense prediction tasks like semantic segmentation and depth estimation.
 
 The abstract from the paper is the following:
@@ -34,7 +35,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dpt_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> DPT architecture. Taken from the <a href="https://arxiv.org/abs/2103.13413" target="_blank">original paper</a>. </small>
+<small> DPT architecture. Taken from the <a href="https://huggingface.co/papers/2103.13413" target="_blank">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/isl-org/DPT).
 
@@ -78,7 +79,13 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTImageProcessor
     - preprocess
+
+## DPTImageProcessorFast
+
+[[autodoc]] DPTImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
+    - post_process_depth_estimation
 
 ## DPTModel
 

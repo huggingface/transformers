@@ -18,28 +18,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from .configuration_mlcd import MLCDVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class MLCDMLP(nn.Module):
@@ -58,6 +49,8 @@ class MLCDMLP(nn.Module):
 
 
 class MLCDRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -180,7 +173,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -219,7 +212,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
     q, k = q.float(), k.float()
@@ -232,12 +225,11 @@ def apply_rotary_pos_emb_vision(
 
 
 class MLCDAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper
-    Multi-headed attention with RoPE. Refer to papers:
-        - Attention is all you need:
-            https://arxiv.org/abs/1706.03762
-        - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-            https://arxiv.org/abs/2104.09864
+    """Multi-headed attention with RoPE. Refer to papers:
+    - Attention is all you need:
+        https://huggingface.co/papers/1706.03762
+    - RoFormer: Enhanced Transformer with Rotary Position Embedding:
+        https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):
@@ -264,10 +256,10 @@ class MLCDAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         batch_size, seq_length = hidden_states.shape[:-1]
 
@@ -288,13 +280,7 @@ class MLCDAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -315,7 +301,7 @@ class MLCDAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MLCDEncoderLayer(nn.Module):
+class MLCDEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -327,16 +313,16 @@ class MLCDEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
                 Represents the hidden states from the previous layer or the input embeddings.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`):
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
                 A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
                 Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.FloatTensor`):
@@ -385,23 +371,22 @@ class MLCDEncoder(nn.Module):
         self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            position_embeddings (`Tuple[torch.Tensor, torch.Tensor]`):
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
                 A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
                 Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -432,21 +417,12 @@ class MLCDEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states=hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -465,22 +441,6 @@ class MLCDEncoder(nn.Module):
         )
 
 
-MLCD_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class MLCDVisionTransformer(nn.Module):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__()
@@ -494,18 +454,14 @@ class MLCDVisionTransformer(nn.Module):
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -549,16 +505,12 @@ class MLCDVisionTransformer(nn.Module):
         )
 
 
+@auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -593,29 +545,13 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-MLCD_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MLCDVisionConfig`]):
-            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare MLCD vision encoder outputting raw hidden-states without any specific head on top.",
-    MLCD_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The vision model from M_L_C_D without any head or projection on top.
+    """
 )
 class MLCDVisionModel(MLCDPreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MLCDEncoderLayer"]
 
@@ -628,19 +564,16 @@ class MLCDVisionModel(MLCDPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MLCDVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
-
-        Examples:
+        Example:
 
         ```python
         >>> import requests

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2023-12-07.*
 
 # LLaVa
 
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 LLaVa is an open-source chatbot trained by fine-tuning LlamA/Vicuna on GPT-generated multimodal instruction-following data. It is an auto-regressive language model, based on the transformer architecture. In other words, it is an multi-modal version of LLMs fine-tuned for chat / instructions.
 
-The LLaVa model was proposed in [Visual Instruction Tuning](https://arxiv.org/abs/2304.08485) and improved in [Improved Baselines with Visual Instruction Tuning](https://arxiv.org/pdf/2310.03744) by Haotian Liu, Chunyuan Li, Yuheng Li and Yong Jae Lee.
+The LLaVa model was proposed in [Visual Instruction Tuning](https://huggingface.co/papers/2304.08485) and improved in [Improved Baselines with Visual Instruction Tuning](https://huggingface.co/papers/2310.03744) by Haotian Liu, Chunyuan Li, Yuheng Li and Yong Jae Lee.
 
 The abstract from the paper is the following:
 
@@ -35,7 +36,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> LLaVa architecture. Taken from the <a href="https://arxiv.org/abs/2304.08485">original paper.</a> </small>
+<small> LLaVa architecture. Taken from the <a href="https://huggingface.co/papers/2304.08485">original paper.</a> </small>
 
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ) and [ybelkada](https://huggingface.co/ybelkada).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main/llava).
@@ -137,7 +138,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 conversation = [
@@ -173,7 +174,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 
@@ -216,12 +217,12 @@ processor.batch_decode(generate_ids, skip_special_tokens=True)
 
 ## Note regarding reproducing original implementation
 
-In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LLavaImageProcessor`:
+In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LlavaImageProcessor`:
 
 ```python
-from transformers import LLavaImageProcessor
+from transformers import LlavaImageProcessor
 
-image_processor = LLavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+image_processor = LlavaImageProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", do_pad=True)
 ```
 
 ### Using Flash Attention 2

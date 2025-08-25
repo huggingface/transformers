@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-28.*
 
 # BitNet
 
@@ -20,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 Trained on a corpus of 4 trillion tokens, this model demonstrates that native 1-bit LLMs can achieve performance comparable to leading open-weight, full-precision models of similar size, while offering substantial advantages in computational efficiency (memory, energy, latency).
 
-➡️ **Technical Report:** [BitNet b1.58 2B4T Technical Report](https://arxiv.org/abs/2504.12285)
+➡️ **Technical Report:** [BitNet b1.58 2B4T Technical Report](https://huggingface.co/papers/2504.12285)
 
 ➡️ **Official Inference Code:** [microsoft/BitNet (bitnet.cpp)](https://github.com/microsoft/BitNet)
 
@@ -89,7 +90,7 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 # Apply the chat template

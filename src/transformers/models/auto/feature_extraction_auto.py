@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
@@ -55,16 +55,19 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
+        ("dia", "DiaFeatureExtractor"),
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
+        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
@@ -112,6 +115,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
+        ("xcodec", "DacFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
@@ -130,7 +134,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
@@ -148,7 +152,7 @@ def get_feature_extractor_config(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
@@ -175,12 +179,12 @@ def get_feature_extractor_config(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -255,7 +259,7 @@ class AutoFeatureExtractor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoFeatureExtractor is designed to be instantiated "
             "using the `AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -292,12 +296,12 @@ class AutoFeatureExtractor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -311,7 +315,7 @@ class AutoFeatureExtractor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -339,7 +343,7 @@ class AutoFeatureExtractor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -371,17 +375,21 @@ class AutoFeatureExtractor:
 
         has_remote_code = feature_extractor_auto_map is not None
         has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in feature_extractor_auto_map:
+                upstream_repo = feature_extractor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             feature_extractor_class = get_class_from_dynamic_module(
                 feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                feature_extractor_class.register_for_auto_class()
+            feature_extractor_class.register_for_auto_class()
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         elif feature_extractor_class is not None:
             return feature_extractor_class.from_dict(config_dict, **kwargs)
@@ -393,7 +401,7 @@ class AutoFeatureExtractor:
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
         )
 
     @staticmethod

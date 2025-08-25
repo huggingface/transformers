@@ -17,6 +17,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 import requests
 import torch
@@ -157,7 +158,7 @@ def load_original_state_dict(repo_id, model_name):
 
     original_state_dict = {}
     model = torch.load(directory_path, map_location="cpu")["model"]
-    for key in model.keys():
+    for key in model:
         original_state_dict[key] = model[key]
 
     return original_state_dict
@@ -319,7 +320,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     # Use the mapping to rename keys
     for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
         for key in list(state_dict_keys.keys()):
@@ -363,8 +364,8 @@ def read_in_q_k_v(state_dict, config, model_name):
         if model_name in ["dfine_n_coco", "dfine_n_obj2coco_e25", "dfine_n_obj365"]:
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:128, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:128]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:384, :]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:384]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[128:256, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[128:256]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-128:, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-128:]
         else:
@@ -405,7 +406,7 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config, model_name)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage

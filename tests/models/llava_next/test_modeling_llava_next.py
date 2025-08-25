@@ -50,7 +50,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches, unpad_image
+    from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 
 
 if is_vision_available():
@@ -222,49 +222,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -298,18 +255,27 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
-    def test_unpad_image(self):
-        original_size = (400, 400)
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
 
-        # Test case width is padded
-        pixel_values = floats_tensor([3, 400, 601])
-        unpadded_tensor = unpad_image(pixel_values, original_size)
-        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+        # prepare input
+        num_image_tokens = 24
+        pixel_values = floats_tensor([1, 5, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
 
-        # Test case height is padded
-        pixel_values = floats_tensor([3, 503, 400])
-        unpadded_tensor = unpad_image(pixel_values, original_size)
-        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
 
     @parameterized.expand(
         [
@@ -383,7 +349,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             load_in_4bit=True,
         )
 
-        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt")
+        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt").to(torch_device)
 
         # verify inputs against original implementation
         filepath = hf_hub_download(
@@ -406,11 +372,13 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         check_torch_load_is_safe()
         original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
-        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+        assert torch.allclose(
+            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype)
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -502,7 +470,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the time of day seems to be either dawn or dusk, given the soft'  # fmt: skip
+        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given"
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -547,7 +515,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # test that changing `strategy` won't error out
         model.vision_feature_select_strategy = "full"
 
-        inputs = self.processor(self.prompt, self.image, return_tensors="pt").to(model.device)
+        inputs = self.processor(text=self.prompt, images=self.image, return_tensors="pt").to(model.device)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
@@ -568,7 +536,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextForConditionalGeneration.from_pretrained(granite_model_path)
         self.processor = AutoProcessor.from_pretrained(granite_model_path)
         prompt = "<|user|>\n<image>\nWhat is shown in this image?\n<|assistant|>\n"
-        inputs = self.processor(prompt, self.image, return_tensors="pt").to(model.device)
+        inputs = self.processor(text=prompt, images=self.image, return_tensors="pt").to(model.device)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)

@@ -39,13 +39,16 @@ import os
 import subprocess
 
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
 print(result.stdout)
 
-if len(result.stderr) > 0:
+if f"PASSED {target_test}" in result.stdout:
+    print("test passed")
+    exit(0)
+elif len(result.stderr) > 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
         exit(0)
@@ -55,7 +58,7 @@ if len(result.stderr) > 0:
     else:
         print(f"pytest failed to run: {{result.stderr}}")
         exit(-1)
-elif f"{target_test} FAILED" in result.stdout:
+elif f"FAILED {target_test}" in result.stdout:
     print("test failed")
     exit(2)
 
@@ -94,6 +97,7 @@ git bisect run python3 target_script.py
 
     result = subprocess.run(
         ["bash", "run_git_bisect.sh"],
+        check=False,
         capture_output=True,
         text=True,
     )
@@ -144,7 +148,8 @@ def get_commit_info(commit):
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url).json()
         author = pr_for_commit["user"]["login"]
-        merged_author = pr_for_commit["merged_by"]["login"]
+        if pr_for_commit["merged_by"] is not None:
+            merged_author = pr_for_commit["merged_by"]["login"]
 
     if author is None:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
@@ -166,6 +171,12 @@ if __name__ == "__main__":
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
+    # `get_commit_info` uses `requests.get()` to request info. via `api.github.com` without using token.
+    # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
+    # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
+    # Let's cache the commit info. and reuse them whenever possible.
+    commit_info_cache = {}
+
     if len({args.test is None, args.file is None}) != 2:
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
@@ -186,7 +197,14 @@ if __name__ == "__main__":
             for test in failed_tests:
                 commit = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
                 info = {"test": test, "commit": commit}
-                info.update(get_commit_info(commit))
+
+                if commit in commit_info_cache:
+                    commit_info = commit_info_cache[commit]
+                else:
+                    commit_info = get_commit_info(commit)
+                    commit_info_cache[commit] = commit_info
+
+                info.update(commit_info)
                 failed_tests_with_bad_commits.append(info)
 
             # If no single-gpu test failures, remove the key

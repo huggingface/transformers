@@ -19,13 +19,10 @@ from typing import Optional, Union
 import requests
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -124,10 +121,6 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
 
-    def _assertEquivalence(self, a, b):
-        self.assertTrue(torch.allclose(a, b, atol=1e-1))
-        self.assertLessEqual(torch.mean(torch.abs(a - b)).item(), 1e-3)
-
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
@@ -146,8 +139,8 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assertEquivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
 
     @require_vision
     @require_torch
@@ -170,5 +163,5 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assertEquivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())

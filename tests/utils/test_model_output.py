@@ -17,6 +17,8 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+import pytest
+
 from transformers import AlbertForMaskedLM
 from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput, is_torch_available
@@ -24,8 +26,6 @@ from transformers.utils import ModelOutput, is_torch_available
 
 if is_torch_available():
     import torch
-
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 
 
 @dataclass
@@ -151,19 +151,16 @@ class ModelOutputTester(unittest.TestCase):
         unflattened_x = pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
         self.assertEqual(x, unflattened_x)
 
-        if is_torch_greater_or_equal_than_2_2:
-            self.assertEqual(
-                pytree.treespec_dumps(actual_tree_spec),
-                '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": "[\\"a\\", \\"c\\"]", "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
-            )
+        self.assertEqual(
+            pytree.treespec_dumps(actual_tree_spec),
+            '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": "[\\"a\\", \\"c\\"]", "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
+        )
 
     # TODO: @ydshieh
     @unittest.skip(reason="CPU OOM")
     @require_torch
+    @pytest.mark.torch_export_test
     def test_export_serialization(self):
-        if not is_torch_greater_or_equal_than_2_2:
-            self.skipTest(reason="Export serialization requires torch >= 2.2.0")
-
         model_cls = AlbertForMaskedLM
         model_config = model_cls.config_class()
         model = model_cls(model_config)

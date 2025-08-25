@@ -230,7 +230,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # read in qkv matrices

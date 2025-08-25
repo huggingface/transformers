@@ -14,7 +14,7 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -151,9 +151,9 @@ class FlavaTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -472,10 +472,10 @@ class FlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_config: Optional[Dict[str, Any]] = None,
-        text_config: Optional[Dict[str, Any]] = None,
-        multimodal_config: Optional[Dict[str, Any]] = None,
-        image_codebook_config: Optional[Dict[str, Any]] = None,
+        image_config: Optional[dict[str, Any]] = None,
+        text_config: Optional[dict[str, Any]] = None,
+        multimodal_config: Optional[dict[str, Any]] = None,
+        image_codebook_config: Optional[dict[str, Any]] = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,

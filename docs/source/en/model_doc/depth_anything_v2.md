@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-13 and added to Hugging Face Transformers on 2024-07-05.*
 
 # Depth Anything V2
 
 ## Overview
 
-Depth Anything V2 was introduced in [the paper of the same name](https://arxiv.org/abs/2406.09414) by Lihe Yang et al. It uses the same architecture as the original [Depth Anything model](depth_anything), but uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
+Depth Anything V2 was introduced in [the paper of the same name](https://huggingface.co/papers/2406.09414) by Lihe Yang et al. It uses the same architecture as the original [Depth Anything model](depth_anything), but uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
 
 The abstract from the paper is the following:
 
@@ -27,7 +28,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_anything_overview.jpg"
 alt="drawing" width="600"/>
 
-<small> Depth Anything overview. Taken from the <a href="https://arxiv.org/abs/2401.10891">original paper</a>.</small>
+<small> Depth Anything overview. Taken from the <a href="https://huggingface.co/papers/2401.10891">original paper</a>.</small>
 
 The Depth Anything models were contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/DepthAnything/Depth-Anything-V2).

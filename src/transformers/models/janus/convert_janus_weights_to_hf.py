@@ -25,6 +25,7 @@ import gc
 import json
 import os
 import re
+from typing import Optional
 
 import torch
 from accelerate import init_empty_weights
@@ -167,7 +168,9 @@ def convert_state_dict_to_hf(state_dict):
     return converted_state_dict
 
 
-def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir: str = None) -> str:
+def ensure_model_downloaded(
+    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
     Returns path to local files.
@@ -347,7 +350,7 @@ def convert_model(
         "num_key_value_heads",
         "hidden_act",
         "max_position_embeddings",
-        "torch_dtype",
+        "dtype",
     ]:
         if key in config_data["language_config"]:
             text_config_kwargs[key] = config_data["language_config"][key]
@@ -404,9 +407,12 @@ def convert_model(
     with init_empty_weights():
         model = JanusForConditionalGeneration(config)
 
+    model.generation_config._from_model_config = False
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
+    if not hasattr(model.generation_config, "generation_kwargs"):
+        model.generation_config.generation_kwargs = {}
     model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict

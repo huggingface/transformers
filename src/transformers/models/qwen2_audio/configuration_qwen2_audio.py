@@ -44,7 +44,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         d_model (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
@@ -172,9 +172,7 @@ class Qwen2AudioConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
 
         if isinstance(audio_config, dict):
-            audio_config["model_type"] = (
-                audio_config["model_type"] if "model_type" in audio_config else "qwen2_audio_encoder"
-            )
+            audio_config["model_type"] = audio_config.get("model_type", "qwen2_audio_encoder")
             audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
         elif audio_config is None:
             audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](
@@ -192,7 +190,7 @@ class Qwen2AudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()

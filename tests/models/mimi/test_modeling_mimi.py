@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
@@ -107,14 +108,21 @@ class MimiModelTester:
         self.sliding_window = sliding_window
         self.use_cache = use_cache
 
-    def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+    def prepare_config_and_inputs(self, input_values_length=None):
+        input_values = floats_tensor(
+            [
+                self.batch_size,
+                self.num_channels,
+                self.intermediate_size if input_values_length is None else input_values_length,
+            ],
+            scale=1.0,
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = self.prepare_config_and_inputs()
+    def prepare_config_and_inputs_for_common(self, input_values_length=None):
+        config, inputs_dict = self.prepare_config_and_inputs(input_values_length=input_values_length)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
@@ -263,8 +271,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -415,11 +423,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -439,6 +447,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -507,6 +516,54 @@ class MimiIntegrationTest(unittest.TestCase):
                 audio_output_entire_context.squeeze().cpu().numpy(),
             )
             self.assertTrue(rmse < 1e-3)
+
+    def test_integration_encode_with_padding_cache(self):
+        """
+        We test here the possibility to run Mimi in a streaming manner, i.e. chunk by chunk.
+        1. we encode a first time the entire audio
+        2. we encode the audio chunk by chunk, each chunk being the smallest size possible for the model (i.e. the frame size)
+
+        This test must be run on CPU since GPU floating point operations accumulate rounding errors that cause test failures.
+        """
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        model_id = "kyutai/mimi"
+
+        model = MimiModel.from_pretrained(model_id, use_cache=True).to("cpu")
+        processor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
+
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to("cpu")
+
+        frame_size = model.config.frame_size
+        audio_codes = model.encode(inputs["input_values"]).audio_codes
+
+        # streaming chunk by chunk
+        encoder_past_key_values = None
+        padding_cache = None
+        encoded_frames_list = []
+
+        for start in range(0, inputs["input_values"].shape[-1], frame_size):
+            input_values_chunk = inputs["input_values"][:, :, start : start + frame_size]
+            encoder_outputs = model.encode(
+                input_values_chunk,
+                padding_cache=padding_cache,
+                encoder_past_key_values=encoder_past_key_values,
+                use_streaming=True,
+            )
+            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            padding_cache = encoder_outputs.padding_cache
+            encoded_frames_list.append(encoder_outputs.audio_codes)
+
+        streamed_audio_codes = torch.cat(encoded_frames_list, dim=-1)
+
+        torch.testing.assert_close(streamed_audio_codes, audio_codes)
 
     def test_integration(self):
         expected_rmses = {

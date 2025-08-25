@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## 개요[[overview]]
 
 CLIP 모델은 Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh,
-Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever가 제안한 [자연어 지도(supervision)를 통한 전이 가능한 시각 모델 학습](https://arxiv.org/abs/2103.00020)라는 논문에서 소개되었습니다. CLIP(Contrastive Language-Image Pre-Training)은 다양한 이미지와 텍스트 쌍으로 훈련된 신경망 입니다. GPT-2와 3의 제로샷 능력과 유사하게, 해당 작업에 직접적으로 최적화하지 않고도 주어진 이미지에 대해 가장 관련성 있는 텍스트 스니펫을 예측하도록 자연어로 지시할 수 있습니다.
+Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever가 제안한 [자연어 지도(supervision)를 통한 전이 가능한 시각 모델 학습](https://huggingface.co/papers/2103.00020)라는 논문에서 소개되었습니다. CLIP(Contrastive Language-Image Pre-Training)은 다양한 이미지와 텍스트 쌍으로 훈련된 신경망 입니다. GPT-2와 3의 제로샷 능력과 유사하게, 해당 작업에 직접적으로 최적화하지 않고도 주어진 이미지에 대해 가장 관련성 있는 텍스트 스니펫을 예측하도록 자연어로 지시할 수 있습니다.
 
 해당 논문의 초록입니다.
 
@@ -85,13 +85,13 @@ pip install -U flash-attn --no-build-isolation
 >>> from transformers import CLIPProcessor, CLIPModel
 
 >>> device = "cuda"
->>> torch_dtype = torch.float16
+>>> dtype = torch.float16
 
 >>> model = CLIPModel.from_pretrained(
 ...     "openai/clip-vit-base-patch32",
 ...     attn_implementation="flash_attention_2",
 ...     device_map=device,
-...     torch_dtype=torch_dtype,
+...     dtype=dtype,
 ... )
 >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -121,7 +121,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 ```python
 from transformers import CLIPModel
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.float16, attn_implementation="sdpa")
 ```
 
 최고의 속도향상을 위해서, 반정밀도로 모델을 로드하는 것을 추천합니다. (예를들면 `torch.float16` 또는 `torch.bfloat16`).

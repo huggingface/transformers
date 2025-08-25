@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 from tensorflow_text import pad_model_inputs
@@ -26,14 +26,14 @@ class TFGPT2Tokenizer(keras.layers.Layer):
     straight from `tf.string` inputs to outputs.
 
     Args:
-        vocab (Dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
-        merges (List[str]): Merges list for Byte Pair Tokenizer
+        vocab (dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
+        merges (list[str]): Merges list for Byte Pair Tokenizer
     """
 
     def __init__(
         self,
-        vocab: Dict[str, int],
-        merges: List[str],
+        vocab: dict[str, int],
+        merges: list[str],
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
     ):
@@ -61,7 +61,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         tf_tokenizer = TFGPT2Tokenizer.from_tokenizer(tokenizer)
         ```
         """
-        merges = [" ".join(m) for m in tokenizer.bpe_ranks.keys()]
+        merges = [" ".join(m) for m in tokenizer.bpe_ranks]
         vocab = tokenizer.get_vocab()
         return cls(vocab, merges, *args, **kwargs)
 

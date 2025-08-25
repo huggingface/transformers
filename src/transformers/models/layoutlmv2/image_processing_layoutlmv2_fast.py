@@ -16,19 +16,13 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    BatchFeature,
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -51,15 +45,8 @@ if is_torchvision_available():
 
 
 class LayoutLMv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    apply_ocr: Optional[bool]
-    ocr_lang: Optional[str]
-    tesseract_config: Optional[str]
-
-
-@add_start_docstrings(
-    "Constructs a fast LayoutLMv2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
             the `apply_ocr` parameter in the `preprocess` method.
@@ -70,8 +57,14 @@ class LayoutLMv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
             Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
             `preprocess` method.
-    """,
-)
+    """
+
+    apply_ocr: Optional[bool]
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
+
+
+@auto_docstring
 class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     size = {"height": 224, "width": 224}
@@ -85,21 +78,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[LayoutLMv2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            apply_ocr (`bool`, *optional*, defaults to `True`):
-                Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-                the `apply_ocr` parameter in the `preprocess` method.
-            ocr_lang (`str`, *optional*):
-                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-                used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-            tesseract_config (`str`, *optional*):
-                Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-                Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-                `preprocess` method.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -112,6 +91,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
         apply_ocr: bool,
         ocr_lang: Optional[str],
         tesseract_config: Optional[str],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -132,7 +112,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
                 boxes_batch.append(boxes)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -142,7 +122,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # flip color channels from RGB to BGR (as Detectron2 requires this)

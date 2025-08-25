@@ -14,33 +14,33 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    logging,
-)
+from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaRMSNorm,
+)
+from ..qwen2.modeling_qwen2 import (
+    Qwen2DecoderLayer,
+    Qwen2ForCausalLM,
+    Qwen2ForQuestionAnswering,
+    Qwen2ForSequenceClassification,
+    Qwen2ForTokenClassification,
+    Qwen2Model,
+    Qwen2PreTrainedModel,
+    Qwen2RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
 from .configuration_qwen3 import Qwen3Config
 
 
@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
 
 
-class Qwen3RMSNorm(LlamaRMSNorm):
+class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
 
@@ -62,23 +62,18 @@ class Qwen3Attention(LlamaAttention):
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window
-        if not (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            self.sliding_window = None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -89,20 +84,14 @@ class Qwen3Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -121,46 +110,28 @@ class Qwen3Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Qwen3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Qwen3Config, layer_idx: int):
-        super().__init__()
-        self.self_attn = Qwen3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Qwen3MLP(config)
-        if (
-            config.sliding_window and config._attn_implementation != "flash_attention_2"
-        ):  # diff with Llama is this warning
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
-
-
-class Qwen3Model(MistralModel):  # mistral model creates sliding window
+class Qwen3DecoderLayer(Qwen2DecoderLayer):
     pass
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+class Qwen3PreTrainedModel(Qwen2PreTrainedModel):
+    pass
 
 
-class Qwen3ForCausalLM(LlamaForCausalLM):
+class Qwen3Model(Qwen2Model):
+    pass
+
+
+class Qwen3ForCausalLM(Qwen2ForCausalLM):
     def forward(
         self,
-        **super_kwargs: Unpack[KwargsForCausalLM],
+        **super_kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -181,23 +152,23 @@ class Qwen3ForCausalLM(LlamaForCausalLM):
         return super().forward(**super_kwargs)
 
 
-class Qwen3ForSequenceClassification(LlamaForSequenceClassification):
+class Qwen3ForSequenceClassification(Qwen2ForSequenceClassification):
     pass
 
 
-class Qwen3ForTokenClassification(LlamaForTokenClassification):
+class Qwen3ForTokenClassification(Qwen2ForTokenClassification):
     pass
 
 
-class Qwen3ForQuestionAnswering(LlamaForQuestionAnswering):
+class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
     pass
 
 
 __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
+    "Qwen3PreTrainedModel",
     "Qwen3Model",
-    "Qwen3PreTrainedModel",  # noqa: F822
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]

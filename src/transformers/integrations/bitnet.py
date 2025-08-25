@@ -124,7 +124,16 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
 
 class BitLinear(nn.Module):
-    def __init__(self, in_features: int, out_features: int, bias: bool, device=None, dtype=None):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool,
+        device=None,
+        dtype=None,
+        use_rms_norm: bool = False,
+        rms_norm_eps: float = 1e-6,
+    ):
         super().__init__()
         self.dtype = dtype
         self.in_features = in_features
@@ -149,6 +158,13 @@ class BitLinear(nn.Module):
             self.register_buffer("bias", torch.zeros((out_features), dtype=dtype, device=device))
         else:
             self.bias = None
+
+        # Optional RMSNorm (applied on the activations before quantization).
+        self.rms_norm = None
+        if use_rms_norm:
+            from ..models.llama.modeling_llama import LlamaRMSNorm
+
+            self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
 
     @torch.compile
     def activation_quant(self, input, num_bits=8):
@@ -180,6 +196,10 @@ class BitLinear(nn.Module):
         return out
 
     def forward(self, input):
+        # Apply RMSNorm on the input if requested.
+        if self.rms_norm is not None:
+            input = self.rms_norm(input)
+
         w = self.weight
         w_quant = unpack_weights(w, dtype=self.dtype)
         input_quant, input_scale = self.activation_quant(input)
@@ -245,9 +265,17 @@ class AutoBitLinear(nn.Linear):
         device=None,
         dtype=None,
         online_quant: bool = False,
+        use_rms_norm: bool = False,
+        rms_norm_eps: float = 1e-6,
     ):
         super().__init__(in_features, out_features, bias)
         self.online_quant = online_quant
+        # Optional RMSNorm
+        self.rms_norm = None
+        if use_rms_norm:
+            from ..models.llama.modeling_llama import LlamaRMSNorm
+
+            self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
             self.register_buffer(
                 "weight_scale",
@@ -271,6 +299,10 @@ class AutoBitLinear(nn.Linear):
         return state_dict
 
     def forward(self, input):
+        # Optional RMSNorm on activations prior to quantization.
+        if self.rms_norm is not None:
+            input = self.rms_norm(input)
+
         if self.online_quant:
             weight = WeightQuant.apply(self.weight)
         else:
@@ -318,6 +350,8 @@ def _replace_with_bitnet_linear(
                             device=module.weight.device,
                             dtype=module.weight.dtype,
                             online_quant=(quantization_config.quantization_mode == "online"),
+                            use_rms_norm=quantization_config.use_rms_norm,
+                            rms_norm_eps=quantization_config.rms_norm_eps,
                         )
                         if quantization_config.quantization_mode == "offline":
                             model._modules[name].requires_grad_(False)
@@ -328,6 +362,8 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
+                            use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
+                            rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True
@@ -362,10 +398,10 @@ def replace_with_bitnet_linear(
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
+            Names of the modules to not convert in `BitLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
