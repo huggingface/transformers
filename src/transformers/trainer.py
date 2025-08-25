@@ -4282,9 +4282,6 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
-            # Defer to accelerate's get_state_dict when using distributed setups that require special state dict handling
-            if state_dict is None and (getattr(self.accelerator, "is_fsdp2", False) or self.is_deepspeed_enabled):
-                state_dict = self.accelerator.get_state_dict(self.model)
             if state_dict is None:
                 state_dict = self.model.state_dict()
 

@@ -2570,18 +2570,19 @@ class TrainingArguments:
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
             if k == "parallelism_config" and v is not None:
-                import copy
+                if hasattr(v, "to_json"):
+                    d[k] = v.to_json()
+                else:
+                    # TODO: Remove this with accelerate 1.11, has been patched in 1.10
+                    import copy
 
-                # This is a hack as torch DeviceMesh is not json serializable
-                # Should probably reside in accelerate, but we didn't add it for
-                # v1.10
-                d[k] = copy.deepcopy(
-                    {
-                        k2: copy.deepcopy(v2.__dict__) if hasattr(v2, "__dict__") else v2
-                        for k2, v2 in v.__dict__.items()
-                        if k2 != "device_mesh"
-                    }
-                )
+                    d[k] = copy.deepcopy(
+                        {
+                            k2: copy.deepcopy(v2.__dict__) if hasattr(v2, "__dict__") else v2
+                            for k2, v2 in v.__dict__.items()
+                            if k2 != "device_mesh"
+                        }
+                    )
 
         self._dict_dtype_to_str(d)
 
