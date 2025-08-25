@@ -15,17 +15,19 @@
 
 import unittest
 
-from transformers import ParakeetTokenizer
+from transformers.models.parakeet import ParakeetCTCTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = ParakeetTokenizer
+    from_pretrained_id = "bezzam/parakeet-ctc-1.1b-hf"
+    tokenizer_class = ParakeetCTCTokenizer
     test_rust_tokenizer = False
+    test_seq2seq = False    # Fails due to no pad token
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        tokenizer = ParakeetTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        tokenizer = ParakeetCTCTokenizer.from_pretrained("bezzam/parakeet-ctc-1.1b-hf")
         tokenizer.save_pretrained(cls.tmpdirname)

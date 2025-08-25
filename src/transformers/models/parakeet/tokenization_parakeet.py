@@ -17,7 +17,9 @@ Tokenization classes for Parakeet CTC.
 """
 
 import json
+import os
 import re
+from typing import Optional
 from itertools import groupby
 from typing import Optional, Union
 
@@ -79,8 +81,8 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
-        unk_token="<unk>",
+        vocab_file: str,
+        unk_token: Optional[str] = "<unk>",
         blank_token_id=None,
         do_lower_case=False,
         **kwargs,
@@ -91,12 +93,15 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         # Create reverse mapping
         self.ids_to_tokens = {v: k for k, v in self.vocab.items()}
-
-        # Set blank token ID
+        # Set blank token ID 
         if blank_token_id is None:
             self.blank_token_id = len(self.vocab)
         else:
             self.blank_token_id = blank_token_id
+            # check no other token has this ID in the main vocab
+            for k, v in self.vocab.items():
+                if v == self.blank_token_id:
+                    raise ValueError(f"blank_token_id {self.blank_token_id} conflicts with existing token '{k}' in vocab")
 
         self.do_lower_case = do_lower_case
 
@@ -113,44 +118,109 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         """Returns the size of the vocabulary."""
         return len(self.vocab)
 
+    def __len__(self) -> int:
+        """
+        Size of the full vocabulary with the added tokens.
+        """
+        return self.vocab_size + len(self.added_tokens_encoder)
+
     def get_vocab(self) -> dict[str, int]:
         """Returns the vocabulary as a dictionary."""
-        return self.vocab.copy()
+        vocab = self.vocab.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, text: str) -> list[str]:
         """
         Tokenize a string into a list of tokens.
 
-        For CTC models, this typically involves character-level or subword tokenization.
+        For CTC models, this handles SentencePiece-style tokenization where spaces
+        are converted to ▁ prefixes to indicate word boundaries.
         """
         if self.do_lower_case:
             text = text.lower()
 
-        # Simple character-level tokenization for now
-        # More sophisticated models might use SentencePiece
-        tokens = list(text)
+        # Handle SentencePiece-style tokenization
+        # Convert spaces to word boundary markers
+        words = text.split(' ')
+        tokens = []
+        
+        for i, word in enumerate(words):
+            if word:  # Skip empty words from consecutive spaces
+                # First word gets ▁ prefix, continuing characters are separate
+                if word in self.vocab:
+                    # If the whole word is in vocab as a subword
+                    if i == 0 or f"▁{word}" in self.vocab:
+                        tokens.append(f"▁{word}" if f"▁{word}" in self.vocab else word)
+                    else:
+                        tokens.append(f"▁{word}")
+                else:
+                    # Character-level fallback for words not in vocab
+                    word_tokens = list(word)
+                    if word_tokens:
+                        # Add ▁ prefix to first character of the word
+                        if i > 0:  # Not the first word
+                            word_tokens[0] = f"▁{word_tokens[0]}"
+                        tokens.extend(word_tokens)
+        
         return tokens
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
-        return self.vocab.get(token, self.vocab.get(self.unk_token, 0))
+        # Check main vocabulary first
+        if token in self.vocab:
+            return self.vocab[token]
+            
+        # Check added tokens (managed by parent class)
+        if hasattr(self, 'added_tokens_encoder') and token in self.added_tokens_encoder:
+            return self.added_tokens_encoder[token]
+            
+        # Return unknown token ID for unrecognized tokens
+        return self.vocab.get(self.unk_token, 0)
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        return self.ids_to_tokens.get(int(index), self.unk_token)
+        # Check main vocabulary first
+        if index in self.ids_to_tokens:
+            return self.ids_to_tokens[index]
+            
+        # Check added tokens (managed by parent class)
+        if hasattr(self, 'added_tokens_decoder') and index in self.added_tokens_decoder:
+            return str(self.added_tokens_decoder[index])
+            
+        # For blank token, return a special marker that will be filtered later
+        if index == self.blank_token_id:
+            return "<BLANK>"  # Special marker for blank tokens
+            
+        # Return unknown token for unrecognized IDs
+        return self.unk_token
 
-    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str], group_tokens: bool = True) -> str:
         """
         Converts a sequence of tokens (string) into a single string.
 
         For CTC tokenizers, this handles SentencePiece-style token merging.
+        
+        Args:
+            tokens: List of token strings to convert
+            group_tokens: Whether to apply CTC-style duplicate removal. True by default.
         """
-        # group same tokens into non-repeating tokens in CTC style decoding
-        grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
+        if group_tokens:
+            # Apply CTC-style duplicate removal for real inference
+            grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
+        else:
+            # Keep all tokens for round-trip consistency (used by internal tests)
+            grouped_tokens = tokens
 
-        # filter self.pad_token which is used as CTC-blank token
+        # Filter None, blank tokens, pad_token, and unk_token
         filtered_tokens = list(
-            filter(lambda token: token != self.pad_token and token != self.unk_token, grouped_tokens)
+            filter(lambda token: (
+                token is not None 
+                and token != "<BLANK>"  # Filter blank token markers
+                and token != "<blank>"  # Filter blank special tokens
+                and token != self.pad_token 
+                and token != self.unk_token
+            ), grouped_tokens)
         )
 
         # Join tokens and handle SentencePiece-style subwords
@@ -164,11 +234,12 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         return text
 
-    def decode(
+    def _decode(
         self,
-        token_ids: Union[int, list[int], list[list[int]]],
-        skip_special_tokens: bool = False,
+        token_ids: Union[int, list[int]],
+        skip_special_tokens: bool = True,
         clean_up_tokenization_spaces: Optional[bool] = None,
+        group_tokens: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -179,25 +250,80 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             token_ids: List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
+            group_tokens: Whether to apply CTC-style duplicate removal. Default to False
         """
-
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         if len(token_ids) == 0:
             return ""
-        if isinstance(token_ids[0], list):
-            return self.batch_decode(
-                token_ids,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                **kwargs,
-            )
 
-        # Convert IDs to tokens and then to string
+        # Convert IDs to tokens 
         tokens = [self._convert_id_to_token(id_) for id_ in token_ids]
-        return self.convert_tokens_to_string(tokens)
+        
+        # Convert tokens to string with specified grouping behavior
+        return self.convert_tokens_to_string(
+            tokens, group_tokens=group_tokens,
+        )
 
     def batch_decode(
+        self,
+        sequences: Union[list[list[int]], "torch.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        group_tokens: bool = False,
+        **kwargs,
+    ) -> list[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        Args:
+            sequences: List of tokenized input ids or torch.Tensor.
+            skip_special_tokens: Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
+            group_tokens: Whether to apply CTC-style duplicate removal. Default to False
+        """
+        # Handle tensor input by converting to list
+        if hasattr(sequences, 'tolist'):
+            sequences = sequences.tolist()
+        
+        return [
+            self._decode(
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                group_tokens=group_tokens,
+                **kwargs,
+            )
+            for seq in sequences
+        ]
+
+    def decode_ctc(
+        self,
+        token_ids: Union[int, list[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """
+        Convenience method for CTC inference that applies duplicate removal.
+        
+        This method should be used when decoding CTC model outputs for speech recognition.
+        It applies CTC-style duplicate removal (groupby) to collapse consecutive identical tokens.
+        
+        Args:
+            token_ids: List of tokenized input ids from CTC model output.
+            skip_special_tokens: Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
+        """
+        return self.decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            group_tokens=True,  # Apply CTC duplicate removal
+            **kwargs,
+        )
+
+    def batch_decode_ctc(
         self,
         sequences: list[list[int]],
         skip_special_tokens: bool = False,
@@ -205,22 +331,20 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> list[str]:
         """
-        Convert a list of lists of token ids into a list of strings by calling decode.
-
+        Convenience method for batch CTC inference that applies duplicate removal.
+        
         Args:
-            sequences: List of tokenized input ids.
+            sequences: List of tokenized input id sequences from CTC model output.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
         """
-        return [
-            self.decode(
-                seq,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                **kwargs,
-            )
-            for seq in sequences
-        ]
+        return self.batch_decode(
+            sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            group_tokens=True,  # Apply CTC duplicate removal
+            **kwargs,
+        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple:
         """
@@ -233,8 +357,6 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         Returns:
             A tuple of the saved file paths.
         """
-        import os
-
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -247,10 +369,6 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             json.dump(self.vocab, f, ensure_ascii=False, indent=2)
 
         return (vocab_file,)
-
-    def __len__(self) -> int:
-        """Returns the size of the vocabulary."""
-        return len(self.vocab)
 
     def get_special_tokens_mask(
         self,

@@ -109,7 +109,7 @@ class ParakeetProcessor(ProcessorMixin):
             predicted_ids (`torch.Tensor`):
                 The predicted token ids from the model output. This should be a tensor of shape `(batch_size, sequence_length)`.
         """
-        return self.tokenizer.batch_decode(predicted_ids, **kwargs)
+        return self.tokenizer.batch_decode_ctc(predicted_ids, **kwargs)
 
     def decode(self, predicted_ids: "torch.Tensor", **kwargs) -> "torch.Tensor":
         """
@@ -123,7 +123,7 @@ class ParakeetProcessor(ProcessorMixin):
             raise ValueError(
                 f"Expecting a single output to be decoded but received {predicted_ids.shape[0]} samples instead."
             )
-        return self.tokenizer.decode(predicted_ids[0], **kwargs)
+        return self.tokenizer.decode_ctc(predicted_ids[0], **kwargs)
 
 
 __all__ = ["ParakeetProcessor"]
