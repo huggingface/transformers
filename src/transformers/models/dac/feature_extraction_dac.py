@@ -150,10 +150,11 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             padding=padding,
-            return_attention_mask=False,
+            return_attention_mask=padding,
             pad_to_multiple_of=self.hop_length,
         )
-
+        if padding:
+            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
         if padding:
             padded_inputs.input_values = padded_inputs.input_values[:, np.newaxis, :]
 
