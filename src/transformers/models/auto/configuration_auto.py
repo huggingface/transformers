@@ -211,6 +211,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("janus", "JanusConfig"),
         ("jetmoe", "JetMoeConfig"),
         ("jukebox", "JukeboxConfig"),
+        ("keye", "KeyeConfig"),
+        ("keye_text", "KeyeTextConfig"),
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
@@ -634,6 +636,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("janus", "Janus"),
         ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
+        ("keye", "Keye"),
+        ("keye_text", "Keye"),
         ("kosmos-2", "KOSMOS-2"),
         ("kosmos-2.5", "KOSMOS-2.5"),
         ("kyutai_speech_to_text", "KyutaiSpeechToText"),
@@ -952,6 +956,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("keye_text", "keye"),
     ]
 )
 

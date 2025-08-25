@@ -232,6 +232,7 @@ OBJECTS_TO_IGNORE = {
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
+    "KeyeImageProcessor",
     "LEDConfig",
     "LEDTokenizerFast",
     "LayoutLMForQuestionAnswering",
