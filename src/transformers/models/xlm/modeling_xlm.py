@@ -16,7 +16,6 @@
 PyTorch XLM model.
 """
 
-import itertools
 import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
@@ -495,7 +494,6 @@ class XLMSequenceSummary(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-
     def __init__(self, n_heads, dim, config, layer_idx: int = 0):
         super().__init__()
         self.layer_id = layer_idx

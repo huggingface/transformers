@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Flaubert model, based on XLM."""
 
-import itertools
 import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
