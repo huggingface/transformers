@@ -288,21 +288,5 @@ class Owlv2Processor(ProcessorMixin):
             outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
         )
 
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.batch_decode
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
 
 __all__ = ["Owlv2Processor"]
