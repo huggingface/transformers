@@ -127,7 +127,7 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
         report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 
     api.upload_file(
-        path_or_fileobj=f"ci_results_{job}/{filename}",
+        path_or_fileobj=f"{filename}",
         path_in_repo=f"{report_repo_folder}/ci_results_{job}/{filename}",
         repo_id=report_repo_id,
         repo_type="dataset",
