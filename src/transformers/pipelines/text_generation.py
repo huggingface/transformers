@@ -158,6 +158,7 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        tokenizer_encode_kwargs=None,
         **generate_kwargs,
     ):
         # preprocess kwargs
@@ -194,6 +195,10 @@ class TextGenerationPipeline(Pipeline):
 
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
+
+        if tokenizer_encode_kwargs is not None:
+            preprocess_params["tokenizer_encode_kwargs"] = tokenizer_encode_kwargs
+
         preprocess_params.update(generate_kwargs)
 
         # forward kwargs
@@ -288,6 +293,9 @@ class TextGenerationPipeline(Pipeline):
                 - `None` : default strategy where nothing in particular happens
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
+            tokenizer_encode_kwargs (`dict`, *optional*):
+                Additional keyword arguments to pass along to the encoding step of the tokenizer. If the text input is
+                a chat, it is passed to `apply_chat_template`. Otherwise, it is passed to `__call__`.
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./text_generation)).
@@ -333,6 +341,7 @@ class TextGenerationPipeline(Pipeline):
         padding=None,
         max_length=None,
         continue_final_message=None,
+        tokenizer_encode_kwargs=None,
         **generate_kwargs,
     ):
         # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
@@ -340,9 +349,10 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
+            "max_length": max_length,  # NOTE: `max_length` is also a `generate` arg. Use `tokenizer_encode_kwargs` to avoid a name clash
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
+        tokenizer_kwargs.update(tokenizer_encode_kwargs or {})
 
         if isinstance(prompt_text, Chat):
             tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
