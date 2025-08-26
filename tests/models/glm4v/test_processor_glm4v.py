@@ -256,6 +256,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_dict=True,
                 do_sample_frames=True,
             )
+
     def test_model_input_names(self):
         processor = self.get_processor()
 
