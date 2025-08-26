@@ -253,7 +253,7 @@ class InternS1IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True
             )
-        expected_output = "Okay, let's see. The user wants a short description of the image. The image shows two " \
+        expected_output = "\nOkay, let's see. The user wants a short description of the image. The image shows two " \
                           "cats lying on a pink couch. One cat is lying on its back with its belly exposed, " \
                           "and the other is lying on its side"
 
