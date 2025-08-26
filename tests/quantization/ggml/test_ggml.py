@@ -16,10 +16,18 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import (
+    AddedToken,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    UMT5Config,
+    UMT5EncoderModel,
+)
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
+    require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -989,3 +997,38 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+
+@slow
+@require_torch
+class T5GGUFIntegrationTests(unittest.TestCase):
+    def test_umt5_encoder_can_load_gguf_from_hub_path(self):
+        """
+        Verifies that a UMT5 encoder loads directly from a GGUF file using
+        UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
+        """
+        if not is_gguf_available():
+            self.skipTest("gguf is not available in this environment")
+
+        model_id = "city96/umt5-xxl-encoder-gguf"
+        gguf_path = "umt5-xxl-encoder-Q8_0.gguf"
+        model = UMT5EncoderModel.from_pretrained(
+            model_id,
+            gguf_file=gguf_path,
+            torch_dtype=torch.float16,
+        )
+        model.eval()
+
+        # --- Assert: correct class + correct config type and fields ---
+        self.assertIsInstance(model, UMT5EncoderModel)
+        self.assertIsInstance(model.config, UMT5Config)
+        self.assertEqual(model.config.model_type, "umt5")
+        # architectures should reflect the encoder variant
+        self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
+
+        # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
+        input_ids = torch.ones((1, 4), dtype=torch.long)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+        self.assertTrue(hasattr(outputs, "last_hidden_state"))
+        self.assertEqual(outputs.last_hidden_state.dim(), 3)  # (batch, seq_len, hidden)

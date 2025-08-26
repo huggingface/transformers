@@ -388,7 +388,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
-        # fix-umt5-gguf-config-support
         if model_name and "umt5" in model_name[0].lower():
             updated_architecture = "umt5"
             if "t5encoder" in architecture:
