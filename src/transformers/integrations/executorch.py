@@ -201,7 +201,10 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-    ):
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
         """
         Initializes the exportable module.
 
@@ -214,20 +217,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         super().__init__()
 
         config = model.config.get_text_config()
-        _generation_config = model.generation_config
 
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
         if hasattr(config, "layer_types") and getattr(config, "sliding_window", None) is not None:
-            self.model = TorchExportableModuleWithHybridCache(model)
+            self.model = TorchExportableModuleWithHybridCache(model, batch_size, max_cache_len, device)
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
             logging.info(
                 "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
             )
-            self.model = TorchExportableModuleWithStaticCache(model)
+            self.model = TorchExportableModuleWithStaticCache(model, batch_size, max_cache_len, device)
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
         ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
         ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
