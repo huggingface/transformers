@@ -65,8 +65,13 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
             # TODO eval is obviously enormously insecure and only used for prototyping here
             #      make a safer parser before merging
             return _parse_type_hint(eval(node_content))
+        elif parser == "python_function":
+            fn = eval(node_content)
         else:
             raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
+
+
+
 
 
 
