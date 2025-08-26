@@ -16,6 +16,7 @@
 import unittest
 
 import accelerate
+import pytest
 
 from transformers import (
     AutoProcessor,
@@ -207,6 +208,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     )
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -250,9 +252,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
         self.model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
-        self.model = Mistral3ForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, torch_dtype=torch.bfloat16
-        )
+        self.model = Mistral3ForConditionalGeneration.from_pretrained(self.model_checkpoint, dtype=torch.bfloat16)
         accelerate.cpu_offload(self.model, execution_device=torch_device)
 
     def tearDown(self):

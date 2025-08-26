@@ -51,8 +51,8 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
-    `patch_width`, `num_channels`x `patch_height` x `patch_width`)
+    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
         image_tensor (torch.Tensor):
@@ -207,7 +207,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             rendered onto the input images.
     """
 
-    model_input_names = ["flattened_patches"]
+    model_input_names = ["flattened_patches", "attention_mask"]
 
     def __init__(
         self,

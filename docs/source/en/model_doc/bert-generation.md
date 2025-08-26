@@ -14,82 +14,129 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BertGeneration
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# BertGeneration
 
-The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using
-[`EncoderDecoderModel`] as proposed in [Leveraging Pre-trained Checkpoints for Sequence Generation
-Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+[BertGeneration](https://huggingface.co/papers/1907.12461) leverages pretrained BERT checkpoints for sequence-to-sequence tasks with the [`EncoderDecoderModel`] architecture. BertGeneration adapts the [`BERT`] for generative tasks.
 
-The abstract from the paper is the following:
+You can find all the original BERT checkpoints under the [BERT](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) collection.
 
-*Unsupervised pretraining of large neural models has recently revolutionized Natural Language Processing. By
-warm-starting from the publicly released checkpoints, NLP practitioners have pushed the state-of-the-art on multiple
-benchmarks while saving significant amounts of compute time. So far the focus has been mainly on the Natural Language
-Understanding tasks. In this paper, we demonstrate the efficacy of pre-trained checkpoints for Sequence Generation. We
-developed a Transformer-based sequence-to-sequence model that is compatible with publicly available pre-trained BERT,
-GPT-2 and RoBERTa checkpoints and conducted an extensive empirical study on the utility of initializing our model, both
-encoder and decoder, with these checkpoints. Our models result in new state-of-the-art results on Machine Translation,
-Text Summarization, Sentence Splitting, and Sentence Fusion.*
+> [!TIP]
+> This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+>
+> Click on the BertGeneration models in the right sidebar for more examples of how to apply BertGeneration to different sequence generation tasks.
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
-found [here](https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder).
+The example below demonstrates how to use BertGeneration with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
 
-## Usage examples and tips
-
-The model can be used in combination with the [`EncoderDecoderModel`] to leverage two pretrained BERT checkpoints for 
-subsequent fine-tuning:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> # leverage checkpoints for Bert2Bert model...
->>> # use BERT's cls token as BOS token and sep token as EOS token
->>> encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)
->>> # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
->>> decoder = BertGenerationDecoder.from_pretrained(
-...     "google-bert/bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
-... )
->>> bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+import torch
+from transformers import pipeline
 
->>> # create tokenizer...
->>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
-
->>> input_ids = tokenizer(
-...     "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
-... ).input_ids
->>> labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
-
->>> # train...
->>> loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss
->>> loss.backward()
+pipeline = pipeline(
+    task="text2text-generation",
+    model="google/roberta2roberta_L-24_discofuse",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through ")
 ```
 
-Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.:
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
->>> # instantiate sentence fusion model
->>> sentence_fuser = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse")
->>> tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
+import torch
+from transformers import EncoderDecoderModel, AutoTokenizer
 
->>> input_ids = tokenizer(
-...     "This is the first sentence. This is the second sentence.", add_special_tokens=False, return_tensors="pt"
-... ).input_ids
+model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
->>> outputs = sentence_fuser.generate(input_ids)
+input_ids = tokenizer(
+    "Plants create energy through ", add_special_tokens=False, return_tensors="pt"
+).input_ids
 
->>> print(tokenizer.decode(outputs[0]))
+outputs = model.generate(input_ids)
+print(tokenizer.decode(outputs[0]))
 ```
 
-Tips:
+</hfoption>
+<hfoption id="transformers CLI">
 
-- [`BertGenerationEncoder`] and [`BertGenerationDecoder`] should be used in
-  combination with [`EncoderDecoder`].
+```bash
+echo -e "Plants create energy through " | transformers run --task text2text-generation --model "google/roberta2roberta_L-24_discofuse" --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quantize the weights to 4-bit.
+
+```python
+import torch
+from transformers import EncoderDecoderModel, AutoTokenizer, BitsAndBytesConfig
+
+# Configure 4-bit quantization
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16
+)
+
+model = EncoderDecoderModel.from_pretrained(
+    "google/roberta2roberta_L-24_discofuse",
+    quantization_config=quantization_config,
+    dtype="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
+
+input_ids = tokenizer(
+    "Plants create energy through ", add_special_tokens=False, return_tensors="pt"
+).input_ids
+
+outputs = model.generate(input_ids)
+print(tokenizer.decode(outputs[0]))
+```
+
+## Notes
+
+- [`BertGenerationEncoder`] and [`BertGenerationDecoder`] should be used in combination with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
+
+   ```python
+   from transformers import BertGenerationEncoder, BertGenerationDecoder, BertTokenizer, EncoderDecoderModel
+   
+   # leverage checkpoints for Bert2Bert model
+   # use BERT's cls token as BOS token and sep token as EOS token
+   encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)
+   # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
+   decoder = BertGenerationDecoder.from_pretrained(
+       "google-bert/bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
+   )
+   bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+   # create tokenizer
+   tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
+
+   input_ids = tokenizer(
+       "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
+   ).input_ids
+   labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
+
+   # train
+   loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss
+   loss.backward()
+   ```
+
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input.
-  Therefore, no EOS token should be added to the end of the input.
+- No EOS token should be added to the end of the input for most generation tasks.
 
 ## BertGenerationConfig
 

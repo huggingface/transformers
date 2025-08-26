@@ -51,7 +51,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     set_model_tester_for_less_flaky_test,
@@ -83,8 +82,7 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
-        HybridCache,
-        QuantoQuantizedCache,
+        QuantoQuantizedLayer,
         StaticCache,
     )
     from transformers.generation import (
@@ -1236,60 +1234,6 @@ class GenerationTesterMixin:
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
-    def test_dola_decoding_sample(self):
-        # TODO (joao): investigate skips, try to reduce incompatibilities
-        for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support DoLa decoding")
-
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
-
-            if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
-                self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
-
-            if any(model_name == model_class.__name__ for model_name in ["LlavaNextVideoForConditionalGeneration"]):
-                self.skipTest(f"DoLa is failing for {model_class.__name__}")
-
-            # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            # force eager attention to support output attentions
-            if self.has_attentions:
-                config._attn_implementation = "eager"
-
-            # Encoder-decoder models are not supported
-            if config.get_text_config(decoder=True).is_encoder_decoder:
-                self.skipTest("DoLa is not supported for encoder-decoder models")
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-
-            if model.get_output_embeddings() is None:
-                self.skipTest("DoLa is not supported for models that don't have output embeddings")
-
-            logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
-
-            # Sets dola generation arguments such that:
-            # a) no EOS is generated, to ensure generation doesn't break early
-            # b) there are at least two forward passes in the main model, to ensure the input preparation of
-            #    the main model is correct
-            generation_kwargs = {
-                "eos_token_id": -1,  # see a)
-                "max_new_tokens": 4,  # see b)
-                "num_beams": 1,
-                "do_sample": True,
-                "output_scores": True,
-                "output_logits": True,
-                "output_hidden_states": True,
-                "output_attentions": self.has_attentions,
-                "return_dict_in_generate": True,
-                "use_cache": getattr(config, "use_cache", False),  # Some models don't support the cache
-                "dola_layers": "low",
-            }
-            output_dola = model.generate(**generation_kwargs, **logits_processor_kwargs, **inputs_dict)
-            self._check_generate_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
-
-    @pytest.mark.generate
     def test_assisted_decoding_sample(self):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
@@ -1736,6 +1680,9 @@ class GenerationTesterMixin:
         to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -1954,8 +1901,10 @@ class GenerationTesterMixin:
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
         has the expected shapes
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -2036,7 +1985,7 @@ class GenerationTesterMixin:
             }
 
             results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertTrue(isinstance(results.past_key_values, QuantoQuantizedCache))
+            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.past_key_values.layers))
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
@@ -2048,15 +1997,15 @@ class GenerationTesterMixin:
                 model.generate(**generation_kwargs, **inputs_dict)
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
     @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
         `.forward` called from `.generate` sees no graph breaks or recompilations when compiled.
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._can_compile_fullgraph:
@@ -2097,7 +2046,7 @@ class GenerationTesterMixin:
             # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            compile_config = CompileConfig(dynamic=False)  # Error out on dynamic shapes
+            compile_config = CompileConfig(fullgraph=True, dynamic=False)  # Error out on dynamic shapes
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
@@ -2157,7 +2106,12 @@ class GenerationTesterMixin:
             finally:
                 torch._logging.set_logs()
 
-            if "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out):
+            # Compilation of sliding layers necessarily has recompiles with `dynamic=False` - however this test
+            # still checks that `fullgraph=True` is supported in this case, as compilation with `dynamic=None`
+            # is the default and does not actually lead to too many recompiles
+            has_sliding_layers = any(decoder_cache.is_sliding)
+            has_recompilation = "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out)
+            if not has_sliding_layers and has_recompilation:
                 raise RuntimeError(
                     f"`torch.compile` recompiled part of the forward pass in {model.__class__.__name__}. "
                     "See the test logs for more details."
@@ -2173,8 +2127,11 @@ class GenerationTesterMixin:
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
-                self.skipTest("This model doesn't support compilation without graph breaks")
+                self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:
@@ -2335,7 +2292,7 @@ class GenerationTesterMixin:
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
                 set_model_for_less_flaky_test(model_eager)
@@ -2345,7 +2302,7 @@ class GenerationTesterMixin:
 
                 model_attn = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
                 set_model_for_less_flaky_test(model_attn)
@@ -2356,7 +2313,6 @@ class GenerationTesterMixin:
                 self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """Tests that generate has equivalent outputs with SDPA and eager attention implementations."""
@@ -2522,11 +2478,11 @@ class GenerationTesterMixin:
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -2571,7 +2527,7 @@ class GenerationTesterMixin:
 
         # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
         # new token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -2744,6 +2700,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    @pytest.mark.torch_export_test
     def test_cache_dependant_input_preparation_exporting(self):
         self.assertFalse(
             is_torchdynamo_exporting()
@@ -4342,6 +4299,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(model_inputs["encoder_outputs"] == "foo")
         # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile_fullgraph_tiny(self):
         """
         Tests that we can call end-to-end generation with a tiny model (i.e. doesn't crash)
@@ -4349,7 +4307,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         non-slow tests to prevent regressions!
         """
         model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM", torch_dtype=torch.bfloat16, device_map="auto"
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", dtype=torch.bfloat16, device_map="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
 
@@ -4921,9 +4879,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "language_model": "cpu",
         }
 
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_id, device_map=device_map, torch_dtype=torch.bfloat16
-        )
+        model = AutoModelForImageTextToText.from_pretrained(model_id, device_map=device_map, dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
 
@@ -4931,6 +4887,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -5154,6 +5111,40 @@ class GenerationIntegrationTests(unittest.TestCase):
                         incremental_outputs.past_key_values[layer_idx][kv_idx],
                     )
                 )
+
+    @pytest.mark.generate
+    def test_dola_hub_runs(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM",
+            device_map=torch_device,
+            attn_implementation="eager",
+        ).eval()
+        model_inputs = {
+            "input_ids": torch.tensor([[1, 22557, 28725, 1526, 28808]], device=torch_device),
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1]], device=torch_device),
+        }
+        # Sets dola generation arguments such that:
+        # a) no EOS is generated, to ensure generation doesn't break early
+        # b) there are at least two forward passes in the main model, to ensure the input preparation of
+        #    the main model is correct
+        generation_kwargs = {
+            "eos_token_id": -1,  # see a)
+            "max_new_tokens": 4,  # see b)
+            "num_beams": 1,
+            "do_sample": True,
+            "output_scores": True,
+            "output_logits": True,
+            "output_hidden_states": True,
+            "output_attentions": True,
+            "return_dict_in_generate": True,
+            "use_cache": True,
+            "dola_layers": "low",
+            "trust_remote_code": True,
+            "custom_generate": "transformers-community/dola",
+        }
+        torch.manual_seed(0)
+        output_dola = model.generate(**generation_kwargs, **model_inputs)
+        self.assertEqual(output_dola.sequences.shape, (1, 9))
 
 
 @require_torch

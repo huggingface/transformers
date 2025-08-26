@@ -770,6 +770,16 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        # Check for multi-label classification incompatibility
+        if self.args.label_smoothing_factor > 0:
+            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
+                warnings.warn(
+                    "Label smoothing is not compatible with multi-label classification. "
+                    "Disabling label smoothing for this training run.",
+                    UserWarning,
+                )
+                self.label_smoother = None
+
         self.control = TrainerControl()
 
         self.state = TrainerState(
@@ -917,7 +927,7 @@ class Trainer:
         if isinstance(self.processing_class, ProcessorMixin):
             tokenizer = self.processing_class.tokenizer
         else:
-            tokenizer = self.tokenizer
+            tokenizer = self.processing_class
         model_has_generation_config = (
             hasattr(self.model, "generation_config") and self.model.generation_config is not None
         )
@@ -927,7 +937,7 @@ class Trainer:
         # token.
         tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
         if model_has_generation_config:
-            # `generation_config.eos_token_id` is None: direct comparision
+            # `generation_config.eos_token_id` is None: direct comparison
             if self.model.generation_config.eos_token_id is None:
                 tokenizer_has_new_eos |= tokenizer.eos_token_id != self.model.generation_config.eos_token_id
             else:
@@ -1819,6 +1829,7 @@ class Trainer:
             if kahan_sum is not None:
                 kahan_sum = bool(kahan_sum)
 
+            adam_kwargs["weight_decay"] = args.weight_decay
             stable_adamw_kwargs = {
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
@@ -2236,7 +2247,9 @@ class Trainer:
         self.is_in_train = True
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
-        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)):
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
             self._align_special_tokens()
 
         # Attach NEFTune hooks if necessary
@@ -3896,7 +3909,7 @@ class Trainer:
 
         kwargs = {}
 
-        # For LOMO optimizers you need to explicitly use the learnign rate
+        # For LOMO optimizers you need to explicitly use the learning rate
         if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             kwargs["learning_rate"] = self._get_learning_rate()
 
@@ -3947,7 +3960,7 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
 
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")

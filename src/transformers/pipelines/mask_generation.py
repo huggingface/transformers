@@ -125,6 +125,10 @@ class MaskGenerationPipeline(ChunkPipeline):
             forward_params["mask_threshold"] = kwargs["mask_threshold"]
         if "stability_score_thresh" in kwargs:
             forward_params["stability_score_thresh"] = kwargs["stability_score_thresh"]
+        if "max_hole_area" in kwargs:
+            forward_params["max_hole_area"] = kwargs["max_hole_area"]
+        if "max_sprinkle_area" in kwargs:
+            forward_params["max_sprinkle_area"] = kwargs["max_sprinkle_area"]
         if "crops_nms_thresh" in kwargs:
             postprocess_kwargs["crops_nms_thresh"] = kwargs["crops_nms_thresh"]
         if "output_rle_mask" in kwargs:
@@ -196,13 +200,13 @@ class MaskGenerationPipeline(ChunkPipeline):
         timeout: Optional[float] = None,
     ):
         image = load_image(image, timeout=timeout)
-        target_size = self.image_processor.size["longest_edge"]
+        target_size = self.image_processor.size.get("longest_edge", self.image_processor.size.get("height"))
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
 
         with self.device_placement():
             if self.framework == "pt":
@@ -250,6 +254,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         stability_score_thresh=0.95,
         mask_threshold=0,
         stability_score_offset=1,
+        max_hole_area=None,
+        max_sprinkle_area=None,
     ):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
@@ -260,8 +266,26 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]
+        postprocess_kwargs = {}
+        if max_hole_area is not None:
+            postprocess_kwargs["max_hole_area"] = max_hole_area
+        if max_sprinkle_area is not None and max_sprinkle_area > 0:
+            postprocess_kwargs["max_sprinkle_area"] = max_sprinkle_area
+        if postprocess_kwargs:
+            low_resolution_masks = self.image_processor.post_process_masks(
+                low_resolution_masks,
+                original_sizes,
+                mask_threshold=mask_threshold,
+                reshaped_input_sizes=reshaped_input_sizes,
+                binarize=False,
+                **postprocess_kwargs,
+            )
         masks = self.image_processor.post_process_masks(
-            low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
+            low_resolution_masks,
+            original_sizes,
+            mask_threshold=mask_threshold,
+            reshaped_input_sizes=reshaped_input_sizes,
+            binarize=False,
         )
         iou_scores = model_outputs["iou_scores"]
         masks, iou_scores, boxes = self.image_processor.filter_masks(

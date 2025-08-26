@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-05 and added to Hugging Face Transformers on 2022-11-21.*
 
 # Audio Spectrogram Transformer
 
@@ -62,7 +63,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```
 from transformers import ASTForAudioClassification
-model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 
