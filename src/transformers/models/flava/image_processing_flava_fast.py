@@ -337,7 +337,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["crop_size"] = crop_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["codebook_size"] = codebook_size
@@ -349,6 +348,15 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             pil_torch_interpolation_mapping[codebook_resample]
             if isinstance(codebook_resample, (PILImageResampling, int))
             else codebook_resample
+        )
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
         return kwargs
