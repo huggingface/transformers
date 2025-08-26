@@ -553,7 +553,6 @@ class Ernie4_5_PretrainedModel(PreTrainedModel):
     _no_split_modules = ["Ernie4_5_DecoderLayer", "Ernie4_5VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules_strict = [r"gate", r"e_score_correction_bias"]
-    #_keep_in_fp16_modules = [...]  # TODO: enable some fp16 flag as well, using dtype workaround for now
 
     # TODO: set correct supports flags etc
 
@@ -719,9 +718,9 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
 class Ernie4_5VLVisionMLP(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim, dtype=torch.float16)  # TODO
+        self.fc1 = nn.Linear(dim, hidden_dim)
         self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim, dtype=torch.float16)  # TODO
+        self.fc2 = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
         return self.fc2(self.act(self.fc1(x)))
@@ -739,9 +738,7 @@ class Ernie4_5VLPatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-        self.proj = nn.Linear(
-            in_channels * patch_size * patch_size, embed_dim, bias=False, dtype=torch.float16  # TODO
-        )
+        self.proj = nn.Linear(in_channels * patch_size * patch_size, embed_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype
@@ -794,8 +791,8 @@ class Ernie4_5VLVisionAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True, dtype=torch.float16)  # TODO
-        self.proj = nn.Linear(self.dim, self.dim, dtype=torch.float16)  # TODO
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
         self.attention_dropout = 0.0
@@ -886,8 +883,8 @@ class Ernie4_5VLVisionAttention(nn.Module):
 class Ernie4_5VLVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
         self.attn = Ernie4_5VLVisionAttention(config)
         self.mlp = Ernie4_5VLVisionMLP(
             dim=config.hidden_size,
@@ -939,7 +936,7 @@ class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
             [Ernie4_5VLVisionBlock(config) for _ in range(config.depth)]
         )
 
-        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
+        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
 
     # copy qwen 2.5 vl
     def rot_pos_emb(self, grid_thw):
