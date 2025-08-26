@@ -251,7 +251,7 @@ class KyutaiSpeechToTextModel(MoshiModel):
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
 
-class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     _keep_in_fp32_modules_strict = ["codec_model"]
 
     def __init__(self, config):
@@ -445,9 +445,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
-            model, loading_info = PreTrainedModel.from_pretrained(self, *args, **kwargs)
+            model, loading_info = PreTrainedModel.from_pretrained(*args, **kwargs)
         else:
-            model = PreTrainedModel.from_pretrained(self, *args, **kwargs)
+            model = PreTrainedModel.from_pretrained(*args, **kwargs)
 
         # copy depth decoder generation conf attr to the depth decoder generation config
         prefix = "codec_"

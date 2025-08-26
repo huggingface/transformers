@@ -190,8 +190,60 @@ def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[st
     return None
 
 
-class SuperTransformer(cst.CSTTransformer):
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+class ReplaceParentClassCallTransformer(cst.CSTTransformer):
+    """
+    This Transformer is used to replace all calls of the form `module.Class.func(...)` by a call of the form
+    `super().func(...)`.
+    """
+
+    def __init__(self, new_bases: list[str]):
+        self.new_bases = new_bases
+
+    def is_call_to_parent_class(self, node: cst.SimpleStatementLine):
+        """Check whether `node` corresponds to a call to a parent class function, such as `module.Parent.func_name(...)`"""
+        parent_call_node = m.Call(func=m.Attribute(value=m.Name() | m.Attribute()))
+        # It can be used as a return, simple expression, or assignment
+        potential_bodies = [m.Return(parent_call_node) | m.Expr(parent_call_node) | m.Assign(value=parent_call_node)]
+        return m.matches(node, m.SimpleStatementLine(body=potential_bodies))
+
+    def leave_SimpleStatementLine(
+        self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+    ) -> cst.SimpleStatementLine:
+        """Replace a call of the form `module.Class.func(...)` by a call of the form `super().func(...)`
+        if the `Class` being called is one of the bases."""
+        if self.is_call_to_parent_class(updated_node):
+            expr_node = updated_node.body[0]
+            full_parent_class_name = get_full_attribute_name(expr_node.value.func.value)
+            # Replace only if it's a base, or a few special rules
+            if (
+                full_parent_class_name in self.new_bases
+                or ("nn.Module" in full_parent_class_name and self.new_bases == ["GradientCheckpointingLayer"])
+                or (
+                    full_parent_class_name == "PreTrainedModel"
+                    and any("PreTrainedModel" in base for base in self.new_bases)
+                )
+            ):
+                # Replace `full_parent_class_name.func(...)` with `super().func(...)`
+                attribute_node = expr_node.value.func.with_changes(value=cst.Call(func=cst.Name("super")))
+                # Check if the first argument is 'self', and remove it
+                new_args = (
+                    expr_node.value.args[1:]
+                    if len(expr_node.value.args) > 0 and m.matches(expr_node.value.args[0].value, m.Name("self"))
+                    else expr_node.value.args
+                )
+                call_node = expr_node.value.with_changes(func=attribute_node, args=new_args)
+                new_expr_node = expr_node.with_changes(value=call_node)
+                return updated_node.with_changes(body=[new_expr_node])
+        return updated_node
+
+
+class ReplaceSuperCallTransformer(cst.CSTTransformer):
+    """
+    This Transformer is used to unravel all calls to `super().func(...)` in class methods by the explicit parent's
+    code. It will also in turn replace all calls of the form `module.Class.func(...)` by a call of the form
+    `super().func(...)`. Those calls are used to explicitly skip the unravelling of code, but we should still follow
+    python's standards and use `super().func(...)` instead of `Parent.func(self, ...)`.
+    """
 
     def __init__(
         self,
@@ -205,7 +257,8 @@ class SuperTransformer(cst.CSTTransformer):
         self.modular_methods = modular_methods
         self.all_assign_target = {}
         self.deleted_targets = {}  # child node can delete some arguments
-        self.new_bases = [get_full_attribute_name(base.value) for base in new_bases]
+        new_bases = [get_full_attribute_name(base.value) for base in new_bases]
+        self.parent_class_call_transformer = ReplaceParentClassCallTransformer(new_bases)
 
     def update_body(self, existing_body, new_statements):
         """
@@ -283,45 +336,14 @@ class SuperTransformer(cst.CSTTransformer):
                 break
         return new_body
 
-    def replace_parent_class_call(self, node: cst.SimpleStatementLine) -> cst.SimpleStatementLine:
-        """Replace a call of the form `module.Class.func(...)` by a call of the form `super().func(...)`
-        if the `Class` being called is one of the bases."""
-        expr_node = node.body[0]
-        full_parent_class_name = get_full_attribute_name(expr_node.value.func.value)
-        # Replace only if it's a base, or if using nn.Module on a GradientCheckpointingLayer
-        if (
-            full_parent_class_name in self.new_bases
-            or ("nn.Module" in full_parent_class_name and self.new_bases == ["GradientCheckpointingLayer"])
-            or (
-                full_parent_class_name == "PreTrainedModel"
-                and any("PreTrainedModel" in base for base in self.new_bases)
-            )
-        ):
-            # Replace `full_parent_class_name.func(...)` with `super().func(...)`
-            attribute_node = expr_node.value.func.with_changes(value=cst.Call(func=cst.Name("super")))
-            call_node = expr_node.value.with_changes(func=attribute_node)
-            # Check if the first argument is 'self', and remove it
-            new_args = (
-                call_node.args[1:]
-                if len(call_node.args) > 0 and m.matches(call_node.args[0].value, m.Name("self"))
-                else call_node.args
-            )
-            new_expr_node = expr_node.with_changes(value=call_node.with_changes(args=new_args))
-            return node.with_changes(body=[new_expr_node])
-        return node
-
     def is_call_to_super(self, node: cst.BaseStatement, func_name: str):
         """Check whether `node` corresponds to a call to `super().func_name(...)`"""
         super_call_node = m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
         return m.matches(node, m.SimpleStatementLine(body=[m.Return(super_call_node) | m.Expr(super_call_node)]))
 
-    def is_call_to_parent_class(self, node: cst.BaseStatement):
-        """Check whether `node` corresponds to a call to a parent class function, such as `module.Parent.func_name(...)`"""
-        parent_call_node = m.Call(func=m.Attribute(value=m.Name() | m.Attribute()))
-        return m.matches(node, m.SimpleStatementLine(body=[m.Return(parent_call_node) | m.Expr(parent_call_node)]))
-
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         func_name = updated_node.name.value
+        self.should_check_statements = False
         if func_name in self.modular_methods:
             actual_body = updated_node.body.body  # first body is an `IndentedBlock` wrapper
             new_body = []
@@ -332,11 +354,9 @@ class SuperTransformer(cst.CSTTransformer):
                     new_body = self._fix_init_location(new_body)
                     # Break here as all future statement were already accounted for in `update_body`
                     break
-                elif self.is_call_to_parent_class(base_statement_node):
-                    new_body.append(self.replace_parent_class_call(base_statement_node))
-                else:
-                    new_body.append(base_statement_node)
-
+                # If not a call to super, this will replace all calls of the form `module.Class.func(...)` by a
+                # call of the form `super().func(...)
+                new_body.append(base_statement_node.visit(self.parent_class_call_transformer))
             return updated_node.with_changes(body=updated_node.body.with_changes(body=new_body))
         return updated_node
 
@@ -1028,9 +1048,8 @@ def replace_class_node(
     # Replace the calls to `super()` of the redefined modular methods with the unrolled code
     result_node = original_modeling_node.with_changes(body=cst.IndentedBlock(body=new_class_body))
     temp_module = cst.Module(body=[result_node])
-    new_module = MetadataWrapper(temp_module)
-    new_replacement_class = new_module.visit(
-        SuperTransformer(temp_module, original_modeling_methods, modular_methods, new_class_bases)
+    new_replacement_class = temp_module.visit(
+        ReplaceSuperCallTransformer(temp_module, original_modeling_methods, modular_methods, new_class_bases)
     )
     new_class_body = new_replacement_class.body[0].body  # get the indented block
 

@@ -37,11 +37,11 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -53,14 +53,9 @@ from ..gemma2.modeling_gemma2 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
-from ..utils.generic import OutputRecorder, check_model_inputs
 
 
 _CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
-
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
