@@ -142,14 +142,12 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_processor_first.to_json_file(json_file_path)
                 image_processor_second = image_processing_class.from_json_file(json_file_path).to_dict()
 
-
             image_processor_first = image_processor_first.to_dict()
             for key, value in image_processor_first.items():
                 if key == "clusters":
                     self.assertTrue(np.array_equal(value, image_processor_second[key]))
                 else:
                     self.assertEqual(image_processor_first[key], value)
-
 
     def test_image_processor_from_and_save_pretrained(self):
         for image_processing_class in self.image_processor_list:
