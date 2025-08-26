@@ -30,7 +30,7 @@ You can find all the original Pixtral checkpoints under the [Mistral AI](https:/
 
 > [!TIP]
 > This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ).
-> Click any Pixtral model in the right-hand sidebar to explore additional multimodal examples (VQA, document Q&A, chart understanding, etc.).
+> Click on the Pixtral models in the right sidebar for more examples of how to apply Pixtral to different vision and language tasks.
 
 <hfoptions id="usage">
 
