@@ -338,14 +338,18 @@ class MistralIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
-    # `flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`
-    # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
     @require_flash_attn
     @slow
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non-trivial as Mistral will use
         a DynamicCache with only sliding layers."""
+
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
 
         model_id = "mistralai/Mistral-7B-v0.1"
         EXPECTED_COMPLETIONS = [
@@ -354,11 +358,11 @@ class MistralIntegrationTest(unittest.TestCase):
         ]
 
         input_text = [
-            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, more than 4096
+            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, 15 more than 4096
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
 
-        if attn_implementation in ["flex_attention", "eager"]:
+        if attn_implementation == "eager":
             input_text = input_text[:1]
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
