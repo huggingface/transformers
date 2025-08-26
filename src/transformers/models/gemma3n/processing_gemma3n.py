@@ -134,6 +134,7 @@ class Gemma3nProcessor(ProcessorMixin):
             audio_inputs = {}
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
             image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
 
