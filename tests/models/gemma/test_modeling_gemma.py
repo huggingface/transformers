@@ -416,6 +416,9 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"
                 ],
+                ("rocm", (9, 5)): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
