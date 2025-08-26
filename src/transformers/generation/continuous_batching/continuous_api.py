@@ -106,7 +106,7 @@ class ContinuousBatchProcessor:
         self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation != "paged_attention" # we set `is_causal` to True in paged call
+        return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
 
     @traced(standalone=True)
     def setup_static_tensors(self):
@@ -161,7 +161,6 @@ class ContinuousBatchProcessor:
         if self.attention_mask is not None:
             self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
 
-
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
@@ -172,8 +171,8 @@ class ContinuousBatchProcessor:
             "input_ids": self.input_ids[:, :t],
             "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[:t+1],
-            "cu_seq_lens_k": self.cumulative_seqlens_k[:t+1],
+            "cu_seq_lens_q": self.cumulative_seqlens_q[: t + 1],
+            "cu_seq_lens_k": self.cumulative_seqlens_k[: t + 1],
             "write_index": self.write_index[:t],
             "read_index": self.read_index[:c],
             "logits_indices": self.logits_indices[:t],

@@ -48,14 +48,14 @@ if __name__ == "__main__":
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-    dataset = dataset.select(range(args.samples)) 
+    dataset = dataset.select(range(args.samples))
     tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
     simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
     # Prepare generation config
     generation_config = GenerationConfig(
         max_new_tokens=512,
-        use_cuda_graph=False, # Not supported for simple version
+        use_cuda_graph=False,  # Not supported for simple version
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=False,

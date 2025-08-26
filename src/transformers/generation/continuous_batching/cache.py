@@ -14,7 +14,7 @@
 # limitations under the License.
 from collections import deque
 from math import floor, sqrt
-from typing import Any, Optional, TypeVar, Union
+from typing import Optional, Union
 
 import torch
 
@@ -287,9 +287,7 @@ class PagedAttentionMemoryHandler:
         logger.info(f"Cache memory: {cache_memory}")
 
         # Compute memory footprints
-        mem_per_activation_token = (
-            m * self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size)
-        )
+        mem_per_activation_token = m * self._activation_dtype.itemsize * (self.hidden_size + self.vocab_size)
         mem_per_cache_token = 2 * self.num_heads * self.head_dim * self.num_layers * cache_dtype.itemsize
         mem_per_input_token = 8 * m * self._input_dtype.itemsize
         logger.info(f"Memory per activation token: {mem_per_activation_token}")
@@ -299,7 +297,7 @@ class PagedAttentionMemoryHandler:
         # Compute second-degree polynomial coefficients
         a = m * self._activation_dtype.itemsize
         b = mem_per_input_token + mem_per_cache_token + mem_per_activation_token
-        c = - cache_memory
+        c = -cache_memory
 
         # Compute discriminant and greatest solution
         discriminant = b**2 - 4 * a * c

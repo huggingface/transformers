@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .cache import PagedAttentionCache
-from .continuous_api import ContinuousBatchingManager, ContinuousMixin
 from .classes import RequestState, RequestStatus
+from .continuous_api import ContinuousBatchingManager, ContinuousMixin
 
 
 __all__ = ["PagedAttentionCache", "RequestState", "RequestStatus", "ContinuousMixin", "ContinuousBatchingManager"]

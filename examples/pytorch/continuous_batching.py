@@ -241,7 +241,9 @@ if __name__ == "__main__":
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
-        args.output_file = f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
+        args.output_file = (
+            f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
+        )
 
     # Run warmup batch generation
     batch_generate(
