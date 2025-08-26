@@ -539,6 +539,124 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             num_segments_fused = max([el["id"] for el in el_fused])
             self.assertEqual(num_segments_fused, expected_num_segments)
 
+    def test_convert_segmentation_map_to_binary_masks_sorted(self):
+        """Test the new sorted binary mask conversion function."""
+        from transformers.models.mask2former.image_processing_mask2former import (
+            convert_segmentation_map_to_binary_masks_sorted,
+        )
+
+        # Test basic functionality with sorting (excluding background with ignore_index=0)
+        segmentation_map = np.array([[0, 1, 2], [1, 1, 2], [2, 2, 2]])
+
+        # Test with sort_by_area=True (default) and ignore_index=0 to exclude background
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(segmentation_map, sort_by_area=True, ignore_index=0)
+
+        # Should return 2 masks (excluding background label 0), sorted by area (largest first)
+        self.assertEqual(masks.shape[0], 2)
+        self.assertEqual(labels.shape[0], 2)
+
+        # Label 2 has area 5, label 1 has area 3, so label 2 should come first
+        self.assertEqual(labels[0], 2)
+        self.assertEqual(labels[1], 1)
+
+        # Test with sort_by_area=False
+        masks_unsorted, labels_unsorted = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, sort_by_area=False, ignore_index=0
+        )
+
+        # Should have same shapes but different order
+        self.assertEqual(masks_unsorted.shape[0], 2)
+        self.assertEqual(labels_unsorted.shape[0], 2)
+
+        # Without sorting, should maintain original order (1, 2)
+        self.assertEqual(labels_unsorted[0], 1)
+        self.assertEqual(labels_unsorted[1], 2)
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_edge_cases(self):
+        """Test edge cases for the sorted binary mask conversion function."""
+        from transformers.models.mask2former.image_processing_mask2former import (
+            convert_segmentation_map_to_binary_masks_sorted,
+        )
+
+        # Test empty segmentation map (only background)
+        empty_map = np.zeros((3, 3))
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(empty_map, ignore_index=0)
+        self.assertEqual(masks.shape[0], 0)
+        self.assertEqual(labels.shape[0], 0)
+
+        # Test single object
+        single_object_map = np.array([[0, 0, 1], [0, 1, 1], [1, 1, 1]])
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(single_object_map, ignore_index=0)
+        self.assertEqual(masks.shape[0], 1)
+        self.assertEqual(labels[0], 1)
+
+        # Test with custom ignore_index
+        segmentation_map = np.array([[255, 1, 2], [1, 1, 2], [2, 2, 2]])
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(segmentation_map, ignore_index=255)
+        self.assertEqual(masks.shape[0], 2)
+        # Background (255) should be ignored
+        self.assertNotIn(255, labels)
+
+        # Test with do_reduce_labels=True
+        segmentation_map = np.array([[0, 1, 2], [1, 1, 2], [2, 2, 2]])
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, do_reduce_labels=True, ignore_index=255
+        )
+        self.assertEqual(masks.shape[0], 2)
+        # Labels should be reduced by 1, so 2->1, 1->0
+        expected_labels = [1, 0]  # Sorted by area: original 2 (area 5) -> 1, original 1 (area 3) -> 0
+        self.assertEqual(labels.tolist(), expected_labels)
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_instance_mapping(self):
+        """Test the sorted binary mask conversion with instance-to-semantic mapping."""
+        from transformers.models.mask2former.image_processing_mask2former import (
+            convert_segmentation_map_to_binary_masks_sorted,
+        )
+
+        # Test with instance_id_to_semantic_id mapping
+        segmentation_map = np.array([[0, 1, 2], [1, 1, 3], [2, 3, 3]])
+        instance_id_to_semantic_id = {1: 10, 2: 20, 3: 30}
+
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, instance_id_to_semantic_id=instance_id_to_semantic_id, ignore_index=0
+        )
+
+        self.assertEqual(masks.shape[0], 3)
+        # Should be sorted by area: 1 (area 3), 3 (area 3), 2 (area 2)
+        # When areas are equal, original order is preserved (stable sort)
+        # Instance IDs mapped to semantic IDs: 1->10, 3->30, 2->20
+        expected_semantic_ids = [10, 30, 20]
+        self.assertEqual(labels.tolist(), expected_semantic_ids)
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_area_ordering(self):
+        """Test that masks are correctly ordered by area (largest to smallest)."""
+        from transformers.models.mask2former.image_processing_mask2former import (
+            convert_segmentation_map_to_binary_masks_sorted,
+        )
+
+        # Create a segmentation map with known areas:
+        # Label 1: area 2
+        # Label 2: area 6
+        # Label 3: area 4
+        segmentation_map = np.array([[0, 1, 2, 2, 2], [0, 1, 2, 2, 2], [0, 0, 2, 3, 3], [0, 0, 0, 3, 3]])
+
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(segmentation_map, sort_by_area=True, ignore_index=0)
+
+        # Should be ordered by area: 2 (area 6), 3 (area 4), 1 (area 2)
+        expected_order = [2, 3, 1]
+        self.assertEqual(labels.tolist(), expected_order)
+
+        # Verify mask correctness for largest object (label 2)
+        expected_mask_2 = np.array(
+            [
+                [False, False, True, True, True],
+                [False, False, True, True, True],
+                [False, False, True, False, False],
+                [False, False, False, False, False],
+            ]
+        )
+        np.testing.assert_array_equal(masks[0], expected_mask_2)
+
     def test_removed_deprecated_kwargs(self):
         image_processor_dict = dict(self.image_processor_dict)
         image_processor_dict.pop("do_reduce_labels", None)

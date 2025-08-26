@@ -267,20 +267,65 @@ def convert_segmentation_map_to_binary_masks_sorted(
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
-    sort_by_area: bool = True
+    sort_by_area: bool = True,
 ):
     """
-    Converts given segmentation map to binary masks with handling for overlapping instances.
-    
+    Converts a segmentation map to binary masks with area-based sorting to handle overlapping instances.
+
+    This function extends the standard segmentation map to binary mask conversion by adding an optional sorting step
+    that orders instances by area (largest to smallest). This is particularly useful for handling overlapping
+    annotations where larger objects should be processed before smaller ones to ensure proper mask generation.
+
     Args:
-        segmentation_map: A segmentation map of shape (height, width) where each value denotes a segment or class id.
-        instance_id_to_semantic_id: A mapping from instance IDs to semantic class IDs.
-        ignore_index: Label to be assigned to background pixels.
-        do_reduce_labels: Whether to decrement label values by 1.
-        sort_by_area: Whether to sort instances by area (largest to smallest) to handle overlaps.
-    
+        segmentation_map (`np.ndarray` of shape `(height, width)`):
+            A segmentation map where each value denotes a segment or class id. Values of 0 are typically treated as
+            background.
+        instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
+            A mapping from instance IDs to semantic class IDs. If provided, the function treats the segmentation map
+            as an instance segmentation where each pixel value represents an instance ID that needs to be mapped to
+            its corresponding semantic class.
+        ignore_index (`int`, *optional*):
+            Label to be assigned to background pixels. Pixels with this value will be excluded from mask generation.
+            If `do_reduce_labels` is `True`, this parameter is required.
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether to decrement all label values by 1. This is commonly used for datasets where 0 is reserved for
+            background and the actual classes start from 1. When `True`, `ignore_index` must be provided.
+        sort_by_area (`bool`, *optional*, defaults to `True`):
+            Whether to sort instances by area in descending order (largest to smallest). This ensures that when
+            overlapping instances are present, larger objects are processed first, allowing smaller objects to
+            appear on top in the final representation.
+
     Returns:
-        Tuple containing binary masks and their corresponding labels.
+        `Tuple[np.ndarray, np.ndarray]`: A tuple containing:
+            - **binary_masks** (`np.ndarray` of shape `(num_instances, height, width)`): Binary masks for each
+              instance, with `True` values indicating the presence of the instance and `False` for background.
+              If `sort_by_area` is `True`, masks are ordered by descending area.
+            - **labels** (`np.ndarray` of shape `(num_instances,)`): The corresponding labels for each mask.
+              If `instance_id_to_semantic_id` is provided, these will be semantic class IDs; otherwise, they
+              will be the original instance IDs from the segmentation map.
+
+    Example:
+        ```python
+        >>> import numpy as np
+        >>> from transformers.models.mask2former.image_processing_mask2former import convert_segmentation_map_to_binary_masks_sorted
+
+        >>> # Create a simple segmentation map with overlapping regions
+        >>> seg_map = np.array([[0, 1, 2], [1, 1, 2], [2, 2, 2]])
+
+        >>> # Convert with area-based sorting (largest objects first)
+        >>> masks, labels = convert_segmentation_map_to_binary_masks_sorted(seg_map, sort_by_area=True)
+        >>> print(f"Labels in order of decreasing area: {labels}")  # [2, 1] - label 2 has area 5, label 1 has area 3
+
+        >>> # Convert with instance mapping
+        >>> mapping = {1: 10, 2: 20}  # Map instance IDs to semantic classes
+        >>> masks, labels = convert_segmentation_map_to_binary_masks_sorted(seg_map, instance_id_to_semantic_id=mapping)
+        >>> print(f"Semantic labels: {labels}")  # [20, 10] - mapped and sorted by area
+        ```
+
+    Note:
+        This function is particularly beneficial for Mask2Former models when processing datasets with overlapping
+        annotations, as it ensures consistent mask ordering that can improve model training stability and
+        performance.
     """
     if do_reduce_labels and ignore_index is None:
         raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
@@ -294,7 +339,7 @@ def convert_segmentation_map_to_binary_masks_sorted(
     # Drop background label if applicable
     if ignore_index is not None:
         all_labels = all_labels[all_labels != ignore_index]
-    
+
     if len(all_labels) == 0:
         return np.zeros((0, *segmentation_map.shape), dtype=np.float32), np.array([], dtype=np.int64)
 
@@ -320,13 +365,14 @@ def convert_segmentation_map_to_binary_masks_sorted(
         for i, label in enumerate(all_labels):
             class_id = instance_id_to_semantic_id.get(
                 label + 1 if do_reduce_labels else label,
-                label  # Default to instance ID if mapping not found
+                label,  # Default to instance ID if mapping not found
             )
             labels[i] = class_id - 1 if do_reduce_labels else class_id
     else:
         labels = all_labels
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
+
 
 # Copied from transformers.models.maskformer.image_processing_maskformer.get_maskformer_resize_output_image_size with maskformer->mask2former
 def get_mask2former_resize_output_image_size(
