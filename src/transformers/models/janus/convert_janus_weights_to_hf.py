@@ -350,7 +350,7 @@ def convert_model(
         "num_key_value_heads",
         "hidden_act",
         "max_position_embeddings",
-        "torch_dtype",
+        "dtype",
     ]:
         if key in config_data["language_config"]:
             text_config_kwargs[key] = config_data["language_config"][key]
