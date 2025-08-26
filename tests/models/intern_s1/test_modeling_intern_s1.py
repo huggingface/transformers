@@ -17,17 +17,12 @@
 import unittest
 
 from transformers import (
+    AutoModelForImageTextToText,
+    AutoProcessor,
     InternS1Config,
     is_torch_available,
-    AutoProcessor,
-    AutoModelForImageTextToText,
 )
-from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-    cleanup
-)
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -251,10 +246,12 @@ class InternS1IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=48, do_sample=False)
             decoded_output = processor.decode(
-                generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "\nOkay, let's see. The user wants a short description of the image. The image shows two " \
-                          "cats lying on a pink couch. One cat is lying on its back with its belly exposed, " \
-                          "and the other is lying on its side"
+        expected_output = (
+            "\nOkay, let's see. The user wants a short description of the image. The image shows two "
+            "cats lying on a pink couch. One cat is lying on its back with its belly exposed, "
+            "and the other is lying on its side"
+        )
 
         self.assertEqual(decoded_output, expected_output)
