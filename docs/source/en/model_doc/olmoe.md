@@ -46,7 +46,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMoE-1B-7B-0125",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
 
@@ -63,7 +63,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
 device = infer_device()
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto").to(device)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
@@ -90,7 +90,7 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")

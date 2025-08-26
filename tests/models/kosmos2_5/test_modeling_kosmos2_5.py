@@ -585,14 +585,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_from_inputs_embeds(self):
         pass
 
-    # TODO: ydshieh
-    @pytest.mark.generate
-    @unittest.skip(
-        "Kosmos2_5ForConditionalGeneration returns `vision_model_output` which is currently not working with `stack_model_outputs`",
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite because Kosmos-2.5 need to padd pixel values and pad image-attn-mask
@@ -683,7 +675,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager", revision="refs/pr/17"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
@@ -720,7 +712,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa", revision="refs/pr/17"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
         processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
@@ -763,9 +755,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,
-            torch_dtype=dtype,
-            attn_implementation="flash_attention_2"
-            , revision="refs/pr/17"
+            dtype=dtype,
+            attn_implementation="flash_attention_2",
         )
         processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"

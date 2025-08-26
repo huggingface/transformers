@@ -245,7 +245,7 @@ Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 ```
 
 ### Benchmarks
