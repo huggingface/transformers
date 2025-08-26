@@ -70,6 +70,8 @@ class KeypointMatchingPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
+        if self.framework != "pt":
+            raise ValueError("Keypoint matching pipeline only supports PyTorch (framework='pt').")
 
     def _sanitize_parameters(self, threshold=None, timeout=None):
         preprocess_params = {}
@@ -136,8 +138,7 @@ class KeypointMatchingPipeline(Pipeline):
     def preprocess(self, images, timeout=None):
         images = [load_image(image, timeout=timeout) for image in images]
         model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = model_inputs.to(self.torch_dtype)
         target_sizes = [image.size for image in images]
         preprocess_outputs = {"model_inputs": model_inputs, "target_sizes": target_sizes}
         return preprocess_outputs
