@@ -65,6 +65,7 @@ class QuantizationMethod(str, Enum):
     QUARK = "quark"
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
+    MXFP4 = "mxfp4"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1630,7 +1631,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        inlcude_embedding (`bool`, default to `False`):
+        include_input_output_embeddings (`bool`, default to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
         untie_embedding_weights (`bool`, default to `False`):
@@ -1647,12 +1648,12 @@ class TorchAoConfig(QuantizationConfigMixin):
     # AOBaseConfig-based configuration
     config = Int4WeightOnlyConfig(group_size=32)
     quantization_config = TorchAoConfig(config)
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
 
     # String-based configuration
     quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
     # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
 
     # autoquant
     # `autoquant` is a convenient way for users to search for the best quantization for each layer
@@ -1661,7 +1662,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     # defaults to None, which means we'll try to get the best performing quantized model without
     # considering accuracy
     quantization_config = TorchAoConfig("autoquant", min_sqnr=30)
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
     # run through example inputs, quantization methods will be selected based on the shape of example input
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     input_text = "What are we having for dinner?"
@@ -2048,3 +2049,38 @@ class QuarkConfig(QuantizationConfigMixin):
                 self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
+
+
+@dataclass
+class Mxfp4Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using mxfp4 quantization.
+
+    Args:
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+        dequantize (`bool`, *optional*, default to `False`):
+            Whether we dequantize the model to bf16 precision or not
+    """
+
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[list] = None,
+        dequantize: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.MXFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}

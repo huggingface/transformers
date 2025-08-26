@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # FP-Quant
 
-[FP-Quant](https://github.com/IST-DASLab/FP-Quant) is a family of quantization algorithms tailored for the Blackwell generation of Nvidia GPUs. The goal is to allow for efficient post-training quantization (PTQ) and quantization-aware trainin (QAT) of LLMs in the [MXFP4 and NVFP4 data-types](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
+[FP-Quant](https://github.com/IST-DASLab/FP-Quant) is a family of quantization algorithms tailored for the Blackwell generation of Nvidia GPUs. The goal is to allow for efficient post-training quantization (PTQ) and quantization-aware training (QAT) of LLMs in the [MXFP4 and NVFP4 data-types](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
 Currently, only PTQ with MXFP4 is supported. Models can either be quantized on the fly with `quantization_config=FPQuantConfig()`:
 
@@ -27,8 +27,8 @@ import torch
 model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
     quantization_config=FPQuantConfig(),
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    dtype=torch.bfloat16,
 )
 ```
 
@@ -52,8 +52,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
 model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
     quantization_config=FPQuantConfig(),
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    dtype=torch.bfloat16,
 )
 
 model.forward = torch.compile(model.forward, mode="max-autotune", fullgraph=True)

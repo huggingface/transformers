@@ -229,11 +229,11 @@ def chunk_layer(
         raise ValueError("Must provide at least one input")
 
     initial_dims = [shape[:no_batch_dims] for shape in _fetch_dims(inputs)]
-    orig_batch_dims = tuple([max(s) for s in zip(*initial_dims)])
+    orig_batch_dims = tuple(max(s) for s in zip(*initial_dims))
 
     def _prep_inputs(t: torch.Tensor) -> torch.Tensor:
         if not low_mem:
-            if not sum(t.shape[:no_batch_dims]) == no_batch_dims:
+            if sum(t.shape[:no_batch_dims]) != no_batch_dims:
                 t = t.expand(orig_batch_dims + t.shape[no_batch_dims:])
             t = t.reshape(-1, *t.shape[no_batch_dims:])
         else:

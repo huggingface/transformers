@@ -21,7 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -143,7 +143,7 @@ class EncodecConv1d(nn.Module):
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        if not mode == "reflect":
+        if mode != "reflect":
             return nn.functional.pad(hidden_states, paddings, mode, value)
 
         max_pad = max(padding_left, padding_right)
@@ -449,7 +449,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
 
 @auto_docstring
-class EncodecPreTrainedModel(PreTrainedModel):
+class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
@@ -498,9 +498,6 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float
