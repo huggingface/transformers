@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_interns1 import *
-    from .modeling_interns1 import *
-    from .processing_interns1 import *
-    from .tokenization_interns1 import *
-    from .video_processing_interns1 import *
+    from .configuration_intern_s1 import *
+    from .modeling_intern_s1 import *
+    from .processing_intern_s1 import *
+    from .tokenization_intern_s1 import *
+    from .video_processing_intern_s1 import *
 else:
     import sys
 

@@ -49,7 +49,7 @@ from ..internvl.modeling_internvl import (
 from ..internvl.processing_internvl import InternVLProcessor
 from ..internvl.video_processing_internvl import InternVLVideoProcessor
 from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
-from .configuration_interns1 import InternS1Config, InternS1VisionConfig
+from .configuration_intern_s1 import InternS1Config, InternS1VisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -73,15 +73,9 @@ class InternS1VisionAttention(InternVLVisionAttention):
 
 @auto_docstring
 class InternS1VisionPreTrainedModel(InternVLVisionPreTrainedModel):
-    config: InternS1VisionConfig
+    pass
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of [`InternS1VisionModel`].
-    """
-)
 class InternS1VisionModelOutputWithPooling(InternVLVisionModelOutputWithPooling):
     pass
 
@@ -198,7 +192,6 @@ class InternS1VisionEncoder(nn.Module):
         )
 
 
-@auto_docstring
 class InternS1VisionModel(InternVLVisionModel):
     pass
 
@@ -211,12 +204,6 @@ class InternS1MultiModalProjector(InternVLMultiModalProjector):
     pass
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for InternS1 outputs, with hidden states and attentions.
-    """
-)
 class InternS1ModelOutputWithPast(InternVLModelOutputWithPast):
     r"""
     router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
@@ -327,12 +314,6 @@ class InternS1Model(InternVLModel):
         )
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for InternS1 causal language model (or autoregressive) outputs.
-    """
-)
 class InternS1CausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
     r"""
     aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):

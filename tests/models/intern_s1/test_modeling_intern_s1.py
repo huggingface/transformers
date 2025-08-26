@@ -19,10 +19,14 @@ import unittest
 from transformers import (
     InternS1Config,
     is_torch_available,
+    AutoProcessor,
+    AutoModelForImageTextToText,
 )
 from transformers.testing_utils import (
     require_torch,
+    slow,
     torch_device,
+    cleanup
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -49,7 +53,7 @@ class InternS1VisionText2TextModelTester:
         image_token_id=1,
         num_channels=3,
         image_size=64,
-        model_type="interns1",
+        model_type="intern_s1",
         is_training=True,
         text_config={
             "model_type": "qwen3_moe",
@@ -200,7 +204,7 @@ class InternS1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @unittest.skip(reason="No small model")
+    @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
         pass
 
@@ -215,3 +219,40 @@ class InternS1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("Qwen3 flash attention does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
+
+
+class InternS1IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.small_model_checkpoint = "internlm/Intern-S1-mini-hf"
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_model_generation(self):
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        model = AutoModelForImageTextToText.from_pretrained(
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device, dtype=torch.float16)
+        with torch.no_grad():
+            generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+            decoded_output = processor.decode(
+                generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+            )
+        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
+
+        self.assertEqual(decoded_output, expected_output)

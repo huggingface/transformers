@@ -180,7 +180,7 @@ if TYPE_CHECKING:
     from .informer import *
     from .instructblip import *
     from .instructblipvideo import *
-    from .interns1 import *
+    from .intern_s1 import *
     from .internvl import *
     from .jamba import *
     from .janus import *
