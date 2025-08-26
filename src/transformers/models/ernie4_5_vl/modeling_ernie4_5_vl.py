@@ -13,14 +13,16 @@
 # limitations under the License.
 
 """Ernie VL model"""
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -178,7 +180,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# copy Llama after making it cache compatible
+# copy Llama
 class Ernie4_5_VLTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -212,7 +214,6 @@ class Ernie4_5_VLTextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -225,18 +226,14 @@ class Ernie4_5_VLTextAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_text(query_states, key_states, cos, sin)
 
-        # cache
         if past_key_values is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_values[0], key_states], dim=2)
-            value_states = torch.cat([past_key_values[1], value_states], dim=2)
-        past_key_values = [key_states, value_states] if use_cache else None
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # core attention
-        #attention_interface: Callable = eager_attention_forward
-        #if self.config._attn_implementation != "eager":
-        #    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]  # forcing sdpa for now
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -252,7 +249,7 @@ class Ernie4_5_VLTextAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_values
+        return attn_output, attn_weights
 
 
 # Copy LlamaRMSNorm
@@ -458,7 +455,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-# Copy Ernie 4.5 Moe
+# Copy Ernie 4.5 Moe (prolly init only, token type ids ~)
 class Ernie4_5_DecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -487,9 +484,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
         token_type_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
         residual = hidden_states
@@ -497,14 +493,13 @@ class Ernie4_5_DecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, past_key_values = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             cache_position=cache_position,
-            use_cache=use_cache,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -524,8 +519,6 @@ class Ernie4_5_DecoderLayer(nn.Module):
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
-        if use_cache:
-            outputs += (past_key_values,)
         if output_router_logits:
             outputs += (gate_logits,)
 
@@ -541,6 +534,10 @@ class Ernie4_5_PretrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [r"gate", r"e_score_correction_bias"]
 
     # TODO: set correct supports flags etc
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    #_supports_attention_backend = True  # TODO check
 
 
 class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
@@ -571,7 +568,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -600,17 +597,27 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
                 )
                 use_cache = False
 
-        if past_key_values is None:
-            past_key_values = tuple([None] * len(self.layers))
+        # torch.jit.trace() doesn't support cache objects in the output
+        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        cache_length = 0
-        seq_length_with_past = inputs_embeds.shape[1]
-        if past_key_values[0] is not None:
-            cache_length = past_key_values[0][0].shape[1]
-            seq_length_with_past += cache_length
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids[..., -1],  # TODO: check for the shape
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -619,15 +626,10 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = () if use_cache else None
 
-        for idx, (decoder_layer) in enumerate(self.layers):
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            past_key_value = (
-                past_key_values[idx] if past_key_values is not None else None
-            )
 
             layer_outputs = decoder_layer(
                 hidden_states,
@@ -637,9 +639,8 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
                 token_type_ids,
                 output_attentions,
                 output_router_logits,
-                past_key_value,  # NOTE: without the s, as we have tuples extracted per layer
+                past_key_values,
                 cache_position,
-                use_cache,
                 **kwargs,
             )
 
@@ -648,17 +649,11 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             else:
                 hidden_states = layer_outputs
 
-            if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
             if output_router_logits:
                 all_router_logits += (layer_outputs[-1],)
-
-            if past_key_value is not None:
-                hidden_states = hidden_states[:, -1:, :]
 
         hidden_states = self.norm(hidden_states)
 
@@ -666,14 +661,12 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
-                    next_cache,
+                    past_key_values,
                     all_hidden_states,
                     all_self_attns,
                     all_router_logits,
@@ -683,7 +676,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -804,12 +797,11 @@ class Ernie4_5VLVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        """attention_interface: Callable = eager_attention_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]"""
-        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]  # forcing sdpa for now
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -888,7 +880,7 @@ class Ernie4_5VLVisionBlock(nn.Module):
 
 
 # similar to qwen 2.5 vl - hard to copy since no window attn, merger
-class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
+class Ernie4_5VLVisionTransformerPreTrainedModel(Ernie4_5_PretrainedModel):
     config_class = Ernie4_5_VLVisionConfig
     _no_split_modules = ["Ernie4_5VLVisionBlock"]
 
@@ -1226,8 +1218,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        #past_key_values: Optional[Cache] = None,
-        past_key_values: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1255,7 +1246,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         # TODO: logic change for input embeds and videos
         inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if past_key_values is None and images is not None:
+        if images is not None:
             # TODO: change logic to preprocessor
             pixel_values = self.forward_image_preprocess(images)
 
@@ -1323,6 +1314,7 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
     ):
+        # TODO: rope delta approach by qwen 2.5 vl?
         position_ids = model_kwargs.pop("position_ids")
         position_ids = torch.cat(
             [position_ids, position_ids.max(dim=1, keepdim=True)[0] + 1],
@@ -1337,39 +1329,14 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        images=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        token_type_ids=None,
-        grid_thw=None,
         **kwargs,
     ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
-            position_ids = position_ids[:, -1:]
-            token_type_ids = token_type_ids[:, -1:]
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
 
-        #attention_mask = kwargs.get("attention_mask")  # non-fa usage
-        attention_mask = None
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "past_key_values": past_key_values,
-                "use_cache": True,
-                "attention_mask": attention_mask,
-                "images": images,
-                "token_type_ids": token_type_ids,
-                "grid_thw": grid_thw,
-                "position_ids": position_ids,
-            }
-        )
+        if model_inputs["cache_position"][0] != 0:
+            model_inputs["images"] = None  # TODO remove when refactoring preprocessing
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
 
@@ -1379,8 +1346,7 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        #past_key_values: Optional[Cache] = None,
-        past_key_values: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
