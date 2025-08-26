@@ -31,6 +31,9 @@ on:
       commit_sha:
         required: false
         type: string
+      runner_type:
+        required: false
+        type: string
 
 
 env:
@@ -541,4 +544,16 @@ jobs:
       ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
 
+    secrets: inherit
+
+  collated_reports:
+    name: Collated Reports
+    if: ${{ always() }}
+    needs: run_models_gpu
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    with:
+      job: run_models_gpu
+      report_repo_id: ${{ inputs.report_repo_id }}
+      gpu_name: ${{ inputs.runner_type }}
+      machine_type: ${{ inputs.machine_type == '1gpu' && 'single-gpu' || 'multi-gpu' }}
     secrets: inherit
