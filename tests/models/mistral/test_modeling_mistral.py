@@ -192,6 +192,7 @@ class MistralIntegrationTest(unittest.TestCase):
             dola_layers="low",
             repetition_penalty=1.2,
             trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

@@ -60,8 +60,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
 from ..auto import AutoModel
@@ -77,11 +75,6 @@ from .configuration_sam2 import (
 if is_torch_available():
     import torch
     from torch.nn import functional as F
-
-if is_torchvision_v2_available():
-    pass
-elif is_torchvision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -213,10 +206,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -981,8 +982,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
 
 
 class Sam2LayerNorm(SamLayerNorm):
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
+    pass
 
 
 class Sam2MaskDecoder(SamMaskDecoder):
