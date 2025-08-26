@@ -85,9 +85,9 @@ model = AutoModelForSemanticSegmentation.from_pretrained(
 
 - SegFormer works with **any input size**, padding inputs to be divisible by `config.patch_sizes`.
 - The most important preprocessing step is to randomly crop and pad all images to the same size (such as 512x512 or 640x640) and normalize afterwards.
-- When preprocessing, be mindful of `do_reduce_labels`:
-  - Some datasets (like ADE20K) don’t include background in the labels → set `do_reduce_labels=True`.
-  - Other datasets do include background → set `do_reduce_labels=False`.
+- Some datasets (ADE20k) uses the `0` index in the annotated segmentation as the background, but doesn't include the "background" class in its labels. The `do_reduce_labels` argument in [`SegformerForImageProcessor`] is used to reduce all labels by `1`. To make sure no loss is computed for the background class, it replaces `0` in the annotated maps by `255`, which is the `ignore_index` of the loss function.
+
+   Other datasets may include a background class and label though, in which case, `do_reduce_labels` should be `False`.
 - Model variants differ in size and accuracy (MiT-B0 to MiT-B5). Example:
   - **SegFormer-B4**: 50.3% mIoU on ADE20K with 64M parameters, 5x smaller and better than prior methods.
   - **SegFormer-B5**: 84.0% mIoU on Cityscapes validation set, strong zero-shot robustness.
