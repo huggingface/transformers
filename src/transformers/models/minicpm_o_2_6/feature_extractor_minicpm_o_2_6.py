@@ -36,6 +36,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         chunk_length: Optional[int] = 1,
         **kwargs,
     ):
+        # in batch inference, it may be [[]]
         if isinstance(audios, np.ndarray):
             audios_list = [[audios]]
         elif isinstance(audios[0], np.ndarray):

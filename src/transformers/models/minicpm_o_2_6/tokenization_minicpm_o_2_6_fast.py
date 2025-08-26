@@ -15,6 +15,7 @@
 
 from transformers import Qwen2TokenizerFast
 
+
 class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -31,6 +32,8 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
         self.slice_end = "</slice>"
         self.im_id_start = "<image_id>"
         self.im_id_end = "</image_id>"
+        self.image_tag = f"({self.im_start}./{self.im_end})"
+        self.image_pattern = "\(<image>./</image>\)"
 
         # audio
         self.audio_start = "<|audio_start|>"
@@ -40,6 +43,12 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
         self.tts_start = "<|tts_bos|>"
         self.tts_end = "<|tts_eos|>"
         self.unk_token = "<unk>"
+        self.audio_tag = "(<audio>./</audio>)"
+        self.audio_pattern = "\(<audio>./</audio>\)"
+
+        self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
+
+        self.terminator_tokens = ["<|im_end|>", "<|endoftext|>", self.tts_end]
 
     @property
     def eos_id(self):
@@ -52,6 +61,10 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
     @property
     def unk_id(self):
         return self.unk_token_id
+
+    @property
+    def terminators(self):
+        return self.terminator_tokens
 
     @property
     def im_start_id(self):
@@ -100,6 +113,10 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
     @property
     def tts_end_id(self):
         return self.convert_tokens_to_ids(self.tts_end)
+
+    @property
+    def terminator_ids(self):
+        return [self.convert_tokens_to_ids(t) for t in self.terminator_tokens]
 
     @staticmethod
     def escape(text: str) -> str:

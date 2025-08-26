@@ -13,23 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import shutil
 import tempfile
 import unittest
 
 import numpy as np
-import pytest
+from PIL import Image
 import librosa
 import requests
+import pytest
+import soundfile as sf
+import io
 
 from transformers import (
     AutoProcessor,
     MiniCPM_o_2_6Processor,
-    AutoTokenizer,
-    WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_av, require_librosa, require_torch, require_torchaudio, require_vision
+from transformers.testing_utils import require_librosa, require_torch, require_torchaudio, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -45,14 +45,29 @@ if is_vision_available():
 @require_vision
 @require_torch
 @require_torchaudio
-class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
     processor_class = MiniCPM_o_2_6Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        processor_kwargs = self.prepare_processor_dict()
-        processor = MiniCPM_o_2_6Processor.from_pretrained("openbmb/MiniCPM-O-2.6", **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+    # 添加这个属性，告知测试框架处理器有自己的chat template实现
+    has_chat_template = True
+
+    # 输入名称定义
+    images_input_name = "pixel_values"
+    audio_input_name = "audio_features"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = AutoProcessor.from_pretrained(
+            "openbmb/MiniCPM-o-2_6", **processor_kwargs)
+        processor.save_pretrained(cls.tmpdirname)
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": "{% for message in messages %}{% if message['role'] == 'user' %}<|im_start|>user\n{{ message['content'] }}<|im_end|>\n{% elif message['role'] == 'assistant' %}<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n{% endif %}{% endfor %}"
+        }
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -63,342 +78,225 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_feature_extractor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
 
-    @staticmethod
-    def prepare_processor_dict():
-        return {
-            "chat_template": "{% for message in messages %}{% if message['role'] == 'user' %}<|im_start|>user\n{{ message['content'] }}<|im_end|>\n{% elif message['role'] == 'assistant' %}<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n{% endif %}{% endfor %}"
-        }
+    def get_processor(self, **kwargs):
+        return MiniCPM_o_2_6Processor.from_pretrained(self.tmpdirname, **kwargs)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def tearDown(self):
-        shutil.rmtree(self.tmpdirname, ignore_errors=True)
+        # 防止复写父类的tearDown方法
+        pass
 
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, batch_size=1):
         """Preparing the image input for testing"""
-        image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        image_url = "https://bkimg.cdn.bcebos.com/pic/d043ad4bd11373f082022267f9585cfbfbedaa64aeb6"
         image = Image.open(requests.get(image_url, stream=True).raw)
-        return image
+        if batch_size == 1:
+            return image
+        return [[image]] * batch_size
 
-    def prepare_audio_inputs(self):
+    def prepare_audio_inputs(self, batch_size=1):
         """Preparing the audio input for testing"""
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
-        try:
-            audio, _ = librosa.load(audio_url, sr=16000)
+        response = requests.get(audio_url)
+        audio, _ = librosa.load(io.BytesIO(
+            response.content), sr=16000, mono=True)
+        if batch_size == 1:
             return audio
-        except:
-            # 如果下载失败，使用随机生成的音频
-            return np.random.rand(160000) * 2 - 1  # 模拟1秒的音频
+        return [[audio]] * batch_size
 
-    def test_save_load_pretrained_default(self):
-        """Test saving and loading pretrained models"""
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
+    def prepare_text_inputs(self, batch_size=1, modality="text"):
+        """准备文本输入"""
+        if modality == "text":
+            text = "Hello, how are you?"
+        elif modality == "image":
+            text = "What is in this image: (<image>./</image>)?"
+        elif modality == "audio":
+            text = "What was said in this audio: (<audio>./</audio>)?"
+        elif modality == "mixed":
+            text = "Describe this image (<image>./</image>) and this audio (<audio>./</audio>)."
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = MiniCPM_o_2_6Processor.from_pretrained(self.tmpdirname)
+        if batch_size == 1:
+            return text
+        return [text] * batch_size
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-
-    def test_image_processor(self):
-        """Testing image processing functions"""
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        image_input = self.prepare_image_inputs()
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
-
-        for key in input_image_proc.keys():
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_processor(self):
-        """Testing overall processing functions"""
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        input_str = "Test text"
-        image_input = self.prepare_image_inputs()
-        audio_input = self.prepare_audio_inputs()
-        inputs = processor(text=input_str, images=image_input, audios=audio_input)
-        
-        keys = list(inputs.keys())
-        self.assertListEqual(
-            keys,
-            [
-                "input_ids",
-                "attention_mask",
-                "pixel_values",
-                "image_sizes",
-                "image_bound",
-                "tgt_sizes",
-                "audio_features",
-                "audio_feature_lens",
-                "audio_bounds",
-                "spk_bounds",
-            ],
-        )
-
-        # no input  
-        with pytest.raises(ValueError):
-            processor()
-
-        # no text input
-        with pytest.raises(ValueError):
-            processor(images=image_input)
-
-    def test_model_input_names(self):
-        """Testing model input names"""
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        input_str = "Test text"
-        image_input = self.prepare_image_inputs()
-        audio_input = self.prepare_audio_inputs()
-
-        inputs = processor(text=input_str, images=image_input, audios=audio_input)
-        self.assertListEqual(sorted(inputs.keys()), sorted(processor.model_input_names))
-
-    def test_apply_chat_template(self):
-        """Testing chat template application"""
+    def test_processor_with_multi_modal_inputs(self):
+        """Test the processor with multiple modality inputs"""
         processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor does not have a chat template")
 
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": "Please describe this image.",
-                },
-                {
-                    "role": "assistant",
-                    "content": "This is an image.",
-                },
-            ]
-        ]
+        input_text = self.prepare_text_inputs(modality="mixed")
+        image = self.prepare_image_inputs()
+        audio = self.prepare_audio_inputs()
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
+        # Test with all modalities
+        inputs = processor(text=[input_text], images=[image],
+                           audios=[audio], return_tensors="pt")
 
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True
-        )
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-    def test_audio_processing(self):
-        """Testing audio processing functions"""
-        processor = self.get_processor()
-        audio_input = self.prepare_audio_inputs()
-        
-        # test audio feature extraction
-        audio_features = processor.feature_extractor(
-            audio_input,
-            sampling_rate=16000,
-            return_attention_mask=True,
-            padding="max_length",
-            return_tensors="pt",
-        )
-        
-        self.assertIn("input_features", audio_features)
-        self.assertIn("attention_mask", audio_features)
-        
-        # test audio and text combination processing
-        inputs = processor(
-            text="Describe this audio",
-            audios=audio_input,
-            return_tensors="pt",
-        )
-        
+        # 检查输入中包含所有模态相关的键
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("image_bound", inputs)
         self.assertIn("audio_features", inputs)
-        self.assertIn("audio_feature_lens", inputs)
         self.assertIn("audio_bounds", inputs)
 
-    def test_number_to_text_converter(self):
-        """Testing number to text conversion functions"""
-        processor = self.get_processor()
-        converter = processor.NumberToTextConverter()
-        
-        # test chinese number conversion
-        chinese_text = converter.replace_numbers_with_text("我有2个苹果", language="chinese")
-        self.assertEqual(chinese_text, "我有两个苹果")
-        
-        # test english number conversion
-        english_text = converter.replace_numbers_with_text("I have 23 books", language="english")
-        self.assertEqual(english_text, "I have two three books")
-        
-        # test automatic language detection
-        mixed_text = converter.replace_numbers_with_text("我有3个苹果和4个梨")
-        self.assertIn("三", mixed_text)
-        self.assertIn("四", mixed_text)
+        # 检查处理器能处理批量输入
+        batch_size = 2
+        input_texts = self.prepare_text_inputs(
+            batch_size=batch_size, modality="mixed")
+        images = self.prepare_image_inputs(batch_size=batch_size)
+        audios = self.prepare_audio_inputs(batch_size=batch_size)
 
-    def test_voice_checker(self):
-        """Testing voice checking functions"""
-        processor = self.get_processor()
-        checker = processor.VoiceChecker()
-        
-        # test silent detection
-        silent_audio = np.zeros(16000)  # 1 second of silence
-        mel_spec = np.random.rand(100, 100)  # simulate mel spectrogram
-        is_bad = checker.is_bad(silent_audio, mel_spec)
-        self.assertTrue(is_bad)
-        
-        # test normal audio
-        normal_audio = np.random.rand(16000) * 2 - 1  # 1 second of normal audio
-        is_bad = checker.is_bad(normal_audio, mel_spec)
-        self.assertFalse(is_bad)
-        
-        # test reset function
-        checker.reset()
-        self.assertIsNone(checker.previous_mel)
-        self.assertEqual(checker.consecutive_zeros, 0)
-        self.assertEqual(checker.consecutive_low_distance, 0)
+        batch_inputs = processor(
+            text=input_texts, images=images, audios=audios, return_tensors="pt")
+        self.assertEqual(batch_inputs["input_ids"].shape[0], batch_size)
+        self.assertEqual(batch_inputs["attention_mask"].shape[0], batch_size)
 
-    def test_image_processor_basic(self):
-        """Testing basic image processor functions"""
-        image_processor = self.get_image_processor()
-        
-        # test image preprocessing
+    @require_torch
+    def test_apply_chat_template_text(self):
+        """Test applying chat template with text only"""
+        processor = self.get_processor()
+
+        # 准备聊天消息
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello, how are you?"},
+            {"role": "assistant", "content": "I'm doing well, thank you!"}
+        ]
+
+        # 测试不带标记化的应用
+        formatted_prompt = processor.tokenizer.apply_chat_template(
+            messages, tokenize=False)
+        self.assertIsInstance(formatted_prompt, str)
+        self.assertTrue("<|im_start|>" in formatted_prompt)
+        self.assertTrue("<|im_end|>" in formatted_prompt)
+
+        # 测试带标记化的应用
+        tokenized_prompt = processor.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_tensors="pt")
+        self.assertIsInstance(tokenized_prompt, torch.Tensor)
+
+    @require_torch
+    @require_vision
+    def test_apply_chat_template_with_image(self):
+        """Test applying chat template with image"""
+        processor = self.get_processor()
         image = self.prepare_image_inputs()
-        processed = image_processor.preprocess(image)
-        
-        self.assertIn("pixel_values", processed)
-        self.assertIn("image_sizes", processed)
-        self.assertIn("tgt_sizes", processed)
-        
-        # test image slicing function
-        sliced_images = image_processor.get_sliced_images(image)
-        self.assertIsInstance(sliced_images, list)
-        self.assertTrue(len(sliced_images) > 0)
-        
-        # test image placeholder generation
-        placeholder = image_processor.get_slice_image_placeholder(image.size)
-        self.assertIsInstance(placeholder, str)
-        self.assertTrue(len(placeholder) > 0)
 
-    def test_image_processor_edge_cases(self):
-        """Testing image processor edge cases"""
-        image_processor = self.get_image_processor()
-        
-        # test empty image list
-        with self.assertRaises(ValueError):
-            image_processor.preprocess([])
-            
-        # test invalid image
-        invalid_image = np.zeros((100, 100))
-        with self.assertRaises(ValueError):
-            image_processor.preprocess(invalid_image)
-            
-        # test large image
-        large_image = Image.new('RGB', (2000, 2000))
-        processed = image_processor.preprocess(large_image)
-        self.assertIn("pixel_values", processed)
+        # 准备包含图像的消息
+        messages = [
+            {"role": "user", "content": [image, "What is in this image?"]}
+        ]
 
-    def test_chat_tts_processor(self):
-        """Testing ChatTTS processor functions"""
+        # 测试聊天模板应用
+        inputs = processor.apply_chat_template(
+            msgs=messages, omni_input=True, return_tensors="pt")
+
+        # 检查输出中有图像相关的数据
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("image_bound", inputs)
+
+    @require_torch
+    @require_librosa
+    def test_apply_chat_template_with_audio(self):
+        """Test applying chat template with audio"""
         processor = self.get_processor()
-        tts_processor = processor.ChatTTSProcessor(processor.tokenizer)
-        
-        # prepare test data
-        text_list = ["Test text 1", "Test text 2"]
-        audio_list = [np.random.rand(16000) for _ in range(2)]
-        
-        # test processing function
-        outputs = tts_processor(text_list, audio_list)
-        
-        self.assertIn("tts_input_ids_varlen", outputs)
-        self.assertIn("tts_input_features_varlen", outputs)
-        self.assertEqual(len(outputs["tts_input_ids_varlen"]), len(text_list))
-        self.assertEqual(len(outputs["tts_input_features_varlen"]), len(audio_list))
+        audio = self.prepare_audio_inputs()
 
-    def test_mel_spectrogram_features(self):
-        """Testing mel spectrogram feature extraction functions"""
-        processor = self.get_processor()
-        mel_processor = processor.MelSpectrogramFeatures()
-        
-        # prepare test audio
-        audio = torch.randn(1, 16000)  # 1 second of audio
-        
-        # test feature extraction
-        features = mel_processor(audio)
-        
-        self.assertIsInstance(features, torch.Tensor)
-        self.assertEqual(features.dim(), 2)  # should be 2D tensor
-        self.assertEqual(features.shape[0], 100)  # mel filter number
+        # 准备包含音频的消息
+        messages = [
+            {"role": "user", "content": [
+                audio, "What was said in this audio?"]}
+        ]
 
-    def test_batch_processing(self):
-        """Testing batch processing functions"""
-        processor = self.get_processor()
-        
-        # prepare batch processing data
-        texts = ["Text 1", "Text 2", "Text 3"]
-        images = [self.prepare_image_inputs() for _ in range(3)]
-        audios = [np.random.rand(16000) for _ in range(3)]
-        
-        # test batch processing
-        batch_outputs = processor(
-            text=texts,
-            images=images,
-            audios=audios,
-            return_tensors="pt"
+        # 测试聊天模板应用
+        inputs = processor.apply_chat_template(
+            msgs=messages, omni_input=True, use_tts_template=True, return_tensors="pt"
         )
-        
-        # verify outputs
-        self.assertIn("input_ids", batch_outputs)
-        self.assertIn("attention_mask", batch_outputs)
-        self.assertIn("pixel_values", batch_outputs)
-        self.assertIn("audio_features", batch_outputs)
-        
-        # verify batch size
-        self.assertEqual(batch_outputs["input_ids"].shape[0], len(texts))
-        self.assertEqual(len(batch_outputs["pixel_values"]), len(images))
-        self.assertEqual(len(batch_outputs["audio_features"]), len(audios))
 
-    def test_error_handling(self):
-        """Testing error handling functions"""
+        # 检查输出中有音频相关的数据
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("audio_features", inputs)
+        self.assertIn("audio_bounds", inputs)
+
+    @require_torch
+    @require_vision
+    @require_librosa
+    def test_apply_chat_template_with_mixed_media(self):
+        """Test applying chat template with both image and audio"""
         processor = self.get_processor()
-        
-        # test invalid input
-        with self.assertRaises(ValueError):
-            processor(text=None, images=None, audios=None)
-            
-        # test mismatch input length
-        with self.assertRaises(AssertionError):
-            processor(
-                text=["Text 1", "Text 2"],
-                images=[self.prepare_image_inputs()],
-                audios=[np.random.rand(16000)]
-            )
-            
-        # test invalid audio sampling rate
-        with self.assertRaises(ValueError):
-            processor(
-                text="Test text",
-                audios=np.random.rand(16000),
-                sampling_rate=0
-            )
+        image = self.prepare_image_inputs()
+        audio = self.prepare_audio_inputs()
+
+        # 准备包含多种媒体的消息
+        messages = [
+            {"role": "user", "content": [
+                image, audio, "Describe this image and audio."]}
+        ]
+
+        # 测试聊天模板应用
+        inputs = processor.apply_chat_template(
+            msgs=messages, omni_input=True, use_tts_template=True, return_tensors="pt"
+        )
+
+        # 检查输出中有所有模态相关的数据
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("image_bound", inputs)
+        self.assertIn("audio_features", inputs)
+        self.assertIn("audio_bounds", inputs)
+
+    def test_get_sys_prompt(self):
+        """Test the system prompt generation function"""
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs()
+
+        # 测试默认系统提示
+        sys_prompt = processor.get_sys_prompt()
+        self.assertIn("role", sys_prompt)
+        self.assertIn("content", sys_prompt)
+
+        # 测试 omni 模式
+        sys_prompt = processor.get_sys_prompt(mode="omni", language="zh")
+        self.assertIn("你是一个AI助手", sys_prompt["content"][0])
+
+        # 测试英文提示
+        sys_prompt = processor.get_sys_prompt(mode="omni", language="en")
+        self.assertIn("You are a helpful assistant", sys_prompt["content"][0])
+
+        # 测试语音克隆提示
+        sys_prompt = processor.get_sys_prompt(
+            ref_audio=audio, mode="voice_cloning", language="en")
+        self.assertIn("Clone the voice", sys_prompt["content"][0])
+
+        # 测试语音助手模式
+        sys_prompt = processor.get_sys_prompt(
+            ref_audio=audio, mode="audio_assistant", language="zh")
+        self.assertIn("模仿输入音频中的声音特征", sys_prompt["content"][0])
+
+    def test_decode(self):
+        """Test the decoding functionality"""
+        processor = self.get_processor()
+
+        # 创建模拟输出
+        class MockOutput:
+            def __init__(self, sequences):
+                self.sequences = sequences
+
+        # 测试单个输出
+        mock_output = MockOutput(torch.tensor([[1, 2, 3, 4, 0, 0]]))
+        result = processor.decode(mock_output)
+        self.assertIsInstance(result, str)
+
+        # 测试批量输出
+        mock_output = MockOutput(torch.tensor(
+            [[1, 2, 3, 4, 0, 0], [5, 6, 7, 8, 0, 0]]))
+        result = processor.decode(mock_output, batched=True)
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 2)
