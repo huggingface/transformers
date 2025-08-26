@@ -95,7 +95,7 @@ dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-데이터셋의 첫 번째 예제를 확인하고 원시 오디오 신호인 `array`가 포함된 `audio` 열에 접근해 보세요.
+데이터 세트의 첫 번째 예제를 확인하고 원시 오디오 신호인 `array`가 포함된 `audio` 열에 접근해 보세요.
 
 ```py
 dataset[0]["audio"]["array"]
