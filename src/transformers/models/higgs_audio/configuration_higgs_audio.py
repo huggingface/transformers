@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,48 +18,6 @@ from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class HiggsAudioEncoderConfig(PretrainedConfig):
-    """Configuration of the Audio encoder in Higgs-Audio."""
-
-    model_type = "higgs_audio_encoder"
-
-    def __init__(
-        self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        encoder_layerdrop=0.0,
-        d_model=1280,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_function="gelu",
-        activation_dropout=0.0,
-        scale_embedding=False,
-        init_std=0.02,
-        max_source_positions=1500,
-        pad_token_id=128001,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_mel_bins = num_mel_bins
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_function = activation_function
-        self.activation_dropout = activation_dropout
-        self.encoder_layerdrop = encoder_layerdrop
-        self.num_hidden_layers = encoder_layers
-        self.init_std = init_std
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.max_source_positions = max_source_positions
-        self.pad_token_id = pad_token_id
-
-
 class HiggsAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class for the HiggsAudioModel. Instantiating a configuration
@@ -69,9 +27,6 @@ class HiggsAudioConfig(PretrainedConfig):
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text backbone.
-        audio_encoder_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the whisper encoder.
-            The audio encoder will be bidirectional and will be only available for audio understanding.
         audio_adapter_type (`str`, *optional*, defaults to `"stack"`):
             The type of audio adapter to use. We support three types of adapter:
             - stack:
@@ -96,12 +51,8 @@ class HiggsAudioConfig(PretrainedConfig):
             Note that `encode_audio_in_tokens` can be combined with `encode_whisper_embed`.
         use_delay_pattern (`bool`, *optional*, defaults to `False`):
             Whether to use delay pattern in the audio decoder.
-        skip_audio_tower (`bool`, *optional*, defaults to `False`):
-            Whether to skip the audio tower in the audio encoder.
         use_audio_out_embed_projector (`bool`, *optional*, defaults to `False`):
             Whether to use an embedding projector to map audio out embeddings.
-        use_audio_out_self_attention (`bool`, *optional*, defaults to `False`):
-            Whether to use self-attention to aggregate information from audio-tokens before sending to the text attention layer.
         audio_num_codebooks (`int`, *optional*, defaults to 8):
             The number of codebooks in RVQGAN.
         audio_codebook_size (`int`, *optional*, defaults to 1024):
@@ -156,22 +107,18 @@ class HiggsAudioConfig(PretrainedConfig):
     is_composition = True
 
     sub_configs = {
-        "text_config": AutoConfig,
-        "audio_encoder_config": HiggsAudioEncoderConfig,
+        "text_config": AutoConfig
     }
 
     def __init__(
         self,
         text_config=None,
-        audio_encoder_config=None,
         audio_adapter_type="stack",
         audio_embed_avg=False,
         audio_dual_ffn_layers=None,
         encode_audio_in_tokens=False,
         use_delay_pattern=False,
-        skip_audio_tower=False,
         use_audio_out_embed_projector=False,
-        use_audio_out_self_attention=False,
         audio_num_codebooks=8,
         audio_codebook_size=1024,
         audio_stream_bos_id=1024,
@@ -188,11 +135,6 @@ class HiggsAudioConfig(PretrainedConfig):
         audio_eos_token_id=128012,
         **kwargs,
     ):
-        if isinstance(audio_encoder_config, dict):
-            audio_encoder_config = HiggsAudioEncoderConfig(**audio_encoder_config)
-        elif audio_encoder_config is None:
-            audio_encoder_config = HiggsAudioEncoderConfig()
-
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -209,15 +151,12 @@ class HiggsAudioConfig(PretrainedConfig):
                 "audio_dual_ffn_layers must be specified when using dual_ffn adapter."
             )
         self.text_config = text_config
-        self.audio_encoder_config = audio_encoder_config
         self.audio_adapter_type = audio_adapter_type
         self.audio_embed_avg = audio_embed_avg
         self.audio_dual_ffn_layers = audio_dual_ffn_layers
         self.encode_audio_in_tokens = encode_audio_in_tokens
         self.use_delay_pattern = use_delay_pattern
-        self.skip_audio_tower = skip_audio_tower
         self.use_audio_out_embed_projector = use_audio_out_embed_projector
-        self.use_audio_out_self_attention = use_audio_out_self_attention
 
         self.audio_num_codebooks = audio_num_codebooks
         self.audio_codebook_size = audio_codebook_size
@@ -237,4 +176,4 @@ class HiggsAudioConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
 
 
-__all__ = ["HiggsAudioEncoderConfig", "HiggsAudioConfig"]
+__all__ = ["HiggsAudioConfig"]

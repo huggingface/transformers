@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -81,7 +81,6 @@ class HiggsAudioModelTester:
         vocab_size=100,
         num_audio_in=2,
         num_audio_out=2,
-        mel_max_length=20,
         hidden_size=16,
         intermediate_size=37,
         num_hidden_layers=2,
@@ -94,14 +93,9 @@ class HiggsAudioModelTester:
         audio_adapter_type="dual_ffn",
         encode_audio_in_tokens=True,
         num_quantizers=4,
-        num_mel_bins=4,
         num_channels=1,
         codebook_size=20,
         sample_rate=16000,
-        encoder_num_hidden_layers=2,
-        encoder_hidden_size=8,
-        encoder_attention_heads=2,
-        encoder_ffn_dim=16,
         audio_in_token_idx=98,
         audio_out_token_idx=99,
         pad_token_id=95,
@@ -117,7 +111,6 @@ class HiggsAudioModelTester:
         self.vocab_size = vocab_size
         self.num_audio_in = num_audio_in
         self.num_audio_out = num_audio_out
-        self.mel_max_length = mel_max_length
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -130,14 +123,9 @@ class HiggsAudioModelTester:
         self.audio_adapter_type = audio_adapter_type
         self.encode_audio_in_tokens = encode_audio_in_tokens
         self.num_quantizers = num_quantizers
-        self.num_mel_bins = num_mel_bins
         self.num_channels = num_channels
         self.codebook_size = codebook_size
         self.sample_rate = sample_rate
-        self.encoder_num_hidden_layers = encoder_num_hidden_layers
-        self.encoder_hidden_size = encoder_hidden_size
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
         self.audio_in_token_idx = audio_in_token_idx
         self.audio_out_token_idx = audio_out_token_idx
         self.audio_out_bos_token_id = audio_out_bos_token_id
@@ -157,19 +145,9 @@ class HiggsAudioModelTester:
 
         audio_num_codebooks = self.num_quantizers
         audio_codebook_size = self.codebook_size
-        higgs_audio_encoder_config = HiggsAudioEncoderConfig(
-            num_mel_bins=self.num_mel_bins,
-            encoder_layers=self.encoder_num_hidden_layers,
-            encoder_attention_heads=self.encoder_attention_heads,
-            encoder_ffn_dim=self.encoder_ffn_dim,
-            d_model=self.encoder_hidden_size,
-            pad_token_id=self.pad_token_id,
-            max_source_positions=self.mel_max_length // 2,
-        )
 
         higgs_audio_config = HiggsAudioConfig(
             llm_config,
-            higgs_audio_encoder_config,
             audio_adapter_type=self.audio_adapter_type,
             audio_dual_ffn_layers=self.audio_dual_ffn_layers,
             audio_decoder_proj_num_layers=self.audio_decoder_proj_num_layers,
@@ -197,11 +175,6 @@ class HiggsAudioModelTester:
         input_ids[0, seq_ids[: self.num_audio_in]] = self.audio_in_token_idx
         input_ids[0, seq_ids[self.num_audio_in :]] = self.audio_out_token_idx
 
-        audio_features = floats_tensor([self.num_audio_in, self.num_mel_bins, self.mel_max_length])
-        audio_feature_attention_mask = (
-            torch.ones(self.num_audio_in, self.mel_max_length).bool().to(device=torch_device)
-        )
-
         audio_in_lengths = torch.full((self.num_audio_in,), self.audio_length, device=torch_device)
         audio_in_ids = ids_tensor([self.num_quantizers, audio_in_lengths.sum()], self.codebook_size)
         audio_in_ids_start = torch.cumsum(audio_in_lengths, dim=0) - audio_in_lengths
@@ -213,8 +186,6 @@ class HiggsAudioModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "audio_features": audio_features,
-            "audio_feature_attention_mask": audio_feature_attention_mask,
             "audio_in_ids": audio_in_ids,
             "audio_in_ids_start": audio_in_ids_start,
             "audio_out_ids": audio_out_ids,
@@ -240,8 +211,7 @@ class HiggsAudioModelTester:
             (
                 self.batch_size,
                 self.seq_length
-                + (self.audio_length - 1) * (self.num_audio_in + self.num_audio_out)
-                + (self.mel_max_length // 4 * self.num_audio_in),
+                + (self.audio_length - 1) * (self.num_audio_in + self.num_audio_out),
                 config.text_config.hidden_size,
             ),
         )
@@ -511,7 +481,7 @@ class HiggsAudioForConditionalGenerationTest(
                 # HiggsAudio embeds audio features and tokens inside its forward
                 model_input_length += (self.model_tester.num_audio_in + self.model_tester.num_audio_out) * (
                     self.model_tester.audio_length - 1
-                ) + self.model_tester.num_audio_in * self.model_tester.mel_max_length // 4
+                )
 
             # check hidden size
             expected_shape = (batch_size, model_input_length, config.hidden_size)
@@ -524,7 +494,7 @@ class HiggsAudioForConditionalGenerationTest(
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
         cache_length += (self.model_tester.num_audio_in + self.model_tester.num_audio_out) * (
             self.model_tester.audio_length - 1
-        ) + self.model_tester.num_audio_in * self.model_tester.mel_max_length // 4
+        )
 
         # (batch, head, seq_length, head_features)
         expected_shape = (

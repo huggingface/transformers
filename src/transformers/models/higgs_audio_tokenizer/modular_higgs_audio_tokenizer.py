@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -269,10 +269,9 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}"
             )
 
-        _, channels, _ = input_values.shape
-
-        if channels not in (1, 2):
-            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+        channels = input_values.shape[1]
+        if channels != 1:
+            raise ValueError(f"Audio must be mono, but got {channels}")
 
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[-1]
@@ -370,11 +369,12 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        length = input_values.shape[-1]
 
         if audio_codes is None:
             audio_codes = self.encode(input_values, bandwidth, return_dict=False)
 
-        audio_values = self.decode(audio_codes, return_dict=return_dict)[0]
+        audio_values = self.decode(audio_codes, return_dict=return_dict)[0][..., :length]
 
         if not return_dict:
             return (audio_codes, audio_values)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -488,6 +488,8 @@ class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
         x = inputs["input_values"]
 
         with torch.no_grad():
+            # A small 1e-2 difference in terms of the output of the acoustic model causes
+            # a big difference in the final code
             ENC_TOL = 1
             audio_codes = model.encode(x, return_dict=False)
             if exp_codes is not None:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -132,8 +132,6 @@ def revert_delay_pattern(data):
 
 
 def merge_input_ids_with_audio_features(
-    audio_features_embed,
-    audio_features_length,
     audio_in_embed,
     audio_in_ids_start,
     audio_out_embed,
@@ -153,10 +151,6 @@ def merge_input_ids_with_audio_features(
     Merge input_ids with audio features into final embeddings.
 
     Args:
-        audio_features_embed (`torch.Tensor` of shape `(num_audios, max_audio_tokens, embed_dim)`):
-            Encoded vectors of all audios in the batch (obtained from the semantic encoder)
-        audio_features_length (`torch.LongTensor` of shape `(num_audios,)`):
-            The length of audio embeddings of each audio as stacked in `audio_features_embed`
         audio_in_embed (`torch.Tensor` of shape `(total_num_audio_in_tokens, embed_dim)`):
             The embeddings of audio-in tokens
         audio_in_ids_start (`torch.LongTensor` of shape `(num_audios,)`):
@@ -206,12 +200,11 @@ def merge_input_ids_with_audio_features(
 
     Explanation:
         each audio has variable length embeddings, with length specified by
-        - audio_features_length
         - audio_in_ids_start
         - audio_out_ids_start
 
         Task:
-        - fill each <|AUDIO|> with audio embeddings (it can be the combination of embeddings extracted by WhisperEncoder and embeddings from audio codebooks)
+        - fill each <|AUDIO|> with audio embeddings from audio codebooks
         - fill each <|AUDIO_OUT|> with the audio-out embeddings
 
         Example:
@@ -251,8 +244,6 @@ def merge_input_ids_with_audio_features(
         skip_labels = True
     else:
         skip_labels = False
-    if audio_features_embed is not None and audio_features_embed.shape[0] == 0:
-        audio_features_embed = None
     if audio_in_embed is not None and audio_in_embed.shape[0] == 0:
         audio_in_embed = None
     if audio_out_embed is not None and audio_out_embed.shape[0] == 0:
@@ -271,14 +262,6 @@ def merge_input_ids_with_audio_features(
     # 1. Calculate the number of tokens for each placeholder (like [<|AUDIO|>, <|AUDIO_OUT|>]).
     token_placeholder_num = torch.ones_like(input_ids)
 
-    if audio_features_embed is not None:
-        num_audios, max_audio_tokens, _ = audio_features_embed.shape
-        audio_in_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
-            audio_features_length.device
-        ) < audio_features_length.unsqueeze(1)
-        masked_audio_in_features = audio_features_embed[audio_in_features_mask].view(-1, embed_dim)
-        token_placeholder_num[audio_in_token_mask] = audio_features_length.long()
-
     if audio_in_embed is not None:
         audio_in_codes_length = torch.concat(
             [
@@ -291,10 +274,7 @@ def merge_input_ids_with_audio_features(
             ],
             dim=0,
         )
-        if audio_features_embed is not None:
-            token_placeholder_num[audio_in_token_mask] += audio_in_codes_length.long()
-        else:
-            token_placeholder_num[audio_in_token_mask] = audio_in_codes_length.long()
+        token_placeholder_num[audio_in_token_mask] = audio_in_codes_length.long()
 
     if audio_out_embed is not None:
         audio_out_codes_length = torch.concat(
@@ -367,26 +347,6 @@ def merge_input_ids_with_audio_features(
             final_labels[batch_indices, col_indices] = ignore_index
         final_audio_in_mask[batch_indices, col_indices] = True
         final_audio_in_discrete_codes_mask[batch_indices, col_indices] = True
-        audio_features_token_ends = audio_features_token_ends - audio_in_codes_length
-
-    if audio_features_embed is not None:
-        # Fill in the audio features
-        seq_indices = (
-            torch.arange(max_token_num, device=target_device)
-            .unsqueeze(0)
-            .expand(audio_features_embed.shape[0], max_token_num)
-        )
-        audio_features_token_starts = audio_features_token_ends - audio_features_length + 1
-        batch_indices, col_indices = torch.where(
-            (seq_indices >= audio_features_token_starts.unsqueeze(1))
-            & (seq_indices <= audio_features_token_ends.unsqueeze(1))
-        )
-        batch_indices = audio_in_batch_id[batch_indices]
-        final_embedding[batch_indices, col_indices] = masked_audio_in_features
-        final_input_ids[batch_indices, col_indices] = audio_in_token_idx
-        if not skip_labels:
-            final_labels[batch_indices, col_indices] = ignore_index
-        final_audio_in_mask[batch_indices, col_indices] = True
 
     if audio_out_embed is not None:
         # Fill in the audio-out embeddings
@@ -481,7 +441,7 @@ class HiggsAudioGenerationOutput(GenerateDecoderOnlyOutput):
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
         past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
@@ -670,7 +630,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
-        past_key_values_buckets: Optional[OrderedDict[int, Cache]],
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -799,12 +758,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                     del model_inputs["audio_out_ids_start"]
 
                 if generation_config.use_cache:
-                    if "audio_features" in model_inputs and model_inputs["audio_features"] is not None:
-                        model_inputs["audio_features"] = model_inputs["audio_features"][:0, ...]
-                        model_inputs["audio_feature_attention_mask"] = model_inputs["audio_feature_attention_mask"][
-                            :0, ...
-                        ]
-
                     if "audio_in_ids" in model_inputs and model_inputs["audio_in_ids"] is not None:
                         model_inputs["audio_in_ids"] = None
                         model_inputs["audio_in_ids_start"] = None
@@ -813,20 +766,8 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-            if past_key_values_buckets is not None:
-                past_key_values, self.current_past_key_values_bucket = self.model._prepare_kv_cache(
-                    cur_len, self.current_past_key_values_bucket, past_key_values_buckets
-                )
-                if past_key_values is not None:
-                    model_inputs.update({"past_key_values": past_key_values})
-                model_inputs["past_key_values_buckets"] = past_key_values_buckets
-
             # forward pass to get next token
             outputs = self(**model_inputs)
-
-            # Update the actual sequence length after the first forward pass
-            if init_model_input and past_key_values_buckets is not None:
-                cur_len = past_key_values_buckets[self.current_past_key_values_bucket].get_seq_length().item()
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -974,16 +915,13 @@ class HiggsAudioGenerationMixin(GenerationMixin):
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        audio_features: Optional[torch.FloatTensor] = None,
-        audio_feature_attention_mask: Optional[torch.BoolTensor] = None,
         audio_in_ids: Optional[torch.LongTensor] = None,
         audio_in_ids_start: Optional[torch.LongTensor] = None,
         audio_out_ids: Optional[torch.LongTensor] = None,
         audio_out_ids_start: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         audio_out_bos_token_id: Optional[int] = None,
         audio_eos_token_id: Optional[int] = None,
-        past_key_values_buckets: Optional[OrderedDict[int, Cache]] = None,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -1049,8 +987,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
         return super().generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            audio_features=audio_features,
-            audio_feature_attention_mask=audio_feature_attention_mask,
             audio_in_ids=audio_in_ids,
             audio_in_ids_start=audio_in_ids_start,
             audio_out_ids=audio_out_ids,
@@ -1059,6 +995,5 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             generation_config=generation_config,
             output_scores=output_scores,
             return_dict_in_generate=return_dict_in_generate,
-            past_key_values_buckets=past_key_values_buckets,
             **kwargs,
         )

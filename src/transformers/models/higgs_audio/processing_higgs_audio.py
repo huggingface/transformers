@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {"pad_token_id": 128001},
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "encode_whisper_embed": False,
             "audio_in_token": "<|AUDIO|>",
             "audio_out_token": "<|AUDIO_OUT|>",
             "audio_in_token_idx": 128015,
@@ -119,8 +118,6 @@ class HiggsAudioChatSample:
 class HiggsAudioBatchInput:
     input_ids: "torch.LongTensor"  # shape (bsz, seq_len).
     attention_mask: "torch.Tensor"  # shape (bsz, seq_len).
-    audio_features: Optional["torch.Tensor"]  # shape (num_audio_in, feature_dim, max_mel_seq_len).
-    audio_feature_attention_mask: Optional["torch.Tensor"]  # shape (num_audio_in, max_mel_seq_len).
     audio_out_ids: Optional["torch.LongTensor"]  # shape (num_codebooks, audio_out_total_length)
     audio_out_ids_start: Optional["torch.LongTensor"]  # shape (num_audio_out,)
     # Currently, we concatenante audio segments along dim 0 to handle variadic audio segment length.
@@ -143,7 +140,6 @@ class HiggsAudioSampleProcessor:
     """Sample processor for Higgs-Audio model.
 
     Args:
-        feature_extractor (WhisperFeatureExtractor): The whisper feature extractor.
         round_to (int): The round-to value.
         pad_left (bool): Whether to pad left.
         return_audio_in_tokens (bool): Whether to return audio-in tokens.
@@ -157,7 +153,6 @@ class HiggsAudioSampleProcessor:
 
     def __init__(
         self,
-        feature_extractor: WhisperFeatureExtractor,
         round_to=1,
         pad_left=False,
         return_audio_in_tokens=True,
@@ -167,7 +162,6 @@ class HiggsAudioSampleProcessor:
         add_new_bos_eos_for_long_chunk=True,
         mask_audio_out_token_label=True,
     ):
-        self.feature_extractor = feature_extractor
         self.round_to = round_to
         self.pad_left = pad_left
         self.return_audio_in_tokens = return_audio_in_tokens
@@ -227,7 +221,6 @@ class HiggsAudioSampleProcessor:
     def __call__(
         self,
         batch: list[HiggsAudioChatSample],
-        encode_whisper_embed=False,
         audio_in_token="<|AUDIO|>",
         audio_out_token="<|AUDIO_OUT|>",
         audio_in_token_idx=128015,
@@ -247,89 +240,12 @@ class HiggsAudioSampleProcessor:
         else:
             return_labels = True
 
-        if encode_whisper_embed:
-            chunk_size_samples = int(self.chunk_size_seconds * self.feature_extractor.sampling_rate)
-        else:
-            chunk_size_samples = None
-
-        if encode_whisper_embed:
-            # Process each sample in the batch to handle long audio
-            processed_batch = []
-            for i in range(len(batch)):
-                sample = batch[i]
-                audio_in_mask = sample.input_ids == audio_in_token_idx
-                audio_in_indices = torch.where(audio_in_mask)[0]
-
-                # Process each audio token and duplicate if needed
-                modified_input_ids = sample.input_ids
-                modified_labels = sample.label_ids if return_labels else None
-                modified_waveforms_concat = []
-                modified_waveforms_start = []
-                modified_sample_rate = []
-                offset = 0  # Track position changes from duplicating tokens
-                curr_wv_offset = 0
-
-                # Process input audio tokens
-                for idx, audio_idx in enumerate(audio_in_indices):
-                    # Get the audio for this token
-                    wv, sr = sample.get_wv(idx)  # Use idx since we want the original audio index
-                    if sr != self.feature_extractor.sampling_rate:
-                        resampled_wv = librosa.resample(
-                            wv.cpu().numpy(),
-                            orig_sr=sr,
-                            target_sr=self.feature_extractor.sampling_rate,
-                        )
-                    else:
-                        resampled_wv = wv.cpu().numpy()
-                    wv = torch.tensor(resampled_wv, device=wv.device)
-                    sr = self.feature_extractor.sampling_rate
-
-                    # Process and duplicate tokens if necessary
-                    token_pos = audio_idx + offset
-                    modified_input_ids, modified_labels, num_chunks = self._process_and_duplicate_audio_tokens(
-                        modified_input_ids, token_pos, wv, chunk_size_samples, modified_labels
-                    )
-
-                    # Update audio data
-                    for chunk_idx in range(num_chunks):
-                        chunk_start = chunk_idx * chunk_size_samples
-                        chunk_end = min((chunk_idx + 1) * chunk_size_samples, len(wv))
-                        chunk_wv = wv[chunk_start:chunk_end]
-                        modified_waveforms_concat.append(chunk_wv)
-                        modified_waveforms_start.append(curr_wv_offset)
-                        curr_wv_offset += len(chunk_wv)
-                        modified_sample_rate.append(sr)
-
-                    # Update offset for next iteration
-                    offset += (num_chunks - 1) * 3  # Each new chunk adds 3 more tokens
-
-                # Create new sample with modified tokens and audio data
-                processed_sample = HiggsAudioChatSample(
-                    input_ids=modified_input_ids,
-                    label_ids=modified_labels if return_labels else sample.label_ids,
-                    audio_ids_concat=sample.audio_ids_concat,
-                    audio_ids_start=sample.audio_ids_start,
-                    audio_waveforms_concat=torch.cat(modified_waveforms_concat)
-                    if modified_waveforms_concat
-                    else sample.audio_waveforms_concat,
-                    audio_waveforms_start=torch.tensor(modified_waveforms_start, dtype=torch.long)
-                    if modified_waveforms_start
-                    else sample.audio_waveforms_start,
-                    audio_sample_rate=torch.tensor(modified_sample_rate)
-                    if modified_sample_rate
-                    else sample.audio_sample_rate,
-                    audio_speaker_indices=torch.tensor([]),
-                    audio_label_ids_concat=sample.audio_label_ids_concat,
-                )
-                processed_batch.append(processed_sample)
-        else:
-            processed_batch = batch
+        processed_batch = batch
 
         # Get the max sequence length based on processed batch
         max_seq_length = _ceil_to_nearest(max([len(sample.input_ids) for sample in processed_batch]), self.round_to)
 
         # Get the ids for audio-in and audio-out for each batch
-        audio_in_wv_l = []
         audio_in_ids_l = []
         audio_out_ids_l = []
         audio_in_label_ids_l = None
@@ -378,46 +294,8 @@ class HiggsAudioSampleProcessor:
                     [processed_batch[i].get_audio_codes_labels(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
                 )
 
-            if encode_whisper_embed:
-                for idx in audio_in_ids:
-                    wv, sr = processed_batch[i].get_wv(idx)
-                    resampled_wv = wv.cpu().numpy()
-                    # Split long audio into chunks
-                    total_samples = len(resampled_wv)
-                    for chunk_start in range(0, total_samples, chunk_size_samples):
-                        chunk_end = min(chunk_start + chunk_size_samples, total_samples)
-                        chunk = resampled_wv[chunk_start:chunk_end]
-                        audio_in_wv_l.append(chunk)
-
         if return_labels:
             audio_out_no_train_flag = torch.cat(audio_out_no_train_flag, dim=0)
-
-        # Process all audio features
-        if len(audio_in_wv_l) > 0:
-            feature_ret = self.feature_extractor(
-                audio_in_wv_l,
-                sampling_rate=self.feature_extractor.sampling_rate,
-                return_attention_mask=True,
-                padding="max_length",
-            )
-            audio_features = torch.from_numpy(feature_ret["input_features"])
-            audio_feature_attention_mask = torch.from_numpy(feature_ret["attention_mask"])
-        else:
-            if encode_whisper_embed:
-                audio_features = torch.zeros(
-                    (
-                        0,
-                        self.feature_extractor.feature_size,
-                        self.feature_extractor.nb_max_frames,
-                    ),
-                    dtype=torch.float32,
-                )
-                audio_feature_attention_mask = torch.zeros(
-                    (0, self.feature_extractor.nb_max_frames), dtype=torch.int32
-                )
-            else:
-                audio_features = None
-                audio_feature_attention_mask = None
 
         # Process audio input tokens
         if len(audio_in_ids_l) > 0:
@@ -570,8 +448,6 @@ class HiggsAudioSampleProcessor:
         return HiggsAudioBatchInput(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            audio_features=audio_features,
-            audio_feature_attention_mask=audio_feature_attention_mask,
             audio_out_ids=audio_out_ids,
             audio_out_ids_start=audio_out_ids_start,
             audio_in_ids=audio_in_ids,
@@ -642,7 +518,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         )
 
         self.processor = HiggsAudioSampleProcessor(
-            feature_extractor=feature_extractor,
             return_audio_in_tokens=False,
             use_delay_pattern=True,
             round_to=1,
@@ -790,7 +665,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         # Use collator to process the sample
         batch_data = self.processor(
             samples,
-            encode_whisper_embed=audio_kwargs["encode_whisper_embed"],
             audio_in_token=audio_kwargs["audio_in_token"],
             audio_out_token=audio_kwargs["audio_out_token"],
             audio_in_token_idx=audio_kwargs["audio_in_token_idx"],

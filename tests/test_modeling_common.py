@@ -2661,6 +2661,12 @@ class ModelTesterMixin:
             t[t != t] = 0
             return t
 
+        # Convert bool output to int when checking the equivalence
+        def bool_to_int(t: torch.Tensor) -> torch.Tensor:
+            if t.dtype == torch.bool:
+                return t.int()
+            return t
+
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
@@ -2679,12 +2685,6 @@ class ModelTesterMixin:
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
-
-                        def bool_to_int(t: torch.Tensor) -> torch.Tensor:
-                            if t.dtype == torch.bool:
-                                return t.int()
-                            return t
-
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(bool_to_int(tuple_object)),
