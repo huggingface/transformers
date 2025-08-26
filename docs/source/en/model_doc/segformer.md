@@ -24,6 +24,10 @@ in your Markdown viewer.
 
 [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://huggingface.co/papers/2105.15203) is a semantic segmentation model that combines a hierarchical Transformer encoder (Mix Transformer, MiT) with a lightweight all-MLP decoder. It avoids positional encodings and complex decoders and achieves state-of-the-art performance on benchmarks like ADE20K and Cityscapes. This simple and lightweight design is more efficient and scalable.
 
+The figure below illustrates the architecture of SegFormer.
+
+<img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png"/>
+
 You can find all the original SegFormer checkpoints under the [NVIDIA](https://huggingface.co/nvidia/models?search=segformer) organization.
 
 > [!TIP]
@@ -37,30 +41,30 @@ The example below demonstrates semantic segmentation with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
+import torch
 from transformers import pipeline
 
-segmenter = pipeline("semantic-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512")
-image = "your_image.png"
-outputs = segmenter(image)
+pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512", torch_dtype=torch.float16)
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
-from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
-from PIL import Image
 import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForSemanticSegmentation
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+processor = AutoProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
 inputs = processor(images=image, return_tensors="pt")
 outputs = model(**inputs)
-logits = outputs.logits  # shape [batch, num_labels, height, width]
+logits = outputs.logits # shape [batch, num_labels, height, width]
 ```
 
 </hfoption>
