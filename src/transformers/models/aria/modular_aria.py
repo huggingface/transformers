@@ -337,58 +337,89 @@ class AriaProjectorMLP(nn.Module):
         return hidden_states
 
 
+def repeat_kv(hidden_states: "torch.Tensor", n_rep: int) -> "torch.Tensor":
+    """
+    Repeat key/value states for GQA/MQA. Input: (batch, num_key_value_heads, seqlen, head_dim)
+    Output: (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+def aria_cross_attention_forward(
+    module: "AriaCrossAttention",
+    query: "torch.Tensor",
+    key: "torch.Tensor",
+    value: "torch.Tensor",
+    attention_mask: "Optional[torch.Tensor]",
+    scaling: float,
+    dropout: float = 0.0,
+):
+    # query: (batch, num_heads, tgt_len, head_dim)
+    # key/value: (batch, num_kv_heads, src_len, head_dim)
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    # (batch, num_heads, tgt_len, src_len)
+    attn_weights = query @ key_states.transpose(-2, -1) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = attn_weights @ value_states
+    return attn_output, attn_weights
+
 class AriaCrossAttention(nn.Module):
     """
-    Aria Cross-Attention module.
-
-    Args:
-        config (`AriaConfig`):
-            The configuration to use.
+    Aria Cross-Attention module (refactored to explicit projections, GQA/MQA, no nn.MultiheadAttention).
     """
-
-    def __init__(self, config: AriaConfig, dropout_rate: float = 0):
+    def __init__(self, config: "AriaConfig", dropout_rate: float = 0):
         super().__init__()
         hidden_size = config.vision_config.hidden_size
         num_heads = config.vision_config.num_attention_heads
+        num_kv_heads = getattr(config.vision_config, "num_key_value_heads", num_heads)
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.num_key_value_heads = num_kv_heads
+        self.num_key_value_groups = num_heads // num_kv_heads
+        self.head_dim = hidden_size // num_heads
+        self.scaling = self.head_dim ** -0.5
+        self.dropout_p = dropout_rate
 
-        # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
-        self.linear = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.q_proj = nn.Linear(hidden_size, num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(num_heads * self.head_dim, hidden_size, bias=False)
 
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
     def forward(self, key_value_states, hidden_states, attn_mask=None):
-        """
-        Forward pass of the AriaCrossAttention module.
+        # hidden_states: (batch, tgt_len, hidden_size)
+        # key_value_states: (batch, src_len, hidden_size)
+        bsz, tgt_len, _ = hidden_states.shape
+        src_len = key_value_states.shape[1]
 
-        Args:
-            key_value_states (`torch.Tensor`):
-                Input tensor for key and value.
-            hidden_states (`torch.Tensor`):
-                Input tensor for query.
-            attn_mask (`torch.Tensor`, *optional*, defaults to None):
-                Attention mask.
-
-        Returns:
-            torch.Tensor:
-                Output tensor after cross-attention.
-        """
-        query = self.q_proj(self.layer_norm(hidden_states))
-
+        query = self.q_proj(self.layer_norm(hidden_states)).view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_value_states = self.layer_norm_kv(key_value_states)
-        key = self.k_proj(key_value_states)
-        value = self.v_proj(key_value_states)
+        key = self.k_proj(key_value_states).view(bsz, src_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value = self.v_proj(key_value_states).view(bsz, src_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
-
-        attn_output = self.dropout(self.linear(attn_output))
-
+        # query: (bsz, num_heads, tgt_len, head_dim)
+        # key/value: (bsz, num_kv_heads, src_len, head_dim)
+        attn_output, _ = aria_cross_attention_forward(
+            self,
+            query,
+            key,
+            value,
+            attn_mask,
+            scaling=self.scaling,
+            dropout=self.dropout_p,
+        )
+        # attn_output: (bsz, num_heads, tgt_len, head_dim)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, tgt_len, self.num_heads * self.head_dim)
+        attn_output = self.o_proj(attn_output)
         return attn_output
 
 
