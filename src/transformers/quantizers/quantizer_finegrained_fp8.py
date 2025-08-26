@@ -59,8 +59,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
+                "You have loaded an FP8 model on CPU and have a CUDA or XPU device available, make sure to set "
+                "your model on a GPU or XPU device in order to run your model. To remove this warning, "
+                "pass device_map = 'cuda' or 'xpu'. "
             )
         elif device_map is not None:
             if (
@@ -227,6 +228,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def get_cuda_warm_up_factor(self):
+    def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here
         return 2
