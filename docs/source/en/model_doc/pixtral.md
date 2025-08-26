@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Pixtral
 
-[Pixtral](https://huggingface.co/papers/2410.07073) model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). It couples a 400 M-parameter vision encoder with a 12 B-parameter Mistral Nemo decoder and can ingest an arbitrary number of images at their native resolution (no resizing, no common padding) thanks to **2-D RoPE** position embeddings. 
+[Pixtral](https://huggingface.co/papers/2410.07073) is a multimodal model trained to understand natural images and documents. It accepts images in their natural resolution and aspect ratio without resizing or padding due to it's 2D RoPE embeddings. In addition, Pixtral has a long 128K token context window for processing a large number of images. Pixtral couples a 400M vision encoder with a 12B Mistral Nemo decoder.
 
 You can find all the original Pixtral checkpoints under the [mistral-community](https://huggingface.co/mistral-community) collection.
 
