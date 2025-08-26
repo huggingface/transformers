@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
 *이 모델은 2020-07-28에 출시되었으며 2021-03-30에 Hugging Face Transformers에 추가되었습니다.*
 
 <div style="float: right;">
@@ -24,12 +23,12 @@ rendered properly in your Markdown viewer.
 
 # BigBird[[bigbird]]
 
-[BigBird](https://huggingface.co/papers/2007.14062)는 [BERT](./bert)의 512토큰과 비교하여 최대 4096토큰까지의 시퀀스 길이를 처리할 수 있도록 설계된 트랜스포머 모델입니다. 기존 트랜스포머는 시퀀스 길이가 증가함에 따라 어텐션 계산 비용이 매우 비싸지기 때문에 긴 입력을 처리하는 데 어려움을 겪습니다. BigBird는 희소 어텐션 메커니즘을 사용하여 이 문제를 해결합니다. 즉, 모든 것을 한 번에 보려고 하지 않습니다. 대신 로컬 어텐션, 랜덤 어텐션, 그리고 몇 개의 전역 토큰을 결합하여 전체 입력을 처리합니다. 이러한 조합은 두 가지 장점을 모두 제공합니다. 계산 효율성을 유지하면서도 시퀀스를 잘 이해할 수 있을 만큼 충분한 정보를 포착합니다. 이러한 특성 덕분에 BigBird는 질문 답변, 요약, 유전체학 응용 등 긴 문서를 다루는 작업에 매우 적합합니다.
+[BigBird](https://huggingface.co/papers/2007.14062)는 [BERT](./bert)의 512토큰과 달리 최대 4096토큰까지의 시퀀스 길이를 처리하도록 설계된 트랜스포머 모델입니다. 기존 트랜스포머들은 시퀀스 길이가 늘어날수록 어텐션 계산 비용이 급격히 증가하여 긴 입력 처리에 어려움을 겪습니다. BigBird는 희소 어텐션 메커니즘으로 이 문제를 해결하는데, 모든 토큰을 동시에 살펴보는 대신 로컬 어텐션, 랜덤 어텐션, 그리고 몇 개의 전역 토큰을 조합하여 전체 입력을 효율적으로 처리합니다. 이런 방식을 통해 계산 효율성을 유지하면서도 시퀀스 전체를 충분히 이해할 수 있게 됩니다. 따라서 BigBird는 질의응답, 요약, 유전체학 응용처럼 긴 문서를 다루는 작업에 특히 우수한 성능을 보입니다.
 
-모든 원본 BigBird 체크포인트는 [Google](https://huggingface.co/google?search_models=bigbird) 조직에서 찾을 수 있습니다.
+모든 원본 BigBird 체크포인트는 [Google](https://huggingface.co/google?search_models=bigbird) 조직에서 찾아볼 수 있습니다.
 
 > [!TIP]
-> 오른쪽 사이드바의 BigBird 모델을 클릭하여 BigBird를 다양한 언어 작업에 적용하는 더 많은 예시를 확인하세요.
+> 오른쪽 사이드바의 BigBird 모델들을 클릭하여 다양한 언어 작업에 BigBird를 적용하는 더 많은 예시를 확인해보세요.
 
 아래 예시는 [`Pipeline`], [`AutoModel`], 그리고 명령줄에서 `[MASK]` 토큰을 예측하는 방법을 보여줍니다.
 
@@ -89,14 +88,14 @@ print(f"The predicted token is: {predicted_token}")
 
 ## 참고사항[[notes]]
 
-- BigBird는 절대 위치 임베딩을 사용하므로 입력은 오른쪽에 패딩되어야 합니다.
-- BigBird는 `original_full`과 `block_sparse` 어텐션을 지원합니다. 입력 시퀀스 길이가 1024보다 작은 경우, 희소 패턴이 작은 입력에 대해서는 큰 이점을 제공하지 않으므로 `original_full`을 사용하는 것이 좋습니다.
-- 현재 구현은 3개 블록의 윈도우 크기와 2개의 전역 블록을 사용하며, ITC 구현만을 지원하고 `num_random_blocks=0`을 지원하지 않습니다.
+- BigBird는 절대 위치 임베딩을 사용하므로 입력을 오른쪽에 패딩해야 합니다.
+- BigBird는 `original_full`과 `block_sparse` 어텐션을 지원합니다. 입력 시퀀스 길이가 1024 미만인 경우에는 희소 패턴의 이점이 크지 않으므로 `original_full` 사용을 권장합니다.
+- 현재 구현은 3블록 윈도우 크기와 2개의 전역 블록을 사용하며, ITC 구현만 지원하고 `num_random_blocks=0`은 지원하지 않습니다.
 - 시퀀스 길이는 블록 크기로 나누어떨어져야 합니다.
 
 ## 리소스[[resources]]
 
-- BigBird의 어텐션 작동 방식에 대한 자세한 내용은 [BigBird](https://huggingface.co/blog/big-bird) 블로그 포스트를 읽어보세요.
+- BigBird 어텐션 메커니즘의 자세한 작동 원리는 [BigBird](https://huggingface.co/blog/big-bird) 블로그 포스트를 참고하세요.
 
 ## BigBirdConfig[[bigbirdconfig]]
 
