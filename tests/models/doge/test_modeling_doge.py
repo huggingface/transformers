@@ -363,7 +363,7 @@ class DogeIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-        model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", torch_dtype=torch.bfloat16)
+        model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
         set_seed(0)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)

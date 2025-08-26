@@ -1299,12 +1299,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1571,7 +1565,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

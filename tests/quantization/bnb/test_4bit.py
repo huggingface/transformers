@@ -16,6 +16,7 @@ import importlib.metadata
 import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import (
@@ -127,9 +128,7 @@ class Bnb4BitTest(Base4bitTest):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=torch.float16, device_map="auto"
-        )
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
 
     def tearDown(self):
@@ -538,7 +537,7 @@ class Pipeline4BitTest(Base4bitTest):
                 "device_map": "auto",
                 "load_in_4bit": True,
                 # float16 isn't supported on CPU, use bfloat16 instead
-                "torch_dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
+                "dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
             },
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
@@ -849,6 +848,7 @@ class Bnb4bitCompile(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 

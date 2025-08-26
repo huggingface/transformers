@@ -1488,9 +1488,9 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
 ```py
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> from transformers import infer_device
+
+>>> device = infer_device()
 >>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)

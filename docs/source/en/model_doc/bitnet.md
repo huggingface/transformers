@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-28.*
 
 # BitNet
 
@@ -89,7 +90,7 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 # Apply the chat template
