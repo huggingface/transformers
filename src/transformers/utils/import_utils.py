@@ -86,6 +86,12 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                         package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
                     except Exception:
                         package_exists = False
+            elif pkg_name == "fla":
+                try:
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
+                except Exception:
+                    package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -582,6 +588,21 @@ def is_mamba_2_ssm_available() -> bool:
                 import mamba_ssm
 
                 if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
+    return False
+
+
+def is_flash_linear_attention_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("fla"):
+                import fla
+
+                if version.parse(fla.__version__) >= version.parse("0.2.2"):
                     return True
     return False
 
