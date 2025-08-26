@@ -5063,7 +5063,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
 
-
     @require_safetensors
     def test_resume_from_interrupted_training(self):
         """
@@ -5172,6 +5171,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
+
 
 @require_torch
 @is_staging_test
