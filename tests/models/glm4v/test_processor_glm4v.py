@@ -29,7 +29,6 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import Glm4vProcessor
 
-
 if is_torch_available():
     import torch
 
@@ -164,16 +163,6 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
     @require_av
-    @unittest.skip("GLM4V can't sample frames from image frames")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @require_av
-    @unittest.skip("GLM4V can't sample frames from image frames")
-    def test_apply_chat_template_video_2(self):
-        pass
-
-    @require_av
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -224,7 +213,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 40)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 20)
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -232,10 +221,9 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 40)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -255,3 +243,27 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities=["image", "video"])
+        image_input = self.prepare_image_inputs()
+        video_inputs = self.prepare_video_inputs()
+        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
+        inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
