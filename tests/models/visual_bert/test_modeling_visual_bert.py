@@ -318,7 +318,7 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class == VisualBertForMultipleChoice:
-            for key in inputs_dict.keys():
+            for key in inputs_dict:
                 value = inputs_dict[key]
                 if isinstance(value, torch.Tensor) and value.ndim > 1:
                     if key != "visual_embeds":
@@ -412,7 +412,8 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():

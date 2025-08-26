@@ -80,7 +80,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         checkpoint_info = flatten_dict(checkpoint_info, sep="/")
 
     all_layers = {}
-    for layer in checkpoint_info.keys():
+    for layer in checkpoint_info:
         curr_real_layer_name, split_layer, content = get_key_and_tensorstore_dict(
             layer, checkpoint_info, switch_checkpoint_path
         )
@@ -89,9 +89,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         else:
             all_layers[curr_real_layer_name] = {split_layer[-1]: content}
 
-    for key in all_layers.keys():
+    for key, layer in all_layers.items():
         # open tensorstore file
-        raw_weights = ts.open(unflatten_dict(all_layers[key])).result().read().result()
+        raw_weights = ts.open(unflatten_dict(layer)).result().read().result()
         raw_weights = torch.tensor(raw_weights)
         weight_size = raw_weights.numel() * raw_weights.element_size()
 

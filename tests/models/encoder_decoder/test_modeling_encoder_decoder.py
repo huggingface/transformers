@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -457,6 +456,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask = decoder_attention_mask[:, :-1]
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config._attn_implementation = "eager"  # model config -> won't work
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -695,7 +695,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")

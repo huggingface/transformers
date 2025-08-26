@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -48,12 +48,12 @@ class VptqHfQuantizer(HfQuantizer):
         if not is_vptq_available():
             raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             if torch.cuda.is_available():
-                torch_dtype = torch.float16
+                dtype = torch.float16
                 logger.info(
-                    "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
                 )
             else:
                 import vptq
@@ -61,14 +61,14 @@ class VptqHfQuantizer(HfQuantizer):
                 device_availability = getattr(vptq, "device_availability", lambda device: False)
                 if device_availability("cpu") is True:
                     raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
-                torch_dtype = torch.float32
+                dtype = torch.float32
                 logger.info("No GPU found. Assuming VPTQ inference on CPU and loading the model in `torch.float32`.")
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         """
@@ -92,7 +92,7 @@ class VptqHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return False
 
     def is_serializable(self, safe_serialization=None):

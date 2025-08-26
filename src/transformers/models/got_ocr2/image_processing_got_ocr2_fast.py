@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Got-OCR-2."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -23,13 +23,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -51,7 +45,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class GotOcr2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class GotOcr2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -82,13 +76,13 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_kwargs = GotOcr2ImageProcessorKwargs
+    valid_kwargs = GotOcr2FastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
@@ -97,7 +91,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Optional[Union[Tuple, int, dict]] = None,
+        patch_size: Optional[Union[tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
@@ -115,12 +109,12 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
+            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
                 The format of the image data. If `None`, the format is inferred from the input image.
 
         Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
+            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
         """
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = images.shape[-2:]
@@ -163,7 +157,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         crop_to_patches: bool,
@@ -175,12 +169,13 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         if crop_to_patches:
-            grouped_images, grouped_images_index = group_images_by_shape(images)
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
             processed_images_grouped = {}
             num_patches = {}
             for shape, stacked_images in grouped_images.items():
@@ -200,7 +195,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             num_patches = [1] * len(images)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -210,7 +205,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -227,6 +222,35 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
         )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        num_patches = 1
+        if crop_to_patches and max_patches > 1:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+            )
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
+
+        return num_patches
 
 
 __all__ = ["GotOcr2ImageProcessorFast"]

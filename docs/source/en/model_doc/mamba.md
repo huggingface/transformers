@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2024-03-05.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -28,6 +29,7 @@ You can find all the original Mamba checkpoints under the [State Space Models](h
 
 
 > [!TIP]
+> This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -42,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="state-spaces/mamba-130m-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -56,8 +58,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16, device_map="auto",)  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16, device_map="auto",)  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
 
 output = model.generate(**input_ids)  
 print(tokenizer.decode(output[0], skip_special_tokens=True)
@@ -85,8 +87,8 @@ from torchao.quantization import Int4WeightOnlyConfig
 quantization_config = Int4WeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-2.8b-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -97,40 +99,30 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 - Mamba stacks `mixer` layers which are equivalent to `Attention` layers. You can find the main logic of Mamba in the `MambaMixer` class.
 - The example below demonstrates how to fine-tune Mamba with [PEFT](https://huggingface.co/docs/peft).
 
-   ```py
-   from datasets import load_dataset
-   from trl import SFTTrainer
-   from peft import LoraConfig
-   from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
-   
-   model_id = "state-spaces/mamba-130m-hf"
-   tokenizer = AutoTokenizer.from_pretrained(model_id)
-   model = AutoModelForCausalLM.from_pretrained(model_id)
-   dataset = load_dataset("Abirate/english_quotes", split="train")
-   training_args = TrainingArguments(
-       output_dir="./results",
-       num_train_epochs=3,
-       per_device_train_batch_size=4,
-       logging_dir='./logs',
-       logging_steps=10,
-       learning_rate=2e-3
-   )
-   lora_config =  LoraConfig(
-           r=8,
-           target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
-           task_type="CAUSAL_LM",
-           bias="none"
-   )
-   trainer = SFTTrainer(
-       model=model,
-       processing_class=tokenizer,
+  ```py
+  from datasets import load_dataset
+  from trl import SFTConfig, SFTTrainer
+  from peft import LoraConfig
+
+  model_id = "state-spaces/mamba-130m-hf"
+  dataset = load_dataset("Abirate/english_quotes", split="train")
+  training_args = SFTConfig(dataset_text_field="quote")
+  lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
+  trainer = SFTTrainer(
+      model=model_id,
       args=training_args,
-       peft_config=lora_config,
-       train_dataset=dataset,
-       dataset_text_field="quote",
-   )
-   trainer.train()
+      train_dataset=dataset,
+      peft_config=lora_config,
+  )
+  trainer.train()
    ```
+
+## MambaCache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## MambaConfig
 

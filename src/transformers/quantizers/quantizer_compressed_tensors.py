@@ -15,7 +15,6 @@
 
 import os
 import re
-from typing import List
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -56,7 +55,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
 
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Update missing keys after loading the model. This is necessary for compressed tensors
         to load the model correctly. We expect weights to be present in missing keys.
@@ -78,12 +77,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
         ]
 
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `unexpected_keys`.
 
         Args:
-            unexpected_keys (`List[str]`, *optional*):
+            unexpected_keys (`list[str]`, *optional*):
                 The list of unexpected keys in the checkpoint compared to the state dict of the model
         """
 
@@ -105,15 +104,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             # torch already should be installed as part of compressed tensors
             raise ImportError("torch is required for using compressed-tensors quantization")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             logger.info("Loading model using torch.float16 for compressed-tensors quantization")
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16:
-            logger.info(
-                "We suggest you to set `torch_dtype=torch.float16` for better efficiency with compressed_tensors."
-            )
-        return torch_dtype
+            dtype = torch.float16
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
+        return dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
@@ -131,7 +128,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            config = kwargs.get("config", None)
+            config = kwargs.get("config")
             cache_path = config._name_or_path
 
             if not os.path.exists(cache_path):

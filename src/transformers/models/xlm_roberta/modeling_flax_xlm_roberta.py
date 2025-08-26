@@ -15,7 +15,7 @@
 # limitations under the License.
 """Flax XLM-RoBERTa model."""
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -741,7 +741,7 @@ class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: XLMRobertaConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -759,7 +759,7 @@ class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.ones_like(input_ids)

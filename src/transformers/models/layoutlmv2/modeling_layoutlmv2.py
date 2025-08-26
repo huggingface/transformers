@@ -15,7 +15,7 @@
 """PyTorch LayoutLMv2 model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -52,7 +53,7 @@ class LayoutLMv2Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
-        super(LayoutLMv2Embeddings, self).__init__()
+        super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
@@ -122,11 +123,6 @@ class LayoutLMv2SelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def compute_qkv(self, hidden_states):
         if self.fast_qkv:
             qkv = self.qkv_linear(hidden_states)
@@ -153,12 +149,13 @@ class LayoutLMv2SelfAttention(nn.Module):
         rel_pos=None,
         rel_2d_pos=None,
     ):
-        q, k, v = self.compute_qkv(hidden_states)
+        batch_size, seq_length, _ = hidden_states.shape
+        query, key, value = self.compute_qkv(hidden_states)
 
         # (B, L, H*D) -> (B, H, L, D)
-        query_layer = self.transpose_for_scores(q)
-        key_layer = self.transpose_for_scores(k)
-        value_layer = self.transpose_for_scores(v)
+        query_layer = query.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        key_layer = key.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_layer = value.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
 
         query_layer = query_layer / math.sqrt(self.attention_head_size)
         # [BSZ, NAT, L, L]
@@ -261,7 +258,7 @@ class LayoutLMv2Output(nn.Module):
         return hidden_states
 
 
-class LayoutLMv2Layer(nn.Module):
+class LayoutLMv2Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -436,25 +433,14 @@ class LayoutLMv2Encoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+                rel_pos=rel_pos,
+                rel_2d_pos=rel_2d_pos,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -482,7 +468,7 @@ class LayoutLMv2Encoder(nn.Module):
 
 @auto_docstring
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
-    config_class = LayoutLMv2Config
+    config: LayoutLMv2Config
     base_model_prefix = "layoutlmv2"
 
     def _init_weights(self, module):
@@ -739,7 +725,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bbox (`torch.LongTensor` of shape `((batch_size, sequence_length), 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -763,9 +749,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
-        >>> image_path = dataset["test"][0]["file"]
-        >>> image = Image.open(image_path).convert("RGB")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image = dataset["test"][0]["image"]
 
         >>> encoding = processor(image, return_tensors="pt")
 
@@ -909,7 +894,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.
@@ -953,7 +938,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True, trust_remote_code=True)
+        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True)
         >>> data = next(iter(dataset))
         >>> image = data["image"].convert("RGB")
 
@@ -1114,7 +1099,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.
@@ -1155,7 +1140,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> datasets = load_dataset("nielsr/funsd", split="test", trust_remote_code=True)
+        >>> datasets = load_dataset("nielsr/funsd", split="test")
         >>> labels = datasets.features["ner_tags"].feature.names
         >>> id2label = {v: k for v, k in enumerate(labels)}
 
@@ -1267,7 +1252,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.
@@ -1312,9 +1297,8 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
         >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
-        >>> image_path = dataset["test"][0]["file"]
-        >>> image = Image.open(image_path).convert("RGB")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image = dataset["test"][0]["image"]
         >>> question = "When is coffee break?"
         >>> encoding = processor(image, question, return_tensors="pt")
 

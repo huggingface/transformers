@@ -15,7 +15,7 @@
 """PyTorch ColPali model"""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,20 +24,18 @@ from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_colpali import ColPaliConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare ColPali model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
-    config_class = ColPaliConfig
+    config: ColPaliConfig
     base_model_prefix = "model"
     _no_split_modules = []
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = (
@@ -57,66 +55,65 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class ColPaliForRetrievalOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for ColPali embeddings output.
+    """
+)
+class ColPaliForRetrievalOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the model.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The embeddings of the model.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
     embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @auto_docstring(
     custom_intro="""
-    In our proposed ColPali approach, we leverage VLMs to construct efficient multi-vector embeddings directly
-    from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity
+    The ColPali architecture leverages VLMs to construct efficient multi-vector embeddings directly
+    from document images (“screenshots”) for document retrieval. The model is trained to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
     introduced in ColBERT.
 
     Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a
     single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
+
+    ColPali is part of the ColVision model family, which was first introduced in the following paper:
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        "vlm.language_model.model": "vlm.model.language_model",
+        "vlm.vision_tower": "vlm.model.vision_tower",
+        "vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
+        "vlm.language_model.lm_head": "vlm.lm_head",
+    }
+
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
-        self.vlm = vlm
+        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        self._tied_weights_keys = [f"vlm.language_model.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -126,6 +123,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -136,9 +134,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        if "pixel_values" in kwargs:
-            kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
+    ) -> ColPaliForRetrievalOutput:
+        if pixel_values is not None:
+            pixel_values = pixel_values.to(dtype=self.dtype)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
@@ -146,38 +144,33 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vlm(
+        vlm_output = self.vlm.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=True,
             output_attentions=output_attentions,
             **kwargs,
         )
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
-        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
-
-        loss = None
-        if not return_dict:
-            output = (embeddings,) + outputs[2:]
-            output[2] = output[2] if output_hidden_states is not None else None
-            output[-1] = (outputs.image_hidden_states if pixel_values is not None else None,)
-            return (loss,) + output if loss is not None else output
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return ColPaliForRetrievalOutput(
-            loss=loss,
             embeddings=embeddings,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states if pixel_values is not None else None,
+            past_key_values=vlm_output.past_key_values,
+            hidden_states=vlm_hidden_states,
+            attentions=vlm_output.attentions,
+            image_hidden_states=vlm_image_hidden_states,
         )
 
     def get_input_embeddings(self):
@@ -191,12 +184,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.vlm.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.vlm.get_decoder()
 
     def tie_weights(self):
         return self.vlm.tie_weights()

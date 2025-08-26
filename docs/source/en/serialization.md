@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [ONNX](http://onnx.ai) is an open standard that defines a common set of operators and a file format to represent deep learning models in different frameworks, including PyTorch and TensorFlow. When a model is exported to ONNX, the operators construct a computational graph (or *intermediate representation*) which represents the flow of data through the model. Standardized operators and data types makes it easy to switch between frameworks.
 
-The [Optimum](https://huggingface.co/docs/optimum/index) library exports a model to ONNX with configuration objects which are supported for [many architectures]((https://huggingface.co/docs/optimum/exporters/onnx/overview)) and can be easily extended. If a model isn't supported, feel free to make a [contribution](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) to Optimum.
+The [Optimum](https://huggingface.co/docs/optimum/index) library exports a model to ONNX with configuration objects which are supported for [many architectures](https://huggingface.co/docs/optimum/exporters/onnx/overview) and can be easily extended. If a model isn't supported, feel free to make a [contribution](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) to Optimum.
 
 The benefits of exporting to ONNX include the following.
 
@@ -42,7 +42,7 @@ pip install optimum[exporters]
 > optimum-cli export onnx --help
 > ```
 
-Set the `--model` argument to export a PyTorch or TensorFlow model from the Hub.
+Set the `--model` argument to export a PyTorch model from the Hub.
 
 ```bash
 optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/

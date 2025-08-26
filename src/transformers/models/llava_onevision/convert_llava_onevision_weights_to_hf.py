@@ -176,13 +176,11 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     num_tokens = vocab_size + 2
     model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
 
@@ -198,7 +196,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # Load everything back for inference tests in float32 because prev script was written as that
     # Though it's mostly loaded in fp16 as original weights are in fp16
     model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-        pytorch_dump_folder_path, torch_dtype="float16", device_map="auto"
+        pytorch_dump_folder_path, dtype="float16", device_map="auto"
     )
     processor = LlavaOnevisionProcessor.from_pretrained(pytorch_dump_folder_path)
     device = model.device

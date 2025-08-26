@@ -130,11 +130,10 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
             new_imports.extend(get_relative_imports(f))
 
         module_path = Path(module_file).parent
-        new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
+        new_import_files = [f"{str(module_path / m)}.py" for m in new_imports]
+        files_to_check = [f for f in new_import_files if f not in all_relative_imports]
 
-        no_change = len(new_import_files) == 0
+        no_change = len(files_to_check) == 0
         all_relative_imports.extend(files_to_check)
 
     return all_relative_imports
@@ -317,12 +316,12 @@ def get_cached_module_file(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -402,10 +401,11 @@ def get_cached_module_file(
         if not (submodule_path / module_file).exists() or not filecmp.cmp(
             resolved_module_file, str(submodule_path / module_file)
         ):
+            (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         for module_needed in modules_needed:
-            module_needed = f"{module_needed}.py"
+            module_needed = Path(module_file).parent / f"{module_needed}.py"
             module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
@@ -507,12 +507,12 @@ def get_class_from_dynamic_module(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or `bool`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -593,7 +593,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:
-        `List[str]`: The list of files saved.
+        `list[str]`: The list of files saved.
     """
     if obj.__module__ == "__main__":
         logger.warning(
@@ -667,7 +667,9 @@ def _raise_timeout_error(signum, frame):
 TIME_OUT_REMOTE_CODE = 15
 
 
-def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code, error_message=None):
+def resolve_trust_remote_code(
+    trust_remote_code, model_name, has_local_code, has_remote_code, error_message=None, upstream_repo=None
+):
     """
     Resolves the `trust_remote_code` argument. If there is remote code to be loaded, the user must opt-in to loading
     it.
@@ -688,11 +690,25 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
     Returns:
         The resolved `trust_remote_code` value.
     """
-    # Originally, `trust_remote_code` was used to load models with custom code.
-    error_message = (
-        error_message
-        or f"The repository `{model_name}` contains custom code which must be executed to correctly load the model."
-    )
+    if error_message is None:
+        if upstream_repo is not None:
+            error_message = (
+                f"The repository {model_name} references custom code contained in {upstream_repo} which "
+                f"must be executed to correctly load the model. You can inspect the repository "
+                f"content at https://hf.co/{upstream_repo} .\n"
+            )
+        elif os.path.isdir(model_name):
+            error_message = (
+                f"The repository {model_name} contains custom code which must be executed "
+                f"to correctly load the model. You can inspect the repository "
+                f"content at {os.path.abspath(model_name)} .\n"
+            )
+        else:
+            error_message = (
+                f"The repository {model_name} contains custom code which must be executed "
+                f"to correctly load the model. You can inspect the repository "
+                f"content at https://hf.co/{model_name} .\n"
+            )
 
     if trust_remote_code is None:
         if has_local_code:
@@ -746,7 +762,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
             This can be either:
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional arguments to pass to `cached_file`.
     """
     failed = []  # error messages regarding requirements

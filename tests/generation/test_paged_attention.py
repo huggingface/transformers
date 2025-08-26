@@ -25,13 +25,13 @@ _EXPECTED_OUTPUTS = [
 
 
 @slow
-@require_torch_gpu
 @require_flash_attn
+@require_torch_gpu
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-3.2-3b-Instruct", torch_dtype="bfloat16", device_map="auto"
+            "meta-llama/Llama-3.2-3b-Instruct", dtype="bfloat16", device_map="auto"
         ).eval()
 
         cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")

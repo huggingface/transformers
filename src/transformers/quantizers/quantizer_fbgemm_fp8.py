@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 
@@ -71,7 +71,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
@@ -89,28 +89,28 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bloat16` due to "
+                "Overriding dtype=%s with `dtype=torch.bloat16` due to "
                 "requirements of `fbgemm-gpu` to enable model loading in fp8. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.bfloat16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype == torch.float16:
+        elif dtype == torch.float16:
             raise ValueError(
-                "You cannot use FP8 with torch_dtype=torch.float16.We recommend you passing torch_dtype=torch.bfloat16"
+                "You cannot use FP8 with dtype=torch.float16.We recommend you passing dtype=torch.bfloat16"
             )
-        return torch_dtype
+        return dtype
 
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ):
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
@@ -141,8 +141,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights into weight and weight_scale
@@ -204,7 +204,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
@@ -226,12 +226,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, FbgemmFp8Linear) or isinstance(module, FbgemmFp8Llama4TextExperts):
+            if isinstance(module, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")

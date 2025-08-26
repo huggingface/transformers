@@ -4,7 +4,7 @@ import io
 import json
 import os
 import re
-from typing import List, Optional
+from typing import Optional
 
 import torch
 from tokenizers import AddedToken, processors
@@ -224,7 +224,7 @@ def write_model(
         params = json.load(f)
 
     params = params.get("model", params)
-    torch_dtype = "bfloat16"
+    dtype = "bfloat16"
 
     # ------------------------------------------------------------
     # Text model params and config
@@ -267,7 +267,7 @@ def write_model(
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
-    if hasattr(params, "moe_args"):
+    if params.get("moe_args", False):
         num_experts = params["moe_args"]["num_experts"]
         interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
     else:
@@ -303,7 +303,7 @@ def write_model(
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
@@ -421,7 +421,7 @@ def write_model(
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
             elif _OFFLINE_QUANT_COMPATIBLE and "feed_forward.experts." in new_key:
-                # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
+                # for experts, we need to split expert for offline quantization purpose and don't need to fuse
                 expert_lists = []
                 for k in current_parameter:
                     expert_lists.append(
@@ -527,7 +527,7 @@ def write_model(
     with torch.no_grad():
         # TODO test if we can do `tp_plan="auto"``
         model = Llama4ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
+            model_path, dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
         )
 
         model.generation_config.top_p = 0.9
@@ -621,7 +621,7 @@ class Llama4Converter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pattern: str,
         model_max_length: int = 0,
         chat_template: Optional[str] = None,
@@ -710,7 +710,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(

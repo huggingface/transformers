@@ -108,7 +108,7 @@ class RegNetShortCut(nn.Module):
 
 class RegNetSELayer(nn.Module):
     """
-    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
+    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://huggingface.co/papers/1709.01507).
     """
 
     def __init__(self, in_channels: int, reduced_channels: int):
@@ -260,7 +260,7 @@ class RegNetEncoder(nn.Module):
 
 @auto_docstring
 class RegNetPreTrainedModel(PreTrainedModel):
-    config_class = RegNetConfig
+    config: RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]

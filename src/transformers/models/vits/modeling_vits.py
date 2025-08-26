@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -37,68 +38,48 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VitsModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Describes the outputs for the VITS model, with potential hidden states and attentions.
-
-    Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            The final audio waveform predicted by the model.
-        sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
-            The length in samples of each element in the `waveform` batch.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
-            The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
-            GAN decoder model to obtain the final audio waveform.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VitsModelOutput(ModelOutput):
+    r"""
+    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        The final audio waveform predicted by the model.
+    sequence_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+        The length in samples of each element in the `waveform` batch.
+    spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+        The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
+        GAN decoder model to obtain the final audio waveform.
     """
 
     waveform: Optional[torch.FloatTensor] = None
     sequence_lengths: Optional[torch.FloatTensor] = None
-    spectrogram: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    spectrogram: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class VitsTextEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted mean values of the prior distribution for the latent text variables.
-        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted log-variance values of the prior distribution for the latent text variables.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VitsTextEncoderOutput(ModelOutput):
+    r"""
+    prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The predicted mean values of the prior distribution for the latent text variables.
+    prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The predicted log-variance values of the prior distribution for the latent text variables.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     prior_means: Optional[torch.FloatTensor] = None
     prior_log_variances: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @torch.jit.script
@@ -897,7 +878,7 @@ class VitsAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1067,7 +1048,7 @@ class VitsFeedForward(nn.Module):
         return hidden_states
 
 
-class VitsEncoderLayer(nn.Module):
+class VitsEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.attention = VitsAttention(config)
@@ -1122,7 +1103,7 @@ class VitsEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1139,27 +1120,18 @@ class VitsEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
 
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        padding_mask,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        padding_mask=padding_mask,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    padding_mask=padding_mask,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -1195,12 +1167,6 @@ class VitsTextEncoder(nn.Module):
         self.encoder = VitsEncoder(config)
         self.project = nn.Conv1d(config.hidden_size, config.flow_size * 2, kernel_size=1)
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1209,7 +1175,7 @@ class VitsTextEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], VitsTextEncoderOutput]:
+    ) -> Union[tuple[torch.Tensor], VitsTextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(
@@ -1241,29 +1207,38 @@ class VitsTextEncoder(nn.Module):
 
 @auto_docstring
 class VitsPreTrainedModel(PreTrainedModel):
-    config_class = VitsConfig
+    config: VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, VitsAttention):
+            if self.config.window_size:
+                head_dim = self.config.hidden_size // self.config.num_attention_heads
+                nn.init.normal_(module.emb_rel_k, std=head_dim**-0.5)
+                nn.init.normal_(module.emb_rel_v, std=head_dim**-0.5)
+        elif isinstance(module, VitsElementwiseAffine):
+            module.translate.data.zero_()
+            module.log_scale.data.zero_()
 
 
 @auto_docstring(
@@ -1311,7 +1286,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple[Any], VitsModelOutput]:
+    ) -> Union[tuple[Any], VitsModelOutput]:
         r"""
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
