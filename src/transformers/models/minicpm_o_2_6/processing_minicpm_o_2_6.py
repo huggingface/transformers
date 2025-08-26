@@ -158,16 +158,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
 
-    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None):
-        super().__init__(tokenizer, image_processor, feature_extractor)
+    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None):
+        super().__init__(tokenizer, image_processor,
+                         feature_extractor, chat_template=chat_template)
         self.version = image_processor.version
         self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
-        self.image_tag = "(<image>./</image>)"
-        self.image_pattern = "\(<image>./</image>\)"
-        self.audio_tag = "(<audio>./</audio>)"
-        self.audio_pattern = "\(<audio>./</audio>\)"
-        self.terminators = ["<|im_end|>", "<|endoftext|>"]
-        self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
 
     def __call__(
         self,
@@ -221,10 +216,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         msgs,
         chunk_input=True,
         max_slice_nums=None,
-        max_inp_length=32768,
+        max_length=32768,
         omni_input=False,
         use_image_id=None,
         use_tts_template=False,
+        **kwargs,
     ):
         """
         Unified chat function
@@ -232,7 +228,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         Args:
             msgs: the input chat msgs, support text: (string)  / image: (PIL.Image) / audio (numpy.ndarray)
             chunk_input: whether to split audio into 1s chunks
-            max_inp_length: the maximum length of input
+            max_length: the maximum length of input
             max_slice_nums: control the maximum number of image slices
             omni_input: determine whether it is omni mode
             use_image_id: for video understanding or omni understanding, use_image_id should be False
@@ -295,11 +291,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                     chat_template=self.default_tts_chat_template if use_tts_template else None,
                 )
             )
-            if images:
-                input_images_list.append(images)
-            if audios:
-                input_audios_list.append(audios)
-                audio_parts_list.append(audio_parts)
+            input_images_list.append(images)
+            input_audios_list.append(audios)
+            audio_parts_list.append(audio_parts)
 
         inputs = self.__call__(
             prompts_lists,
@@ -310,13 +304,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             use_image_id=use_image_id,
             chunk_input=chunk_input,
             return_tensors="pt",
-            max_length=max_inp_length,
+            max_length=max_length,
         )
         return inputs
 
     def decode(self, outputs, batched=False):
         result = self.decode_text(
-            outputs.sequences, self.tokenizer, self.terminators)
+            outputs.sequences, self.tokenizer)
         if not batched:
             result = result[0]
         if isinstance(result, list):
@@ -325,15 +319,22 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             result = result.replace(self.tokenizer.tts_end, "")
         return result
 
-    def decode_text(self, result_ids, tokenizer, terminators):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in terminators]
+    def decode_text(self, result_ids, tokenizer):
         result_text = []
         for result in result_ids:
             result = result[result != 0]
-            if result[0] == tokenizer.bos_id:
-                result = result[1:]
-            if result[-1] in terminators:
-                result = result[:-1]
+            start, end = 0, len(result)
+            for i, tok in enumerate(result):
+                if tok == tokenizer.bos_id:
+                    start = i+1
+                else:
+                    break
+            for i in range(len(result)-1, -1, -1):
+                if result[i] in tokenizer.terminator_ids:
+                    end = i
+                else:
+                    break
+            result = result[start:end]
             result_text.append(tokenizer.decode(result))
         return result_text
 
@@ -509,10 +510,10 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         spk_bounds_list = []
 
         for index, text in enumerate(texts):
-            text_chunks = re.split(self.split_pattern, text)
+            text_chunks = re.split(self.tokenizer.split_pattern, text)
 
-            image_tags = re.findall(self.image_pattern, text)
-            audio_tags = re.findall(self.audio_pattern, text)
+            image_tags = re.findall(self.tokenizer.image_pattern, text)
+            audio_tags = re.findall(self.tokenizer.audio_pattern, text)
 
             if image_tags:
                 assert images is not None
@@ -524,13 +525,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             image_id = 0
             audio_id = 0
             for i, chunk in enumerate(text_chunks):
-                if chunk == self.image_tag:
+                if chunk == self.tokenizer.image_tag:
                     image_placeholder = self.image_processor.get_slice_image_placeholder(
                         self.tokenizer, image_sizes[index][image_id], image_id, max_slice_nums, use_image_id
                     )
                     image_id += 1
                     text_chunks[i] = image_placeholder
-                elif chunk == self.audio_tag:
+                elif chunk == self.tokenizer.audio_tag:
                     audio_placeholder = audio_phs[index][audio_id]
                     audio_id += 1
                     text_chunks[i] = audio_placeholder

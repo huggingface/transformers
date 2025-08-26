@@ -551,7 +551,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         # feature_extractor = MiniCPM_o_2_6FeatureExtractor.from_pretrained(config._name_or_path)
         # self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        self.terminators = ["<|im_end|>", "<|endoftext|>"]
+        # self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
         self.force_no_stop = False
 
@@ -1094,26 +1094,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def _decode(self, inputs_embeds, tokenizer, attention_mask, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
-        outputs = super().generate(
-            inputs_embeds=inputs_embeds,
-            pad_token_id=0,
-            eos_token_id=terminators,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-            return_dict_in_generate=True,
-            **kwargs,
-        )
-        return outputs
-
     def _decode_stream(self, inputs_embeds, tokenizer, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         streamer = TextIteratorStreamer(tokenizer=tokenizer)
         generation_kwargs = {
             "inputs_embeds": inputs_embeds,
             "pad_token_id": 0,
-            "eos_token_id": terminators,
+            "eos_token_id": tokenizer.terminator_ids,
             "streamer": streamer,
         }
         generation_kwargs.update(kwargs)
@@ -1199,11 +1185,10 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             if stream:
                 result = self._decode_stream(model_inputs["inputs_embeds"], processor.tokenizer, **generation_config)
             else:
-                terminators = [processor.tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
                 outputs = super().generate(
                     inputs_embeds=model_inputs["inputs_embeds"],
                     pad_token_id=0,
-                    eos_token_id=terminators,
+                    eos_token_id=processor.tokenizer.terminator_ids,
                     attention_mask=attention_mask,
                     output_hidden_states=True,
                     return_dict_in_generate=True,
@@ -1213,7 +1198,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         if stream:
             def stream_gen():
                 for text in result:
-                    for term in self.terminators:
+                    for term in processor.tokenizer.terminators:
                         text = text.replace(term, "")
                     yield text
 
@@ -1226,8 +1211,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             spk_embeds = wav_numpy = sr = None
             
             if not batched and use_tts_template and generate_audio:
-                # todo 这个地方怎么处理，必须得decode一次
-                result = processor.decode_text(outputs.sequences, processor.tokenizer, self.terminators)
+                result = processor.decode_text(outputs.sequences, processor.tokenizer)
                 mel_spec = self._generate_mel_spec(model_inputs, outputs, result[0], tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0}, force_no_stop=force_no_stop)
                 wav_numpy, sr = self.decode_mel_to_audio(mel_spec, kwargs.get('output_audio_path', None))
 
@@ -1486,7 +1470,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         self.llm_generate_completed = False
         self.audio_past_key_values = None  # apm kv cache
 
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         generate_prompt = "<|im_end|>\n<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>"
         input_ids = tokenizer(generate_prompt, return_tensors="pt", add_special_tokens=False)["input_ids"].cuda()
 
@@ -1500,7 +1483,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
         generation_config["max_new_tokens"] = max_new_tokens
-        streamer = self.llm_generate_chunk(input_ids, attention_mask, tokenizer, terminators, generation_config)
+        streamer = self.llm_generate_chunk(input_ids, attention_mask, tokenizer, tokenizer.terminator_ids, generation_config)
 
         if generate_audio:
             result = self._generate_mel_spec_audio_streaming(
@@ -1552,7 +1535,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             end = check_uncompleted_token(cur_ids[0])
             left_ids = cur_ids[:, end:]
             cur_ids = cur_ids[:, :end]
-            text = self.processor.decode_text(cur_ids, tokenizer, self.terminators)[0] if end > 0 else ""
+            text = self.processor.decode_text(cur_ids, tokenizer)[0] if end > 0 else ""
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]

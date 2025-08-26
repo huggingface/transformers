@@ -259,7 +259,13 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> MiniCPMOBatchFeature:
-        images_list = make_nested_list_of_images(images)
+        # in batch inference, it may be [[]], so we can't use `make_nested_list_of_images`
+        if isinstance(images, Image.Image):
+            images_list = [[images]]
+        elif isinstance(images[0], Image.Image):
+            images_list = [images]
+        else:
+            images_list = images
 
         to_tensor = transforms.ToTensor()
         normalize_transform = transforms.Normalize(
@@ -308,7 +314,9 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                             (slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
                     )
 
-            tgt_sizes = np.vstack(tgt_sizes)
+            # in batch inference, it may be []
+            if tgt_sizes:
+                tgt_sizes = np.vstack(tgt_sizes)
 
             new_images_list.append(new_images)
             image_sizes_list.append(image_sizes)

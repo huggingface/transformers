@@ -21,14 +21,14 @@ import tempfile
 import numpy as np
 import librosa
 import soundfile as sf
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from PIL import Image
 import requests
 from io import BytesIO
 
 from transformers import (
     AutoModel,
-    AutoTokenizer,
+    AutoProcessor,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -38,11 +38,11 @@ from transformers.testing_utils import (
     require_vision,
     require_soundfile,
     require_sentencepiece,
-    require_tokenizers,
 )
 
 if is_torch_available():
     import torch
+
 
 @require_torch
 class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
@@ -55,7 +55,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
 
         self.video_path = os.path.join(self.assets_dir, "Skiing.mp4")
         self.ref_audio_path = os.path.join(self.assets_dir, "demo.wav")
-        
+
         if not os.path.exists(self.video_path):
             video_url = "https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/Skiing.mp4"
             response = requests.get(video_url, stream=True)
@@ -72,18 +72,16 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
+        self.model_path = "openbmb/MiniCPM-o-2_6"
+        # self.model_path = "/cache/guochenxu/models/minicpmo2_6_renamed_qkv"
         self.model = AutoModel.from_pretrained(
-            "openbmb/MiniCPM-o-2_6",
-            trust_remote_code=True,
+            self.model_path,
             attn_implementation='sdpa',
-            torch_dtype=torch.bfloat16,
-            init_vision=True,
-            init_audio=True,
-            init_tts=True
+            torch_dtype=torch.bfloat16
         )
         self.model = self.model.eval().to(torch_device)
-        self.tokenizer = AutoTokenizer.from_pretrained('openbmb/MiniCPM-o-2_6', trust_remote_code=True)
         self.model.init_tts()
+        self.processor = AutoProcessor.from_pretrained(self.model_path)
 
     def tearDown(self):
         """clean up test environment"""
@@ -94,16 +92,10 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
         if os.path.exists(self.assets_dir):
             os.rmdir(self.assets_dir)
 
-    @slow
-    def test_minicpm_o_2_6_model_base(self):
-        """test base model loading"""
-        base_model = AutoModel.from_pretrained("openbmb/MiniCPM-o-2_6")
-        self.assertIsNotNone(base_model)
-
     def _get_video_chunk_content(self, video_path, flatten=True):
         """process video content, extract frames and audio"""
         video = VideoFileClip(video_path)
-        
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_audio_file:
             video.audio.write_audiofile(
                 temp_audio_file.name,
@@ -111,21 +103,22 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 fps=16000,
                 logger=None
             )
-            audio_np, sr = librosa.load(temp_audio_file.name, sr=16000, mono=True)
-        
+            audio_np, sr = librosa.load(
+                temp_audio_file.name, sr=16000, mono=True)
+
         num_units = math.ceil(video.duration)
         contents = []
-        
+
         for i in range(num_units):
             frame = video.get_frame(i+1)
             image = Image.fromarray(frame.astype(np.uint8))
             audio_segment = audio_np[sr*i:sr*(i+1)]
-            
+
             if flatten:
                 contents.extend(["<unit>", image, audio_segment])
             else:
                 contents.append(["<unit>", image, audio_segment])
-                
+
         video.close()
         return contents
 
@@ -133,21 +126,25 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     @require_vision
     @require_soundfile
     @require_sentencepiece
-    @require_tokenizers
-    def test_omni_chat(self):
+    def test_omni_generate(self):
         try:
-            ref_audio, _ = librosa.load(self.ref_audio_path, sr=16000, mono=True)
-            sys_msg = self.model.get_sys_prompt(ref_audio=ref_audio, mode='omni', language='en')
-            
+            ref_audio, _ = librosa.load(
+                self.ref_audio_path, sr=16000, mono=True)
+            sys_msg = self.processor.get_sys_prompt(
+                ref_audio=ref_audio, mode='omni', language='en')
+
             contents = self._get_video_chunk_content(self.video_path)
             msg = {"role": "user", "content": contents}
             msgs = [sys_msg, msg]
+            inputs = self.processor.apply_chat_template(
+                msgs=msgs).to(self.model.device)
 
-            output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+            output_audio_path = tempfile.NamedTemporaryFile(
+                suffix=".wav", delete=False).name
 
-            res = self.model.chat(
-                msgs=msgs,
-                tokenizer=self.tokenizer,
+            res = self.model.generate(
+                **inputs,
+                processor=self.processor,
                 sampling=True,
                 temperature=0.5,
                 max_new_tokens=128,
@@ -159,16 +156,17 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 use_image_id=False,
                 return_dict=True
             )
+            res = self.processor.decode(res.outputs)
 
             self.assertIsNotNone(res, "Chat response should not be empty")
-            self.assertIn("text", res, "Chat response should contain text")
-            self.assertTrue(len(res["text"]) > 0, "Chat response text should not be empty")
-            
-            if res.get("audio_path"):
-                self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
-                
+            self.assertTrue(len(res) > 0,
+                            "Chat response text should not be empty")
+            self.assertTrue(sf.info(output_audio_path).frames >
+                            0, "Generated audio file should not be empty")
+
         except FileNotFoundError:
-            self.skipTest(f"资源文件未找到: {self.video_path} 或 {self.ref_audio_path}")
+            self.skipTest(
+                f"资源文件未找到: {self.video_path} 或 {self.ref_audio_path}")
         finally:
             if 'output_audio_path' in locals() and os.path.exists(output_audio_path):
                 os.remove(output_audio_path)
@@ -177,44 +175,45 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     @require_vision
     @require_soundfile
     @require_sentencepiece
-    @require_tokenizers
     def test_streaming_inference(self):
         try:
             self.model.reset_session()
-            
-            ref_audio, _ = librosa.load(self.ref_audio_path, sr=16000, mono=True)
-            sys_msg = self.model.get_sys_prompt(ref_audio=ref_audio, mode='omni', language='en')
-            
-            contents = self._get_video_chunk_content(self.video_path, flatten=False)
+
+            ref_audio, _ = librosa.load(
+                self.ref_audio_path, sr=16000, mono=True)
+            sys_msg = self.processor.get_sys_prompt(
+                ref_audio=ref_audio, mode='omni', language='en')
+
+            contents = self._get_video_chunk_content(
+                self.video_path, flatten=False)
             session_id = 'test_session'
             generate_audio = True
 
-            res = self.model.streaming_prefill(
+            self.model.streaming_prefill(
                 session_id=session_id,
                 msgs=[sys_msg],
-                tokenizer=self.tokenizer
+                processor=self.processor,
             )
-            self.assertIsNotNone(res, "System prompt prefilling should not return empty")
 
             for content in contents:
                 msgs = [{"role": "user", "content": content}]
-                res = self.model.streaming_prefill(
+                self.model.streaming_prefill(
                     session_id=session_id,
                     msgs=msgs,
-                    tokenizer=self.tokenizer
+                    processor=self.processor,
                 )
-                self.assertIsNotNone(res, "Content prefilling should not return empty")
 
             res = self.model.streaming_generate(
                 session_id=session_id,
-                tokenizer=self.tokenizer,
+                processor=self.processor,
                 temperature=0.5,
                 generate_audio=generate_audio
             )
 
             audios = []
             text = ""
-            output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+            output_audio_path = tempfile.NamedTemporaryFile(
+                suffix=".wav", delete=False).name
 
             if generate_audio:
                 for r in res:
@@ -226,17 +225,22 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                     text += txt
 
                 res_audio = np.concatenate(audios)
-                sf.write(output_audio_path, res_audio, samplerate=sampling_rate)
-                
-                self.assertTrue(len(text) > 0, "Generated text should not be empty")
-                self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+                sf.write(output_audio_path, res_audio,
+                         samplerate=sampling_rate)
+
+                self.assertTrue(
+                    len(text) > 0, "Generated text should not be empty")
+                self.assertTrue(sf.info(output_audio_path).frames >
+                                0, "Generated audio file should not be empty")
             else:
                 for r in res:
                     text += r['text']
-                self.assertTrue(len(text) > 0, "Generated text should not be empty")
+                self.assertTrue(
+                    len(text) > 0, "Generated text should not be empty")
 
         except FileNotFoundError:
-            self.skipTest(f"Resource file not found: {self.video_path} or {self.ref_audio_path}")
+            self.skipTest(
+                f"Resource file not found: {self.video_path} or {self.ref_audio_path}")
         finally:
             if 'output_audio_path' in locals() and os.path.exists(output_audio_path):
                 os.remove(output_audio_path)
@@ -244,14 +248,12 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     @slow
     @require_soundfile
     @require_sentencepiece
-    @require_tokenizers
     def test_audio_mimick(self):
         try:
             self.model.init_tts()
-            self.model.tts.float()
 
             mimick_prompt = "Please repeat each user's speech, including voice style and speech content."
-            
+
             audio_urls = [
                 'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/Trump_WEF_2018_10s.mp3',
                 'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/cxk_original.wav',
@@ -262,24 +264,29 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
 
             for audio_url in audio_urls:
                 try:
-                    
+
                     response = requests.get(audio_url, stream=True)
                     response.raise_for_status()
-                    
+
                     with tempfile.NamedTemporaryFile(suffix=os.path.splitext(audio_url)[1], delete=False) as temp_file:
                         for chunk in response.iter_content(chunk_size=8192):
                             temp_file.write(chunk)
                         temp_file_path = temp_file.name
 
-                    audio_input, _ = librosa.load(temp_file_path, sr=16000, mono=True)
-                    
-                    msgs = [{'role': 'user', 'content': [mimick_prompt, audio_input]}]
-                    
-                    output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-                    
-                    res = self.model.chat(
-                        msgs=msgs,
-                        tokenizer=self.tokenizer,
+                    audio_input, _ = librosa.load(
+                        temp_file_path, sr=16000, mono=True)
+
+                    msgs = [{'role': 'user', 'content': [
+                        mimick_prompt, audio_input]}]
+                    inputs = self.processor.apply_chat_template(
+                        msgs=msgs).to(self.model.device)
+
+                    output_audio_path = tempfile.NamedTemporaryFile(
+                        suffix=".wav", delete=False).name
+
+                    res = self.model.generate(
+                        **inputs,
+                        processor=self.processor,
                         sampling=True,
                         max_new_tokens=128,
                         use_tts_template=True,
@@ -287,10 +294,14 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                         generate_audio=True,
                         output_audio_path=output_audio_path
                     )
+                    res = self.processor.decode(res.outputs)
 
-                    self.assertIsNotNone(res, "Mimic response should not be empty")
-                    self.assertTrue(os.path.exists(output_audio_path), "Output audio file should exist")
-                    self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+                    self.assertIsNotNone(
+                        res, "Mimic response should not be empty")
+                    self.assertTrue(os.path.exists(
+                        output_audio_path), "Output audio file should exist")
+                    self.assertTrue(sf.info(output_audio_path).frames >
+                                    0, "Generated audio file should not be empty")
 
                 except requests.exceptions.RequestException as e:
                     self.skipTest(f"Failed to download audio file: {str(e)}")
@@ -308,44 +319,47 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     @slow
     @require_vision
     @require_sentencepiece
-    @require_tokenizers
     def test_single_image_inference(self):
         try:
-            image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+            image_url = "https://bkimg.cdn.bcebos.com/pic/d043ad4bd11373f082022267f9585cfbfbedaa64aeb6"
             response = requests.get(image_url, stream=True)
             response.raise_for_status()
-            
+
             image = Image.open(BytesIO(response.content)).convert('RGB')
             question = 'What is in the image?'
-            
+
             msgs = [{'role': 'user', 'content': [image, question]}]
-        
-            res = self.model.chat(
-                image=None,
-                msgs=msgs,
-                tokenizer=self.tokenizer
+            inputs = self.processor.apply_chat_template(
+                msgs=msgs).to(self.model.device)
+
+            res = self.model.generate(
+                **inputs,
+                processor=self.processor,
             )
-            
-            self.assertIsNotNone(res, "Normal inference response should not be empty")
-            self.assertTrue(len(res) > 0, "Normal inference response text should not be empty")
-            
-            res = self.model.chat(
-                msgs=msgs,
-                tokenizer=self.tokenizer,
+            res = self.processor.decode(res)
+
+            self.assertIsNotNone(
+                res, "Normal inference response should not be empty")
+            self.assertTrue(
+                len(res) > 0, "Normal inference response text should not be empty")
+
+            res = self.model.generate(
+                **inputs,
+                processor=self.processor,
                 sampling=True,
                 stream=True
             )
-            
+
             generated_text = ""
             for new_text in res:
                 generated_text += new_text
-                self.assertIsNotNone(new_text, "Each part of streaming reasoning should not be empty")
-            
-            self.assertTrue(len(generated_text) > 0, "Text should not be empty")
-            
+                self.assertIsNotNone(
+                    new_text, "Each part of streaming reasoning should not be empty")
+
+            self.assertTrue(len(generated_text) > 0,
+                            "Text should not be empty")
+
         except requests.exceptions.RequestException as e:
             self.skipTest(f"Failed to download image: {str(e)}")
         except Exception as e:
             self.fail(f"Single image inference test failed: {str(e)}")
-        
-        
