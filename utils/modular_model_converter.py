@@ -201,39 +201,31 @@ class ReplaceParentClassCallTransformer(cst.CSTTransformer):
 
     def is_call_to_parent_class(self, node: cst.SimpleStatementLine):
         """Check whether `node` corresponds to a call to a parent class function, such as `module.Parent.func_name(...)`"""
-        parent_call_node = m.Call(func=m.Attribute(value=m.Name() | m.Attribute()))
-        # It can be used as a return, simple expression, or assignment
-        potential_bodies = [m.Return(parent_call_node) | m.Expr(parent_call_node) | m.Assign(value=parent_call_node)]
-        return m.matches(node, m.SimpleStatementLine(body=potential_bodies))
+        return m.matches(node, m.Call(func=m.Attribute(value=m.Name() | m.Attribute())))
 
-    def leave_SimpleStatementLine(
-        self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
-    ) -> cst.SimpleStatementLine:
+    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.Call:
         """Replace a call of the form `module.Class.func(...)` by a call of the form `super().func(...)`
         if the `Class` being called is one of the bases."""
         if self.is_call_to_parent_class(updated_node):
-            expr_node = updated_node.body[0]
-            full_parent_class_name = get_full_attribute_name(expr_node.value.func.value)
+            full_parent_class_name = get_full_attribute_name(updated_node.func.value)
             # Replace only if it's a base, or a few special rules
             if (
                 full_parent_class_name in self.new_bases
-                or ("nn.Module" in full_parent_class_name and self.new_bases == ["GradientCheckpointingLayer"])
+                or (full_parent_class_name == "nn.Module" and "GradientCheckpointingLayer" in self.new_bases)
                 or (
                     full_parent_class_name == "PreTrainedModel"
                     and any("PreTrainedModel" in base for base in self.new_bases)
                 )
             ):
                 # Replace `full_parent_class_name.func(...)` with `super().func(...)`
-                attribute_node = expr_node.value.func.with_changes(value=cst.Call(func=cst.Name("super")))
+                attribute_node = updated_node.func.with_changes(value=cst.Call(func=cst.Name("super")))
                 # Check if the first argument is 'self', and remove it
                 new_args = (
-                    expr_node.value.args[1:]
-                    if len(expr_node.value.args) > 0 and m.matches(expr_node.value.args[0].value, m.Name("self"))
-                    else expr_node.value.args
+                    updated_node.args[1:]
+                    if len(updated_node.args) > 0 and m.matches(updated_node.args[0].value, m.Name("self"))
+                    else updated_node.args
                 )
-                call_node = expr_node.value.with_changes(func=attribute_node, args=new_args)
-                new_expr_node = expr_node.with_changes(value=call_node)
-                return updated_node.with_changes(body=[new_expr_node])
+                return updated_node.with_changes(func=attribute_node, args=new_args)
         return updated_node
 
 
