@@ -574,21 +574,18 @@ OLMOE_ATTENTION_CLASSES = {
 }
 
 
-# FIXME: Update the modulelist
-class OlmoeSparseMoeBlock(nn.Module):
+class OlmoeNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
+        for _ in range(config.num_experts):
+            self.append(OlmoeMLP(config))
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
-        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = nn.ModuleList([OlmoeMLP(config) for _ in range(self.num_experts)])
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states, router_logits):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
@@ -607,7 +604,7 @@ class OlmoeSparseMoeBlock(nn.Module):
 
         # Loop over all available experts in the model and perform the computation on each expert
         for expert_idx in range(self.num_experts):
-            expert_layer = self.experts[expert_idx]
+            expert_layer = self[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
 
             # Index the correct hidden states and compute the expert hidden state for
@@ -619,7 +616,27 @@ class OlmoeSparseMoeBlock(nn.Module):
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return final_hidden_states
+
+
+class OlmoeSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
+        self.experts = OlmoeNaiveMoe(config)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
+
+        final_hidden_states = self.experts(hidden_states.reshape(batch_size, sequence_length, hidden_dim), router_logits)
         return final_hidden_states, router_logits
 
 
