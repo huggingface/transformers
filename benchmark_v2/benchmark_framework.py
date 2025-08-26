@@ -31,12 +31,7 @@ import numpy as np
 import psutil
 import gpustat
 
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-    torch = None
+import torch
 
 
 class CUDATimer:
@@ -50,7 +45,7 @@ class CUDATimer:
             device: CUDA device to use. If None, uses current device.
         """
         self.device = device
-        self.use_cuda = TORCH_AVAILABLE and torch.cuda.is_available()
+        self.use_cuda = torch.cuda.is_available()
         
         if self.use_cuda:
             if device and device != "cpu":
@@ -134,7 +129,6 @@ class BenchmarkConfig:
     use_cache: bool = True
     batch_size: int = 1
     sequence_length: Optional[int] = None
-    generation_config: Dict[str, Any] = field(default_factory=dict)
     attn_implementation: str = "sdpa"  # "eager", "sdpa", "flash_attention_2"
     sdpa_backend: Optional[str] = None  # None, "math", "flash_attention", "efficient_attention", "cudnn_attention"
     custom_params: Dict[str, Any] = field(default_factory=dict)
@@ -182,13 +176,7 @@ class BenchmarkScenario:
     def __repr__(self):
         return f"BenchmarkScenario(name='{self.name}', variant='{self.config.variant}')"
 
-    def __post_init__(self):
-        if not self.generation_config:
-            self.generation_config = {
-                "do_sample": False,
-                "top_p": 1.0,
-                "temperature": 1.0
-            }
+
 
 
 @dataclass
@@ -261,8 +249,6 @@ class BenchmarkMetadata:
     """Metadata collected for each benchmark run."""
     timestamp: str
     commit_id: str
-    repository: str
-    branch: str
     hardware_info: HardwareInfo
     config: BenchmarkConfig
 
@@ -386,12 +372,10 @@ def get_hardware_info() -> HardwareInfo:
     except Exception:
         pass
     
-    torch_version = None
+    torch_version = torch.__version__
     cuda_version = None
-    if TORCH_AVAILABLE and hasattr(torch, '__version__'):
-        torch_version = torch.__version__
-        if hasattr(torch, 'cuda') and torch.cuda.is_available():
-            cuda_version = torch.version.cuda
+    if hasattr(torch, 'cuda') and torch.cuda.is_available():
+        cuda_version = torch.version.cuda
     
     return HardwareInfo(
         gpu_name=gpu_name,
@@ -417,7 +401,7 @@ def get_git_commit_id() -> str:
 def flush_memory():
     """Flush GPU memory and run garbage collection."""
     gc.collect()
-    if TORCH_AVAILABLE and hasattr(torch, 'cuda') and torch.cuda.is_available():
+    if hasattr(torch, 'cuda') and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
         torch.cuda.reset_peak_memory_stats()
@@ -426,9 +410,6 @@ def flush_memory():
 
 def get_sdpa_backend(backend_name: Optional[str]):
     """Get the SDPA backend enum from string name."""
-    if not TORCH_AVAILABLE:
-        return None
-    
     if backend_name is None:
         return None
     
@@ -445,60 +426,7 @@ def get_sdpa_backend(backend_name: Optional[str]):
         return None
 
 
-def get_available_sdpa_backends():
-    """Get list of available SDPA backends on this system."""
-    if not TORCH_AVAILABLE:
-        return []
-    
-    try:
-        import torch
-        available_backends = []
-        
-        # Test actual availability by trying to use SDPA with different backends
-        # Create small test tensors
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.float16 if device == "cuda" else torch.float32
-        
-        query = torch.randn(1, 4, 16, 64, device=device, dtype=dtype)
-        key = torch.randn(1, 4, 16, 64, device=device, dtype=dtype)
-        value = torch.randn(1, 4, 16, 64, device=device, dtype=dtype)
-        
-        # Test math backend (should always work)
-        try:
-            with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-                torch.nn.functional.scaled_dot_product_attention(query, key, value)
-            available_backends.append("math")
-        except Exception:
-            pass
-        
-        # Test flash attention backend
-        try:
-            with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.FLASH_ATTENTION):
-                torch.nn.functional.scaled_dot_product_attention(query, key, value)
-            available_backends.append("flash_attention")
-        except Exception:
-            pass
-        
-        # Test efficient attention backend
-        try:
-            with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION):
-                torch.nn.functional.scaled_dot_product_attention(query, key, value)
-            available_backends.append("efficient_attention")
-        except Exception:
-            pass
-        
-        # Test cuDNN attention backend
-        try:
-            with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.CUDNN_ATTENTION):
-                torch.nn.functional.scaled_dot_product_attention(query, key, value)
-            available_backends.append("cudnn_attention")
-        except Exception:
-            pass
-        
-        return available_backends
-        
-    except Exception:
-        return []
+
 
 
 class SDPAContext:
@@ -509,20 +437,10 @@ class SDPAContext:
         self.logger = logger or logging.getLogger(__name__)
         self.backend = get_sdpa_backend(backend_name) if backend_name else None
         self.context = None
-        self.available_backends = None
         
     def __enter__(self):
-        if self.backend is not None and TORCH_AVAILABLE:
+        if self.backend is not None:
             try:
-                # Check if this backend is actually available before using it
-                if self.available_backends is None:
-                    self.available_backends = get_available_sdpa_backends()
-                
-                if self.backend_name not in self.available_backends:
-                    if self.logger:
-                        self.logger.warning(f"SDPA backend '{self.backend_name}' not available, using default")
-                    return self
-                
                 self.context = torch.nn.attention.sdpa_kernel(self.backend)
                 self.context.__enter__()
                 if self.logger:
@@ -532,7 +450,7 @@ class SDPAContext:
                     self.logger.warning(f"Failed to set SDPA backend {self.backend_name}: {e}")
                 self.context = None
         elif self.backend_name and self.logger:
-            self.logger.debug(f"SDPA backend '{self.backend_name}' requested but not using kernel context (backend={self.backend}, torch={TORCH_AVAILABLE})")
+            self.logger.debug(f"SDPA backend '{self.backend_name}' requested but not using kernel context (backend={self.backend})")
         return self
         
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -545,7 +463,7 @@ class SDPAContext:
         return False
 
 
-class ModelBenchmark(ABC):
+class AbstractModelBenchmark(ABC):
     """Abstract base class for model benchmarks."""
     
     def __init__(self, logger: logging.Logger):
@@ -589,8 +507,453 @@ class ModelBenchmark(ABC):
         if not self.scenarios:
             self.scenarios = self.create_scenarios(**kwargs)
         return self.scenarios
-    
 
+
+class ModelBenchmark(AbstractModelBenchmark):
+    """
+    Base class for HuggingFace Transformers model benchmarks.
+    
+    This class provides common scenario creation logic and handles the standard
+    patterns for eager, compiled, and kernelized execution variants with different
+    attention implementations and SDPA backends.
+    """
+    
+    def __init__(self, logger: logging.Logger):
+        super().__init__(logger)
+        self.inputs = None
+        self.compiled_model = None
+        self.past_key_values = None
+        self.config = None
+        self._default_prompt = "Why dogs are so cute?"
+        
+    @property
+    def default_prompt(self) -> str:
+        """Default prompt for text generation. Override in subclasses if needed."""
+        return self._default_prompt
+    
+    @property
+    def model_type(self) -> str:
+        """Model type identifier. Override in subclasses."""
+        return "transformers"
+    
+    def get_attention_configs(self, include_sdpa_variants: bool = True) -> List[Dict[str, Any]]:
+        """
+        Get attention implementation configurations.
+        
+        Args:
+            include_sdpa_variants: Whether to include SDPA backend variants
+            
+        Returns:
+            List of attention configuration dictionaries
+        """
+        attention_configs = [
+            {"attn_implementation": "eager", "sdpa_backends": [None], "desc_suffix": " with eager attention"},
+        ]
+        
+        # Add SDPA variants if requested
+        if include_sdpa_variants:
+            attention_configs.append({
+                "attn_implementation": "sdpa", 
+                "sdpa_backends": [None, "math", "flash_attention", "efficient_attention"],
+                "desc_suffix": ""
+            })
+        
+        return attention_configs
+    
+    def get_scenario_configs(self) -> List[Dict[str, Any]]:
+        """
+        Get base scenario configurations. Override in subclasses to customize.
+        
+        Returns:
+            List of scenario configuration dictionaries
+        """
+        return [
+            # Eager variants
+            {"variant": "eager", "compile_mode": None, "use_cache": True, "description": "Eager execution with cache"},
+            
+            # Compiled variants
+            {"variant": "compiled", "compile_mode": "max-autotune", "use_cache": True, "description": "Compiled with max autotune"},
+            
+            # Kernelized variant (if available)
+            {"variant": "kernelized", "compile_mode": "max-autotune", "use_cache": True, "description": "Kernelized execution"},
+        ]
+    
+    def _is_kernelization_available(self) -> bool:
+        """Check if kernelization is available. Override in subclasses."""
+        try:
+            from kernels import Mode, kernelize
+            return True
+        except ImportError:
+            return False
+    
+    def get_default_generation_config(self) -> Dict[str, Any]:
+        """Get default generation configuration. Override in subclasses for model-specific defaults."""
+        return {
+            "do_sample": False,
+            "top_p": 1.0,
+            "temperature": 1.0
+        }
+    
+    def get_model_init_kwargs(self, config: BenchmarkConfig) -> Dict[str, Any]:
+        """Get model initialization kwargs. Override in subclasses for model-specific parameters."""
+        return {
+            "torch_dtype": getattr(torch, config.torch_dtype),
+            "attn_implementation": config.attn_implementation
+        }
+    
+    def get_default_torch_dtype(self) -> str:
+        """Get default torch dtype. Override in subclasses."""
+        return "float16"
+    
+    def get_default_device(self) -> str:
+        """Get default device. Override in subclasses."""
+        return "cuda"
+    
+    def create_scenarios(self, **kwargs) -> Dict[str, 'BenchmarkScenario']:
+        """Create benchmark scenarios for HuggingFace models."""
+        scenarios = {}
+        
+        # Extract parameters with model-specific defaults
+        model_id = kwargs.get('model_id', 'microsoft/DialoGPT-medium')
+        warmup_iterations = kwargs.get('warmup_iterations', 3)
+        measurement_iterations = kwargs.get('measurement_iterations', 5)
+        num_tokens_to_generate = kwargs.get('num_tokens_to_generate', 100)
+        include_sdpa_variants = kwargs.get('include_sdpa_variants', True)
+        device = kwargs.get('device', self.get_default_device())
+        torch_dtype = kwargs.get('torch_dtype', self.get_default_torch_dtype())
+        batch_size = kwargs.get('batch_size', 1)
+        
+        # Get configurations
+        attention_configs = self.get_attention_configs(include_sdpa_variants)
+        scenario_configs = self.get_scenario_configs()
+        
+        # Create scenarios for each attention config and variant combination
+        for attn_config in attention_configs:
+            attn_implementation = attn_config["attn_implementation"]
+            sdpa_backends = attn_config["sdpa_backends"]
+            desc_suffix = attn_config["desc_suffix"]
+            
+            for scenario_config in scenario_configs:
+                for sdpa_backend in sdpa_backends:
+                    # Skip kernelized if not available
+                    if scenario_config["variant"] == "kernelized" and not self._is_kernelization_available():
+                        continue
+                    
+                    # Create unique config for this scenario
+                    config = BenchmarkConfig(
+                        name=scenario_config['variant'],
+                        model_id=model_id,
+                        variant=scenario_config["variant"],
+                        compile_mode=scenario_config["compile_mode"],
+                        use_cache=scenario_config["use_cache"],
+                        warmup_iterations=warmup_iterations,
+                        measurement_iterations=measurement_iterations,
+                        num_tokens_to_generate=num_tokens_to_generate,
+                        device=device,
+                        torch_dtype=torch_dtype,
+                        batch_size=batch_size,
+                        attn_implementation=attn_implementation,
+                        sdpa_backend=sdpa_backend if attn_implementation == "sdpa" else None
+                    )
+                    
+                    # Create scenario name
+                    scenario_name_parts = [scenario_config["variant"]]
+                    if scenario_config["compile_mode"]:
+                        scenario_name_parts.append(f"compile_{scenario_config['compile_mode']}")
+                    
+                    # Add attention implementation to name
+                    if attn_implementation == "eager":
+                        scenario_name_parts.append("eager_attn")
+                    elif attn_implementation == "sdpa":
+                        if sdpa_backend:
+                            scenario_name_parts.append(f"sdpa_{sdpa_backend}")
+                        else:
+                            scenario_name_parts.append("sdpa_default")
+                    
+                    scenario_name = "_".join(scenario_name_parts)
+                    
+                    # Create description
+                    description = scenario_config["description"]
+                    if attn_implementation == "sdpa" and sdpa_backend:
+                        description += f" with SDPA {sdpa_backend} backend"
+                    elif attn_implementation == "sdpa":
+                        description += " with SDPA default backend"
+                    else:
+                        description += desc_suffix
+                    
+                    # Create scenario
+                    scenario = BenchmarkScenario(
+                        name=scenario_name,
+                        config=config,
+                        description=description
+                    )
+                    
+                    # Add setup callbacks based on variant
+                    if scenario_config["variant"] == "compiled":
+                        scenario.add_setup_callback(self._setup_compilation_callback)
+                    elif scenario_config["variant"] == "kernelized":
+                        scenario.add_setup_callback(self._setup_kernelization_callback)
+                    
+                    scenarios[scenario_name] = scenario
+        
+        return scenarios
+    
+    def _setup_compilation_callback(self, model, tokenizer, config, logger):
+        """Setup callback for compilation scenarios."""
+        if logger:
+            logger.info(f"Setting up compilation with mode: {config.compile_mode}")
+        
+        # Perform torch.compile
+        if config.compile_mode is not None:
+            self.compiled_model = torch.compile(
+                model, 
+                mode=config.compile_mode, 
+                **config.compile_options
+            )
+        else:
+            self.compiled_model = torch.compile(model, **config.compile_options)
+        
+        # Setup static cache for compiled mode if needed
+        if config.use_cache and hasattr(self, 'inputs') and self.inputs is not None:
+            self._setup_static_cache(config)
+    
+    def _setup_kernelization_callback(self, model, tokenizer, config, logger):
+        """Setup callback for kernelization scenarios.""" 
+        if logger:
+            logger.info("Setting up kernelization")
+        
+        try:
+            from kernels import Mode, kernelize
+            self.compiled_model = kernelize(
+                model,
+                mode=Mode.INFERENCE
+            )
+        except Exception as e:
+            if logger:
+                logger.warning(f"Failed to setup kernelized mode: {e}")
+                logger.warning("Falling back to eager mode")
+            config.variant = "eager"
+    
+    def _setup_static_cache(self, config: BenchmarkConfig):
+        """Setup static cache for compiled models. Override if needed."""
+        if hasattr(self, 'inputs') and self.inputs is not None:
+            try:
+                from transformers import StaticCache
+                seq_length = self.inputs["input_ids"].shape[1]
+                
+                # Get the actual device the model is on
+                if hasattr(self.model, 'device'):
+                    cache_device = self.model.device
+                else:
+                    cache_device = self.device
+                
+                self.past_key_values = StaticCache(
+                    config=self.model.config,
+                    max_batch_size=config.batch_size,
+                    max_cache_len=seq_length + config.num_tokens_to_generate,
+                    device=cache_device,
+                    dtype=getattr(torch, config.torch_dtype)
+                )
+                self.logger.debug(f"StaticCache created on device: {cache_device}")
+            except (ImportError, TypeError) as e:
+                # StaticCache not available or incompatible, continue without it
+                self.logger.debug(f"StaticCache setup failed: {e}, continuing without cache")
+                self.past_key_values = None
+    
+    def setup_model(self, config: BenchmarkConfig) -> None:
+        """Setup the HuggingFace model for benchmarking with the given configuration."""
+        
+        self.logger.info(f"Setting up model: {config.model_id} with variant: {config.variant}")
+        self.device = config.device
+        self.config = config
+        
+        # Load model and tokenizer
+        self._load_model_and_tokenizer(config)
+        
+        # Prepare inputs
+        self._prepare_model_inputs(config)
+        
+        # Configure generation settings
+        self._configure_generation(config)
+        
+        self.logger.info("Model setup complete")
+    
+    def _load_model_and_tokenizer(self, config: BenchmarkConfig):
+        """Load the model and tokenizer. Override in subclasses for custom loading."""
+
+        
+        from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+        
+        # Load tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(config.model_id)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # Prepare generation config
+        generation_config_dict = self.get_default_generation_config()
+        gen_config = GenerationConfig(**generation_config_dict)
+        
+        # Load model
+        self.logger.info("Loading model...")
+        
+        # Handle device mapping intelligently
+        if config.device == "cuda":
+            # For multi-GPU systems, use single GPU for consistency in benchmarking
+            if torch.cuda.device_count() > 1:
+                self.logger.info(f"Multiple GPUs detected ({torch.cuda.device_count()}), loading on single GPU for consistency")
+                target_device = "cuda:0"
+            else:
+                target_device = "cuda:0"
+        else:
+            target_device = config.device
+            
+        # Get model initialization kwargs
+        model_init_kwargs = self.get_model_init_kwargs(config)
+        model_init_kwargs.update({
+            "generation_config": gen_config
+        })
+            
+        self.model = AutoModelForCausalLM.from_pretrained(
+            config.model_id, 
+            **model_init_kwargs
+        ).eval()
+        
+        # Move model to target device
+        self.logger.info(f"Moving model to device: {target_device}")
+        self.model.to(target_device)
+        self.device = target_device  # Update device to match actual device used
+    
+    def _prepare_model_inputs(self, config: BenchmarkConfig):
+        """Prepare model inputs. Override in subclasses for custom inputs."""
+        # Prepare inputs
+        self.inputs = self.tokenizer(self.default_prompt, return_tensors="pt")
+        
+        # Move inputs to the same device as the model
+        if hasattr(self.model, 'device'):
+            # Model is on a single device
+            model_device = self.model.device
+        else:
+            # Model might be distributed, use self.device which was set during model loading
+            model_device = self.device
+            
+        self.inputs = {k: v.to(model_device) for k, v in self.inputs.items()}
+        self.logger.debug(f"Moved inputs to device: {model_device}")
+    
+    def _configure_generation(self, config: BenchmarkConfig):
+        """Configure generation settings."""
+        seq_length = self.inputs["input_ids"].shape[1]
+        self.model.generation_config.max_length = seq_length + config.num_tokens_to_generate
+    
+    def cleanup_model(self) -> None:
+        """Cleanup model resources."""
+        if hasattr(self, 'model') and self.model is not None:
+            del self.model
+            self.model = None
+        if hasattr(self, 'compiled_model') and self.compiled_model is not None:
+            del self.compiled_model
+            self.compiled_model = None
+        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+        if hasattr(self, 'past_key_values') and self.past_key_values is not None:
+            del self.past_key_values
+            self.past_key_values = None
+        
+        # Clear CUDA cache
+        flush_memory()
+    
+    def measure_time_to_first_token(self, config: BenchmarkConfig) -> float:
+        """Measure time to first token generation."""
+        model_to_use = self.compiled_model if self.compiled_model is not None else self.model
+        
+        # Prepare generation kwargs
+        generation_kwargs = self._get_generation_kwargs(config, max_new_tokens=1)
+        
+        # Use CUDA timer for high-precision measurement
+        with CUDATimer(device=config.device) as timer:
+            # Use SDPA context if specified
+            with SDPAContext(config.sdpa_backend, self.logger):
+                with torch.no_grad():
+                    outputs = model_to_use.generate(**generation_kwargs)
+        
+        return timer.elapsed_time()
+    
+    def measure_latency(self, config: BenchmarkConfig) -> TimingResult:
+        """Measure full generation latency and compute tokens/sec."""
+        model_to_use = self.compiled_model if self.compiled_model is not None else self.model
+        
+        # Prepare generation kwargs
+        generation_kwargs = self._get_generation_kwargs(config, max_new_tokens=config.num_tokens_to_generate)
+        
+        # Use CUDA timer for high-precision measurement
+        with CUDATimer(device=config.device) as timer:
+            # Use SDPA context if specified
+            with SDPAContext(config.sdpa_backend, self.logger):
+                with torch.no_grad():
+                    outputs = model_to_use.generate(**generation_kwargs)
+        
+        # Calculate metrics
+        latency = timer.elapsed_time()
+        input_length = self.inputs["input_ids"].shape[1]
+        output_length = outputs.shape[1]
+        tokens_generated = output_length - input_length
+        
+        tokens_per_second = tokens_generated / latency if latency > 0 else 0
+        time_per_output_token = latency / tokens_generated if tokens_generated > 0 else None
+        
+        return TimingResult(
+            latency=latency,
+            tokens_per_second=tokens_per_second,
+            time_per_output_token_seconds=time_per_output_token,
+            total_tokens_generated=tokens_generated,
+            metadata={
+                "input_length": input_length,
+                "output_length": output_length,
+                "variant": config.variant,
+                "compile_mode": config.compile_mode,
+                "attn_implementation": config.attn_implementation,
+                "sdpa_backend": config.sdpa_backend
+            }
+        )
+    
+    def _get_generation_kwargs(self, config: BenchmarkConfig, max_new_tokens: int) -> Dict[str, Any]:
+        """Get generation kwargs. Override in subclasses for custom generation."""
+        generation_config_dict = self.get_default_generation_config()
+        generation_kwargs = {
+            **self.inputs,
+            "max_new_tokens": max_new_tokens,
+            "do_sample": generation_config_dict.get("do_sample", False),
+            "temperature": generation_config_dict.get("temperature", 1.0),
+            "top_p": generation_config_dict.get("top_p", 1.0),
+            "pad_token_id": self.tokenizer.pad_token_id,
+        }
+        
+        # Handle static cache for compiled models
+        if self.past_key_values is not None and config.variant == "compiled":
+            try:
+                from transformers import StaticCache
+                # Reset cache for each measurement
+                seq_length = self.inputs["input_ids"].shape[1]
+                
+                # Get the actual device the model is on
+                if hasattr(self.model, 'device'):
+                    cache_device = self.model.device
+                else:
+                    cache_device = self.device
+                
+                fresh_cache = StaticCache(
+                    config=self.model.config,
+                    max_batch_size=config.batch_size,
+                    max_cache_len=seq_length + max_new_tokens,
+                    device=cache_device,
+                    dtype=getattr(torch, config.torch_dtype)
+                )
+                generation_kwargs["past_key_values"] = fresh_cache
+            except (ImportError, TypeError) as e:
+                self.logger.debug(f"Fresh StaticCache creation failed: {e}")
+                pass
+        
+        return generation_kwargs
 
 
 class BenchmarkRunner:
@@ -652,8 +1015,6 @@ class BenchmarkRunner:
                 metadata = BenchmarkMetadata(
                     timestamp=datetime.utcnow().isoformat(),
                     commit_id=get_git_commit_id(),
-                    repository="transformers",  # TODO: make configurable
-                    branch="main",  # TODO: make configurable
                     hardware_info=get_hardware_info(),
                     config=config
                 )
@@ -838,6 +1199,4 @@ class BenchmarkRunner:
         
         self.logger.info(f"Results saved to {filepath}")
         return filepath
-
-
  

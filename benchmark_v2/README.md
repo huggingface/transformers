@@ -30,31 +30,6 @@ python run_benchmarks.py --include llama
 # Exclude specific benchmarks
 python run_benchmarks.py --exclude old_benchmark
 
-# Enable mock benchmark (skipped by default)
-python run_benchmarks.py --include mock_benchmark --enable-mock
-```
-
-## Execution Modes
-
-### Eager Mode
-Standard PyTorch execution without compilation:
-```python
-config.variant = "eager"
-```
-
-### Compiled Mode
-Uses `torch.compile` for optimization:
-```python
-config.variant = "compiled"
-config.compile_mode = "max-autotune"  # or "default", "reduce-overhead"
-```
-
-### Kernelized Mode
-Uses the `kernels` library if there are custom kernels available for the model:
-```python
-config.variant = "kernelized"
-```
-
 ## Output Format
 
 Results are saved as JSON files with the following structure:
@@ -118,36 +93,6 @@ python run_benchmarks.py --include mock_benchmark --enable-mock
 # Test framework with fast settings
 python run_benchmarks.py --include mock_benchmark --enable-mock \
     --warmup-iterations 1 --measurement-iterations 2 --num-tokens-to-generate 10
-```
-
-## Hardware Monitoring
-
-```python
-from framework import GPUMonitor
-
-monitor = GPUMonitor(sample_interval=0.05)  # 50ms sampling
-monitor.start()
-# ... run benchmark ...
-metrics = monitor.stop()
-```
-
-### Custom Timing Measurements
-
-```python
-from framework import TimingResult, flush_memory
-import time
-
-def custom_measurement():
-    flush_memory()  # Clear GPU cache
-    
-    start_time = time.perf_counter()
-    # ... your code ...
-    end_time = time.perf_counter()
-    
-    return TimingResult(
-        latency=end_time - start_time,
-        tokens_per_second=tokens_generated / (end_time - start_time)
-    )
 ```
 
 ### Debug Mode
