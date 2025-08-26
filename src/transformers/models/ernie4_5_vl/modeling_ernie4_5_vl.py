@@ -21,6 +21,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -159,7 +160,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs#: Unpack[TransformersKwargs],
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -177,7 +178,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# copy Llama after moving rope etc out
+# copy Llama after making it cache compatible
 class Ernie4_5_VLTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -204,20 +205,16 @@ class Ernie4_5_VLTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias
         )
 
-        # TODO: rope to be moved outside
-        self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(config=config)
-
     def forward(
         self,
-        hidden_states,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[tuple[torch.Tensor]] = None,
-        use_cache: bool = False,
-        **kwargs,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        assert position_ids is not None, "rope3d requires pos-id"
-
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -225,19 +222,15 @@ class Ernie4_5_VLTextAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # rope
-        if past_key_value is not None:
-            position_ids = position_ids[:, -1:, :]
-
-        cos, sin = self.rotary_emb(query_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_text(query_states, key_states, cos, sin)
 
         # cache
-        if past_key_value is not None:
+        if past_key_values is not None:
             # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        past_key_value = [key_states, value_states] if use_cache else None
+            key_states = torch.cat([past_key_values[0], key_states], dim=2)
+            value_states = torch.cat([past_key_values[1], value_states], dim=2)
+        past_key_values = [key_states, value_states] if use_cache else None
 
         # core attention
         #attention_interface: Callable = eager_attention_forward
@@ -259,7 +252,7 @@ class Ernie4_5_VLTextAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, past_key_values
 
 
 # Copy LlamaRMSNorm
@@ -488,36 +481,37 @@ class Ernie4_5_DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        attn_mask_start_row_indices: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
-        output_gate_logits=True,  # PP model should not output gate logits,
+        output_attentions: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights, past_key_values = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            attn_mask_start_row_indices=attn_mask_start_row_indices,
             position_ids=position_ids,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
             use_cache=use_cache,
-            token_type_ids=token_type_ids,
+            **kwargs,
         )
         hidden_states = hidden_states + residual
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-
         if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
             hidden_states, gate_logits = self.mlp(
                 hidden_states, token_type_ids
@@ -525,23 +519,15 @@ class Ernie4_5_DecoderLayer(nn.Module):
         else:
             hidden_states = self.mlp(hidden_states)
             gate_logits = None
-
         hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
-
         if output_attentions:
             outputs += (self_attn_weights,)
-
         if use_cache:
-            outputs += (present_key_value,)
-
-        if output_gate_logits:
+            outputs += (past_key_values,)
+        if output_router_logits:
             outputs += (gate_logits,)
-
-        # remove empty tuple for pipeline parallel
-        if type(outputs) is tuple and len(outputs) == 1:
-            outputs = outputs[0]
 
         return outputs
 
@@ -563,6 +549,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
     def __init__(self, config: Ernie4_5_VLTextConfig):
         super().__init__(config)
         self.config = config
+        self.gradient_checkpointing = False
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
@@ -571,82 +558,73 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             self.vocab_size,
             self.hidden_size,
         )
-
         self.layers = nn.ModuleList(
             [Ernie4_5_DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
         )
         self.norm = Ernie4_5_VLRMSNorm(config.hidden_size, config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
+        self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(config=config)
 
     def forward(
         self,
-        input_ids=None,
-        position_ids=None,
-        token_type_ids=None,
-        attention_mask=None,
-        attn_mask_start_row_indices=None,
-        inputs_embeds=None,
-        use_cache=None,
-        past_key_values=None,
-        output_attentions=False,
-        output_hidden_states=None,
-        return_dict=False,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_router_logits = output_router_logits# if output_router_logits is not None else self.config.output_router_logits
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            _, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            _, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError(
-                "You have to specify either decoder_input_ids or decoder_inputs_embeds"
-            )
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.layers))
 
-        seq_length_with_past = seq_length
-        cache_length = 0
-        if past_key_values[0] is not None:
-            cache_length = past_key_values[0][0].shape[1]
-            seq_length_with_past += cache_length
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        inputs_embeds = inputs_embeds.to(self.embed_tokens.weight.dtype)
+        cache_length = 0
+        seq_length_with_past = inputs_embeds.shape[1]
+        if past_key_values[0] is not None:
+            cache_length = past_key_values[0][0].shape[1]
+            seq_length_with_past += cache_length
 
         hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        rope_position_ids = position_ids
+        if past_key_values[0] is not None:  # we are decoding
+            rope_position_ids = position_ids[:, -1:, :]
+        position_embeddings = self.rotary_emb(hidden_states, rope_position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = () if use_cache else None
-        if getattr(self.config, "use_moe", False):
-            all_router_loss = torch.tensor(0.0).to(device=inputs_embeds.device)
-        else:
-            all_router_loss = None
-        all_gate_logits = ()
 
         for idx, (decoder_layer) in enumerate(self.layers):
             if output_hidden_states:
@@ -655,15 +633,19 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             past_key_value = (
                 past_key_values[idx] if past_key_values is not None else None
             )
+
             layer_outputs = decoder_layer(
                 hidden_states,
+                position_embeddings,
                 attention_mask,
-                attn_mask_start_row_indices,
                 position_ids,
                 token_type_ids,
                 output_attentions,
-                past_key_value,
+                output_router_logits,
+                past_key_value,  # NOTE: without the s, as we have tuples extracted per layer
+                cache_position,
                 use_cache,
+                **kwargs,
             )
 
             if isinstance(layer_outputs, (tuple, list)):
@@ -677,8 +659,8 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
-            all_gate_logits = all_gate_logits + (gate_logits,)
+            if output_router_logits:
+                all_router_logits += (layer_outputs[-1],)
 
             if past_key_value is not None:
                 hidden_states = hidden_states[:, -1:, :]
@@ -699,8 +681,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
                     next_cache,
                     all_hidden_states,
                     all_self_attns,
-                    all_router_loss,
-                    all_gate_logits,
+                    all_router_logits,
                 ]
                 if v is not None
             )
@@ -710,7 +691,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            router_logits=all_gate_logits,
+            router_logits=all_router_logits,
         )
 
 
@@ -1249,15 +1230,16 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
         #past_key_values: Optional[Cache] = None,
         past_key_values: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         images: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         grid_thw: Optional[torch.Tensor] = None,
         #pixel_values: Optional[torch.Tensor] = None,
         #pixel_values_videos: Optional[torch.FloatTensor] = None,
@@ -1268,9 +1250,12 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         #second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_router_logits = output_router_logits# if output_router_logits is not None else self.config.output_router_logits
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # TODO: logic change for input embeds and videos
         inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1299,16 +1284,19 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=True,
+            **kwargs,
         )
 
-        return MoeModelOutputWithPast(
+        output = MoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+        return output if return_dict else output.to_tuple()
 
 
 class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMixin):
@@ -1420,15 +1408,16 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
         #past_key_values: Optional[Cache] = None,
         past_key_values: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         images: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         grid_thw: Optional[torch.Tensor] = None,
         #pixel_values: Optional[torch.Tensor] = None,
         #pixel_values_videos: Optional[torch.FloatTensor] = None,
@@ -1444,14 +1433,15 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=True,
             images=images,
-            token_type_ids=token_type_ids,
             grid_thw=grid_thw,
             #pixel_values=pixel_values,
             #pixel_values_videos=pixel_values_videos,
