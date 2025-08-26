@@ -240,7 +240,7 @@ class InternS1IntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-                    {"type": "text", "text": "Please describe the image explicitly."},
+                    {"type": "text", "text": "Please describe the image shortly."},
                 ],
             }
         ]
@@ -249,10 +249,12 @@ class InternS1IntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
-            generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+            generate_ids = model.generate(**inputs, max_new_tokens=48, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
+        expected_output = "Okay, let's see. The user wants a short description of the image. The image shows two " \
+                          "cats lying on a pink couch. One cat is lying on its back with its belly exposed, " \
+                          "and the other is lying on its side"
 
         self.assertEqual(decoded_output, expected_output)
