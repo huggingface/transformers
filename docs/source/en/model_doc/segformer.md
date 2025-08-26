@@ -84,6 +84,7 @@ model = AutoModelForSemanticSegmentation.from_pretrained(
 ## Notes
 
 - SegFormer works with **any input size**, padding inputs to be divisible by `config.patch_sizes`.
+- The most important preprocessing step is to randomly crop and pad all images to the same size (such as 512x512 or 640x640) and normalize afterwards.
 - When preprocessing, be mindful of `do_reduce_labels`:
   - Some datasets (like ADE20K) don’t include background in the labels → set `do_reduce_labels=True`.
   - Other datasets do include background → set `do_reduce_labels=False`.
