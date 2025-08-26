@@ -213,7 +213,7 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+            input_data_format = infer_channel_dimension_format(images[0], num_channels=(1, 3, 4))
 
         if do_resize:
             images = [
