@@ -636,6 +636,10 @@ def is_torch_bf16_gpu_available() -> bool:
         return True
     if is_torch_npu_available():
         return torch.npu.is_bf16_supported()
+    if is_torch_mps_available():
+        # There is no torch.mps.is_bf16_supported(), could return true and hope for the best here, but not all intel setups support this.
+        import platform
+        return platform.machine().lower() == "arm64"
     return False
 
 
