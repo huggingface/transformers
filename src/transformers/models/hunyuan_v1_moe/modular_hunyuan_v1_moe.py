@@ -197,6 +197,8 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):

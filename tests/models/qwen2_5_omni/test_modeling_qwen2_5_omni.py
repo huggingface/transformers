@@ -434,10 +434,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_constrained_beam_search_generate_dict_output(self):
         pass
 
-    @unittest.skip("Cannot do dola generation, has custom `generate()`")
-    def test_dola_decoding_sample(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

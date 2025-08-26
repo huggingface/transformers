@@ -1049,9 +1049,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def get_mel_conditioner_outputs(
         self,
         input_features: torch.FloatTensor,

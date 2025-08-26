@@ -1009,6 +1009,8 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
     config: Glm4vMoeConfig
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
 
@@ -1445,6 +1447,8 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
 class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)

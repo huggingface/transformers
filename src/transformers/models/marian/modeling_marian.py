@@ -1165,9 +1165,6 @@ class MarianModel(MarianPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def resize_decoder_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         if self.config.share_encoder_decoder_embeddings:
             raise ValueError(

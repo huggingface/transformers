@@ -848,9 +848,9 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
-        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -862,8 +862,8 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: Optional[bool]
     output_attentions: Optional[bool]
     output_router_logits: Optional[bool]
-    cumulative_seqlens_q: Optional["torch.LongTensor"]
-    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    cu_seq_lens_q: Optional["torch.LongTensor"]
+    cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
 

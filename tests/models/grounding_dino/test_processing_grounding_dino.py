@@ -79,7 +79,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.embed_dim = 5
         cls.seq_length = 5
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, modality: Optional[str] = None):
+    def prepare_text_inputs(self, batch_size: Optional[int] = None, **kwargs):
         labels = ["a cat", "remote control"]
         labels_longer = ["a person", "a car", "a dog", "a cat"]
 

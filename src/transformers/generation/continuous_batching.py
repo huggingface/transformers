@@ -801,8 +801,8 @@ class ContinuousBatchProcessor:
             "input_ids": self.input_ids,
             "position_ids": self.position_ids,
             "attention_mask": self.attention_mask,
-            "cumulative_seqlens_q": self.cumulative_seqlens_q,
-            "cumulative_seqlens_k": self.cumulative_seqlens_k,
+            "cu_seq_lens_q": self.cumulative_seqlens_q,
+            "cu_seq_lens_k": self.cumulative_seqlens_k,
             "write_index": self.write_index,
             "read_index": self.read_index,
             "logits_indices": self.logits_indices,
@@ -1238,7 +1238,7 @@ class ContinuousBatchingManager:
         # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
         if hasattr(self.logit_processor, "set_continuous_batching_context"):
             self.logit_processor.set_continuous_batching_context(
-                batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
+                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
         return self.logit_processor(batch_data["input_ids"], logits)
 

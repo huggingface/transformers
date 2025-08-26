@@ -356,11 +356,11 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
         self.logits_indices = None
-        self.cumulative_seqlens_q = None
+        self.cu_seq_lens_q = None
 
-    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cumulative_seqlens_q: torch.Tensor):
+    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cu_seq_lens_q: torch.Tensor):
         self.logits_indices = logits_indices
-        self.cumulative_seqlens_q = cumulative_seqlens_q
+        self.cu_seq_lens_q = cu_seq_lens_q
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -368,14 +368,14 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
         if scores.dim() == 3:
-            if self.logits_indices is not None and self.cumulative_seqlens_q is not None:
+            if self.logits_indices is not None and self.cu_seq_lens_q is not None:
                 batch_size, seq_len, vocab_size = scores.shape
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
 
                 # Prepare token mask
                 token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
-                cu_seq_lens = self.cumulative_seqlens_q
+                cu_seq_lens = self.cu_seq_lens_q
                 lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
                 seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
                 token_mask[seq_indices, input_ids] = True

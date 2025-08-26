@@ -490,6 +490,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             Whether to convert the image to RGB.
     """
 
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -747,6 +749,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_image_std = OPENAI_CLIP_STD
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:

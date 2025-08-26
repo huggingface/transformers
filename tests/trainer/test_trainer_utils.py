@@ -14,9 +14,11 @@
 
 import copy
 import unittest
+import warnings
 
 import numpy as np
 
+from transformers import Trainer, TrainingArguments
 from transformers.data.data_collator import default_data_collator
 from transformers.testing_utils import require_accelerate, require_torch
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
@@ -613,3 +615,41 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))
         self.assertEqual(arrays[2][1].shape, (8, 2))
+
+    def test_label_smoothing_multi_label_incompatibility(self):
+        """Test that Trainer warns and disables label smoothing for multi-label classification"""
+
+        # Mock model config with multi-label classification
+        class MockConfig:
+            problem_type = "multi_label_classification"
+
+        class MockModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = MockConfig()
+                self.linear = nn.Linear(10, 3)
+
+            def forward(self, **kwargs):
+                return {"logits": torch.randn(2, 3)}
+
+        model = MockModel()
+
+        # Create training args with label smoothing
+        training_args = TrainingArguments(
+            output_dir="./test-trainer",
+            label_smoothing_factor=0.1,
+            per_device_train_batch_size=2,
+            num_train_epochs=1,
+        )
+
+        # Should warn and disable label smoothing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            trainer = Trainer(model=model, args=training_args)
+
+            # Check warning was issued
+            self.assertEqual(len(w), 1)
+            self.assertIn("Label smoothing is not compatible with multi-label classification", str(w[0].message))
+
+            # Check label_smoother was disabled
+            self.assertIsNone(trainer.label_smoother)

@@ -51,6 +51,10 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
+# After using A10 as CI runner, let's run FA2 tests
+RUN python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation
+
+# TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
 # (`deformable_detr`, `rwkv`, `mra`)
 RUN python3 -m pip uninstall -y ninja

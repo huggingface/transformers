@@ -770,6 +770,16 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        # Check for multi-label classification incompatibility
+        if self.args.label_smoothing_factor > 0:
+            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
+                warnings.warn(
+                    "Label smoothing is not compatible with multi-label classification. "
+                    "Disabling label smoothing for this training run.",
+                    UserWarning,
+                )
+                self.label_smoother = None
+
         self.control = TrainerControl()
 
         self.state = TrainerState(
@@ -3813,6 +3823,123 @@ class Trainer:
 
         return inputs
 
+    def _is_attention_mask_causal(self, attention_mask):
+        """
+        Check if an attention mask is causal (compatible with causal attention).
+        Context parallelism only supports causal attention patterns. This function
+        checks if the provided attention mask is compatible.
+
+        Args:
+            attention_mask (torch.Tensor): The attention mask to check
+
+        Returns:
+            bool: True if the mask is causal or compatible with causal attention
+        """
+        if attention_mask is None:
+            return True  # No mask is considered causal (model uses default causal masking)
+
+        # Handle different mask dimensions
+        if attention_mask.dim() == 2:
+            # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+            return True
+        elif attention_mask.dim() in [3, 4]:
+            # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+            # Check if it's lower triangular (causal)
+            seq_len = attention_mask.shape[-1]
+            if seq_len <= 1:
+                return True  # Single token or empty is always causal
+
+            # Take first batch and head (if 4D) for checking pattern
+            if attention_mask.dim() == 4:
+                mask = attention_mask[0, 0]  # First batch, first head
+            else:
+                mask = attention_mask[0]  # First batch
+
+            # Check if upper triangular part is masked (should be 0 or very negative for causal)
+            upper_triangular = torch.triu(mask, diagonal=1)
+
+            # For causal masks, upper triangular should be 0 or very negative (like -inf)
+            # Use a reasonable threshold to handle float precision issues
+            is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+            return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+        # For unknown dimensions, be conservative and reject
+        return False
+
+    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
+        """
+        Prepare inputs for context parallelism by setting up buffers and validation.
+
+        Args:
+            model: The model being trained
+            inputs: Input tensors to prepare
+
+        Returns:
+            tuple: (context_manager, prepared_inputs) where context_manager is either
+                   the context parallelism wrapper or a no-op context
+        """
+        if (
+            getattr(self.accelerator, "parallelism_config", None) is not None
+            and self.accelerator.parallelism_config.cp_enabled
+        ):
+            if hasattr(model, "config"):
+                if model.config._attn_implementation != "sdpa":
+                    raise ValueError(
+                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                    )
+
+            if "position_ids" not in inputs:
+                logger.warning_once("Position IDs not found in the inputs, generating manually")
+                inputs["position_ids"] = torch.arange(
+                    inputs["input_ids"].size(1), device=inputs["input_ids"].device
+                ).expand(inputs["input_ids"].size(0), -1)
+            if "shift_labels" not in inputs:
+                logger.warning_once("Shift labels not found in the inputs, shifting manually")
+                if "labels" in inputs:
+                    _ignore_index = -100
+                    labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
+                    inputs["shift_labels"] = labels[:, 1:].contiguous()
+
+            buffers = []
+            buffer_seq_dims = []
+
+            if "input_ids" in inputs:
+                buffers.append(inputs["input_ids"])
+                buffer_seq_dims.append(1)  # Sequence dimension
+            if "labels" in inputs:
+                buffers.append(inputs["labels"])
+                buffer_seq_dims.append(1)
+            if "shift_labels" in inputs:
+                buffers.append(inputs["shift_labels"])
+                buffer_seq_dims.append(1)
+            if "attention_mask" in inputs and not getattr(self, "_attn_mask_causal_checked", False):
+                # Context parallel currently doesn't support other masks than causal
+                # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+                # Check if the mask is really causal and if not throw an error
+                # TODO: check this only once or always, with speed being the cost
+                attention_mask = inputs["attention_mask"]
+                if not self._is_attention_mask_causal(attention_mask):
+                    raise ValueError(
+                        "Context parallelism only supports causal attention masks. "
+                        "The provided attention_mask is not causal. "
+                        "Please ensure your data uses causal masking (lower triangular) "
+                        "or remove the attention_mask to use the model's default causal masking."
+                    )
+                self._attn_mask_causal_checked = True
+            # Include position_ids in context parallelism splitting
+            if "position_ids" in inputs and inputs["position_ids"] is not None:
+                buffers.append(inputs["position_ids"])
+                buffer_seq_dims.append(1)
+
+            return partial(
+                self.accelerator.maybe_context_parallel,
+                buffers=buffers,
+                buffer_seq_dims=buffer_seq_dims,
+                no_restore_buffers=set(buffers),
+            ), inputs
+
+        return contextlib.nullcontext, inputs
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3863,66 +3990,74 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        model.train()
-        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
-            self.optimizer.train()
+        # Prepare buffers for context parallelism
 
-        inputs = self._prepare_inputs(inputs)
-        if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
-            return loss_mb.reduce_mean().detach().to(self.args.device)
+        cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
 
-        with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+        # Context manager is no-op if CP isn't enabled
+        with cp_context():
+            model.train()
+            if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+                self.optimizer.train()
 
-        del inputs
-        if (
-            self.args.torch_empty_cache_steps is not None
-            and self.state.global_step % self.args.torch_empty_cache_steps == 0
-        ):
-            if is_torch_xpu_available():
-                torch.xpu.empty_cache()
-            elif is_torch_mlu_available():
-                torch.mlu.empty_cache()
-            elif is_torch_musa_available():
-                torch.musa.empty_cache()
-            elif is_torch_npu_available():
-                torch.npu.empty_cache()
-            elif is_torch_mps_available():
-                torch.mps.empty_cache()
-            elif is_torch_hpu_available():
-                logger.warning(
-                    "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                )
+            inputs = self._prepare_inputs(inputs)
+            if is_sagemaker_mp_enabled():
+                loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+                return loss_mb.reduce_mean().detach().to(self.args.device)
+
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+
+            del inputs
+            if (
+                self.args.torch_empty_cache_steps is not None
+                and self.state.global_step % self.args.torch_empty_cache_steps == 0
+            ):
+                if is_torch_xpu_available():
+                    torch.xpu.empty_cache()
+                elif is_torch_mlu_available():
+                    torch.mlu.empty_cache()
+                elif is_torch_musa_available():
+                    torch.musa.empty_cache()
+                elif is_torch_npu_available():
+                    torch.npu.empty_cache()
+                elif is_torch_mps_available():
+                    torch.mps.empty_cache()
+                elif is_torch_hpu_available():
+                    logger.warning(
+                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
+                    )
+                else:
+                    torch.cuda.empty_cache()
+
+            kwargs = {}
+
+            # For LOMO optimizers you need to explicitly use the learning rate
+            if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+                kwargs["learning_rate"] = self._get_learning_rate()
+
+            if self.args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+            if self.use_apex:
+                from apex import amp
+
+                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
             else:
-                torch.cuda.empty_cache()
+                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
+                if (
+                    not self.model_accepts_loss_kwargs or num_items_in_batch is None
+                ) and self.compute_loss_func is None:
+                    # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+                    loss = loss / self.current_gradient_accumulation_steps
 
-        kwargs = {}
+                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+                # https://github.com/huggingface/transformers/pull/35808
+                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                    kwargs["scale_wrt_gas"] = False
 
-        # For LOMO optimizers you need to explicitly use the learning rate
-        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            kwargs["learning_rate"] = self._get_learning_rate()
-
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-        if self.use_apex:
-            from apex import amp
-
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
-                loss = loss / self.current_gradient_accumulation_steps
-
-            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-            # https://github.com/huggingface/transformers/pull/35808
-            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                kwargs["scale_wrt_gas"] = False
-
-            self.accelerator.backward(loss, **kwargs)
+                self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
 
@@ -5327,6 +5462,16 @@ class Trainer:
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
+
+        # We defer compatibility checks to accelerator
+        if self.args.parallelism_config is not None:
+            if not is_accelerate_available("1.10.1"):
+                raise ImportError(
+                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
+                )
+
+            args["parallelism_config"] = self.args.parallelism_config
+
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
@@ -5469,6 +5614,9 @@ class Trainer:
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
                     # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
                     num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                # Divide by number of devices with the same batch
+                if pc := self.accelerator.parallelism_config:
+                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return batch_samples, num_items_in_batch
 

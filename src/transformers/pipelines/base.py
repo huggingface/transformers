@@ -54,6 +54,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.deprecation import deprecate_kwarg
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -1549,6 +1550,7 @@ class PipelineRegistry:
             f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
         )
 
+    @deprecate_kwarg(old_name="tf_model", version="5.0.0")
     def register_pipeline(
         self,
         task: str,

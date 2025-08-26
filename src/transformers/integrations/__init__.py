@@ -126,6 +126,7 @@ _import_structure = {
         "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
+        "swizzle_mxfp4",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -269,6 +270,7 @@ if TYPE_CHECKING:
         load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
+        swizzle_mxfp4,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

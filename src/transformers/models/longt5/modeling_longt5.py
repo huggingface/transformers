@@ -1730,9 +1730,6 @@ class LongT5Model(LongT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1932,9 +1929,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(

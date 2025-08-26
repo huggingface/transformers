@@ -135,10 +135,9 @@ class Pix2StructProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         decoder_ids = ["decoder_attention_mask", "decoder_input_ids"]
-        return tokenizer_input_names + image_processor_input_names + decoder_ids
+        return image_processor_input_names + decoder_ids
 
 
 __all__ = ["Pix2StructProcessor"]

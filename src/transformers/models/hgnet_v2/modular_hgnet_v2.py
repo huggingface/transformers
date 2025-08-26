@@ -455,6 +455,8 @@ class HGNetV2Encoder(nn.Module):
 
 
 class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
         super()._init_backbone(config)

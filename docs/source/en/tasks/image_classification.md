@@ -108,8 +108,6 @@ The next step is to load a ViT image processor to process the image into a tenso
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 ```
 
-<frameworkcontent>
-<pt>
 Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module, but you can also use any image library you like.
 
 Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
@@ -148,95 +146,6 @@ Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data 
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
-
-
-<frameworkcontent>
-<tf>
-
-To avoid overfitting and to make the model more robust, add some data augmentation to the training part of the dataset.
-Here we use Keras preprocessing layers to define the transformations for the training data (includes data augmentation),
-and transformations for the validation data (only center cropping, resizing and normalizing). You can use `tf.image`or
-any other library you prefer.
-
-```py
->>> from tensorflow import keras
->>> from tensorflow.keras import layers
-
->>> size = (image_processor.size["height"], image_processor.size["width"])
-
->>> train_data_augmentation = keras.Sequential(
-...     [
-...         layers.RandomCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...         layers.RandomFlip("horizontal"),
-...         layers.RandomRotation(factor=0.02),
-...         layers.RandomZoom(height_factor=0.2, width_factor=0.2),
-...     ],
-...     name="train_data_augmentation",
-... )
-
->>> val_data_augmentation = keras.Sequential(
-...     [
-...         layers.CenterCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...     ],
-...     name="val_data_augmentation",
-... )
-```
-
-Next, create functions to apply appropriate transformations to a batch of images, instead of one image at a time.
-
-```py
->>> import numpy as np
->>> import tensorflow as tf
->>> from PIL import Image
-
-
->>> def convert_to_tf_tensor(image: Image):
-...     np_image = np.array(image)
-...     tf_image = tf.convert_to_tensor(np_image)
-...     # `expand_dims()` is used to add a batch dimension since
-...     # the TF augmentation layers operates on batched inputs.
-...     return tf.expand_dims(tf_image, 0)
-
-
->>> def preprocess_train(example_batch):
-...     """Apply train_transforms across a batch."""
-...     images = [
-...         train_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-
-
-... def preprocess_val(example_batch):
-...     """Apply val_transforms across a batch."""
-...     images = [
-...         val_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-```
-
-Use 🤗 Datasets [`~datasets.Dataset.set_transform`] to apply the transformations on the fly:
-
-```py
-food["train"].set_transform(preprocess_train)
-food["test"].set_transform(preprocess_val)
-```
-
-As a final preprocessing step, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
-`DefaultDataCollator` does not apply additional preprocessing, such as padding.
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -266,8 +175,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
+
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -329,116 +237,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-<Tip>
-
-If you are unfamiliar with fine-tuning a model with Keras, check out the [basic tutorial](./training#train-a-tensorflow-model-with-keras) first!
-
-</Tip>
-
-To fine-tune a model in TensorFlow, follow these steps:
-1. Define the training hyperparameters, and set up an optimizer and a learning rate schedule.
-2. Instantiate a pre-trained model.
-3. Convert a 🤗 Dataset to a `tf.data.Dataset`.
-4. Compile your model.
-5. Add callbacks and use the `fit()` method to run the training.
-6. Upload your model to 🤗 Hub to share with the community.
-
-Start by defining the hyperparameters, optimizer and learning rate schedule:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 5
->>> num_train_steps = len(food["train"]) * num_epochs
->>> learning_rate = 3e-5
->>> weight_decay_rate = 0.01
-
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=learning_rate,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=weight_decay_rate,
-...     num_warmup_steps=0,
-... )
-```
-
-Then, load ViT with [`TFAutoModelForImageClassification`] along with the label mappings:
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained(
-...     checkpoint,
-...     id2label=id2label,
-...     label2id=label2id,
-... )
-```
-
-Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Dataset.to_tf_dataset`] and your `data_collator`:
-
-```py
->>> # converting our train dataset to tf.data.Dataset
->>> tf_train_dataset = food["train"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-
->>> # converting our test dataset to tf.data.Dataset
->>> tf_eval_dataset = food["test"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-```
-
-Configure the model for training with `compile()`:
-
-```py
->>> from tensorflow.keras.losses import SparseCategoricalCrossentropy
-
->>> loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
->>> model.compile(optimizer=optimizer, loss=loss)
-```
-
-To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](../main_classes/keras_callbacks).
-Pass your `compute_metrics` function to [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback),
-and use the [PushToHubCallback](../main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="food_classifier",
-...     tokenizer=image_processor,
-...     save_strategy="no",
-... )
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-Finally, you are ready to train your model! Call `fit()` with your training and validation datasets, the number of epochs,
-and your callbacks to fine-tune the model:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=num_epochs, callbacks=callbacks)
-Epoch 1/5
-250/250 [==============================] - 313s 1s/step - loss: 2.5623 - val_loss: 1.4161 - accuracy: 0.9290
-Epoch 2/5
-250/250 [==============================] - 265s 1s/step - loss: 0.9181 - val_loss: 0.6808 - accuracy: 0.9690
-Epoch 3/5
-250/250 [==============================] - 252s 1s/step - loss: 0.3910 - val_loss: 0.4303 - accuracy: 0.9820
-Epoch 4/5
-250/250 [==============================] - 251s 1s/step - loss: 0.2028 - val_loss: 0.3191 - accuracy: 0.9900
-Epoch 5/5
-250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
-```
-
-Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. You can now use it for inference!
-</tf>
-</frameworkcontent>
 
 
 <Tip>
@@ -478,8 +276,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load an image processor to preprocess the image and return the `input` as PyTorch tensors:
 
 ```py
@@ -507,36 +303,3 @@ Get the predicted label with the highest probability, and use the model's `id2la
 >>> model.config.id2label[predicted_label]
 'beignets'
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-Load an image processor to preprocess the image and return the `input` as TensorFlow tensors:
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
->>> inputs = image_processor(image, return_tensors="tf")
-```
-
-Pass your inputs to the model and return the logits:
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained("MariaK/food_classifier")
->>> logits = model(**inputs).logits
-```
-
-Get the predicted label with the highest probability, and use the model's `id2label` mapping to convert it to a label:
-
-```py
->>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
->>> model.config.id2label[predicted_class_id]
-'beignets'
-```
-
-</tf>
-</frameworkcontent>

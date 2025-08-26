@@ -702,9 +702,6 @@ class OPTModel(OPTPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_decoder(self):
-        return self.decoder
-
     @can_return_tuple
     @auto_docstring
     def forward(
