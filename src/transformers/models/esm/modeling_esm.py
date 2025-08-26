@@ -271,10 +271,6 @@ def eager_attention_forward(
     # ESM applies relative position embeddings and we don't copy from Llama
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
     if hasattr(module, "position_embedding_type") and module.position_embedding_type in [
         "relative_key",
         "relative_key_query",
@@ -294,6 +290,10 @@ def eager_attention_forward(
             relative_position_scores = relative_position_scores_query + relative_position_scores_key
 
         attn_weights = attn_weights + relative_position_scores
+
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -598,6 +598,7 @@ class EsmPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["position_embeddings.weight"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     _can_record_outputs = {
