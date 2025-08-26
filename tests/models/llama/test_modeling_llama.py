@@ -227,6 +227,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
+    # TODO joao, manuel: remove this in v4.62.0
     # TODO: check why we have the following strange situation.
     # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
     @run_test_using_subprocess
