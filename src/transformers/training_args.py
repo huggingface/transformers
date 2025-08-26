@@ -77,6 +77,9 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
+    if is_accelerate_available("1.10.1"):
+        from accelerate.parallelism_config import ParallelismConfig
+
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -597,7 +600,8 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-
+        parallelism_config (`ParallelismConfig`, *optional*):
+            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1271,6 +1275,10 @@ class TrainingArguments:
                 "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
+    )
+    parallelism_config: Optional["ParallelismConfig"] = field(
+        default=None,
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
     )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,
@@ -2561,6 +2569,9 @@ class TrainingArguments:
                 quantization_config = v.get("quantization_config")
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
+            if k == "parallelism_config" and v is not None:
+                d[k] = v.to_json()
+
         self._dict_dtype_to_str(d)
 
         return d
