@@ -698,7 +698,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             device = cache_config.get("device", model.device)
 
         # Initialize the cache
-        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
