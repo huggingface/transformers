@@ -409,13 +409,7 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
-            "BeamScorer",
-            "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
-            "ConstrainedBeamSearchScorer",
-            "Constraint",
-            "ConstraintListState",
-            "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -654,14 +648,8 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
-    from .generation import BeamScorer as BeamScorer
-    from .generation import BeamSearchScorer as BeamSearchScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
-    from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
-    from .generation import Constraint as Constraint
-    from .generation import ConstraintListState as ConstraintListState
-    from .generation import DisjunctiveConstraint as DisjunctiveConstraint
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria

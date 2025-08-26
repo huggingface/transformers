@@ -35,18 +35,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["beam_constraints"] = [
-        "Constraint",
-        "ConstraintListState",
-        "DisjunctiveConstraint",
-        "PhrasalConstraint",
-    ]
-    _import_structure["beam_search"] = [
-        "BeamHypotheses",
-        "BeamScorer",
-        "BeamSearchScorer",
-        "ConstrainedBeamSearchScorer",
-    ]
     _import_structure["candidate_generator"] = [
         "AssistedCandidateGenerator",
         "CandidateGenerator",
@@ -208,8 +196,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
-        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,
