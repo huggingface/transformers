@@ -286,7 +286,6 @@ class SuperTransformer(cst.CSTTransformer):
     def replace_parent_class_call(self, node: cst.SimpleStatementLine) -> cst.SimpleStatementLine:
         """Replace a call of the form `module.Class.func(...)` by a call of the form `super().func(...)`
         if the `Class` being called is one of the bases."""
-        print(self.new_bases)
         expr_node = node.body[0]
         full_parent_class_name = get_full_attribute_name(expr_node.value.func.value)
         # Replace only if it's a base, or if using nn.Module on a GradientCheckpointingLayer
