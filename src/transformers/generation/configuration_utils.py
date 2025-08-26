@@ -437,7 +437,7 @@ class GenerationConfig(PushToHubMixin):
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
 
-        # Deprecated / moved to the Hub
+        # Deprecated (moved to the Hub). TODO joao, manuel: remove in v4.62.0
         self.low_memory = kwargs.pop("low_memory", None)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.dola_layers = kwargs.pop("dola_layers", None)
