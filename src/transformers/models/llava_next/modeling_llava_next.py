@@ -33,7 +33,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_llava_next import LlavaNextConfig
-
+from ..llama.modeling_llama import LlamaDecoderLayer
+from ..clip.modeling_clip import CLIPEncoderLayer
 
 logger = logging.get_logger(__name__)
 
@@ -226,7 +227,7 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     config: LlavaNextConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["LlamaDecoderLayer", "CLIPEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     _supports_flash_attn = True
