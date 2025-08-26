@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 [`~AutoFeatureExtractor.from_pretrained`]를 호출하여 Hugging Face [Hub](https://hf.co/models) 또는 로컬 디렉터리에서 특징 추출기와 그 전처리기 설정을 가져오세요. 특징 추출기와 전처리기 설정은 [preprocessor_config.json](https://hf.co/openai/whisper-tiny/blob/main/preprocessor_config.json) 파일에 저장됩니다.
 
-일반적으로 `array`에 저장된 오디오 신호를 특징 추출기에 전달하고, `sampling_rate` 매개변수를 사전 학습된 오디오 모델의 샘플링 레이트로 설정하세요. 오디오 데이터의 샘플링 레이트가 사전 학습된 오디오 모델이 학습된 데이터의 샘플링 레이트와 일치하는 것이 중요합니다.
+일반적으로 `array`에 저장된 오디오 신호를 특징 추출기에 전달하고, `sampling_rate` 매개변수를 사전 훈련된 오디오 모델의 샘플링 레이트로 설정하세요. 오디오 데이터의 샘플링 레이트가 사전 훈련된 오디오 모델이 학습한 데이터의 샘플링 레이트와 일치하는 것이 중요합니다.
 
 ```py
 from transformers import AutoFeatureExtractor
