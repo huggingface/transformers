@@ -127,7 +127,7 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
         report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 
     api.upload_file(
-        path_or_fileobj=f"ci_results_{job}/{filename}",
+        path_or_fileobj=f"{filename}",
         path_in_repo=f"{report_repo_folder}/ci_results_{job}/{filename}",
         repo_id=report_repo_id,
         repo_type="dataset",
@@ -166,17 +166,13 @@ if __name__ == "__main__":
     job = args.job
     report_repo_id = args.report_repo_id
 
-    # Find the origin directory based on machine type
-    origin = path
-    for p in path.iterdir():
-        if machine_type in p.name:
-            origin = p
-            break
-
     # Loop through model directories and create collated reports
-    for model_dir in sorted(origin.iterdir()):
+    for model_dir in sorted(path.iterdir()):
+        if not model_dir.name.startswith(machine_type):
+            continue
+
         # Create a new entry for the model
-        model_name = model_dir.name.removesuffix("_test_reports")
+        model_name = model_dir.name.split("models_")[-1].removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
         results = []
 
