@@ -947,7 +947,7 @@ class GgufModelTests(unittest.TestCase):
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).model
 
         converted_state_dict = converted_model.state_dict()
@@ -987,5 +987,5 @@ class GgufModelTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Helloab, I am a 1000"
+        EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
