@@ -2104,6 +2104,10 @@ class GenerationMixin(ContinuousMixin):
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
+        # TODO - In my opinion, we should keep compile disable by default, and
+        # then introduce `enable_compile` in the generation config to do the
+        # compilation. With DynamicCache becoming compileable, the blast radius
+        # could be big.
         # Override: honor `disable_compile` flag
         if generation_config.disable_compile:
             return False
@@ -3507,7 +3511,31 @@ class GenerationMixin(ContinuousMixin):
                 outputs = self(**model_inputs, return_dict=True)
                 is_prefill = False
             else:
-                outputs = model_forward(**model_inputs, return_dict=True)
+                if compile_forward:
+                    attention_mask = model_inputs.get("attention_mask")
+                    assert isinstance(attention_mask, (dict, type(None)))
+                    # With compileable caches, we get 4D masks (not sure why)
+                    if isinstance(attention_mask, dict):
+                        for mask in attention_mask.values():
+                            if isinstance(mask, torch.Tensor):
+                                torch._dynamo.mark_dynamic(mask, 3)
+                    kv_cache = model_inputs.get("past_key_values")
+                    if kv_cache and isinstance(kv_cache, DynamicCache):
+                        kv_cache.mark_dynamic_for_compile()
+
+                    # Mark `DynamicSlidingWindowLayer.cumulative_length` as
+                    # dynamic.  There isn’t a public/stable API for dynamic
+                    # *integers* yet, so we use `dynamic_sources`, which relies
+                    # on string matching to identify tensors/ints.  This is
+                    # brittle: if the attribute is renamed, this selector must
+                    # be updated.  The torch.compile team is discussing a
+                    # SymInt-like API that would make this explicit and remove
+                    # the string-matching workaround.  TODO: switch when
+                    # available.
+                    with torch.compiler.config.patch(dynamic_sources=".*cumulative_length"):
+                        outputs = model_forward(**model_inputs, return_dict=True)
+                else:
+                    outputs = model_forward(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(

@@ -80,6 +80,9 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
+    @abstractmethod
+    def mark_dynamic_for_compile(self): ...
+
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -88,6 +91,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_compileable = True
 
     def lazy_initialization(self, key_states: torch.Tensor):
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -163,6 +167,12 @@ class DynamicLayer(CacheLayerMixin):
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
 
+    def mark_dynamic_for_compile(self):
+        """Marks the seq length of KV tensors dynamic for torch.compile."""
+        super().mark_dynamic_for_compile()
+        torch._dynamo.mark_dynamic(self.keys, 2)
+        torch._dynamo.mark_dynamic(self.values, 2)
+
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
@@ -175,6 +185,10 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int):
         super().__init__()
         self.sliding_window = sliding_window
+        # TODO - torch.compile has a recompilation on this value. There are 2 ways to handle this
+        # 1) Short term - make it a scalar tensor - and set it up in lazy_initialization. We
+        # might need to update get_mask_sizes.
+        # 2) Long term - wait for torch.compile team to give torch.symint like API.
         self.cumulative_length = 0
 
     def update(
@@ -244,6 +258,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
+
+    def mark_dynamic_for_compile(self):
+        super().mark_dynamic_for_compile()
 
 
 class StaticLayer(CacheLayerMixin):
@@ -1046,6 +1063,13 @@ class DynamicCache(Cache):
         else:
             super().__init__(layers=layers)
 
+        # Store the indexes of the same type of layers to add torch._size checks later
+        from collections import defaultdict
+
+        self.layer_type_to_layer_indexes = defaultdict(list)
+        for idx, layer in enumerate(self.layers):
+            self.layer_type_to_layer_indexes[layer.__class__].append(idx)
+
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
@@ -1070,6 +1094,30 @@ class DynamicCache(Cache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
+
+    def add_torch_size_checks(self):
+        """
+        Insert torch._checks size asserts to assist torch.compile dynamic shape
+        infra to reuse same symbolic shape for different layers in the Dynamic
+        cache. Here, we collect the layers that are of same type, and add checks
+        on them.
+        """
+
+        if not len(self.layers):
+            return
+
+        for layer_idxs in self.layer_type_to_layer_indexes.values():
+            if len(layer_idxs) > 1:
+                first_layer = self.layers[layer_idxs[0]]
+
+                for layer_idx in layer_idxs:
+                    layer = self.layers[layer_idx]
+                    torch._check(first_layer.keys.size(2) == layer.keys.size(2))
+                    torch._check(first_layer.values.size(2) == layer.values.size(2))
+
+    def mark_dynamic_for_compile(self):
+        for layer in self.layers:
+            layer.mark_dynamic_for_compile()
 
 
 # Utilities for `DynamicCache` <> torch.export support

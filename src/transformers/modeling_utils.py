@@ -5922,7 +5922,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
             self._last_compile_config = compile_config
-            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+
+            # For DynamicCache, we want to ensure that the symbolic shapes for
+            # seq length for all keys and values in the KV cache are same. To do
+            # this, we have to run torch._check to inform the dynamic infra of
+            # torch.compile to use the same symbols. These torch._check asserts
+            # must be seen by the torch.compile tracing. To achieve this, we
+            # make a wrapper that first does these checks and then calls the
+            # actual model.
+            def model_wrapper(*args, **kwargs):
+                # Add torch._checks on the KV cache tensors
+                from .cache_utils import DynamicCache
+
+                kv_cache = kwargs.get("past_key_values")
+                if kv_cache and isinstance(kv_cache, DynamicCache):
+                    kv_cache.add_torch_size_checks()
+
+                return self(*args, **kwargs)
+
+            self._compiled_call = torch.compile(model_wrapper, **compile_config.to_dict())
+
         return self._compiled_call
 
     @classmethod
