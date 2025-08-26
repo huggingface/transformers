@@ -800,12 +800,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @auto_docstring
     def forward(
         self,
@@ -1177,7 +1171,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
-        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

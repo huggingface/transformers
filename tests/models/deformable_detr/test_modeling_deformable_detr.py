@@ -636,7 +636,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = model_class(config, torch_dtype=torch.bfloat16)
+        model = model_class(config, dtype=torch.bfloat16)
         model.to(torch_device)
         model.eval()
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)

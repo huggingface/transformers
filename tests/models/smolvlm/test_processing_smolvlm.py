@@ -395,7 +395,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -450,7 +450,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
@@ -477,7 +477,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="video")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="video")
         video_input = self.prepare_video_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
@@ -572,7 +572,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
