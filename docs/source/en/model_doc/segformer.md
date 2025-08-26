@@ -71,19 +71,7 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) to quantize SegFormer weights to 8-bit.
-
-```python
-from transformers import BitsAndBytesConfig, AutoModelForSemanticSegmentation
-
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForSemanticSegmentation.from_pretrained(
-    "nvidia/segformer-b0-finetuned-ade-512-512",
-    quantization_config=quantization_config
-)
-```
 
 ## Notes
 
