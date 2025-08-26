@@ -244,19 +244,10 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
     if hasattr(module, "position_embedding_type") and module.position_embedding_type in [
         "relative_key",
         "relative_key_query",
     ]:
-        if module.config._attn_implementation != "eager":
-            raise ValueError(
-                f"ESM {module.config._attn_implementation} attention does not support {module.position_embedding_type} embeddings. "
-                "Set attention explicitly to 'eager' with `model.set_attn_implementation('eager')`"
-            )
-
         seq_length = query.shape[2]
         position_ids_l = torch.arange(seq_length, dtype=torch.long, device=attn_weights.device).view(-1, 1)
         position_ids_r = torch.arange(seq_length, dtype=torch.long, device=attn_weights.device).view(1, -1)
@@ -272,6 +263,9 @@ def eager_attention_forward(
             relative_position_scores = relative_position_scores_query + relative_position_scores_key
 
         attn_weights = attn_weights + relative_position_scores
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     if head_mask is not None:
         attn_weights = attn_weights * head_mask
@@ -347,6 +341,11 @@ class EvollaSaProtSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
+            if self.position_embedding_type in ["relative_key", "relative_key_query"]:
+                raise ValueError(
+                    f"ESM {self.config._attn_implementation} attention does not support {self.position_embedding_type} embeddings. "
+                    "Set attention explicitly to 'eager' with `model.set_attn_implementation('eager')`"
+                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
