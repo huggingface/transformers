@@ -937,7 +937,7 @@ def load_balancing_loss_func(
 
 @auto_docstring(
     custom_intro="""
-    The INTERNS1 model which consists of a vision backbone and a language model.
+    The INTERN_S1 model which consists of a vision backbone and a language model.
     """
 )
 class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin):
