@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DINOv3ViTModel, DINOv3ViTBackbone
+    from transformers import DINOv3ViTBackbone, DINOv3ViTModel
 
 
 if is_vision_available():
@@ -113,24 +113,24 @@ class DINOv3ViTModelTester:
             num_register_tokens=self.num_register_tokens,
         )
 
-    def create_and_check_backbone(self, config, pixel_values, labels):      
-            config.out_features = ["stage1", "stage2"]
-            config.reshape_hidden_states = True
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        config.out_features = ["stage1", "stage2"]
+        config.reshape_hidden_states = True
 
-            model = DINOv3ViTBackbone(config)
-            model.to(torch_device)
-            model.eval()
+        model = DINOv3ViTBackbone(config)
+        model.to(torch_device)
+        model.eval()
 
-            with torch.no_grad():
-                outputs = model(pixel_values)
+        with torch.no_grad():
+            outputs = model(pixel_values)
 
-            self.parent.assertEqual(len(outputs.feature_maps), 2)
-            for fm in outputs.feature_maps:
-                b, c, h, w = fm.shape
-                self.parent.assertEqual(b, self.batch_size)
-                self.parent.assertEqual(c, self.hidden_size)
-                self.parent.assertGreater(h, 0)
-                self.parent.assertGreater(w, 0)    
+        self.parent.assertEqual(len(outputs.feature_maps), 2)
+        for fm in outputs.feature_maps:
+            b, c, h, w = fm.shape
+            self.parent.assertEqual(b, self.batch_size)
+            self.parent.assertEqual(c, self.hidden_size)
+            self.parent.assertGreater(h, 0)
+            self.parent.assertGreater(w, 0)
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DINOv3ViTModel(config=config)
@@ -160,7 +160,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ViTModel,) if is_torch_available() else ()
+    all_model_classes = (DINOv3ViTModel, DINOv3ViTBackbone) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DINOv3ViTModel,
@@ -179,7 +179,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DINOv3ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37)
 
-    def test_backbone(self):                                       
+    def test_backbone(self):
         config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(config, pixel_values, labels)
 
