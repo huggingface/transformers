@@ -420,6 +420,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GPT2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("minicpm_v_4_5", ("MiniCPM_V_4_5Tokenizer", "MiniCPM_V_4_5TokenizerFast" if is_tokenizers_available() else None)),
         (
             "mistral",
             (
