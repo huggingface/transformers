@@ -435,7 +435,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             )
 
             # True (1) == vision, False (0) == text tokens
-            token_type_ids = token_type_ids[:, :-1].bool()
+            token_type_ids = token_type_ids.bool()
             token_type_ids_router = token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
             token_type_ids_states = token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
@@ -613,12 +613,7 @@ class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
             seq_length_with_past += cache_length
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        rope_position_ids = position_ids
-        if past_key_values[0] is not None:  # we are decoding
-            rope_position_ids = position_ids[:, -1:, :]
-        position_embeddings = self.rotary_emb(hidden_states, rope_position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1321,40 +1316,21 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
-        # update cache
-        if isinstance(outputs, tuple) and len(outputs) > 1 and not isinstance(outputs[1], torch.Tensor):
-            model_kwargs["past_key_values"] = outputs[1]
-
-        if isinstance(outputs, MoeCausalLMOutputWithPast) and "past_key_values" in outputs:
-            model_kwargs["past_key_values"] = outputs.past_key_values
-
-        # update token_type_ids with last value
-        if "token_type_ids" in model_kwargs and model_kwargs["token_type_ids"] is not None:
-            token_type_ids = model_kwargs["token_type_ids"]
-            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1:]], dim=-1)
-
-        if not is_encoder_decoder and model_kwargs.get("attention_mask", None) is not None:
-            # update attention mask
-            attention_mask = model_kwargs["attention_mask"]
-            model_kwargs["attention_mask"] = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones((attention_mask.shape[0], 1), dtype=torch.int64, device=attention_mask.device),
-                ],
-                dim=-1,
-            )
-
-        assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
-        position_ids = model_kwargs["position_ids"]
-
-        max_position = position_ids.max(dim=1, keepdim=True)[0]  # [batch_size, 1, hidden_dim]
-        new_positions = max_position + 1
-
-        model_kwargs["position_ids"] = torch.cat(
-            [position_ids, new_positions],
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs,
+        model_kwargs,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ):
+        position_ids = model_kwargs.pop("position_ids")
+        position_ids = torch.cat(
+            [position_ids, position_ids.max(dim=1, keepdim=True)[0] + 1],
             dim=1
         )
+
+        model_kwargs = super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+        model_kwargs["position_ids"] = position_ids
 
         return model_kwargs
 
@@ -1364,12 +1340,14 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         images=None,
         past_key_values=None,
         inputs_embeds=None,
+        position_ids=None,
         token_type_ids=None,
         grid_thw=None,
         **kwargs,
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
+            position_ids = position_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
 
         #attention_mask = kwargs.get("attention_mask")  # non-fa usage
@@ -1387,19 +1365,11 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
                 "use_cache": True,
                 "attention_mask": attention_mask,
                 "images": images,
-                "token_type_ids": torch.cat(
-                    [
-                        token_type_ids,
-                        torch.zeros(
-                            [len(token_type_ids), 1], dtype=token_type_ids.dtype
-                        ).to(token_type_ids.device),
-                    ],
-                    dim=-1,
-                ),
+                "token_type_ids": token_type_ids,
                 "grid_thw": grid_thw,
+                "position_ids": position_ids,
             }
         )
-        model_inputs.update({"position_ids": kwargs["position_ids"]})
 
         return model_inputs
 
