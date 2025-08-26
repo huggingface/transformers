@@ -189,7 +189,7 @@ dataset[0]["audio"]
 dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 ```
 
-이제 데이터셋 샘플을 로드하면 16kHz로 리샘플링됩니다.
+이제 데이터 세트 샘플을 가져오면 16kHz로 리샘플링됩니다.
 
 ```py
 dataset[0]["audio"]
