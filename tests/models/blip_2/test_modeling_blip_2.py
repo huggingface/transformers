@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -508,7 +507,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -945,7 +943,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_cpu_offload(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -1645,9 +1642,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1676,9 +1673,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
         processor.image_processor.size = {"height": 500, "width": 500}
 
         image = prepare_img()
@@ -1693,9 +1690,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1710,9 +1707,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1766,9 +1763,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1798,7 +1795,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_opt_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16, device_map="balanced"
+            "Salesforce/blip2-opt-2.7b", dtype=torch.float16, device_map="balanced"
         )
 
         # prepare image
@@ -1828,7 +1825,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_multi_accelerator
     def test_inference_t5_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        device_map = device_map = {
+        device_map = {
             "query_tokens": 0,
             "vision_model": 0,
             "language_model": 1,
@@ -1837,7 +1834,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         }
 
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map=device_map
+            "Salesforce/blip2-flan-t5-xl", dtype=torch.float16, device_map=device_map
         )
 
         # prepare image
@@ -1904,7 +1901,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_itm_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2ForImageTextRetrieval.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2ForImageTextRetrieval.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
@@ -1924,7 +1921,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_vision_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2VisionModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2VisionModelWithProjection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
@@ -1948,7 +1945,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_text_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2TextModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2TextModelWithProjection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
             torch_device

@@ -61,7 +61,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # better for smaller number of GPUs
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
@@ -97,7 +97,7 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
 print(model._tp_plan)
 ```
 
@@ -247,7 +247,7 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...
     }
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
     ```
 
 ## Benchmarks
