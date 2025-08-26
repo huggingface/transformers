@@ -516,7 +516,8 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
-        model_inputs = super().prepare_inputs_for_generation(
+        model_inputs = Phi3PreTrainedModel.prepare_inputs_for_generation(
+            self,
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

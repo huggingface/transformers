@@ -289,8 +289,13 @@ class SuperTransformer(cst.CSTTransformer):
         expr_node = node.body[0]
         full_parent_class_name = get_full_attribute_name(expr_node.value.func.value)
         # Replace only if it's a base, or if using nn.Module on a GradientCheckpointingLayer
-        if full_parent_class_name in self.new_bases or (
-            "nn.Module" in full_parent_class_name and self.new_bases == ["GradientCheckpointingLayer"]
+        if (
+            full_parent_class_name in self.new_bases
+            or ("nn.Module" in full_parent_class_name and self.new_bases == ["GradientCheckpointingLayer"])
+            or (
+                full_parent_class_name == "PreTrainedModel"
+                and any("PreTrainedModel" in base for base in self.new_bases)
+            )
         ):
             # Replace `full_parent_class_name.func(...)` with `super().func(...)`
             attribute_node = expr_node.value.func.with_changes(value=cst.Call(func=cst.Name("super")))

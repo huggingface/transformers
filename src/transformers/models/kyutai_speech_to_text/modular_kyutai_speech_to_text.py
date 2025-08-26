@@ -299,7 +299,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         super().forward(**super_kwargs)
 
     def _prepare_generation_config(self, *args, **kwargs):
-        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
+        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(self, *args, **kwargs)
         # this should be passed to the model kwargs for the input preparation
         model_kwargs["audio_window_size"] = (
             generation_config.audio_window_size if hasattr(generation_config, "audio_window_size") else None
@@ -313,6 +313,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         model_kwargs: Optional[dict[str, torch.Tensor]] = None,
     ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
+            self,
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,
@@ -397,7 +398,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
         **kwargs,
     ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
         if input_values is not None:
             cache_position = model_inputs["cache_position"]
@@ -444,9 +445,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
-            model, loading_info = PreTrainedModel.from_pretrained(*args, **kwargs)
+            model, loading_info = PreTrainedModel.from_pretrained(self, *args, **kwargs)
         else:
-            model = PreTrainedModel.from_pretrained(*args, **kwargs)
+            model = PreTrainedModel.from_pretrained(self, *args, **kwargs)
 
         # copy depth decoder generation conf attr to the depth decoder generation config
         prefix = "codec_"

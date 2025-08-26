@@ -252,9 +252,9 @@ GPT_NEOX_START_DOCSTRING = None  # Will be picked up by modular
 GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
-class GPTNeoXModel(LlamaModel, nn.Module):
+class GPTNeoXModel(LlamaModel):
     def __init__(self, config):
-        nn.Module.__init__(config)
+        GPTNeoXPreTrainedModel.__init__(self, config)
         self.config = config
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)

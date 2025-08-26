@@ -1,4 +1,5 @@
 import ast
+import re
 from collections import defaultdict
 
 
@@ -40,6 +41,32 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
     return sorting_list
 
 
+# All the potential file types to create
+ALL_FILE_TYPES = (
+    "modeling",
+    "configuration",
+    "tokenization",
+    "processing",
+    "image_processing",
+    "video_processing",
+    "feature_extraction",
+)
+
+
+def is_model_import(module: str) -> bool:
+    """Check whether `module` is a model import or not."""
+    if module is None:
+        return False
+    patterns = "|".join(ALL_FILE_TYPES)
+    regex = rf"(\w+)\.(?:{patterns})_(\w+)"
+    match_object = re.search(regex, module)
+    if match_object is not None:
+        model_name = match_object.group(1)
+        if model_name in match_object.group(2) and model_name != "auto":
+            return True
+    return False
+
+
 # Function to extract class and import info from a file
 def extract_classes_and_imports(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
@@ -49,7 +76,7 @@ def extract_classes_and_imports(file_path):
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             module = node.module if isinstance(node, ast.ImportFrom) else None
-            if module and (".modeling_" in module or "transformers.models" in module):
+            if is_model_import(module):
                 imports.add(module)
     return imports
 

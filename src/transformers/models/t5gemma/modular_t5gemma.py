@@ -18,8 +18,6 @@ from typing import Any, Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
@@ -33,7 +31,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -55,6 +53,7 @@ from ..gemma2.modeling_gemma2 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
+from ..utils.generic import OutputRecorder, check_model_inputs
 
 
 _CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
@@ -487,7 +486,7 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
-        Gemma2PreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
