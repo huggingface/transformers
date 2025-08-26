@@ -555,5 +555,5 @@ jobs:
       job: run_models_gpu
       report_repo_id: ${{ inputs.report_repo_id }}
       gpu_name: ${{ inputs.runner_type }}
-      machine_type: ${{ inputs.machine_type == '1gpu' && 'single-gpu' || 'multi-gpu' }}
+      machine_type: ${{ matrix.machine_type }}
     secrets: inherit
