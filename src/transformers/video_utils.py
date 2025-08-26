@@ -202,7 +202,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
     for item in videos:
         if isinstance(item, str) or is_valid_video(item):
             flat_videos_list.append(item)
-        elif isinstance(item, list):
+        elif isinstance(item, list) and item:
             flat_videos_list.extend(make_batched_videos(item))
 
     flat_videos_list = convert_pil_frames_to_video(flat_videos_list)

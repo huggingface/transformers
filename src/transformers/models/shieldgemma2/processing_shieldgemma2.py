@@ -160,17 +160,29 @@ class ShieldGemma2Processor(Gemma3Processor):
                 raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
 
             for policy in policies:
-                messages.append(
-                    [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "image"},
-                                {"type": "text", "text": policy_definitions[policy]},
-                            ],
-                        }
-                    ]
-                )
+                if img:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image"},
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
+                else:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
                 expanded_images.append(img)
 
         text = self.apply_chat_template(messages, tokenize=False)

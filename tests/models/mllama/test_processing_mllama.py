@@ -395,3 +395,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=3,
             )
+
+    @unittest.skip("Mllama can't process inouts with no image ttogether with multimodal inputs")
+    def test_processor_text_has_no_visual(self):
+        pass

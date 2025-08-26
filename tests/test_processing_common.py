@@ -243,7 +243,7 @@ class ProcessorTesterMixin:
         if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
             self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
 
-        text = self.prepare_text_inputs(batch_size=3, modality="image")
+        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
         image_inputs = self.prepare_image_inputs(batch_size=3)
         video_inputs = self.prepare_video_inputs(batch_size=3)
         inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}

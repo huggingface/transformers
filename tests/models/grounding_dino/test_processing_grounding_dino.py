@@ -285,7 +285,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Overwritten: text inputs have to be nested as well
         processor = self.get_processor()
 
-        text = self.prepare_text_inputs(batch_size=3, modality="image")
+        text = self.prepare_text_inputs(batch_size=3, modalities="image")
         image_inputs = self.prepare_image_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True}
 
