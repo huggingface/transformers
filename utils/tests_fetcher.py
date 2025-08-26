@@ -71,34 +71,9 @@ PATH_TO_TESTS = PATH_TO_REPO / "tests"
 # This variable has effect only if `filter_models=False`.
 NUM_MODELS_TO_TRIGGER_FULL_CI = 30
 
-# List here the models to always test.
-IMPORTANT_MODELS = [
-    "auto",
-    "bert",
-    "gpt2",
-    "t5",
-    "modernbert",
-    "vit,clip",
-    "detr",
-    "table_transformer",
-    "got_ocr2",
-    "whisper",
-    "wav2vec2",
-    "qwen2_audio",
-    "speech_t5",
-    "csm",
-    "llama",
-    "gemma3",
-    "qwen2",
-    "mistral3",
-    "qwen2_5_vl",
-    "llava",
-    "smolvlm",
-    "internvl",
-    "gemma3n",
-    "gpt_oss",
-    "qwen2_5_omni",
-]
+
+# List here the models not to be filtered by `filter_tests`.
+from important_files import IMPORTANT_MODELS
 
 
 @contextmanager
