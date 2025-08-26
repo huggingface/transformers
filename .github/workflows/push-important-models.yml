@@ -150,44 +150,16 @@ jobs:
                   f.write("matrix=[]\n")
           EOF
 
-
-  test_matrix_output:
-    name: "Test matrix output"
-    runs-on: ubuntu-latest
-    needs: get_modified_models
-    if: needs.get_modified_models.outputs.matrix != '[]'
-    steps:
-      - name: Echo matrix value
-        run: |
-          echo "Full matrix was: ${{ needs.get_modified_models.outputs.matrix }}"
-
-
   model-ci:
     name: Model CI
     uses: ./.github/workflows/self-scheduled.yml
     needs: get_modified_models
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-dummy"
+      slack_report_channel: "#transformers-ci-push"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: push
-      report_repo_id: hf-internal-testing/transformers_ci_dummy
+      report_repo_id: hf-internal-testing/transformers_ci_push
       commit_sha: ${{ github.sha }}
       models: ${{ needs.get_modified_models.outputs.matrix }}
     secrets: inherit
-
-
-
-#  test_matrix_output_with_matrix:
-#    name: "Test matrix output with matrix"
-#    runs-on: ubuntu-latest
-#    needs: get_modified_models
-#    if: needs.get_modified_models.outputs.matrix != '[]'
-#    strategy:
-#      matrix:
-#        model: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
-#    steps:
-#      - name: Echo matrix value
-#        run: |
-#          echo "Processing model: ${{ matrix.model }}"
-#          echo "Full matrix was: ${{ needs.get_modified_models.outputs.matrix }}"
