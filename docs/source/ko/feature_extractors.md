@@ -85,7 +85,7 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny
 
 또한 특징 추출기는 오디오 파일의 샘플링 레이트(초당 추출되는 오디오 신호 값의 수)를 설정합니다. 오디오 데이터의 샘플링 레이트는 사전 훈련된 모델이 학습한 데이터 세트의 샘플링 레이트와 일치해야 합니다. 이 값은 일반적으로 모델 카드에 명시되어 있습니다.
 
-[`~FeatureExtractionMixin.from_pretrained`]를 사용하여 데이터셋과 특징 추출기를 로드합니다.
+[`~FeatureExtractionMixin.from_pretrained`]를 사용하여 데이터 세트와 특징 추출기를 가져옵니다.
 
 ```py
 from datasets import load_dataset, Audio
