@@ -4,10 +4,11 @@
 import os
 from typing import Union
 
-from .. import Qwen3Config
 from ...configuration_utils import PretrainedConfig
 from ...models.siglip.configuration_siglip import SiglipVisionConfig
 from ...utils import logging
+from .. import Qwen3Config
+
 
 logger = logging.get_logger(__name__)
 

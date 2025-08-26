@@ -40,7 +40,7 @@ class MiniCPM_V_4_5TokenizerFast(Qwen2Tokenizer):
     @property
     def slice_start_id(self):
         return self.convert_tokens_to_ids(self.slice_start)
-    
+
     @property
     def slice_end_id(self):
         return self.convert_tokens_to_ids(self.slice_end)
@@ -48,11 +48,11 @@ class MiniCPM_V_4_5TokenizerFast(Qwen2Tokenizer):
     @property
     def im_id_start_id(self):
         return self.convert_tokens_to_ids(self.im_id_start)
-    
+
     @property
     def im_id_end_id(self):
         return self.convert_tokens_to_ids(self.im_id_end)
-    
+
     @property
     def newline_id(self):
         return self.convert_tokens_to_ids('\n')

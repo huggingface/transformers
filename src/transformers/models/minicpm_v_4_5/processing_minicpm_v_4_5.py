@@ -16,17 +16,35 @@
 Processor class for MiniCPMV.
 """
 
-from typing import List, Optional, Union, Dict, Any
-import torch
 import re
+from typing import Optional, Union
 
-from ...image_processing_utils import BatchFeature
+import torch
+
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, requires_backends, is_torch_dtype, is_torch_device
-
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TensorType
 from .image_processing_minicpm import MiniCPMVBatchFeature
+
+
+class MiniCPMVImageKwargs(ImagesKwargs, total=False):
+    max_slice_nums: Optional[int]
+    use_image_id: bool
+    temporal_ids: Optional[Union[list[list[int]], list[list[list[int]]]]]
+
+
+class MiniCPM_V_4_5ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MiniCPMVImageKwargs
+    _defaults = {
+        "images_kwargs": {
+            "do_pad": True,
+            "max_slice_nums": None,
+            "use_image_id": None,
+            "temporal_ids" : None,
+        },
+        "return_tensors": TensorType.PYTORCH,
+    }
 
 
 class MiniCPM_V_4_5Processor(ProcessorMixin):
@@ -49,26 +67,22 @@ class MiniCPM_V_4_5Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
         self.version = image_processor.version
-    
+
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: ImageInput = None,
-        max_length: Optional[int] = None,
-        do_pad: Optional[bool] = True,
-        max_slice_nums: int = None,
-        use_image_id: bool = None,
-        temporal_ids: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        **kwargs
+        **kwargs: Unpack[MiniCPM_V_4_5ProcessorKwargs],
     ) -> MiniCPMVBatchFeature:
+        output_kwargs = self._merge_kwargs(
+            MiniCPM_V_4_5ProcessorKwargs, self.tokenizer.init_kwargs, **kwargs
+        )
+        image_kwargs = output_kwargs["images_kwargs"]
 
         if images is not None:
-            # image_inputs = self.image_processor(images, do_pad=do_pad, max_slice_nums=max_slice_nums, return_tensors=return_tensors)
-            image_inputs = self.image_processor(images, do_pad=do_pad, max_slice_nums=max_slice_nums, temporal_ids=temporal_ids, return_tensors=return_tensors)
-        # return self._convert_images_texts_to_inputs(image_inputs, text, max_slice_nums=max_slice_nums, use_image_id=use_image_id, max_length=max_length, **kwargs)
-        return self._convert_images_texts_to_inputs(image_inputs, text, max_slice_nums=max_slice_nums, use_image_id=use_image_id, max_length=max_length, temporal_ids=temporal_ids, **kwargs)
-    
+            image_inputs = self.image_processor(images, **image_kwargs)
+        return self._convert_images_texts_to_inputs(image_inputs, text, **kwargs)
+
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
@@ -86,7 +100,7 @@ class MiniCPM_V_4_5Processor(ProcessorMixin):
             result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
         # return self.tokenizer.batch_decode(*args, **kwargs)
-    
+
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
         """
@@ -130,24 +144,24 @@ class MiniCPM_V_4_5Processor(ProcessorMixin):
         return input_ids, image_bounds
 
     def _convert_images_texts_to_inputs(
-            self, 
-            images, 
-            texts: Union[str, List[str]], 
-            truncation=None, 
+            self,
+            images,
+            texts: Union[str, list[str]],
+            truncation=None,
             max_length=None,
             max_slice_nums=None,
-            use_image_id=None, 
+            use_image_id=None,
             return_tensors=None,
             **kwargs
         ):
         if images is None or not len(images):
             model_inputs = self.tokenizer(texts, return_tensors=return_tensors, truncation=truncation, max_length=max_length, **kwargs)
             return MiniCPMVBatchFeature(data={**model_inputs})
-        
+
         pattern = "(<image>./</image>)"
         # images, image_sizes, tgt_sizes = images["pixel_values"], images["image_sizes"], images["tgt_sizes"]
         images, image_sizes, tgt_sizes, temporal_ids, skip_image_idx = images["pixel_values"], images["image_sizes"], images["tgt_sizes"], images["temporal_ids"], images["skip_image_idx"]
-        
+
         if isinstance(texts, str):
             texts = [texts]
         input_ids_list = []
@@ -162,18 +176,18 @@ class MiniCPM_V_4_5Processor(ProcessorMixin):
                 if i in skip_idx:
                     image_placeholder = ''
                     text_chunk = text_chunks[i].strip()
-                    
+
                 else:
                     image_placeholder = self.image_processor.get_slice_image_placeholder(
-                        image_sizes[index][i], 
+                        image_sizes[index][i],
                         i,
                         max_slice_nums,
                         use_image_id
                     )
                     text_chunk = text_chunks[i]
-                
+
                 final_text = final_text + text_chunk + image_placeholder
-                        
+
             final_text += text_chunks[-1]
 
             input_ids, image_bounds = self._convert(final_text, max_length)
@@ -227,10 +241,10 @@ class MiniCPM_V_4_5Processor(ProcessorMixin):
         dtype = items[0].dtype
 
         if dim == 0:
-            return torch.stack([item for item in items], dim=0), [0]
+            return torch.stack(list(items), dim=0), [0]
         elif dim == 1:
             if max_length == min_length:
-                return torch.stack([item for item in items], dim=0), [0] * batch_size
+                return torch.stack(list(items), dim=0), [0] * batch_size
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         else:
             tensor = (
