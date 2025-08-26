@@ -38,7 +38,7 @@ Maverick과 Scout 모두 200개 언어를 포함하는 데이터에서 최대 40
 Meta는 Llama 4 Scout을 누구나 쉽게 사용할 수 있도록 설계했습니다. Scout은 4비트 또는 8비트 양자화를 적용하면 단일 서버급 GPU에서도 실시간으로 실행할 수 있습니다. 반면, 더 대규모인 Llama 4 Maverick은 고성능 연산을 위해 BF16과 FP8 형식으로 제공합니다.
 이 모델들은 모델 저장소에서 제공되는 사용자 지정 Llama 4 커뮤니티 라이선스 계약에 따라 출시됩니다.
 
-모든 원본 Llama 체크포인트는 [meta-llama](https://huggingface.co/meta-llama) 조직에서 찾으실 수 있습니다.
+모든 원본 Llama 체크포인트는 hugging face [meta-llama](https://huggingface.co/meta-llama) 페이지에서 확인하실 수 있습니다.
 
 > [!TIP]
 > Llama 4 모델 패밀리는 두 가지 변형으로 제공됩니다: 109B와 402B 매개변수입니다. 이 두 변형 모두 매우 크며
