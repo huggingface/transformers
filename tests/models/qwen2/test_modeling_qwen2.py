@@ -257,7 +257,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ],
             ("rocm", (9, 5)): [
-                "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ]
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
