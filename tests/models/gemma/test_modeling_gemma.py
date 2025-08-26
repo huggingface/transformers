@@ -519,6 +519,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             dola_layers="low",
             repetition_penalty=1.2,
             trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
