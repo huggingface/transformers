@@ -84,6 +84,7 @@ tools_schema_with_named_groups = {
                             "parameters": {
                                 "type": "object",
                                 "properties": {
+                                    # TODO I think this schema is wrong, gotta double check first
                                     "type": {"type": "string", "enum": ["object"]},
                                     "required": {"type": "array", "items": {"type": "string"}},
                                     "properties": {
@@ -148,13 +149,28 @@ cohere_schema = {
                                         "type": "string",
                                         "x-regex": r"\s*:\s*(.*?)(?:\n\s*\w+:|$)"
                                     },
-
-                                    # TODO There's some way we basically do some horizontal gene transfer from the scope
-                                    #      vars to the properties here but I don't fully grok it yet. I guess we somehow
-                                    #      swap the node content at a given point for a variable from scope vars?
+                                    "parameters": {
+                                        # TODO We need to build the "parameters" key here using both their docstring
+                                        #  descriptions and the "argument_types" scope
+                                        #  var, but I don't know what the syntax for that should look like.
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "object"},
+                                            "required": {"type": "array", "items": {"type": "string"}},
+                                            "properties": {
+                                                "type": "object",
+                                                "additionalProperties": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "type": {"type": "string"},
+                                                        "description": {"type": "string"},
+                                                    }
+                                                }
+                                            },
+                                        }
+                                    }
                                 }
                             },
-
                         }
                     }
                 }
@@ -223,6 +239,7 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.tokenizer.chat_template = tool_template
         formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False, tools=[tool])
         parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
+        breakpoint()  # Check we're parsing correctly and the schema is good before we send to GPT-5
         self.assertEqual(parsed_chat['messages'], chat)
         self.assertEqual(parsed_chat['tools'], [get_json_schema(tool)])
 
