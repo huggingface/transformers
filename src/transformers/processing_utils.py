@@ -1603,12 +1603,12 @@ class ProcessorMixin(PushToHubMixin):
             if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
                 kwargs["do_sample_frames"] = True
 
-            flat_images = [im for im_list in batch_images for im in im_list]
-            flat_videos = [vid for vid_list in batch_videos for vid in vid_list]
+            images_exist = any(im for im_list in batch_images for im in im_list)
+            videos_exist = any(vid for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
-                images=batch_images if flat_images else None,
-                videos=batch_videos if flat_videos else None,
+                images=batch_images if images_exist else None,
+                videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
                 **kwargs,
             )

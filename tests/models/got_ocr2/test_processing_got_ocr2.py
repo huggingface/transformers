@@ -90,11 +90,15 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Call with nested list of vision inputs
         image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
         inputs_dict_nested = {"text": text, "images": image_inputs_nested}
-        processor(**inputs_dict_nested, **processing_kwargs)
+        inputs = processor(**inputs_dict_nested, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs)
 
         # Call with one of the samples with no associated vision input
         plain_text = "lower newer"
         image_inputs_nested[0] = []
         text[0] = plain_text
         inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
-        processor(**inputs_dict_no_vision, **processing_kwargs)
+        inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
+        self.assertListEqual(
+            inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
+        )
