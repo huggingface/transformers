@@ -657,7 +657,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("xpu", 3): [-9.8750, -0.5703, 1.4297, -10.3125, -10.3125],
                 ("cuda", 7): [-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359],
                 ("cuda", 8): [-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438],
-                ("rocm", (9, 4)): [ -9.8750,  -0.4885,   1.4668, -10.3359, -10.3359],
+                ("rocm", (9, 4)): [ -9.8828,  -0.5005,   1.4697, -10.3438, -10.3438],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
             }
         )  # fmt: skip
@@ -927,6 +927,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
                 ("cuda", 7): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
                 ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
+                ("rocm", (9, 4)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
+                ("rocm", (9, 5)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

@@ -358,6 +358,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
 
         if images is not None:
+            images = self.fetch_images(images)
             images = make_nested_list_of_images(images)
 
         if images is not None and not valid_images(images):

@@ -489,6 +489,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             Whether to convert the image to RGB.
     """
 
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -630,6 +632,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_size = high_res_size if high_res_size is not None else self.high_res_size
         high_res_size_dict = get_size_dict(high_res_size)
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -746,6 +749,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_image_std = OPENAI_CLIP_STD
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
@@ -800,9 +804,15 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             else high_res_resample
         )
 
+        low_res_resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[low_res_resample]
+            if isinstance(low_res_resample, (int, PILImageResampling))
+            else low_res_resample
+        )
+
         kwargs["size"] = size
         kwargs["high_res_size"] = high_res_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["high_res_image_mean"] = high_res_image_mean
@@ -965,7 +975,6 @@ class DeepseekVLHybridProcessor(DeepseekVLProcessor):
 
         # process images if pixel_values are provided
         if images is not None:
-            images = make_flat_list_of_images(images)
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             data["pixel_values"] = inputs["pixel_values"]
             data["high_res_pixel_values"] = inputs["high_res_pixel_values"]
