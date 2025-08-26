@@ -89,7 +89,7 @@ def is_valid_video_frame(frame):
 def is_valid_video(video):
     if not isinstance(video, (list, tuple)):
         return (is_numpy_array(video) or is_torch_tensor(video)) and video.ndim == 4
-    return all(is_valid_video_frame(frame) for frame in video)
+    return video and all(is_valid_video_frame(frame) for frame in video)
 
 
 def valid_videos(videos):
@@ -167,7 +167,9 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor"]]:
     elif is_valid_image(videos):
         videos = [np.array(videos)[None, ...]]
     # nested batch so we need to unflatten
-    elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
+    elif isinstance(videos[0], (list, tuple)) and all(
+        not videos_list or is_valid_video(videos_list[0]) for videos_list in videos
+    ):
         videos = [video for sublist in videos for video in sublist]
     return convert_pil_frames_to_video(videos)
 

@@ -167,6 +167,7 @@ class ProcessorTesterMixin:
     def prepare_video_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        video_input = np.array(video_input)
         if batch_size is None:
             return video_input
         return [video_input] * batch_size
@@ -230,6 +231,40 @@ class ProcessorTesterMixin:
         inputs = processor(**inputs_dict, return_tensors="pt")
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+
+    def test_processor_text_has_no_visual(self):
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values()]
+
+        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
+            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+
+        text = self.prepare_text_inputs(batch_size=3, modality="image")
+        image_inputs = self.prepare_image_inputs(batch_size=3)
+        video_inputs = self.prepare_video_inputs(batch_size=3)
+        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if "videos" in inputs_dict:
+            processing_kwargs["do_sample_frames"] = False
+
+        # Call processor with all inputs first. Use nested input type which is the format supported by all multimodal processors
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        video_inputs_nested = [[video] for video in video_inputs]
+        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
+        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        processor(**inputs_dict_nested, **processing_kwargs)
+
+        # Call with one of the samples with no associated vision input
+        plain_text = "lower newer"
+        image_inputs_nested[0] = []
+        video_inputs_nested[0] = []
+        text[0] = plain_text
+        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
+        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        processor(**inputs_dict_no_vision, **processing_kwargs)
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.

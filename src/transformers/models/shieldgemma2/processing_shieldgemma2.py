@@ -154,6 +154,11 @@ class ShieldGemma2Processor(Gemma3Processor):
         messages = []
         expanded_images = []
         for img in images:
+            if not isinstance(img, list):
+                img = [img]
+            elif len(img) > 1:
+                raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
+
             for policy in policies:
                 messages.append(
                     [
@@ -166,7 +171,7 @@ class ShieldGemma2Processor(Gemma3Processor):
                         }
                     ]
                 )
-                expanded_images.append([img])
+                expanded_images.append(img)
 
         text = self.apply_chat_template(messages, tokenize=False)
         return super().__call__(images=expanded_images, text=text, **kwargs)

@@ -34,7 +34,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_torch_available,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -368,7 +368,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -432,7 +432,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         if prompt_depth is not None:
             # prompt_depth is a list of images with shape (height, width)
             # we need to convert it to a list of images with shape (1, height, width)
-            prompt_depths = make_list_of_images(prompt_depth, expected_ndims=2)
+            prompt_depths = make_flat_list_of_images(prompt_depth, expected_ndims=2)
 
             # Validate prompt_depths has same length as images
             if len(prompt_depths) != len(images):

@@ -28,7 +28,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -390,10 +390,10 @@ class BeitImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(

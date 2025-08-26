@@ -1601,11 +1601,9 @@ class ProcessorMixin(PushToHubMixin):
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
-                if images:
-                    batch_images.append(images)
-                if videos:
-                    batch_videos.append(videos)
-                    batch_video_metadata.append(video_metadata)
+                batch_images.append(images)
+                batch_videos.append(videos)
+                batch_video_metadata.append(video_metadata)
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -1633,12 +1631,14 @@ class ProcessorMixin(PushToHubMixin):
             if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
                 kwargs["do_sample_frames"] = True
 
+            flat_images = [im for im_list in batch_images for im in im_list]
+            flat_videos = [vid for vid_list in batch_videos for vid in vid_list]
             out = self(
                 text=prompt,
-                images=batch_images if batch_images else None,
-                videos=batch_videos if batch_videos else None,
+                images=batch_images if flat_images else None,
+                videos=batch_videos if flat_videos else None,
                 audio=batch_audios if batch_audios else None,
-                video_metadata=batch_video_metadata,
+                video_metadata=flat_videos,
                 **kwargs,
             )
 

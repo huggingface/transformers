@@ -35,7 +35,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -385,7 +385,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

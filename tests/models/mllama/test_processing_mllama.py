@@ -16,6 +16,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 import numpy as np
 
@@ -55,6 +56,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_processor_dict(self):
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
+
+    # Override as Mllama needs images to be an explicitly nested batch
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        images = super().prepare_image_inputs(batch_size)
+        if isinstance(images, (list, tuple)):
+            images = [[image] for image in images]
+        return images
 
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
