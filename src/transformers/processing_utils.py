@@ -604,7 +604,7 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in self.__class__.attributes:
             if attribute_name in output:
                 del output[attribute_name]
-        
+
         # Do not delete optional attributes from output - they should be saved in processor_config.json
         # Only remove chat_template and audio_tokenizer as they are saved separately
         if "chat_template" in output:
@@ -714,13 +714,13 @@ class ProcessorMixin(PushToHubMixin):
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             else:
                 attribute.save_pretrained(save_directory)
-        
+
         # Save optional processor attributes
         for optional_attribute_name in self.optional_attributes:
             # Skip chat_template and audio_tokenizer as they are handled separately
             if optional_attribute_name in ["chat_template", "audio_tokenizer"]:
                 continue
-            
+
             optional_attribute = getattr(self, optional_attribute_name, None)
             if optional_attribute is not None and hasattr(optional_attribute, "save_pretrained"):
                 # Include the processor class in the attribute config so this processor can then be reloaded
@@ -1036,13 +1036,13 @@ class ProcessorMixin(PushToHubMixin):
 
         if audio_tokenizer is not None:
             kwargs["audio_tokenizer"] = audio_tokenizer
-            
+
         # Load optional processor attributes
         for optional_attribute_name in cls.optional_attributes:
             # Skip chat_template and audio_tokenizer as they are handled separately
             if optional_attribute_name in ["chat_template", "audio_tokenizer"]:
                 continue
-                
+
             # Check if there's a class attribute for this optional attribute
             class_attribute_name = f"{optional_attribute_name}_class"
             if hasattr(cls, class_attribute_name):
@@ -1053,7 +1053,7 @@ class ProcessorMixin(PushToHubMixin):
                         attribute_class = cls.get_possibly_dynamic_module(class_name)
                         optional_attribute = attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
                         kwargs[optional_attribute_name] = optional_attribute
-                    except (OSError, ValueError) as e:
+                    except (OSError, ValueError):
                         # If we can't load it, that's fine - it will be None or handled elsewhere
                         pass
 
@@ -1102,13 +1102,13 @@ class ProcessorMixin(PushToHubMixin):
         for optional_attribute in cls.optional_attributes:
             if optional_attribute not in ["chat_template", "audio_tokenizer"] and optional_attribute in kwargs:
                 processor_dict[optional_attribute] = kwargs.pop(optional_attribute)
-        
+
         # Load optional processor attributes that weren't in the config file
         for optional_attribute_name in cls.optional_attributes:
             # Skip chat_template and audio_tokenizer as they are handled separately
             if optional_attribute_name in ["chat_template", "audio_tokenizer"]:
                 continue
-                
+
             # Check if there's a class attribute for this optional attribute and it's not already in processor_dict
             class_attribute_name = f"{optional_attribute_name}_class"
             if hasattr(cls, class_attribute_name) and optional_attribute_name not in processor_dict:
@@ -1119,7 +1119,7 @@ class ProcessorMixin(PushToHubMixin):
                         attribute_class = cls.get_possibly_dynamic_module(class_name)
                         optional_attribute = attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
                         processor_dict[optional_attribute_name] = optional_attribute
-                    except (OSError, ValueError) as e:
+                    except (OSError, ValueError):
                         # If we can't load it, that's fine - it will be None or handled elsewhere
                         pass
 
@@ -1433,13 +1433,13 @@ class ProcessorMixin(PushToHubMixin):
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
-        
+
         # Load optional processor attributes and add them to kwargs
         for optional_attribute_name in cls.optional_attributes:
             # Skip chat_template and audio_tokenizer as they are handled separately
             if optional_attribute_name in ["chat_template", "audio_tokenizer"]:
                 continue
-                
+
             # Check if there's a class attribute for this optional attribute
             class_attribute_name = f"{optional_attribute_name}_class"
             if hasattr(cls, class_attribute_name):
