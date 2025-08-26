@@ -14,7 +14,7 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
-from typing import Optional, List
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -142,8 +142,8 @@ class DINOv3ViTConfig(BackboneConfigMixin, PretrainedConfig):
         pos_embed_shift: Optional[float] = None,
         pos_embed_jitter: Optional[float] = None,
         pos_embed_rescale: Optional[float] = 2.0,
-        out_features: Optional[List[str]] = None,
-        out_indices: Optional[List[int]] = None,
+        out_features: Optional[list[str]] = None,
+        out_indices: Optional[list[int]] = None,
         apply_layernorm: bool = True,
         reshape_hidden_states: bool = True,
         **kwargs,
@@ -179,16 +179,14 @@ class DINOv3ViTConfig(BackboneConfigMixin, PretrainedConfig):
         # Initialize backbone-specific configuration
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
-        
+
         # Initialize backbone stage names
         stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 2)]
         self.stage_names = stage_names
-        
+
         # Initialize backbone features/indices
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, 
-            out_indices=out_indices, 
-            stage_names=stage_names
+            out_features=out_features, out_indices=out_indices, stage_names=stage_names
         )
 
 
