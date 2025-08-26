@@ -34,7 +34,7 @@ class ViTHybridConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -73,7 +73,7 @@ class ViTHybridConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
+        backbone_featmap_shape (`list[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
@@ -167,6 +167,14 @@ class ViTHybridConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["ViTHybridConfig"]

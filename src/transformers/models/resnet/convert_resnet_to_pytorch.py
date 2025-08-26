@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import timm
 import torch
@@ -38,11 +38,11 @@ logger = logging.get_logger()
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, (nn.Conv2d, nn.BatchNorm2d))
         if has_not_submodules:
             self.traced.append(m)
 
@@ -64,8 +64,8 @@ class ModuleTransfer:
     src: nn.Module
     dest: nn.Module
     verbose: int = 0
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
+    src_skip: list = field(default_factory=list)
+    dest_skip: list = field(default_factory=list)
 
     def __call__(self, x: Tensor):
         """
@@ -87,7 +87,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Path, push_to_hub: bool = True):

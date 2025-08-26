@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-31 and added to Hugging Face Transformers on 2021-10-28.*
 
 # SegFormer
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The SegFormer model was proposed in [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://arxiv.org/abs/2105.15203) by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping
+The SegFormer model was proposed in [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://huggingface.co/papers/2105.15203) by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping
 Luo. The model consists of a hierarchical Transformer encoder and a lightweight all-MLP decode head to achieve great
 results on image segmentation benchmarks such as ADE20K and Cityscapes.
 
@@ -41,12 +41,11 @@ and efficiency than previous counterparts. For example, SegFormer-B4 achieves 50
 being 5x smaller and 2.2% better than the previous best method. Our best model, SegFormer-B5, achieves 84.0% mIoU on
 Cityscapes validation set and shows excellent zero-shot robustness on Cityscapes-C.*
 
-The figure below illustrates the architecture of SegFormer. Taken from the [original paper](https://arxiv.org/abs/2105.15203).
+The figure below illustrates the architecture of SegFormer. Taken from the [original paper](https://huggingface.co/papers/2105.15203).
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png"/>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version
-of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/NVlabs/SegFormer).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/NVlabs/SegFormer).
 
 ## Usage tips
 
@@ -61,7 +60,6 @@ of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). T
   found on the [hub](https://huggingface.co/models?other=segformer).
 - The quickest way to get started with SegFormer is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer) (which showcase both inference and
   fine-tuning on custom data). One can also check out the [blog post](https://huggingface.co/blog/fine-tune-segformer) introducing SegFormer and illustrating how it can be fine-tuned on custom data.
-- TensorFlow users should refer to [this repository](https://github.com/deep-diver/segformer-tf-transformers) that shows off-the-shelf inference and fine-tuning.
 - One can also check out [this interactive demo on Hugging Face Spaces](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
   to try out a SegFormer model on custom images.
 - SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`.
@@ -79,7 +77,7 @@ of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). T
   background class and include this class as part of all labels. In that case, `do_reduce_labels` should be set to
   `False`, as loss should also be computed for the background class.
 - As most models, SegFormer comes in different sizes, the details of which can be found in the table below
-  (taken from Table 7 of the [original paper](https://arxiv.org/abs/2105.15203)).
+  (taken from Table 7 of the [original paper](https://huggingface.co/papers/2105.15203)).
 
 | **Model variant** | **Depths**    | **Hidden sizes**    | **Decoder hidden size** | **Params (M)** | **ImageNet-1k Top 1** |
 | :---------------: | ------------- | ------------------- | :---------------------: | :------------: | :-------------------: |
@@ -91,7 +89,7 @@ of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). T
 | MiT-b5            | [3, 6, 40, 3] | [64, 128, 320, 512] | 768                     | 82.0           | 83.8                  |
 
 Note that MiT in the above table refers to the Mix Transformer encoder backbone introduced in SegFormer. For
-SegFormer's results on the segmentation datasets like ADE20k, refer to the [paper](https://arxiv.org/abs/2105.15203).
+SegFormer's results on the segmentation datasets like ADE20k, refer to the [paper](https://huggingface.co/papers/2105.15203).
 
 ## Resources
 
@@ -107,7 +105,6 @@ Semantic segmentation:
 - [`SegformerForSemanticSegmentation`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation).
 - A blog on fine-tuning SegFormer on a custom dataset can be found [here](https://huggingface.co/blog/fine-tune-segformer).
 - More demo notebooks on SegFormer (both inference + fine-tuning on a custom dataset) can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer).
-- [`TFSegformerForSemanticSegmentation`] is supported by this [example notebook](https://github.com/huggingface/notebooks/blob/main/examples/semantic_segmentation-tf.ipynb).
 - [Semantic segmentation task guide](../tasks/semantic_segmentation)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -128,8 +125,11 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
-<frameworkcontent>
-<pt>
+## SegformerImageProcessorFast
+
+[[autodoc]] SegformerImageProcessorFast
+    - preprocess
+    - post_process_semantic_segmentation
 
 ## SegformerModel
 
@@ -150,29 +150,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] SegformerForSemanticSegmentation
     - forward
-
-</pt>
-<tf>
-
-## TFSegformerDecodeHead
-
-[[autodoc]] TFSegformerDecodeHead
-    - call
-
-## TFSegformerModel
-
-[[autodoc]] TFSegformerModel
-    - call
-
-## TFSegformerForImageClassification
-
-[[autodoc]] TFSegformerForImageClassification
-    - call
-
-## TFSegformerForSemanticSegmentation
-
-[[autodoc]] TFSegformerForSemanticSegmentation
-    - call
-
-</tf>
-</frameworkcontent>

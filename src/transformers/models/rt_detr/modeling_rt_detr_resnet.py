@@ -23,29 +23,14 @@ from typing import Optional
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BackboneOutput,
-    BaseModelOutputWithNoAttention,
-)
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_rt_detr_resnet import RTDetrResNetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "RTDetrResNetConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer -> RTDetrResNetConvLayer
@@ -309,14 +294,10 @@ class RTDetrResNetEncoder(nn.Module):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrResNet
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = RTDetrResNetConfig
+    config: RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
@@ -336,38 +317,14 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-RTDETR_RESNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`RTDetrResNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-RTDETR_RESNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`RTDetrImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ResNet backbone, to be used with frameworks like RTDETR.
-    """,
-    RTDETR_RESNET_START_DOCSTRING,
+    """
 )
 class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -379,32 +336,34 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RTDETR_RESNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
-        """
-        Returns:
+        r"""
+                        Examples:
 
-        Examples:
+                        ```python
+                        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
-        >>> import torch
+                        >>> config = RTDetrResNetConfig()
+                        >>> model = RTDetrResNetBackbone(config)
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+                        >>> pixel_values = torch.randn(1, 3, 224, 224)
 
-        >>> pixel_values = torch.randn(1, 3, 224, 224)
+                        >>> with torch.no_grad():
+                        ...     outputs = model(pixel_values)
 
-        >>> with torch.no_grad():
-        ...     outputs = model(pixel_values)
-
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
-        ```"""
+                        >>> feature_maps = outputs.feature_maps
+                        >>> list(feature_maps[-1].shape)
+                        [1, 2048, 7, 7]
+                        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

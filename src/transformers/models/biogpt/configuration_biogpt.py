@@ -64,7 +64,7 @@ class BioGptConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            Please refer to the paper about LayerDrop: https://arxiv.org/abs/1909.11556 for further details
+            Please refer to the paper about LayerDrop: https://huggingface.co/papers/1909.11556 for further details
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         pad_token_id (`int`, *optional*, defaults to 1):

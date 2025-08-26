@@ -19,18 +19,19 @@ Processor class for Qwen2.5Omni.
 
 import logging
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput, make_batched_videos
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+from ...video_utils import VideoInput
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[List[int]] = None
+    fps: Optional[list[Union[int, float]]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
@@ -61,6 +62,8 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
+            "min_pixels": 128 * 28 * 28,
+            "max_pixels": 768 * 28 * 28,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -79,6 +82,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     Args:
         image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor.
+        video_processor ([`Qwen2VLVideoProcessor`], *optional*):
+            The video processor.
         feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The audio feature extractor.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
@@ -87,14 +92,16 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["image_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "Qwen2VLImageProcessor"
+    attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-    valid_kwargs = ["chat_template"]
 
-    def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None):
-        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
+    def __init__(
+        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+    ):
+        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
@@ -105,7 +112,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
@@ -121,17 +128,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            audio (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array.
         """
 
@@ -147,7 +154,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].pop("fps", None)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -165,22 +171,22 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_lengths = iter([])
 
         if images is not None:
-            images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
-            if fps is None:
-                fps = [2.0] * len(videos)
-            videos_inputs["video_second_per_grid"] = [
-                self.image_processor.temporal_patch_size / fps[i] for i in range(len(fps))
-            ]
-            video_grid_thw = iter(videos_inputs["video_grid_thw"])
-            video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+
+            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            video_grid_thw = videos_inputs["video_grid_thw"]
+            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
+            videos_inputs["video_second_per_grid"] = second_per_grid_ts
+
+            video_grid_thw = iter(video_grid_thw)
+            video_second_per_grid = iter(second_per_grid_ts)
         else:
             videos_inputs = {}
             video_grid_thw = iter([])
@@ -189,16 +195,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-            image_grid_thw,
-            video_grid_thw,
-            video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
-            position_id_per_seconds=position_id_per_seconds,
-            seconds_per_chunk=seconds_per_chunk,
-        )
+        if images is not None or videos is not None or audio is not None:
+            text = self.replace_multimodal_special_tokens(
+                text,
+                audio_lengths,
+                image_grid_thw,
+                video_grid_thw,
+                video_second_per_grid=video_second_per_grid,
+                use_audio_in_video=use_audio_in_video,
+                position_id_per_seconds=position_id_per_seconds,
+                seconds_per_chunk=seconds_per_chunk,
+            )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -219,7 +226,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk,
     ):
         # Extend mm token length
-        merge_length = self.image_processor.merge_size**2
+        merge_length_image = self.image_processor.merge_size**2
+        merge_length_video = self.video_processor.merge_size**2
 
         processed_text = []
         for sample in text:
@@ -233,17 +241,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 if special_token == self.audio_token:
                     sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
                 elif special_token == self.image_token:
-                    image_seq_length = next(image_grid_thw).prod() // merge_length
+                    image_seq_length = next(image_grid_thw).prod() // merge_length_image
                     sample = sample.replace(self.image_token, "<|image_placeholder|>" * image_seq_length, 1)
                 elif special_token == self.video_token:
                     if not use_audio_in_video:
-                        video_seq_length = next(video_grid_thw).prod() // merge_length
+                        video_seq_length = next(video_grid_thw).prod() // merge_length_video
                         sample = sample.replace(self.video_token, "<|video_placeholder|>" * video_seq_length, 1)
                     else:
                         audio_token_indices = np.arange(next(audio_lengths))
                         curr_video_grid_thw = next(video_grid_thw)
-                        height = curr_video_grid_thw[1] // self.image_processor.merge_size
-                        width = curr_video_grid_thw[2] // self.image_processor.merge_size
+                        height = curr_video_grid_thw[1] // self.video_processor.merge_size
+                        width = curr_video_grid_thw[2] // self.video_processor.merge_size
                         video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
                         video_token_indices = np.broadcast_to(
                             video_token_indices, (video_token_indices.shape[0], height, width)
@@ -289,11 +297,11 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
-            token_indices (`List[int]`): A monotonically increasing list of token index values.
+            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
 
         Returns:
-            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
                                 and end (exclusive) indices of a chunk in `token_indices`.
         """
 
@@ -310,23 +318,12 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         return list(_iter())
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        is_batched = False
         if isinstance(conversations[0], dict):
             conversations = [conversations]
+            is_batched = True
+
         for conversation in conversations:
             if (
                 conversation[0]["role"] != "system"
@@ -337,6 +334,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                     "System prompt modified, audio output may not work as expected. "
                     + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
                 )
+        if is_batched:
+            conversations = conversations[0]
+
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
     @property

@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-Trajectory Transformer 모델은 Michael Janner, Qiyang Li, Sergey Levine이 제안한 [하나의 커다란 시퀀스 모델링 문제로서의 오프라인 강화학습](https://arxiv.org/abs/2106.02039)라는 논문에서 소개되었습니다.
+Trajectory Transformer 모델은 Michael Janner, Qiyang Li, Sergey Levine이 제안한 [하나의 커다란 시퀀스 모델링 문제로서의 오프라인 강화학습](https://huggingface.co/papers/2106.02039)라는 논문에서 소개되었습니다.
 
 해당 논문의 초록입니다:
 

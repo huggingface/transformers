@@ -59,7 +59,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.52.0.dev0")
+check_min_version("4.56.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
@@ -99,7 +99,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "help": "Will use the token generated when running `transformers login` (necessary to use this script "
             "with private models)."
         },
     )
@@ -668,7 +668,7 @@ def main():
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}

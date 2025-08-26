@@ -19,8 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -150,7 +148,7 @@ class JanusVQVAEConfig(PretrainedConfig):
             Number of out channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
             Channel multipliers for each resolution.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of residual blocks.
@@ -182,7 +180,7 @@ class JanusVQVAEConfig(PretrainedConfig):
         in_channels: int = 3,
         out_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
         dropout: float = 0.0,
         initializer_range=0.02,
@@ -230,6 +228,8 @@ class JanusConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         vq_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVQVAEConfig`):
             The config object or dictionary of the VQVAE backbone.
+        image_token_id (`int`, *optional*, defaults to 100581):
+            Token index of a placeholder image token.
 
     Example:
 
@@ -262,7 +262,14 @@ class JanusConfig(PretrainedConfig):
         "vq_config": JanusVQVAEConfig,
     }
 
-    def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        vq_config=None,
+        image_token_id=100581,
+        **kwargs,
+    ):
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -304,10 +311,11 @@ class JanusConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
 
+        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
         # The default is only the index for the 1B model, 7B uses a different one
-        self.image_token_index = kwargs.get("image_token_index", 100581)
+        self.image_token_id = image_token_id
         super().__init__(**kwargs)
 
 

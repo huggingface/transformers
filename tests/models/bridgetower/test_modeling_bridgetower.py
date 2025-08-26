@@ -203,9 +203,9 @@ class BridgeTowerModelTester:
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
-        return BridgeTowerConfig.from_text_vision_configs(
-            text_config=self.text_model_tester.get_config(),
-            vision_config=self.vision_model_tester.get_config(),
+        return BridgeTowerConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,
             share_link_tower_layers=self.share_link_tower_layers,
             link_tower_type=self.link_tower_type,
@@ -438,7 +438,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
 
-    # override as the `logit_scale` parameter initilization is different for BRIDGE TOWER
+    # override as the `logit_scale` parameter initialization is different for BRIDGE TOWER
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

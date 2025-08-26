@@ -13,6 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "accelerate >= 0.21.0",
+#     "sentencepiece != 0.1.92",
+#     "protobuf",
+#     "torch >= 1.3",
+# ]
+# ///
+
 """Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)"""
 
 import argparse
@@ -34,12 +45,9 @@ from transformers import (
     GPT2Tokenizer,
     GPTJForCausalLM,
     LlamaForCausalLM,
-    LlamaTokenizer,
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
     OPTForCausalLM,
-    TransfoXLLMHeadModel,
-    TransfoXLTokenizer,
     XLMTokenizer,
     XLMWithLMHeadModel,
     XLNetLMHeadModel,
@@ -62,11 +70,10 @@ MODEL_CLASSES = {
     "ctrl": (CTRLLMHeadModel, CTRLTokenizer),
     "openai-gpt": (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     "xlnet": (XLNetLMHeadModel, XLNetTokenizer),
-    "transfo-xl": (TransfoXLLMHeadModel, TransfoXLTokenizer),
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
     "bloom": (BloomForCausalLM, BloomTokenizerFast),
-    "llama": (LlamaForCausalLM, LlamaTokenizer),
+    "llama": (LlamaForCausalLM, AutoTokenizer),
     "opt": (OPTForCausalLM, GPT2Tokenizer),
 }
 
@@ -363,15 +370,12 @@ def main():
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
     # Different models need different input formatting and/or extra arguments
-    requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS.keys()
+    requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS
     if requires_preprocessing:
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
         preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
 
-        if model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
-            tokenizer_kwargs = {"add_space_before_punct_symbol": True}
-        else:
-            tokenizer_kwargs = {}
+        tokenizer_kwargs = {}
 
         encoded_prompt = tokenizer.encode(
             preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs

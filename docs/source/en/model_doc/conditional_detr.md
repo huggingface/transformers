@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-08-13 and added to Hugging Face Transformers on 2022-09-22.*
 
 # Conditional DETR
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
+The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://huggingface.co/papers/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
 
 The abstract from the paper is the following:
 
@@ -31,7 +32,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/conditional_detr_curve.jpg"
 alt="drawing" width="600"/>
 
-<small> Conditional DETR shows much faster convergence compared to the original DETR. Taken from the <a href="https://arxiv.org/abs/2108.06152">original paper</a>.</small>
+<small> Conditional DETR shows much faster convergence compared to the original DETR. Taken from the <a href="https://huggingface.co/papers/2108.06152">original paper</a>.</small>
 
 This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The original code can be found [here](https://github.com/Atten4Vis/ConditionalDETR).
 

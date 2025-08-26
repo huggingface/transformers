@@ -47,7 +47,7 @@ def postprocess_qa_predictions(
     Args:
         examples: The non-preprocessed dataset (see the main script for more information).
         features: The processed dataset (see the main script for more information).
-        predictions (:obj:`Tuple[np.ndarray, np.ndarray]`):
+        predictions (:obj:`tuple[np.ndarray, np.ndarray]`):
             The predictions of the model: two arrays containing the start logits and the end logits respectively. Its
             first dimension must match the number of elements of :obj:`features`.
         version_2_with_negative (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -270,7 +270,7 @@ def postprocess_qa_predictions_with_beam_search(
     Args:
         examples: The non-preprocessed dataset (see the main script for more information).
         features: The processed dataset (see the main script for more information).
-        predictions (:obj:`Tuple[np.ndarray, np.ndarray]`):
+        predictions (:obj:`tuple[np.ndarray, np.ndarray]`):
             The predictions of the model: two arrays containing the start logits and the end logits respectively. Its
             first dimension must match the number of elements of :obj:`features`.
         version_2_with_negative (:obj:`bool`, `optional`, defaults to :obj:`False`):

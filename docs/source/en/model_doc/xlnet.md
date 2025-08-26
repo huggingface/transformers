@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-06-19 and added to Hugging Face Transformers on 2020-11-16.*
 
 # XLNet
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://huggingface.co/papers/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
 Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
 bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
 order.
@@ -94,21 +94,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
 
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
-
-<frameworkcontent>
-<pt>
-
 ## XLNetModel
 
 [[autodoc]] XLNetModel
@@ -143,39 +128,3 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] XLNetForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLNetModel
-
-[[autodoc]] TFXLNetModel
-    - call
-
-## TFXLNetLMHeadModel
-
-[[autodoc]] TFXLNetLMHeadModel
-    - call
-
-## TFXLNetForSequenceClassification
-
-[[autodoc]] TFXLNetForSequenceClassification
-    - call
-
-## TFXLNetForMultipleChoice
-
-[[autodoc]] TFXLNetForMultipleChoice
-    - call
-
-## TFXLNetForTokenClassification
-
-[[autodoc]] TFXLNetForTokenClassification
-    - call
-
-## TFXLNetForQuestionAnsweringSimple
-
-[[autodoc]] TFXLNetForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>

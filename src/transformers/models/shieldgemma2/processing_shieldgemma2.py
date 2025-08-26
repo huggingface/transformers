@@ -105,7 +105,7 @@ class ShieldGemma2Processor(Gemma3Processor):
             text: Not supported.
             videos: Not supported.
             audio: Not supported.
-            kwargs: An optional dictionary of keyword arguments to configre the
+            kwargs: An optional dictionary of keyword arguments to configure the
                 processor. Possible values include:
 
                 *   `custom_policies`: Additional policy definitions that augment the `self.policy_definitions` passed
@@ -116,7 +116,7 @@ class ShieldGemma2Processor(Gemma3Processor):
                     generated for every key in the joint dictionary.
 
         Returns:
-            A `BatchFeature` continaing `input_ids`, `pixel_values`, etc. where each Tensor is of shape
+            A `BatchFeature` containing `input_ids`, `pixel_values`, etc. where each Tensor is of shape
             `(len(images) * len(policies), )`, and the order within the batch will be
             img1_policy1, ... img1_policyN, ... imgM_policyN.
         """
@@ -170,26 +170,6 @@ class ShieldGemma2Processor(Gemma3Processor):
 
         text = self.apply_chat_template(messages, tokenize=False)
         return super().__call__(images=expanded_images, text=text, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["ShieldGemma2Processor"]

@@ -14,10 +14,23 @@
 
 import unittest
 
+import pytest
 import requests
+from packaging import version
 
-from transformers.testing_utils import require_pytesseract, require_torch, require_vision
-from transformers.utils import is_pytesseract_available, is_torch_available, is_torchvision_available
+from transformers.testing_utils import (
+    require_pytesseract,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    is_pytesseract_available,
+    is_torch_available,
+    is_torchvision_available,
+)
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -111,13 +124,13 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_layoutlmv2_integration_test(self):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         for image_processing_class in self.image_processor_list:
             # with apply_OCR = True
             image_processing = image_processing_class()
 
-            image = Image.open(ds[0]["file"]).convert("RGB")
+            image = ds[0]["image"]
 
             encoding = image_processing(image, return_tensors="pt")
 
@@ -157,16 +170,8 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self.assertTrue(
-            torch.allclose(
-                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
-            )
-        )
-        self.assertLessEqual(
-            torch.mean(
-                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
-            ).item(),
-            1e-3,
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255
         )
 
     @require_vision
@@ -190,14 +195,29 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self.assertTrue(
-            torch.allclose(
-                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
-            )
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255
         )
-        self.assertLessEqual(
-            torch.mean(
-                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
-            ).item(),
-            1e-3,
+
+    # Overriding as we can't use torch.testing.assert_close on int8 tensors
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
+    def test_can_compile_fast_image_processor(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values.float() / 255, output_compiled.pixel_values.float() / 255
         )
