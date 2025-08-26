@@ -1009,6 +1009,8 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
     config: Glm4vMoeConfig
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
 
@@ -1445,6 +1447,8 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
 class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -1473,7 +1477,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1730,14 +1734,9 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "second_per_grid_ts":
-                    if not isinstance(dict_to_expand[key], list):
-                        raise TypeError(
-                            f"Expected value for key '{key}' to be a list, but got {type(dict_to_expand[key])} instead."
-                        )
-                    tensor = torch.tensor(dict_to_expand[key])
-                    lengths = list(video_nums)
-                    tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
-                    dict_to_expand[key] = tensor.tolist()
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
             return dict_to_expand
 
         def _expand_dict_for_generation(dict_to_expand):

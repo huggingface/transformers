@@ -43,7 +43,7 @@ from .configuration_dots1 import Dots1Config
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Dots1RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Dots1RMSNorm is equivalent to T5LayerNorm
         """
@@ -51,7 +51,7 @@ class Dots1RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -422,8 +422,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Dots1DecoderLayer,
@@ -475,7 +474,7 @@ class Dots1Model(Dots1PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -543,12 +542,6 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

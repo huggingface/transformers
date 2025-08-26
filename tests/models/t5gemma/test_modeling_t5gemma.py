@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     torch_device,
 )
 
@@ -829,7 +828,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
     # Add decoder_input_ids and adjust hidden states.
-    @require_torch_sdpa
+
     @require_torch_accelerator
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
@@ -1385,10 +1384,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
-
-    @unittest.skip("EncoderDecoderCache can't be gathered because it is not iterable.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 class T5GemmaEncoderOnlyModelTester:

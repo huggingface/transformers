@@ -96,6 +96,7 @@ IMPORTANT_MODELS = [
     "smolvlm",
     "internvl",
     "gemma3n",
+    "gpt_oss",
     "qwen2_5_omni",
 ]
 

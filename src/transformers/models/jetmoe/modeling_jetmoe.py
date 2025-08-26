@@ -857,9 +857,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, JetMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, JetMoeMoA):
-            module.bias.data.zero_()
-        elif isinstance(module, JetMoeMoE):
+        elif isinstance(module, (JetMoeMoA, JetMoeMoE)):
             module.bias.data.zero_()
 
 
@@ -1133,14 +1131,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

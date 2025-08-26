@@ -185,7 +185,7 @@ class Qwen2Attention(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Qwen2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Qwen2RMSNorm is equivalent to T5LayerNorm
         """
@@ -193,7 +193,7 @@ class Qwen2RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -345,7 +345,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -413,12 +413,6 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring
@@ -497,6 +491,7 @@ __all__ = [
     "Qwen2PreTrainedModel",
     "Qwen2Model",
     "Qwen2ForCausalLM",
+    "Qwen2RMSNorm",
     "Qwen2ForSequenceClassification",
     "Qwen2ForTokenClassification",
     "Qwen2ForQuestionAnswering",

@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+triton_kernels_hub = None
 
 
 class Mxfp4HfQuantizer(HfQuantizer):
@@ -41,7 +42,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
     """
 
     requires_parameters_quantization = True
-    # to remove if we decide to allow quantizing weights with this method
     requires_calibration = False
 
     required_packages = ["accelerate"]
@@ -49,6 +49,18 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
+        self.triton_kernels_hub = None
+
+    def _lazy_import_kernels(self):
+        """Lazy import and initialize kernels only when needed"""
+        if self.triton_kernels_hub is None:
+            try:
+                from kernels import get_kernel
+
+                self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+            except ImportError:
+                raise ImportError("kernels package is required for MXFP4 quantization")
+        return self.triton_kernels_hub
 
     def validate_environment(self, *args, **kwargs):
         if not is_torch_available():
@@ -61,7 +73,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available():
-            raise RuntimeError("Using MXFP4 quantized models requires a GPU")
+            if self.pre_quantized:
+                logger.warning_once(
+                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
+                )
+                self.quantization_config.dequantize = True
+                return
+            else:
+                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
 
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
@@ -93,15 +112,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
-            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
+            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and kernels installed")
 
         if not self.pre_quantized:
-            from kernels import get_kernel
+            self._lazy_import_kernels()
 
-            global triton_kernels_hub
-            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
@@ -119,17 +135,17 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16` due to "
+                "Overriding dtype=%s with `dtype=torch.bfloat16` due to "
                 "requirements of `fbgemm-gpu` to enable model loading in fp4. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.bfloat16 to remove this warning.",
+                dtype,
             )
-        return torch_dtype
+        return dtype
 
     def check_quantized_param(
         self,
@@ -147,7 +163,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
         else:
             module, tensor_name = get_module_from_name(model, param_name)
-
         if isinstance(module, Mxfp4GptOssExperts) or (
             isinstance(module, GptOssExperts) and self.quantization_config.dequantize
         ):
@@ -166,57 +181,51 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
+        from ..integrations import (
+            Mxfp4GptOssExperts,
+            dequantize,
+            load_and_swizzle_mxfp4,
+            quantize_to_mxfp4,
+            swizzle_mxfp4,
+        )
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
-            PrecisionConfig, FlexCtx, InFlexData = (
-                triton_kernels_hub.matmul_ogs.PrecisionConfig,
-                triton_kernels_hub.matmul_ogs.FlexCtx,
-                triton_kernels_hub.matmul_ogs.InFlexData,
-            )
+            triton_kernels_hub = self._lazy_import_kernels()
             module, _ = get_module_from_name(model, param_name)
-            with torch.cuda.device(target_device):
+            with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
-                    if "gate_up_proj" in param_name:
-                        right_pad = module.gate_up_proj_right_pad
-                        bottom_pad = module.gate_up_proj_bottom_pad
-                        loaded_weight = torch.nn.functional.pad(
-                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                        )
-                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
-                        module.gate_up_proj_precision_config = PrecisionConfig(
-                            weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
-                        )
-                        module.gate_up_proj = triton_weight_tensor
-                        module.gate_up_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.storage.data, requires_grad=False
-                        )
-                    elif "down_proj" in param_name:
-                        right_pad = module.down_proj_right_pad
-                        bottom_pad = module.down_proj_bottom_pad
-                        loaded_weight = torch.nn.functional.pad(
-                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                        ).to(target_device)
-                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
-                        module.down_proj_precision_config = PrecisionConfig(
-                            weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
-                        )
-                        module.down_proj = triton_weight_tensor
-                        module.down_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.storage.data, requires_grad=False
-                        )
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
+                    PrecisionConfig, FlexCtx, InFlexData = (
+                        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                        triton_kernels_hub.matmul_ogs.FlexCtx,
+                        triton_kernels_hub.matmul_ogs.InFlexData,
+                    )
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                        triton_weight_tensor, weight_scale, triton_kernels_hub
+                    )
 
-        # we take this path if already quantized but not in a compatible way
+                    proj = "gate_up_proj" if "gate_up_proj" in param_name else "down_proj"
+                    setattr(module, proj, triton_weight_tensor)
+                    setattr(
+                        module,
+                        f"{proj}_precision_config",
+                        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                    )
+
+                    delattr(module, f"{proj}_blocks")
+                    delattr(module, f"{proj}_scales")
+
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
-            empty_param = kwargs.get("empty_param", None)
-            casting_dtype = kwargs.get("casting_dtype", None)
-            to_contiguous = kwargs.get("to_contiguous", None)
-            rank = kwargs.get("rank", None)
-            device_mesh = kwargs.get("device_mesh", None)
+            #  This is when loading a quantized model (blocks and scales exist)
+            empty_param = kwargs.get("empty_param")
+            casting_dtype = kwargs.get("casting_dtype")
+            to_contiguous = kwargs.get("to_contiguous")
+            rank = kwargs.get("rank")
+            device_mesh = kwargs.get("device_mesh")
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
-                # blocks and scales have the same length that's this works for both
+                # blocks and scales have the same length that's why this works for both
                 module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
             else:
                 module, _ = get_module_from_name(model, param_name)
@@ -244,11 +253,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         param_name,
                         param_value,
                         target_device,
+                        self._lazy_import_kernels(),
                         **shard_kwargs,
                     )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # we are not really dequantizing, we are just removing everthing related to quantization here
+        # we are not really dequantizing, we are just removing everything related to quantization here
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
         # clean cache due to triton ops
@@ -267,6 +277,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 base = key[: -len("down_proj")]
                 new_expected_keys.append(base + "down_proj_blocks")
                 new_expected_keys.append(base + "down_proj_scales")
+            elif not self.pre_quantized:
+                # in this case, we are quantizing the model so we need to update the keys as we changed the layers
+                if key.endswith(".mlp.experts.down_proj_blocks"):
+                    base = key[: -len("down_proj_blocks")]
+                    new_expected_keys.append(base + "down_proj")
+                elif key.endswith(".mlp.experts.gate_up_proj_blocks"):
+                    base = key[: -len("gate_up_proj_blocks")]
+                    new_expected_keys.append(base + "gate_up_proj")
+                elif key.endswith("scales"):
+                    # we remove it the scales as the checkpoint don't contain them
+                    continue
+                else:
+                    new_expected_keys.append(key)
             else:
                 new_expected_keys.append(key)
         return new_expected_keys
@@ -336,11 +359,49 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("_blocks", "")
             elif "_scales" in param_name:
                 return param_name.replace("_scales", "")
+        elif not self.pre_quantized:
+            if param_name.endswith("gate_up_proj"):
+                return param_name.replace("gate_up_proj", "gate_up_proj_blocks")
+            if param_name.endswith("down_proj"):
+                return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
+    def get_state_dict(self, model):
+        from ..integrations import Mxfp4GptOssExperts
+
+        state_dict = model.state_dict()
+
+        for name, module in model.named_modules():
+            if (
+                isinstance(module, Mxfp4GptOssExperts)
+                and hasattr(module, "gate_up_proj")
+                and hasattr(module, "down_proj")
+            ):
+                state_dict[f"{name}.gate_up_proj_blocks"] = (
+                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(32, -1, 90, 16)
+                )
+                state_dict[f"{name}.gate_up_proj_scales"] = (
+                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.gate_up_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+                state_dict[f"{name}.down_proj_blocks"] = (
+                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(32, 2880, 90, -1)
+                )
+                state_dict[f"{name}.down_proj_scales"] = (
+                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.down_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+
+        return state_dict
+
     def is_serializable(self, safe_serialization=None):
-        logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:

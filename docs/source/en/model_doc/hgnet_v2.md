@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-01 and added to Hugging Face Transformers on 2025-04-29.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -42,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="ustc-community/hgnet-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")

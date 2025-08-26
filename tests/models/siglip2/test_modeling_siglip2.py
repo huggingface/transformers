@@ -44,7 +44,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -62,7 +61,6 @@ if is_vision_available():
 
 
 class Siglip2ModelTesterMixin(ModelTesterMixin):
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -121,10 +119,8 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
-                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype)
-                model_fa = model_class.from_pretrained(
-                    tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmp_dir, dtype=dtype)
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -347,7 +343,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method

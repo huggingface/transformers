@@ -812,10 +812,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(
-                self_attention_cache=DynamicCache(),
-                cross_attention_cache=DynamicCache(),
-            )
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -901,9 +898,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()

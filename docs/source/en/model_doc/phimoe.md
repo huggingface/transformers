@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-10-04.*
 
 # PhiMoE
 
@@ -66,9 +67,8 @@ torch.random.manual_seed(0)
 
 model = AutoModelForCausalLM.from_pretrained( 
     "microsoft/Phi-3.5-MoE-instruct",  
-    device_map="cuda",  
-    torch_dtype="auto",  
-    trust_remote_code=True,  
+    device_map="auto",  
+    dtype="auto",
 ) 
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct") 

@@ -1022,7 +1022,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlvit-base-patch32"
-        model = OwlViTForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = OwlViTForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 
