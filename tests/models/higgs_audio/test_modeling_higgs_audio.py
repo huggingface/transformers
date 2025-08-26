@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import AutoTokenizer
-from transformers.models.higgs_audio import HiggsAudioConfig, HiggsAudioEncoderConfig
+from transformers.models.higgs_audio import HiggsAudioConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
