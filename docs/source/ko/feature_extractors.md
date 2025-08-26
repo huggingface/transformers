@@ -62,7 +62,7 @@ feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
 </hfoption>
 <hfoption id="model-specific feature extractor">
 
-모든 사전 학습된 오디오 모델은 오디오 데이터를 올바르게 처리하기 위한 특정 특징 추출기를 가지고 있습니다. 특징 추출기를 로드하면 [preprocessor_config.json](https://hf.co/openai/whisper-tiny/blob/main/preprocessor_config.json)에서 특징 추출기의 설정(특성 크기, 청크 길이 등)을 가져옵니다.
+모든 사전 훈련된 오디오 모델은 오디오 데이터를 올바르게 처리하기 위한 특정 특징 추출기를 가지고 있습니다. 특징 추출기를 가져오면 [preprocessor_config.json](https://hf.co/openai/whisper-tiny/blob/main/preprocessor_config.json)에서 특징 추출기의 설정(특성 크기, 청크 길이 등)을 가져옵니다.
 
 특징 추출기는 모델별 클래스에서 직접 가져올 수 있습니다.
 
