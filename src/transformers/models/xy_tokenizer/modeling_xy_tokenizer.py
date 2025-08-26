@@ -960,16 +960,17 @@ class VectorQuantize(nn.Module):
             + self.codebook.float().pow(2).sum(1, keepdim=True).t()
         )
         indices = (-dist).max(1)[1].reshape(z.size(0), -1)  # (b t) -> b t
-        z_q = self.decode_code(indices)
-        commit_loss = F.mse_loss(z_e, z_q.detach(), reduction="none").mean([1, 2]) * self.commitment
+        z_q_emb = F.embedding(indices, self.codebook.float()).transpose(1, 2)  # Get embeddings without projection
+        commit_loss = F.mse_loss(z_e, z_q_emb.detach(), reduction="none").mean([1, 2]) * self.commitment
         if self.training and torch.is_grad_enabled():
             self.ema_update(encodings, F.one_hot(indices.view(-1), self.codebook_size))
             self.replace_dead_codes(encodings)
-        z_q = self.out_project(z_e + (z_q - z_e).detach())
+        z_q = self.out_project(z_e + (z_q_emb - z_e).detach())
         return z_q, commit_loss, torch.tensor(0.0, device=z.device), indices, z_e
 
     def decode_code(self, embed_id):
-        return F.embedding(embed_id, self.codebook.float()).transpose(1, 2)
+        embeddings = F.embedding(embed_id, self.codebook.float()).transpose(1, 2)
+        return self.out_project(embeddings)
 
 
 class ResidualVQ(nn.Module):
@@ -1096,8 +1097,11 @@ class ResidualVQ(nn.Module):
 
     def decode_codes(self, codes):
         nq, B, T = codes.shape
-        # 动态获取output_proj的数据类型，确保数据类型一致
-        output_dtype = next(self.output_proj.parameters()).dtype
+        # If output_proj is nn.Identity, use float32 as default
+        if isinstance(self.output_proj, nn.Identity):
+            output_dtype = torch.float32
+        else:
+            output_dtype = next(self.output_proj.parameters()).dtype
         emb = torch.zeros(B, self.rvq_dim, T, device=codes.device, dtype=output_dtype)
         for i, quantizer in enumerate(self.quantizers[:nq]):
             emb += quantizer.decode_code(codes[i])
@@ -1648,9 +1652,17 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # Create BatchFeature from input_values and attention_mask for encode method
+        # If attention_mask is None, create a default one
+        if attention_mask is None:
+            batch_size = input_values.shape[0]
+            seq_len = input_values.shape[-1]
+            attention_mask = torch.ones(batch_size, seq_len, device=input_values.device, dtype=torch.long)
+
+        features = BatchFeature({"input_features": input_values, "attention_mask": attention_mask})
+
         encoder_outputs = self.encode(
-            input_values=input_values,
-            attention_mask=attention_mask,
+            features=features,
             n_quantizers=n_quantizers,
             return_dict=True,
         )

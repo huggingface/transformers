@@ -348,14 +348,17 @@ class MossTTSDModel(MossTTSDPretrainedModel):
 
     def __init__(self, config: MossTTSDConfig):
         super().__init__(config)
-        self.text_pad_idx = config.pad_token_id
-        self.speech_pad_idx = config.speech_pad_token
+        self.text_pad_idx = config.pad_token_id if config.pad_token_id is not None else 0
+        self.speech_pad_idx = config.speech_pad_token if config.speech_pad_token is not None else 0
 
         self.embedding_list = nn.ModuleList([])
-        self.embedding_list.append(nn.Embedding(config.vocab_size, config.hidden_size, self.text_pad_idx))
+        # For text embedding, only use padding_idx if it's valid
+        text_padding_idx = self.text_pad_idx if self.text_pad_idx < config.vocab_size else None
+        self.embedding_list.append(nn.Embedding(config.vocab_size, config.hidden_size, text_padding_idx))
         # Channels 1 to channels-1: Speech tokens only
+        speech_padding_idx = self.speech_pad_idx if self.speech_pad_idx < config.speech_vocab_size else None
         for _ in range(1, config.channels):
-            self.embedding_list.append(nn.Embedding(config.speech_vocab_size, config.hidden_size, self.speech_pad_idx))
+            self.embedding_list.append(nn.Embedding(config.speech_vocab_size, config.hidden_size, speech_padding_idx))
 
         self.language_model = Qwen3Model(config)
         self.post_init()
