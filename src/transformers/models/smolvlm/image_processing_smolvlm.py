@@ -534,7 +534,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images (`List[List[np.ndarray]]`):
+            images (`list[list[np.ndarray]]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
