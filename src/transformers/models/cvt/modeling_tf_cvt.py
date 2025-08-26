@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -65,8 +64,8 @@ class TFBaseModelOutputWithCLSToken(ModelOutput):
             the initial embedding outputs.
     """
 
-    last_hidden_state: Optional[tf.Tensor] = None
-    cls_token_value: Optional[tf.Tensor] = None
+    last_hidden_state: tf.Tensor | None = None
+    cls_token_value: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
 
 
@@ -766,10 +765,10 @@ class TFCvtEncoder(keras.layers.Layer):
     def call(
         self,
         pixel_values: TFModelInputType,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithCLSToken | tuple[tf.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         hidden_state = pixel_values
         # When running on CPU, `keras.layers.Conv2D` doesn't support (batch_size, num_channels, height, width)
@@ -785,7 +784,7 @@ class TFCvtEncoder(keras.layers.Layer):
         # Change back to (batch_size, num_channels, height, width) format to have uniformity in the modules
         hidden_state = tf.transpose(hidden_state, perm=(0, 3, 1, 2))
         if output_hidden_states:
-            all_hidden_states = tuple([tf.transpose(hs, perm=(0, 3, 1, 2)) for hs in all_hidden_states])
+            all_hidden_states = tuple(tf.transpose(hs, perm=(0, 3, 1, 2)) for hs in all_hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, cls_token, all_hidden_states] if v is not None)
@@ -821,10 +820,10 @@ class TFCvtMainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithCLSToken | tuple[tf.Tensor]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -929,10 +928,10 @@ class TFCvtModel(TFCvtPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithCLSToken | tuple[tf.Tensor]:
         r"""
         Returns:
 
@@ -1015,10 +1014,10 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         self,
         pixel_values: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFImageClassifierOutputWithNoAttention, tuple[tf.Tensor]]:
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFImageClassifierOutputWithNoAttention | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

@@ -285,7 +285,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 Ahora, para enviar el modelo al Hub, asegúrate de haber iniciado sesión. Ejecuta en tu terminal:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 o desde un _notebook_:

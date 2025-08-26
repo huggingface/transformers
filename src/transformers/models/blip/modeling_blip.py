@@ -434,16 +434,16 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BlipPreTrainedModel(PreTrainedModel):
-    config_class = BlipConfig
+    config: BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
-    _skip_keys_device_placement = ["past_key_value"]
+    _skip_keys_device_placement = ["past_key_values"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
-        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
             module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
@@ -551,7 +551,7 @@ class BlipEncoder(nn.Module):
 
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = BlipVisionConfig
+    config: BlipVisionConfig
 
     def __init__(self, config: BlipVisionConfig):
         super().__init__(config)
@@ -617,7 +617,7 @@ class BlipVisionModel(BlipPreTrainedModel):
     """
 )
 class BlipModel(BlipPreTrainedModel):
-    config_class = BlipConfig
+    config: BlipConfig
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -902,7 +902,7 @@ class BlipModel(BlipPreTrainedModel):
     """
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
-    config_class = BlipConfig
+    config: BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
 
@@ -1080,7 +1080,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     """
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
-    config_class = BlipConfig
+    config: BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
     def __init__(self, config: BlipConfig):
@@ -1310,7 +1310,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     """
 )
 class BlipForImageTextRetrieval(BlipPreTrainedModel):
-    config_class = BlipConfig
+    config: BlipConfig
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)

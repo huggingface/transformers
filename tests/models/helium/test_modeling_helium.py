@@ -93,7 +93,7 @@ class HeliumIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_TEXTS = expected_texts.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, revision="refs/pr/1").to(
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision="refs/pr/1").to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")

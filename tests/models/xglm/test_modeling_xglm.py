@@ -258,7 +258,7 @@ class XGLMModelTester:
     def create_and_check_xglm_weight_initialization(self, config, *args):
         model = XGLMModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.num_hidden_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -446,7 +446,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model_name = "facebook/xglm-564M"
         tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = XGLMForCausalLM.from_pretrained(model_name, dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")

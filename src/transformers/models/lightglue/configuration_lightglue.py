@@ -49,7 +49,7 @@ class LightGlueConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         depth_confidence (`float`, *optional*, defaults to 0.95):
             The confidence threshold used to perform early stopping
@@ -129,9 +129,7 @@ class LightGlueConfig(PretrainedConfig):
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
-            )
+            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
             if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
                 keypoint_detector_config = AutoConfig.from_pretrained(
                     keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code

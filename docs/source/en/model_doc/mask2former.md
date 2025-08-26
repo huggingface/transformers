@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-12-02 and added to Hugging Face Transformers on 2023-01-16.*
 
 # Mask2Former
 
@@ -75,6 +76,14 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] Mask2FormerImageProcessor
     - preprocess
     - encode_inputs
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
+## Mask2FormerImageProcessorFast
+
+[[autodoc]] Mask2FormerImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation

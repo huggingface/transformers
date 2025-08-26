@@ -99,6 +99,10 @@ class ImageClassificationPipeline(Pipeline):
     """
 
     function_to_apply: ClassificationFunction = ClassificationFunction.NONE
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -188,7 +192,7 @@ class ImageClassificationPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

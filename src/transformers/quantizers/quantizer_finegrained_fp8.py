@@ -56,7 +56,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     f", actual = `{major}.{minor}`"
                 )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
@@ -74,11 +74,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the cpu/disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("Setting torch_dtype to torch.float32 as no torch_dtype was specified in from_pretrained")
-            torch_dtype = torch.float32
-        return torch_dtype
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("Setting dtype to torch.float32 as no dtype was specified in from_pretrained")
+            dtype = torch.float32
+        return dtype
 
     def create_quantized_param(
         self,

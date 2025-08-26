@@ -275,7 +275,7 @@ def replace_params(hf_params, tf_params, key_mapping):
             new_hf_value = torch.from_numpy(np.transpose(value))
         elif "temperature" in key:
             new_hf_value = value
-        elif "bn/gamma" or "bn/beta" in key:
+        elif "bn/gamma" in key or "bn/beta" in key:
             new_hf_value = torch.from_numpy(np.transpose(value)).squeeze()
         else:
             new_hf_value = torch.from_numpy(value)

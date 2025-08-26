@@ -18,8 +18,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
-
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -61,7 +59,7 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
     original TensorFlow repo. It can be seen here:
@@ -88,7 +86,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         bias: bool = False,
         dilation: int = 1,
         use_normalization: bool = True,
-        use_activation: Union[bool, str] = True,
+        use_activation: bool | str = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -764,7 +762,7 @@ class TFMobileViTEncoder(keras.layers.Layer):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         training: bool = False,
-    ) -> Union[tuple, TFBaseModelOutput]:
+    ) -> tuple | TFBaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layers):
@@ -830,10 +828,10 @@ class TFMobileViTMainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPooling:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -871,7 +869,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
             if not self.expand_output:
                 remaining_encoder_outputs = encoder_outputs[1:]
                 remaining_encoder_outputs = tuple(
-                    [tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]]
+                    tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]
                 )
                 remaining_encoder_outputs = (remaining_encoder_outputs,)
                 return output + remaining_encoder_outputs
@@ -880,7 +878,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -998,10 +996,10 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPooling:
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 
@@ -1046,11 +1044,11 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         labels: tf.Tensor | None = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFImageClassifierOutputWithNoAttention]:
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFImageClassifierOutputWithNoAttention:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1287,10 +1285,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         self,
         pixel_values: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple, TFSemanticSegmenterOutputWithNoAttention]:
+    ) -> tuple | TFSemanticSegmenterOutputWithNoAttention:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,

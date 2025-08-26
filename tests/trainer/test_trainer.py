@@ -31,6 +31,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -48,6 +49,7 @@ from transformers import (
     default_data_collator,
     enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
+    is_datasets_available,
     is_torch_available,
     logging,
     set_seed,
@@ -99,6 +101,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_non_multi_gpu,
+    require_torch_optimi,
     require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
@@ -160,6 +163,8 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+if is_datasets_available():
+    import datasets
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
@@ -511,14 +516,17 @@ if is_torch_available():
             self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
             self.fc = nn.Linear(hidden_size, vocab_size)
 
-        def forward(self, input_ids, **kwargs):
+        def forward(self, input_ids, labels=None, **kwargs):
             embedded = self.embedding(input_ids)
             lstm_out, _ = self.lstm(embedded)
             logits = self.fc(lstm_out)
-            return logits
+            if labels is None:
+                return logits
+
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+            return loss, logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
-        import datasets
         import numpy as np
 
         # Create random input sequences
@@ -554,7 +562,7 @@ if is_torch_available():
         output_dir=None,
         **kwargs,
     ):
-        label_names = kwargs.get("label_names", None)
+        label_names = kwargs.get("label_names")
         gradient_checkpointing = kwargs.get("gradient_checkpointing", False)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
@@ -594,8 +602,6 @@ if is_torch_available():
         )
 
     def get_language_model_trainer(**kwargs):
-        import datasets
-
         dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -772,8 +778,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_trainer_with_datasets(self):
-        import datasets
-
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
         y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,)).astype(np.float32)
@@ -822,7 +826,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @slow
     def test_gradient_accumulation_loss_alignment_with_model_loss(self):
         set_seed(42)
-        import datasets
 
         model_name = "nickypro/tinyllama-15M"
         dataset_name = "wikitext"
@@ -922,7 +925,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
-        import datasets
 
         model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
@@ -1143,6 +1145,34 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer.lr_scheduler.step()
             self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
 
+    def test_cosine_with_min_lr_schedule_with_warmup_lr_rate(self):
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"min_lr": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="cosine_warmup_with_min_lr",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+            report_to="none",
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Check the last learning rate
+        step_lrs = []
+        for _ in range(num_steps):
+            step_lrs.append(trainer.optimizer.param_groups[0]["lr"])
+            trainer.lr_scheduler.step()
+        self.assertEqual(step_lrs[0], 0.1)
+        self.assertEqual(step_lrs[1], 0.2)
+        self.assertEqual(step_lrs[-1], 1e-05)
+
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
@@ -1290,28 +1320,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
-    def test_evaluation_with_keys_to_drop(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
-        tiny_gpt2 = GPT2LMHeadModel(config)
-        x = torch.randint(0, 100, (128,))
-        eval_dataset = RepeatDataset(x)
-        args = TrainingArguments(self.get_auto_remove_tmp_dir(), report_to="none")
-        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
-        # By default the past_key_values are removed
-        result = trainer.predict(eval_dataset)
-        self.assertTrue(isinstance(result.predictions, np.ndarray))
-        # We can still get them by setting ignore_keys to []
-        result = trainer.predict(eval_dataset, ignore_keys=[])
-        self.assertTrue(isinstance(result.predictions, tuple))
-        self.assertEqual(len(result.predictions), 2)
-
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)
         trainer.train()
         args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
-        for key in dict1.keys():
+        for key in dict1:
             # Logging dir can be slightly different as they default to something with the time.
             if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])
@@ -1333,6 +1348,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
+    @pytest.mark.torch_compile_test
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1352,6 +1368,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_peft
     @require_bitsandbytes
+    @pytest.mark.torch_compile_test
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
 
@@ -2490,6 +2507,155 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # warm up steps << total steps
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        _ = trainer.train()
+
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw_extra_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_args="decouple_lr=True,max_lr=1e-3,kahan_sum=True",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # reflects displayed lr in trainer
+        self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw_trainer_adamw_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            weight_decay=0.001,
+            adam_beta1=0.89,
+            adam_beta2=0.98,
+            adam_epsilon=1e-8,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # check StableAdamW optimizer is created with the correct parameters
+        self.assertEqual(trainer.optimizer.defaults["beta1"], args.adam_beta1)
+        self.assertEqual(trainer.optimizer.defaults["beta2"], args.adam_beta2)
+        self.assertEqual(trainer.optimizer.defaults["eps"], args.adam_epsilon)
+        self.assertEqual(trainer.optimizer.defaults["weight_decay"], args.weight_decay)
+
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 2e-4
+        num_train_epochs = 10
+        num_warmup_steps = 5
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            num_train_epochs=num_train_epochs,
+            learning_rate=learning_rate,
+            warmup_steps=num_warmup_steps,
+            lr_scheduler_type="cosine",
+            logging_steps=1,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # creating log history of trainer, results don't matter
+        trainer.train()
+        logs = trainer.state.log_history[1:][:-1]
+
+        # reach given learning rate peak and end with 0 lr
+        self.assertTrue(logs[num_warmup_steps - 1]["learning_rate"] == learning_rate)
+        self.assertTrue(np.allclose(logs[-1]["learning_rate"], 0, atol=5e-6))
+
+        # increasing and decreasing pattern of lrs
+        increasing_lrs = [
+            logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+            for i in range(len(logs))
+            if i < num_warmup_steps - 1
+        ]
+        decreasing_lrs = [
+            logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+            for i in range(len(logs) - 1)
+            if i >= num_warmup_steps - 1
+        ]
+
+        self.assertTrue(all(increasing_lrs))
+        self.assertTrue(all(decreasing_lrs))
+
+        # warm up steps << total steps
+        self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
+
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
         model = RegressionModel()
@@ -3248,7 +3414,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        self.assertEqual(trainer._train_batch_size, 8)
+        self.assertEqual(trainer._train_batch_size, 14)
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -3268,16 +3434,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
+        # After `auto_find_batch_size` is ran we should now be at 16*0.9=14
+        self.assertEqual(trainer._train_batch_size, 14)
 
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
         # Check we are at 16 to start
         self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # We should be back to 14 again, picking up based upon the last ran Trainer
+        self.assertEqual(trainer._train_batch_size, 14)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -4396,10 +4562,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4419,11 +4585,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
@@ -4814,6 +4980,89 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
+    def test_special_token_aligment(self):
+        """
+        Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
+        ensure special tokens are aligned across configs
+        """
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # add new special tokens to tokenizer, so we can test that trainer aligns the model configs with the tokenizer
+        tokenizer.eos_token = "<|im_end|>"
+        tokenizer.pad_token = "<|im_end|>"
+        tokenizer.bos_token = "<|im_start|>"
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|im_end|>", "<|im_start|>"]})
+
+        # the model needs to have its embedding layer resized accordingly
+        model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+
+        # create a random dataset from the **new** vocab size
+        x = torch.randint(0, len(tokenizer), (64,))
+        dataset = RepeatDataset(x, length=2)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir, report_to="none", max_steps=1, per_device_train_batch_size=1
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=dataset,
+            )
+
+            # We haven't started training -> not yet aligned
+            self.assertNotEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertNotEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertNotEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+            trainer.train()
+
+            # Must be aligned as soon as we start training
+            self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_trainer_works_without_model_config(self):
+        """
+        Tests that models without a `config` parameter can still be trained.
+        This is useful for preserving compatibility with third parties that train different models using the
+        transformers Trainer.
+
+        If this test fails, it doesn't imply that there's issues with transformers, but perhaps with third
+        parties.
+        """
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
+        # Note that this class does not have a config attribute
+
+        train_dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in train_dataset.examples:
+            example["labels"] = example["input_ids"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir,
+                report_to="none",
+                max_steps=5,
+                per_device_train_batch_size=1,
+                remove_unused_columns=False,
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=train_dataset,
+            )
+            trainer.train()
+
 
 @require_torch
 @is_staging_test
@@ -4871,7 +5120,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
-            "git log".split(),
+            ["git", "log"],
             capture_output=True,
             check=True,
             encoding="utf-8",

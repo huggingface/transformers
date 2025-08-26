@@ -607,7 +607,7 @@ class FuyuProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            size = kwargs.get("size", None) or self.image_processor.size
+            size = kwargs.get("size") or self.image_processor.size
             padded_height, padded_width = size["height"], size["width"]
 
             num_image_tokens = []
@@ -774,19 +774,20 @@ class FuyuProcessor(ProcessorMixin):
 
         return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        # Make a copy of list when removing otherwise `self.image_processor.model_input_names` is also modified
+        extra_image_inputs = [
+            "image_input_ids",
+            "image_patch_indices_per_subsequence",
+            "images",
+            "image_patch_indices_per_batch",
+        ]
+        image_processor_input_names = [name for name in image_processor_input_names if name not in extra_image_inputs]
+        return list(tokenizer_input_names + image_processor_input_names + ["image_patches_indices"])
 
 
 __all__ = ["FuyuProcessor"]

@@ -56,19 +56,19 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Owlv2Processor(ProcessorMixin):
     r"""
-    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
+    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`]/[`Owlv2ImageProcessorFast`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
     a single processor that inherits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Owlv2ImageProcessor`]):
+        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Owlv2ImageProcessor"
+    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):
@@ -287,22 +287,6 @@ class Owlv2Processor(ProcessorMixin):
         return self.image_processor.post_process_image_guided_detection(
             outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
         )
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.batch_decode
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["Owlv2Processor"]

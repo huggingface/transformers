@@ -51,6 +51,11 @@ class VideoClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "av")
@@ -150,7 +155,7 @@ class VideoClassificationPipeline(Pipeline):
 
         model_inputs = self.image_processor(video, return_tensors=self.framework)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

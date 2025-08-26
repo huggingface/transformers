@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-22 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -51,7 +50,7 @@ pipeline = pipeline(
     task="translation",
     model="facebook/mbart-large-50-many-to-many-mmt",
     device=0,
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     src_lang="en_XX",
     tgt_lang="fr_XX",
 )
@@ -67,11 +66,11 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 article_en = "UN Chief Says There Is No Military Solution in Syria"
 
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
 tokenizer.src_lang = "en_XX"
-encoded_hi = tokenizer(article_en, return_tensors="pt").to("cuda")
+encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
 generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```
@@ -89,7 +88,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
 
     article = "UN Chief Says There Is No Military Solution in Syria"
@@ -106,7 +105,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
     article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
@@ -138,9 +137,6 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 
 [[autodoc]] MBart50TokenizerFast
 
-<frameworkcontent>
-<pt>
-
 ## MBartModel
 
 [[autodoc]] MBartModel
@@ -161,50 +157,3 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 
 [[autodoc]] MBartForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFMBartModel
-
-[[autodoc]] TFMBartModel
-    - call
-
-## TFMBartForConditionalGeneration
-
-[[autodoc]] TFMBartForConditionalGeneration
-    - call
-
-</tf>
-<jax>
-
-## FlaxMBartModel
-
-[[autodoc]] FlaxMBartModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForConditionalGeneration
-
-[[autodoc]] FlaxMBartForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForSequenceClassification
-
-[[autodoc]] FlaxMBartForSequenceClassification
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForQuestionAnswering
-
-[[autodoc]] FlaxMBartForQuestionAnswering
-    - __call__
-    - encode
-    - decode
-
-</jax>
-</frameworkcontent>

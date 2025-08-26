@@ -594,12 +594,11 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
 @auto_docstring
 class WavLMPreTrainedModel(PreTrainedModel):
-    config_class = WavLMConfig
+    config: WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = False
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
