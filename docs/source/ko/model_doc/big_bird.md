@@ -13,7 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-03-30.*
+
+*이 모델은 2020-07-28에 출시되었으며 2021-03-30에 Hugging Face Transformers에 추가되었습니다.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -21,16 +22,16 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# BigBird
+# BigBird[[bigbird]]
 
-[BigBird](https://huggingface.co/papers/2007.14062) is a transformer model built to handle sequence lengths up to 4096 compared to 512 for [BERT](./bert). Traditional transformers struggle with long inputs because attention gets really expensive as the sequence length grows. BigBird fixes this by using a sparse attention mechanism, which means it doesn’t try to look at everything at once. Instead, it mixes in local attention, random attention, and a few global tokens to process the whole input. This combination gives it the best of both worlds. It keeps the computation efficient while still capturing enough of the sequence to understand it well. Because of this, BigBird is great at tasks involving long documents, like question answering, summarization, and genomic applications.
+[BigBird](https://huggingface.co/papers/2007.14062)는 [BERT](./bert)의 512토큰과 비교하여 최대 4096토큰까지의 시퀀스 길이를 처리할 수 있도록 설계된 트랜스포머 모델입니다. 기존 트랜스포머는 시퀀스 길이가 증가함에 따라 어텐션 계산 비용이 매우 비싸지기 때문에 긴 입력을 처리하는 데 어려움을 겪습니다. BigBird는 희소 어텐션 메커니즘을 사용하여 이 문제를 해결합니다. 즉, 모든 것을 한 번에 보려고 하지 않습니다. 대신 로컬 어텐션, 랜덤 어텐션, 그리고 몇 개의 전역 토큰을 결합하여 전체 입력을 처리합니다. 이러한 조합은 두 가지 장점을 모두 제공합니다. 계산 효율성을 유지하면서도 시퀀스를 잘 이해할 수 있을 만큼 충분한 정보를 포착합니다. 이러한 특성 덕분에 BigBird는 질문 답변, 요약, 유전체학 응용 등 긴 문서를 다루는 작업에 매우 적합합니다.
 
-You can find all the original BigBird checkpoints under the [Google](https://huggingface.co/google?search_models=bigbird) organization.
+모든 원본 BigBird 체크포인트는 [Google](https://huggingface.co/google?search_models=bigbird) 조직에서 찾을 수 있습니다.
 
 > [!TIP]
-> Click on the BigBird models in the right sidebar for more examples of how to apply BigBird to different language tasks.
+> 오른쪽 사이드바의 BigBird 모델을 클릭하여 BigBird를 다양한 언어 작업에 적용하는 더 많은 예시를 확인하세요.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+아래 예시는 [`Pipeline`], [`AutoModel`], 그리고 명령줄에서 `[MASK]` 토큰을 예측하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -47,6 +48,7 @@ pipeline = pipeline(
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -81,24 +83,26 @@ print(f"The predicted token is: {predicted_token}")
 ```bash
 !echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model google/bigbird-roberta-base --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
-## Notes
-- Inputs should be padded on the right because BigBird uses absolute position embeddings.
-- BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
-- The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.
-- The sequence length must be divisible by the block size.
+## 참고사항[[notes]]
 
-## Resources
+- BigBird는 절대 위치 임베딩을 사용하므로 입력은 오른쪽에 패딩되어야 합니다.
+- BigBird는 `original_full`과 `block_sparse` 어텐션을 지원합니다. 입력 시퀀스 길이가 1024보다 작은 경우, 희소 패턴이 작은 입력에 대해서는 큰 이점을 제공하지 않으므로 `original_full`을 사용하는 것이 좋습니다.
+- 현재 구현은 3개 블록의 윈도우 크기와 2개의 전역 블록을 사용하며, ITC 구현만을 지원하고 `num_random_blocks=0`을 지원하지 않습니다.
+- 시퀀스 길이는 블록 크기로 나누어떨어져야 합니다.
 
-- Read the [BigBird](https://huggingface.co/blog/big-bird) blog post for more details about how its attention works.
+## 리소스[[resources]]
 
-## BigBirdConfig
+- BigBird의 어텐션 작동 방식에 대한 자세한 내용은 [BigBird](https://huggingface.co/blog/big-bird) 블로그 포스트를 읽어보세요.
+
+## BigBirdConfig[[bigbirdconfig]]
 
 [[autodoc]] BigBirdConfig
 
-## BigBirdTokenizer
+## BigBirdTokenizer[[bigbirdtokenizer]]
 
 [[autodoc]] BigBirdTokenizer
     - build_inputs_with_special_tokens
@@ -106,50 +110,50 @@ print(f"The predicted token is: {predicted_token}")
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## BigBirdTokenizerFast
+## BigBirdTokenizerFast[[bigbirdtokenizerfast]]
 
 [[autodoc]] BigBirdTokenizerFast
 
-## BigBird specific outputs
+## BigBird 특정 출력[[bigbird-specific-outputs]]
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
 
-## BigBirdModel
+## BigBirdModel[[bigbirdmodel]]
 
 [[autodoc]] BigBirdModel
     - forward
 
-## BigBirdForPreTraining
+## BigBirdForPreTraining[[bigbirdforpretraining]]
 
 [[autodoc]] BigBirdForPreTraining
     - forward
 
-## BigBirdForCausalLM
+## BigBirdForCausalLM[[bigbirdforcausallm]]
 
 [[autodoc]] BigBirdForCausalLM
     - forward
 
-## BigBirdForMaskedLM
+## BigBirdForMaskedLM[[bigbirdformaskedlm]]
 
 [[autodoc]] BigBirdForMaskedLM
     - forward
 
-## BigBirdForSequenceClassification
+## BigBirdForSequenceClassification[[bigbirdforsequenceclassification]]
 
 [[autodoc]] BigBirdForSequenceClassification
     - forward
 
-## BigBirdForMultipleChoice
+## BigBirdForMultipleChoice[[bigbirdformultiplechoice]]
 
 [[autodoc]] BigBirdForMultipleChoice
     - forward
 
-## BigBirdForTokenClassification
+## BigBirdForTokenClassification[[bigbirdfortokenclassification]]
 
 [[autodoc]] BigBirdForTokenClassification
     - forward
 
-## BigBirdForQuestionAnswering
+## BigBirdForQuestionAnswering[[bigbirdforquestionanswering]]
 
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
