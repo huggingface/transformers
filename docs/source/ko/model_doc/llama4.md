@@ -247,7 +247,7 @@ print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} G
 
 ### 어텐션 방법[[the-attention-methods]]
 
-기본 어텐션 함수를 업데이트하면 계산 성능과 메모리 사용량을 크게 개선할 수 있습니다. 인터페이스에 대한 자세한 설명은 [어텐션 인터페이스](../attention_interface) 개요를 참조하세요.
+기본 설정으로 주어지는 어텐션 함수를 변경하면 계산 성능과 메모리 사용량을 크게 개선할 수 있습니다. 인터페이스에 대한 자세한 설명은 [어텐션 인터페이스](../attention_interface) 개요를 참조하세요.
 
 Llama 4 모델은 처음 공개될 때부터 다음 어텐션 방식을 지원합니다: `eager`, `flex_attention`, `sdpa`. 최상의 결과를 위해 `flex_attention` 사용을 권장합니다.
 어텐션 메커니즘 전환은 모델을 초기화할 때 이루어집니다:
