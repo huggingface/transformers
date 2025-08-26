@@ -2646,6 +2646,7 @@ class DVAE(nn.Module):
             nn.GELU(),
         )
 
+        # These hardcodings match our model and cannot be modified.
         self.encoder = DVAEDecoder(
             idim=512,
             odim=1024,
@@ -2926,7 +2927,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 class PatchLlamaModel(LlamaModel):
     """
     This is a patch for LlamaModel to support our audio
-    Mainly modifies by changing create_causal_mask to _update_causal_mask
+    Mainly modifies by changing `create_causal_mask` to `_update_causal_mask`
     """
     
     @can_return_tuple
@@ -2977,8 +2978,8 @@ class PatchLlamaModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # ! in transformers>=4.53.1, this is `create_causal_mask`, but it will be wrong in our case
-        # so copy `_update_causal_mask` from LlamaModel which transformers=4.44.2
+        # in transformers>=4.53.1, this is `create_causal_mask`, but it will be wrong in our case
+        # so copy `_update_causal_mask` from `LlamaModel` which transformers=4.44.2
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
