@@ -1944,8 +1944,8 @@ class GenerationMixin(ContinuousMixin):
             )
             generation_config.cache_implementation = None
 
-        # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers. 
-        # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache). 
+        # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
+        # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
         generation_mode = generation_config.get_generation_mode(assistant_model)
         if (
