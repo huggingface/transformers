@@ -37,7 +37,7 @@ from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
-    attention_mask: torch.Tensor
+    attention_mask: Optional[torch.Tensor]
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
@@ -105,6 +105,9 @@ class ContinuousBatchProcessor:
         self.tokenizer = PreTrainedTokenizerFast.from_pretrained(self.config._name_or_path)
         self.decode_stream = DecodeStream(skip_special_tokens=True)
 
+    def return_attention_mask(self) -> bool:
+        return self.config._attn_implementation != "paged_attention" # we set `is_causal` to True in paged call
+
     @traced(standalone=True)
     def setup_static_tensors(self):
         T = self.max_batch_tokens
@@ -114,9 +117,6 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
-        self.attention_mask = torch.empty(
-            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
-        )
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
         self.write_index = torch.empty((T,), **tensor_metadata)
@@ -125,6 +125,13 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.empty((1, T), **tensor_metadata)
+        # Since attenention_mask is not always needed, we only allocate it if it is needed
+        if self.return_attention_mask():
+            self.attention_mask = torch.empty(
+                (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+            )
+        else:
+            self.attention_mask = None
         # Initialize the tensors by pretending they are in full use
         self.actual_tokens = T
         self.cache_used = max_token_budget
@@ -143,7 +150,6 @@ class ContinuousBatchProcessor:
         # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
-        self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
         self.cumulative_seqlens_q[: t + 1].zero_()
         self.cumulative_seqlens_k[: t + 1].zero_()
         self.write_index[:t].fill_(-1)
@@ -152,17 +158,20 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids[:, :t].fill_(-1)
+        if self.attention_mask is not None:
+            self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
+
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
         t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
         c = self.cache_used if self.slice_inputs else self.read_index.size(0)
-        # Return  the tensors
-        return {
+        # Prepare the kwargs
+        kwargs = {
             "input_ids": self.input_ids[:, :t],
+            "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
-            "attention_mask": self.attention_mask[:, :, :t, :c], # NOTE: this is probably not used for paged attention
             "cu_seq_lens_q": self.cumulative_seqlens_q[:t+1],
             "cu_seq_lens_k": self.cumulative_seqlens_k[:t+1],
             "write_index": self.write_index[:t],
@@ -174,6 +183,10 @@ class ContinuousBatchProcessor:
             "cache": self.cache,
             "use_cache": False,
         }
+        # If the attention mask is not None, we slice it as the others
+        if self.attention_mask is not None:
+            kwargs["attention_mask"] = self.attention_mask[:, :, :t, :c]
+        return kwargs
 
     def __repr__(self):
         return (
@@ -303,7 +316,7 @@ class ContinuousBatchProcessor:
         self.cache_used = len(read_index)
 
         min_value = torch.finfo(self.model_dtype).min
-        if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
+        if self.attention_mask is not None:
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
                     cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
