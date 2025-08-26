@@ -60,7 +60,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
         processor_kwargs = cls.prepare_processor_dict()
         processor = AutoProcessor.from_pretrained(
-            "/cache/guochenxu/models/minicpmo2_6_renamed_qkv", **processor_kwargs)
+            "openbmb/MiniCPM-o-2_6", **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
 
     @staticmethod

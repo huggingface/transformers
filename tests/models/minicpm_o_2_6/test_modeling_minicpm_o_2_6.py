@@ -73,7 +73,6 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                     f.write(chunk)
 
         self.model_path = "openbmb/MiniCPM-o-2_6"
-        # self.model_path = "/cache/guochenxu/models/minicpmo2_6_renamed_qkv"
         self.model = AutoModel.from_pretrained(
             self.model_path,
             attn_implementation='sdpa',
