@@ -268,10 +268,7 @@ class Glm4vMoeTextConfig(PretrainedConfig):
         norm_topk_prob=True,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

@@ -101,8 +101,9 @@ class Gemma3Processor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
-            image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
             # Create empty text to be replaced with placeholders
             if not text:
