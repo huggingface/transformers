@@ -796,17 +796,7 @@ class ModelBenchmark(AbstractModelBenchmark):
         # Load model
         self.logger.info("Loading model...")
         
-        # Handle device mapping intelligently
-        if config.device == "cuda":
-            # For multi-GPU systems, use single GPU for consistency in benchmarking
-            if torch.cuda.device_count() > 1:
-                self.logger.info(f"Multiple GPUs detected ({torch.cuda.device_count()}), loading on single GPU for consistency")
-                target_device = "cuda:0"
-            else:
-                target_device = "cuda:0"
-        else:
-            target_device = config.device
-            
+        target_device = config.device    
         # Get model initialization kwargs
         model_init_kwargs = self.get_model_init_kwargs(config)
         model_init_kwargs.update({

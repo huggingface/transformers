@@ -91,9 +91,68 @@ class LLaMABenchmark(ModelBenchmark):
         return "cuda"  # LLaMA prefers CUDA
 
 
-def run_benchmark(*args, **kwargs):
+def run_llama(logger, output_dir, **kwargs):
     """
-    Generic benchmark runner function for discovery compatibility.
-    Delegates to run_llama_benchmark.
+    Run LLaMA benchmark with the given configuration.
+    
+    Args:
+        logger: Logger instance
+        output_dir: Output directory for results
+        **kwargs: Additional configuration options
+        
+    Returns:
+        Path to output file if successful
     """
-    return run_llama_benchmark(*args, **kwargs)
+    from benchmark_framework import BenchmarkRunner
+    
+    # Extract parameters with defaults
+    model_id = kwargs.get('model_id', 'meta-llama/Llama-2-7b-hf')
+    warmup_iterations = kwargs.get('warmup_iterations', 3)
+    measurement_iterations = kwargs.get('measurement_iterations', 5)
+    num_tokens_to_generate = kwargs.get('num_tokens_to_generate', 100)
+    include_sdpa_variants = kwargs.get('include_sdpa_variants', True)
+    device = kwargs.get('device', 'cuda')
+    torch_dtype = kwargs.get('torch_dtype', 'float16')
+    batch_size = kwargs.get('batch_size', 1)
+    
+    logger.info(f"Starting LLaMA benchmark for model: {model_id}")
+    logger.info(f"Configuration: warmup={warmup_iterations}, measurement={measurement_iterations}, tokens={num_tokens_to_generate}")
+    
+    try:
+        # Create benchmark instance
+        benchmark = LLaMABenchmark(logger)
+        
+        # Create scenarios
+        scenarios = benchmark.create_scenarios(
+            model_id=model_id,
+            warmup_iterations=warmup_iterations,
+            measurement_iterations=measurement_iterations,
+            num_tokens_to_generate=num_tokens_to_generate,
+            include_sdpa_variants=include_sdpa_variants,
+            device=device,
+            torch_dtype=torch_dtype,
+            batch_size=batch_size
+        )
+        
+        logger.info(f"Created {len(scenarios)} benchmark scenarios")
+        
+        # Create runner and execute benchmarks
+        runner = BenchmarkRunner(logger, output_dir)
+        results = runner.run_benchmark(benchmark, scenarios)
+        
+        if not results:
+            logger.warning("No successful benchmark results")
+            return None
+        
+        # Save results
+        model_name = model_id.split('/')[-1]  # Extract model name from ID
+        output_file = runner.save_results(model_name, results)
+        
+        logger.info(f"LLaMA benchmark completed successfully. Results saved to: {output_file}")
+        return output_file
+        
+    except Exception as e:
+        logger.error(f"LLaMA benchmark failed: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        raise
