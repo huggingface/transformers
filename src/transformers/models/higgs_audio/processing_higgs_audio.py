@@ -133,7 +133,7 @@ class HiggsAudioResponse:
 
 
 def build_delay_pattern_mask(
-    input_ids: torch.LongTensor,
+    input_ids: "torch.LongTensor",
     bos_token_id: int,
     pad_token_id: int,
 ):
@@ -212,7 +212,7 @@ def revert_delay_pattern(data):
     out_l = []
     num_codebooks = data.shape[0]
     for i in range(num_codebooks):
-        out_l.append(data[i : (i + 1), i : (data.shape[1] - num_codebooks + 1 + i)])
+        out_l.append(data[i: (i + 1), i: (data.shape[1] - num_codebooks + 1 + i)])
     return torch.cat(out_l, dim=0)
 
 
