@@ -31,8 +31,6 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-from transformers.utils.generic import OutputRecorder, TransformersKwargs
-
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -44,6 +42,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
 )
+from ...utils.generic import OutputRecorder, TransformersKwargs
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 
