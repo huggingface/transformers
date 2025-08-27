@@ -1370,6 +1370,25 @@ def _get_dtype(
                 if hasattr(config, "dtype") and config.dtype is not None:
                     dtype = config.dtype
                     logger.info(f"Will use dtype={dtype} as defined in model's config object")
+                    
+                    # If config dtype is bfloat16, check device compatibility and fallback if needed
+                    if dtype == torch.bfloat16:
+                        current_device = torch.tensor([]).device
+                        device_type = current_device.type if current_device.type != "cpu" else "cuda" if torch.cuda.is_available() else "cpu"
+                        
+                        if device_type != "cpu" and not is_torch_bf16_available_on_device(device_type):
+                            if is_torch_fp16_available_on_device(device_type):
+                                logger.info(f"Device '{device_type}' does not support bfloat16. Falling back to float16.")
+                                dtype = torch.float16
+                            else:
+                                logger.info(f"Device '{device_type}' does not support bfloat16 or float16. Falling back to float32.")
+                                dtype = torch.float32
+                            
+                            # Update config with the corrected dtype
+                            config.dtype = dtype
+                            for sub_config_key in config.sub_configs:
+                                sub_config = getattr(config, sub_config_key)
+                                sub_config.dtype = dtype
                 else:
                     if is_sharded and "dtype" in sharded_metadata:
                         dtype = sharded_metadata["dtype"]
@@ -1382,8 +1401,27 @@ def _get_dtype(
                         dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `dtype` attribute can't be found in model's config object, "
-                        "will use dtype={dtype} as derived from model's weights"
+                        f"will use dtype={dtype} as derived from model's weights"
                     )
+                    
+                    # If auto-detected dtype is bfloat16, check device compatibility and fallback if needed
+                    if dtype == torch.bfloat16:
+                        current_device = torch.tensor([]).device
+                        device_type = current_device.type if current_device.type != "cpu" else "cuda" if torch.cuda.is_available() else "cpu"
+                        
+                        if device_type != "cpu" and not is_torch_bf16_available_on_device(device_type):
+                            if is_torch_fp16_available_on_device(device_type):
+                                logger.info(f"Device '{device_type}' does not support bfloat16. Falling back to float16.")
+                                dtype = torch.float16
+                            else:
+                                logger.info(f"Device '{device_type}' does not support bfloat16 or float16. Falling back to float32.")
+                                dtype = torch.float32
+                            
+                            # Update config with the corrected dtype
+                            config.dtype = dtype
+                            for sub_config_key in config.sub_configs:
+                                sub_config = getattr(config, sub_config_key)
+                                sub_config.dtype = dtype
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
@@ -5132,74 +5170,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
             )
 
-            # If dtype resolved to bfloat16 but the intended accelerator doesn't support it
-            # (common on Colab GPUs like T4), fallback to float16, else float32, before instantiating the model.
-            try:
-                if dtype == torch.bfloat16:
-                    target_device_type = None
-                    # Coarse inference from user-provided device_map argument (already normalized earlier)
-                    if isinstance(device_map, dict):
-                        v = device_map.get("", None)
-                        if isinstance(v, torch.device):
-                            target_device_type = v.type
-                        elif isinstance(v, str) and v != "disk":
-                            target_device_type = v.split(":", 1)[0]
-                        elif isinstance(v, int):
-                            if torch.cuda.is_available():
-                                target_device_type = "cuda"
-                            elif is_torch_xpu_available():
-                                target_device_type = "xpu"
-                            elif is_torch_npu_available():
-                                target_device_type = "npu"
-                    elif isinstance(device_map, str):
-                        # If auto/balanced, assume primary accelerator if available
-                        if device_map in {"auto", "balanced", "balanced_low_0", "sequential"}:
-                            if torch.cuda.is_available():
-                                target_device_type = "cuda"
-                            elif is_torch_xpu_available():
-                                target_device_type = "xpu"
-                            elif is_torch_npu_available():
-                                target_device_type = "npu"
-                        else:
-                            # device name like 'cuda', 'cuda:0', 'xpu:0', etc.
-                            target_device_type = device_map.split(":", 1)[0]
-                    elif isinstance(device_map, int):
-                        if torch.cuda.is_available():
-                            target_device_type = "cuda"
-                        elif is_torch_xpu_available():
-                            target_device_type = "xpu"
-                        elif is_torch_npu_available():
-                            target_device_type = "npu"
-                    # Else fallback to context manager / global default device
-                    if target_device_type is None:
-                        inferred_device = get_torch_context_manager_or_global_device()
-                        if inferred_device is not None and inferred_device.type != "cpu":
-                            target_device_type = inferred_device.type
 
-                    if target_device_type is not None and not is_torch_bf16_available_on_device(target_device_type):
-                        if is_torch_fp16_available_on_device(target_device_type):
-                            logger.info(
-                                f"Device '{target_device_type}' does not support bfloat16. Falling back to float16."
-                            )
-                            dtype = torch.float16
-                        else:
-                            logger.info(
-                                f"Device '{target_device_type}' does not support bfloat16 or float16. Falling back to float32."
-                            )
-                            dtype = torch.float32
-                        # Reflect final dtype decision in config and default dtype for instantiation
-                        config.dtype = dtype
-                        for sub_config_key in config.sub_configs:
-                            sub_config = getattr(config, sub_config_key)
-                            sub_config.dtype = dtype
-                        # Reset default dtype to the new dtype for model init
-                        if dtype_orig is not None:
-                            # restore to the original default first, then set to the new one to keep the semantics
-                            torch.set_default_dtype(dtype_orig)
-                        dtype_orig = cls._set_default_dtype(dtype)
-            except Exception:
-                # Be conservative: if any unexpected issue occurs during checks, keep existing dtype.
-                pass
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
