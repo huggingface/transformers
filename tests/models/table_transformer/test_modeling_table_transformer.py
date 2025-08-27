@@ -594,7 +594,7 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         expected_logits_data = Expectations({
             ("cuda", None): [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
             ("rocm", (9, 4)): [[-6.7668, -16.9917, 6.7738], [-8.0046, -22.2668, 6.9491], [-7.2834, -21.0321, 7.3785]],
-        }).get_expectation()
+        }).get_expectation()  # fmt: skip
 
         expected_logits = torch.tensor(expected_logits_data, device=torch_device)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
@@ -602,7 +602,7 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         expected_boxes_data = Expectations({
             ("cuda", None): [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]],
             ("rocm", (9, 4)): [[0.4868, 0.1766, 0.6732], [0.6686, 0.4526, 0.3859], [0.4717, 0.1760, 0.6362]],
-        }).get_expectation()
+        }).get_expectation()  # fmt: skip
 
         expected_boxes = torch.tensor(expected_boxes_data, device=torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3)
