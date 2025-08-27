@@ -20,22 +20,18 @@
 
 import unittest
 
-from transformers import AutoTokenizer, StaticCache, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    import torch
-
     from transformers import (
         ApertusConfig,
         ApertusForCausalLM,
