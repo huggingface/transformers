@@ -2022,7 +2022,7 @@ class DFineHybridEncoder(nn.Module):
     """
 
     def __init__(self, config: DFineConfig):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.in_channels = config.encoder_in_channels
         self.num_fpn_stages = len(self.in_channels) - 1
