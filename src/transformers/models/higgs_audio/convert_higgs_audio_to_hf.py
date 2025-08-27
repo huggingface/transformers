@@ -106,7 +106,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 """
 ```
 # Download config and checkpoint files
-wget https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base/resolve/main/ -P /workspace/higgs_audio_original
+git clone https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base /workspace/higgs_audio_original
 # Run conversion:
 python src/transformers/models/higgs_audio/convert_higgs_audio_to_hf.py \
     --checkpoint_path /workspace/higgs_audio_original \
