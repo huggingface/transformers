@@ -82,19 +82,6 @@ Results are saved as JSON files with the following structure:
 }
 ```
 
-## Mock Benchmark
-
-The framework includes a mock benchmark for testing and demonstration purposes:
-
-```bash
-# Run mock benchmark (demonstrates framework without ML dependencies)
-python run_benchmarks.py --include mock_benchmark --enable-mock
-
-# Test framework with fast settings
-python run_benchmarks.py --include mock_benchmark --enable-mock \
-    --warmup-iterations 1 --measurement-iterations 2 --num-tokens-to-generate 10
-```
-
 ### Debug Mode
 
 ```bash
