@@ -237,7 +237,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         skippable_tests = [
             "test_sample_generate_dict_output",  # return sequences > 1
             "test_beam",
-            "test_group_beam",
             "test_constrained_beam",
             "test_contrastive",
             "test_assisted",
