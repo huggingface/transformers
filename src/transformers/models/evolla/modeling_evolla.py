@@ -277,7 +277,7 @@ def eager_attention_forward(
 
 
 class EvollaSaProtSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         super().__init__()
         self.config = config
 
@@ -309,7 +309,7 @@ class EvollaSaProtSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
         self.scaling = 1.0
-        self.is_causal = self.is_decoder  # used only in FA2/FA3
+        self.is_causal = self.is_decoder and not is_cross_attention
 
     def forward(
         self,
@@ -379,9 +379,9 @@ class EvollaSaProtSelfOutput(nn.Module):
 
 
 class EvollaSaProtAttention(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config, layer_idx=None, is_cross_attention=False):
         super().__init__()
-        self.self = EvollaSaProtSelfAttention(config, layer_idx=layer_idx)
+        self.self = EvollaSaProtSelfAttention(config, layer_idx=layer_idx, is_cross_attention=is_cross_attention)
         self.output = EvollaSaProtSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -468,7 +468,7 @@ class EvollaSaProtLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = EvollaSaProtAttention(config)
+            self.crossattention = EvollaSaProtAttention(config, is_cross_attention=True)
         self.intermediate = EvollaSaProtIntermediate(config)
         self.output = EvollaSaProtOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

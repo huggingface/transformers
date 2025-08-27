@@ -128,7 +128,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         nn.Module.__init__(self)
         self.config = config
 
@@ -160,7 +160,7 @@ class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
         self.scaling = 1.0
-        self.is_causal = self.is_decoder  # used only in FA2/FA3
+        self.is_causal = self.is_decoder and not is_cross_attention
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
