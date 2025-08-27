@@ -33,7 +33,9 @@ from transformers import (
     LlamaConfig,
     Qwen2Config,
     Qwen3Config,
+    Qwen3MoeConfig,
 )
+from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
 
 
 LM_TYPE_CORRESPONDENCE = {
@@ -52,15 +54,15 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3-38B": "qwen2",
     "OpenGVLab/InternVL3-78B": "qwen2",
     "OpenGVLab/InternVL3_5-1B": "qwen3",
-    "OpenGVLab/InternVL3_5-2B": "qwen3",
+    "OpenGVLab/InternVL3_5-2B": "qwen3", 
     "OpenGVLab/InternVL3_5-4B": "qwen3",
     "OpenGVLab/InternVL3_5-8B": "qwen3",
     "OpenGVLab/InternVL3_5-14B": "qwen3",
     "OpenGVLab/InternVL3_5-26B": "qwen3",
     "OpenGVLab/InternVL3_5-38B": "qwen3",
     "OpenGVLab/InternVL3_5-78B": "qwen3",
-    "OpenGVLab/InternVL3_5-241B-A28B": "qwen3",
-    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "qwen3",
+    "OpenGVLab/InternVL3_5-241B-A28B": "qwen3_moe",
+    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss",
 }
 
 UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
@@ -101,7 +103,19 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN2 = {
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3 = {
-    # For Qwen3 and derivatives (same structure as Qwen2 for key mapping)
+    # Basic model mappings
+    r"language_model.model.":                       r"model.language_model.",
+    r"language_model.lm_head":                       r"lm_head",
+}
+
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3_MOE = {
+    # Qwen3Moe mappings (standard MoE structure)
+    r"language_model.model.":                       r"model.language_model.",
+    r"language_model.lm_head":                       r"lm_head",
+}
+
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_GPT_OSS = {
+    # GptOss mappings (custom MoE structure)
     r"language_model.model.":                       r"model.language_model.",
     r"language_model.lm_head":                       r"lm_head",
 }
@@ -141,9 +155,74 @@ chat_template = (
 CONTEXT_LENGTH = 8192
 
 
-def get_lm_type(path: str) -> Literal["qwen2", "qwen3", "llama"]:
+def handle_specialized_architecture_weights(key: str, new_key: str, weight: torch.Tensor, lm_type: str, state_dict: dict) -> bool:
     """
-    Determine the type of language model (either 'qwen2', 'qwen3', or 'llama') based on a given model path.
+    Handle weight conversion for specialized architectures (Qwen3, Qwen3Moe, GptOss).
+    Returns True if the weight was handled, False if it should be processed normally.
+    """
+    
+    if lm_type == "qwen3":
+        # Qwen3 dense model with attention sinks
+        if "self_attn.sinks" in key:
+            # Keep attention sinks as-is
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts" in key or "mlp.router" in key:
+            # This shouldn't happen for dense Qwen3, but skip if it does
+            print(f"Warning: Found MoE components in dense Qwen3 model: {key}")
+            return True
+        return False
+    
+    elif lm_type == "qwen3_moe":
+        # Qwen3Moe with standard MoE structure
+        if "self_attn.sinks" in key:
+            # Keep attention sinks
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.gate" in key:
+            # Standard Qwen3Moe gate/router
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts" in key:
+            # Standard Qwen3Moe expert weights
+            state_dict[new_key] = weight
+            return True
+        return False
+    
+    elif lm_type == "gpt_oss":
+        # GptOss with custom MoE structure
+        if "self_attn.sinks" in key:
+            # Keep attention sinks
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.router" in key:
+            # GptOss router
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts.gate_up_proj" in key:
+            # GptOss uses gate_up_proj structure
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts.gate_up_proj_bias" in key:
+            # GptOss bias terms
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts.down_proj" in key:
+            # GptOss down projection
+            state_dict[new_key] = weight
+            return True
+        elif "mlp.experts.down_proj_bias" in key:
+            # GptOss bias terms
+            state_dict[new_key] = weight
+            return True
+        return False
+    
+    return False
+
+
+def get_lm_type(path: str) -> Literal["qwen2", "qwen3", "qwen3_moe", "gpt_oss", "llama"]:
+    """
+    Determine the type of language model based on a given model path.
     """
     if path not in LM_TYPE_CORRESPONDENCE:
         base_config = AutoModel.from_pretrained(path, trust_remote_code=True).config
@@ -154,14 +233,18 @@ def get_lm_type(path: str) -> Literal["qwen2", "qwen3", "llama"]:
             lm_type = "llama"
         elif lm_arch == "Qwen2ForCausalLM":
             lm_type = "qwen2"
-        elif lm_arch in ("Qwen3ForCausalLM", "Qwen3MoeForCausalLM", "GptOssForCausalLM"):
+        elif lm_arch == "Qwen3ForCausalLM":
             lm_type = "qwen3"
+        elif lm_arch == "Qwen3MoeForCausalLM":
+            lm_type = "qwen3_moe"
+        elif lm_arch == "GptOssForCausalLM":
+            lm_type = "gpt_oss"
         else:
             raise ValueError(
-                f"Architecture '{lm_arch}' is not supported. Only 'Qwen2ForCausalLM', 'Qwen3ForCausalLM', 'Qwen3MoeForCausalLM', 'GptOssForCausalLM', and 'InternLM2ForCausalLM' are recognized."
+                f"Architecture '{lm_arch}' is not supported. Supported architectures: Qwen2ForCausalLM, Qwen3ForCausalLM, Qwen3MoeForCausalLM, GptOssForCausalLM, InternLM2ForCausalLM."
             )
     else:
-        lm_type: Literal["qwen2", "qwen3", "llama"] = LM_TYPE_CORRESPONDENCE[path]
+        lm_type: Literal["qwen2", "qwen3", "qwen3_moe", "gpt_oss", "llama"] = LM_TYPE_CORRESPONDENCE[path]
 
     return lm_type
 
@@ -189,6 +272,12 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: O
                 new_text = re.sub(pattern, replacement, new_text)
         elif lm_type == "qwen3":
             for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3.items():
+                new_text = re.sub(pattern, replacement, new_text)
+        elif lm_type == "qwen3_moe":
+            for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3_MOE.items():
+                new_text = re.sub(pattern, replacement, new_text)
+        elif lm_type == "gpt_oss":
+            for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_GPT_OSS.items():
                 new_text = re.sub(pattern, replacement, new_text)
         output_dict.update(dict(zip(old_text_language.split("\n"), new_text.split("\n"))))
         old_text_multi = "\n".join(
@@ -229,6 +318,12 @@ def get_internvl_config(input_base_path):
     elif lm_type == "qwen3":
         image_token_id = 151667
         language_config_class = Qwen3Config
+    elif lm_type == "qwen3_moe":
+        image_token_id = 151667
+        language_config_class = Qwen3MoeConfig
+    elif lm_type == "gpt_oss":
+        image_token_id = 200002  # From the config
+        language_config_class = GptOssConfig
     else:
         image_token_id = 92546
         language_config_class = LlamaConfig
@@ -237,8 +332,10 @@ def get_internvl_config(input_base_path):
     # Force use_cache to True
     llm_config["use_cache"] = True
     # Force correct eos_token_id for InternVL3 and InternVL3.5
-    if ("InternVL3" in input_base_path or "InternVL3_5" in input_base_path) and lm_type in ("qwen2", "qwen3"):
+    if ("InternVL3" in input_base_path or "InternVL3_5" in input_base_path) and lm_type in ("qwen2", "qwen3", "qwen3_moe"):
         llm_config["eos_token_id"] = 151645
+    elif lm_type == "gpt_oss":
+        llm_config["eos_token_id"] = 200002
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
     if "attention_probs_dropout_prob" in vision_config:
@@ -273,6 +370,9 @@ def write_model(
     if push_to_hub:
         config.push_to_hub(hub_dir, use_temp_dir=True)
     print("Model config saved successfully...")
+
+    # Get LM type for later use
+    lm_type = get_lm_type(input_base_path)
 
     # ------------------------------------------------------------
     # Convert weights
@@ -315,8 +415,36 @@ def write_model(
 
             new_key_value = new_key.replace("attention.wqkv", "self_attn.v_proj")
             state_dict[new_key_value] = v_proj
+        elif lm_type in ("qwen3", "qwen3_moe", "gpt_oss"):
+            # Handle architecture-specific weight conversion
+            handled = handle_specialized_architecture_weights(key, new_key, state_dict_old[key], lm_type, state_dict)
+            if handled:
+                continue
         else:
             state_dict[new_key] = state_dict_old[key]
+
+    # Handle missing q_norm and k_norm for Qwen3 models if they're expected but missing
+    if lm_type in ("qwen3", "qwen3_moe"):
+        missing_q_norm = []
+        missing_k_norm = []
+        hidden_size = config.text_config.hidden_size
+        num_layers = config.text_config.num_hidden_layers
+        
+        for layer_idx in range(num_layers):
+            q_norm_key = f"model.language_model.layers.{layer_idx}.self_attn.q_norm.weight"
+            k_norm_key = f"model.language_model.layers.{layer_idx}.self_attn.k_norm.weight"
+            
+            if q_norm_key not in state_dict:
+                missing_q_norm.append(q_norm_key)
+            if k_norm_key not in state_dict:
+                missing_k_norm.append(k_norm_key)
+        
+        if missing_q_norm or missing_k_norm:
+            print(f"Adding missing normalization weights: {len(missing_q_norm)} q_norm, {len(missing_k_norm)} k_norm")
+            for key in missing_q_norm:
+                state_dict[key] = torch.ones(hidden_size, dtype=torch.bfloat16)
+            for key in missing_k_norm:
+                state_dict[key] = torch.ones(hidden_size, dtype=torch.bfloat16)
 
     del state_dict_old
     gc.collect()
@@ -373,7 +501,7 @@ def write_tokenizer(
     save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
 ):
     lm_type = get_lm_type(path)
-    if lm_type in ("qwen2", "qwen3"):
+    if lm_type in ("qwen2", "qwen3", "qwen3_moe", "gpt_oss"):
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
             return_token_type_ids=False,
