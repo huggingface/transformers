@@ -327,20 +327,5 @@ class T5GemmaConfig(PretrainedConfig):
         # Always return self, regardless of the decoder option.
         return self
 
-    @property
-    def num_hidden_layers(self):
-        # For generation and caching purposes, use the decoder's num_hidden_layers
-        return self.decoder.num_hidden_layers
-
-    @num_hidden_layers.setter
-    def num_hidden_layers(self, value):
-        if hasattr(self, "decoder") and self.decoder is not None:
-            self.decoder.num_hidden_layers = value
-
-    def to_dict(self):
-        output = super().to_dict()
-        output["num_hidden_layers"] = self.num_hidden_layers
-        return output
-
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
