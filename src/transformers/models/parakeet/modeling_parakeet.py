@@ -131,7 +131,7 @@ class ParakeetEncoderAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = 1
+        self.num_key_value_groups = 1       # config.num_attention_heads // config.num_key_value_heads in Llama, and they're equal here
         self.scaling = 1 / math.sqrt(self.head_dim)
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
@@ -200,7 +200,8 @@ class ParakeetEncoderAttention(nn.Module):
 
         # to match the original implementation
         # cf https://github.com/NVIDIA/NeMo/blob/620d2ba07835c230b2e1ee25fe1322504ce01d79/nemo/collections/asr/parts/submodules/multi_head_attention.py#L336-L340
-        if attention_mask is not None:
+        # Only apply padding mask for eager and sdpa implementations, not for flash as pads are ignored
+        if attention_mask is not None and "flash" not in self.config._attn_implementation:
             all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
             all_masked_rows = all_masked_rows.unsqueeze_(-1)
             attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
