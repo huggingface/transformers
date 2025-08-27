@@ -122,42 +122,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return num_windows, full_length
 
-    def _load_audio(self, file_path, target_sr=16000, duration=30.0, start=0.0):
-        requires_backends(self, ["librosa"])
-        import librosa
-
-        y, sr = librosa.load(file_path, sr=None, mono=False)
-        if y.ndim == 1: y = y[np.newaxis, :]
-        C, N = y.shape
-
-        if file_path.endswith(".mp3"):
-            if (N / sr) * 1000.0 > (start + duration) * 1000.0:
-                s0, s1 = int(start * sr), int((start + duration) * sr)
-                y = y[:, max(0, s0):min(N, s1)]
-            y = y.mean(axis=0) if C > 1 else y[0]
-            if sr != target_sr and y.size: y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
-            data = y.astype(np.float32, copy=False)
-        else:
-            s0, s1 = int(start * sr), min(N, int((start + duration) * sr))
-            y = y[:, s0:s1] if s0 < N else y[:, 0:0]
-            y = y[0] if y.ndim == 2 and y.shape[0] > 1 else y.squeeze(0)
-            if sr != target_sr and y.size: y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
-            data = y.astype(np.float64, copy=False)
-
-        if data.size:
-            dmin, dmax = data.min(), data.max()
-            if dmin >= 0:
-                m = abs(dmax) or 1.0
-                data = 2 * data / m - 1.0
-            else:
-                m = max(abs(dmax), abs(dmin)) or 1.0
-                data = data / m
-
-        assert len(data.shape) == 1, data.shape
-        return data
-
-    def _load_sound_mask(self, sound_file, sample_rate=16000, window_length=30.0, window_overlap=0.0, max_num_window=20, audio_start=0.0):
-        if sound_file is None:
+    def _load_sound_mask(self, audio_data, sample_rate=16000, window_length=30.0, window_overlap=0.0, max_num_window=20, audio_start=0.0):
+        if audio_data is None:
             return None
         window_length = int(window_length * sample_rate)
         window_overlap = int(window_overlap * sample_rate)
@@ -169,7 +135,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_embed_masks = []
 
         try:
-            audio_data = self._load_audio(sound_file, sample_rate, duration, audio_start)  # already cuts to max duration
             T = len(audio_data)
             audio_data = audio_data.reshape(1, -1)
             num_windows, full_length = self._get_num_windows(T, sample_rate)
@@ -196,7 +161,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 audio_embed_mask[:output_embedding_lengths] = 1
                 audio_embed_masks.append(audio_embed_mask)
         except:
-            print("Error loading sound file: ", sound_file)
+            print("Error loading sound file")
             sound_outputs.append(torch.zeros(1, 128, 3000))
             audio_feature_masks.append(torch.zeros(1, 3000, dtype=torch.int32))
             audio_embed_masks.append(torch.zeros(750))
@@ -205,12 +170,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_embed_masks = torch.stack(audio_embed_masks, dim=0)
         return sound_outputs.numpy().tolist(), audio_feature_masks, audio_embed_masks
 
-    def __call__(self, text: str, audio_path: str):
+    def __call__(self, text: str, audio_data):
         media = []
         media_meta = defaultdict(list)
 
         final_text = ""
-        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio_path)
+        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio_data)
         media.append(sound)
         media_meta["sound_feature_masks"].append(audio_feature_masks)
         media_meta["sound_embed_masks"].append(audio_embed_masks)
