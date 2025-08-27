@@ -136,7 +136,7 @@ class ImageToImagePipeline(Pipeline):
 
     def postprocess(self, model_outputs):
         images = []
-        if "reconstruction" in model_outputs.keys():
+        if "reconstruction" in model_outputs:
             outputs = model_outputs.reconstruction
         for output in outputs:
             output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()

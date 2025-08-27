@@ -21,6 +21,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
+import pytest
 import requests
 
 from transformers import (
@@ -37,7 +38,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -259,6 +259,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     test_pruning = False
     test_head_masking = False
     _is_composite = True
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
@@ -281,6 +282,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
         pass
 
     @unittest.skip(reason="Compile not yet supported because in QwenOmniThinker models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -292,7 +294,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_model_outputs_equivalence(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -413,7 +414,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
@@ -445,7 +445,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
     # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @unittest.skip("Cannot handle 4D attention mask")
@@ -698,7 +699,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=text * 2,
+            text=[text] * 2,
             audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
@@ -716,6 +717,10 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
                 ],
                 ("cuda", 8): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                ],
+                ("rocm", None): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                 ],

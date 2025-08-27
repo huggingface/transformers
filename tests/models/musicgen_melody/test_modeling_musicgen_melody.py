@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from pytest import mark
 
 from transformers import (
@@ -31,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -39,7 +41,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_sdpa,
     require_torchaudio,
     slow,
     torch_device,
@@ -68,7 +69,7 @@ if is_torchaudio_available():
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -1031,7 +1032,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="MusicgenMelody doesn't use the MusicgenMelodyFlashAttention2 class method.")
 
-    @require_torch_sdpa
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -1169,7 +1169,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -1235,6 +1234,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -1255,6 +1255,12 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):

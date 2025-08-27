@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import packaging.version
 
+from transformers.utils.import_utils import _is_package_available
+
 
 if os.getenv("WANDB_MODE") == "offline":
     print("⚙️  Running in WANDB offline mode")
@@ -109,7 +111,14 @@ def is_wandb_available():
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
-    return importlib.util.find_spec("wandb") is not None
+    if importlib.util.find_spec("wandb") is not None:
+        import wandb
+
+        # wandb might still be detected by find_spec after an uninstall (leftover files or metadata), but not actually
+        # import correctly. To confirm it's fully installed and usable, we check for a key attribute like "run".
+        return hasattr(wandb, "run")
+    else:
+        return False
 
 
 def is_trackio_available():
@@ -797,6 +806,19 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
+            # Check if wandb is actually installed but disabled via WANDB_DISABLED
+            if importlib.util.find_spec("wandb") is not None:
+                # wandb is installed but disabled
+                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
+                if wandb_disabled:
+                    raise RuntimeError(
+                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
+                        "This disables wandb logging, even though it was explicitly requested.\n\n"
+                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
+                        "- To disable logging: use `report_to='none'`.\n\n"
+                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
+                    )
+            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
@@ -856,7 +878,7 @@ class WandbCallback(TrainerCallback):
             init_args = {}
             if trial_name is not None:
                 init_args["name"] = trial_name
-                init_args["group"] = args.run_name
+                init_args["group"] = args.run_name or args.output_dir
             elif args.run_name is not None:
                 init_args["name"] = args.run_name
                 if args.run_name == args.output_dir:
@@ -1043,6 +1065,14 @@ class WandbCallback(TrainerCallback):
 class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
+
+    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
+    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+
+    **Requires**:
+    ```bash
+    pip install trackio
+    ```
     """
 
     def __init__(self):
@@ -1119,12 +1149,14 @@ class TrackioCallback(TrainerCallback):
             device_idx = torch.cuda.current_device()
             total_memory = torch.cuda.get_device_properties(device_idx).total_memory
             memory_allocated = torch.cuda.memory_allocated(device_idx)
-            power = torch.cuda.power_draw(device_idx)
+
             gpu_memory_logs = {
                 f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
                 f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-                f"gpu/{device_idx}/power": power / 1000,  # Watts
             }
+            if _is_package_available("pynvml"):
+                power = torch.cuda.power_draw(device_idx)
+                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
             if dist.is_available() and dist.is_initialized():
                 gathered_logs = [None] * dist.get_world_size()
                 dist.all_gather_object(gathered_logs, gpu_memory_logs)
@@ -1230,11 +1262,7 @@ class CometCallback(TrainerCallback):
 
             import comet_ml
 
-            # Do not use the default run_name as the experiment name
-            if args.run_name is not None and args.run_name != args.output_dir:
-                experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
-            else:
-                experiment_config = comet_ml.ExperimentConfig()
+            experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
 
             self._experiment = comet_ml.start(online=online, mode=mode, experiment_config=experiment_config)
             self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
@@ -2357,10 +2385,12 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
-            if trial_name is not None:
+            if trial_name is not None and args.run_name is not None:
                 init_args["experiment_name"] = f"{args.run_name}-{trial_name}"
             elif args.run_name is not None:
                 init_args["experiment_name"] = args.run_name
+            elif trial_name is not None:
+                init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
 
             if self._swanlab.get_run() is None:

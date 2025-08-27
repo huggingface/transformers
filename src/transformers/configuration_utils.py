@@ -198,6 +198,7 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
+    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -370,7 +371,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @output_attentions.setter
     def output_attentions(self, value: bool):
-        # If we set `output_attentions` explictily before the attn implementation, dispatch eager
+        # If we set `output_attentions` explicitly before the attn implementation, dispatch eager
         if value and self._attn_implementation is None:
             self._attn_implementation = "eager"
         if value and self._attn_implementation != "eager":
@@ -410,15 +411,17 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value: Optional[Union[str, dict]]):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
-        attn_implementation = value if not isinstance(value, dict) else value.get("", self._attn_implementation)
+        current_attn = getattr(self, "_attn_implementation", None)
+        attn_implementation = value if not isinstance(value, dict) else value.get("", current_attn)
         self._attn_implementation_internal = attn_implementation
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
             subconfig = getattr(self, subconfig_key, None)
             if subconfig is not None:
+                current_subconfig_attn = getattr(subconfig, "_attn_implementation", None)
                 sub_implementation = (
-                    value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
 
@@ -678,7 +681,7 @@ class PretrainedConfig(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
 
-        gguf_file = kwargs.get("gguf_file", None)
+        gguf_file = kwargs.get("gguf_file")
 
         if trust_remote_code is True:
             logger.warning(
@@ -1033,7 +1036,7 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None:
+        if d.get("torch_dtype") is not None:
             if isinstance(d["torch_dtype"], dict):
                 d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
             elif not isinstance(d["torch_dtype"], str):
@@ -1165,21 +1168,34 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=None, encoder=None) -> "PretrainedConfig":
         """
-        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
-        itself. On specific composite models, it is under a set of valid names.
+        Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
+        `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
+        which is useful on models that have both text input and output modalities.
+
+        There are three possible outcomes of using this method:
+        1. On most models, it returns the original config instance itself.
+        2. On newer (2024+) composite models, it returns the text section of the config, which is nested under a set
+            of valid names.
+        3. On older (2023-) composite models, it discards decoder-only parameters when `encoder=True` and vice-versa.
 
         Args:
-            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+            decoder (`Optional[bool]`, *optional*):
                 If set to `True`, then only search for decoder config names.
+            encoder (`Optional[bool]`, *optional*):
+                If set to `True`, then only search for encoder config names.
         """
+        return_both = decoder == encoder  # both unset or both set -> search all possible names
+
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
         encoder_possible_text_config_names = ("text_encoder",)
-        if decoder:
+        if return_both:
+            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+        elif decoder:
             possible_text_config_names = decoder_possible_text_config_names
         else:
-            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+            possible_text_config_names = encoder_possible_text_config_names
 
         valid_text_config_names = []
         for text_config_name in possible_text_config_names:
@@ -1191,13 +1207,64 @@ class PretrainedConfig(PushToHubMixin):
         if len(valid_text_config_names) > 1:
             raise ValueError(
                 f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
-                "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
+                "case, using `get_text_config()` would be ambiguous. Please specify the desired text config directly, "
+                "e.g. `text_config = config.sub_config_name`"
             )
         elif len(valid_text_config_names) == 1:
             config_to_return = getattr(self, valid_text_config_names[0])
         else:
             config_to_return = self
+
+        # handle legacy models with flat config structure, when we only want one of the configs
+        if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
+            config_to_return = copy.deepcopy(config_to_return)
+            prefix_to_discard = "encoder" if decoder else "decoder"
+            for key in config_to_return.to_dict():
+                if key.startswith(prefix_to_discard):
+                    delattr(config_to_return, key)
+            # old encoder/decoder models may use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
+            if decoder and hasattr(config_to_return, "decoder_layers"):
+                config_to_return.num_hidden_layers = config_to_return.decoder_layers
+            elif encoder and hasattr(config_to_return, "encoder_layers"):
+                config_to_return.num_hidden_layers = config_to_return.encoder_layers
+
         return config_to_return
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and vision model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+    @classmethod
+    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and audio model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:

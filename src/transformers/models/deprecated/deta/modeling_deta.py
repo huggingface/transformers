@@ -393,7 +393,7 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = DetaFrozenBatchNorm2d(module.num_features)
 
-            if not module.weight.device == torch.device("meta"):
+            if module.weight.device != torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
                 new_module.bias.data.copy_(module.bias)
                 new_module.running_mean.data.copy_(module.running_mean)
@@ -788,6 +788,10 @@ class DetaMultiheadAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
+                )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
                 )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
@@ -2042,7 +2046,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 aux_weight_dict.update({k + "_enc": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
 
         if not return_dict:
             if auxiliary_outputs is not None:

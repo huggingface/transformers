@@ -16,6 +16,7 @@ import importlib.metadata
 import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import (
@@ -726,7 +727,7 @@ class BaseSerializationTest(unittest.TestCase):
         d1 = dict(model_1.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
 
-        for k in d0.keys():
+        for k in d0:
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)
@@ -849,6 +850,7 @@ class Bnb4bitCompile(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 

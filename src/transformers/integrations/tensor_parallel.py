@@ -60,7 +60,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
-            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
                 backend = "ccl"
             if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
@@ -657,7 +657,7 @@ class RowwiseParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if hasattr(mod, "bias") and mod.bias is not None:
-            mod._bias = mod.bias
+            mod._bias = mod.bias.to_local()
             mod.bias = None
 
         input_tensor = inputs[0]
@@ -675,10 +675,11 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
-            outputs += mod._bias
+            outputs = outputs + mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
+        return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -821,8 +822,6 @@ class GroupedGemmParallel(TensorParallelLayer):
         param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
-        if "gate_up" in param_type and False:
-            param = torch.cat([param[..., ::2], param[..., 1::2]], dim=-1)
         return param
 
 
@@ -998,7 +997,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1014,7 +1013,7 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    tp_plan = model._tp_plan
+    tp_plan = model.tp_plan or {}
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
@@ -1079,39 +1078,26 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
-    _plan = "_tp_plan"
-    model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
-        distributed_config = DistributedConfig.from_config(distributed_config)
-        if distributed_config.enable_expert_parallel:
-            _plan = "_ep_plan"
-            model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
-
-    # now fetch my childrens
-    for name, module in model.named_children():
-        if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
-            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-        if hasattr(module, "config"):
-            plan = getattr(module.config, f"base_model{_plan}", {})
-            if plan == {}:
-                plan = getattr(module.config, "base_model_tp_plan", {})
-            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-
-    if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-        for v in model._tp_plan.values():
+        if isinstance(distributed_config, dict):
+            distributed_config = DistributedConfig.from_dict(distributed_config)
+        model.config.distributed_config = distributed_config
+    model_plan = model.tp_plan
+    if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
         for name, module in model.named_modules():
             if not getattr(module, "_is_hooked", False):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
-                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
-                    tp_plan=model._tp_plan,
+                    tp_plan=model_plan,
                     layer_name="",
                     current_module_plan=plan,
                     device_mesh=device_mesh,

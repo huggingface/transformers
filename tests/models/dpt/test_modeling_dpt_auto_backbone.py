@@ -141,7 +141,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -205,7 +205,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             backbone_params = []
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DPTViTHybridEmbeddings":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
                     break
 
             for name, param in model.named_parameters():

@@ -39,7 +39,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -374,7 +373,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self,
         name,
@@ -429,6 +427,19 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with dola decoding"
     )
     def test_dola_decoding_sample(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
+    def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
 
@@ -639,6 +650,14 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
     )
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     def test_automodelforcausallm(self):

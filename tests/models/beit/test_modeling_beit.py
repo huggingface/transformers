@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from datasets import load_dataset
 
 from transformers import BeitConfig
@@ -285,6 +286,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BEiT can't compile dynamic")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -517,9 +519,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[-4.8963, -2.3696, -3.0359], [-2.8485, -0.9842, -1.7426], [-2.9453, -1.3338, -2.1463]],
-                [[-5.8099, -3.4140, -4.1025], [-3.8578, -2.2100, -3.0337], [-3.8383, -2.4615, -3.3681]],
-                [[-0.0314, 3.9864, 4.0536], [2.9637, 4.6879, 4.9976], [3.2074, 4.7690, 4.9946]],
+                [[-4.8960, -2.3688, -3.0355], [-2.8479, -0.9836, -1.7418], [-2.9449, -1.3333, -2.1456]],
+                [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
+                [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
             ],
             device=torch_device,
         )

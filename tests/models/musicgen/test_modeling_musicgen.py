@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from pytest import mark
 
 from transformers import (
@@ -39,7 +40,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -64,7 +64,7 @@ if is_torch_available():
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -1031,7 +1031,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="Musicgen doesn't use the MusicgenFlashAttention2 class method.")
 
-    @require_torch_sdpa
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -1169,7 +1168,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -1235,6 +1233,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

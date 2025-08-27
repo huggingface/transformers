@@ -115,6 +115,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
+        ("xcodec", "DacFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
@@ -342,7 +343,7 @@ class AutoFeatureExtractor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -400,7 +401,7 @@ class AutoFeatureExtractor:
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
         )
 
     @staticmethod

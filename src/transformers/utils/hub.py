@@ -167,13 +167,16 @@ def list_repo_templates(
             return [
                 entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
                 for entry in list_repo_tree(
-                    repo_id=repo_id, revision=revision, path_in_repo=CHAT_TEMPLATE_DIR, recursive=False
+                    repo_id=repo_id,
+                    revision=revision,
+                    path_in_repo=CHAT_TEMPLATE_DIR,
+                    recursive=False,
                 )
                 if entry.path.endswith(".jinja")
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (ConnectionError, HTTPError):
+        except (HTTPError, requests.exceptions.ConnectionError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -204,14 +207,14 @@ def define_sagemaker_information():
         dlc_tag = None
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
-    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
-        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", "0"),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", "0"),
         "sm_distributed_training": runs_distributed_training,
         "sm_deep_learning_container": dlc_container_used,
         "sm_deep_learning_container_tag": dlc_tag,

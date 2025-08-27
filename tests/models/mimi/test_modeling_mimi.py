@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
@@ -270,8 +271,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -446,6 +447,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

@@ -1016,8 +1016,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -1420,7 +1420,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     # TODO (joao, eustache): fix me :)
@@ -1710,7 +1711,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        token = os.getenv("HF_HUB_READ_TOKEN", None)
+        if token is None:
+            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",

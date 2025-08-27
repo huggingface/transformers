@@ -128,7 +128,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
-    "kernels>=0.6.1,<0.7",
+    "kernels>=0.6.1,<=0.9",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -137,14 +137,14 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
-    "openai",
+    "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
-    "parameterized",
+    "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "phonemizer",
     "protobuf",
     "psutil",
@@ -190,7 +190,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1",
+    "torch>=2.2",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -203,8 +203,6 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk",
     "mistral-common[opencv]>=1.6.3",
 ]
 
@@ -337,6 +335,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
+extras["chat_template"] = deps_list("jinja2")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -363,6 +362,7 @@ extras["testing"] = (
         "pydantic",
         "sentencepiece",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
+        "libcst",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -389,6 +389,7 @@ extras["all"] = (
     + extras["video"]
     + extras["num2words"]
     + extras["mistral-common"]
+    + extras["chat_template"]
 )
 
 
@@ -444,7 +445,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+extras["open-telemetry"] = deps_list("opentelemetry-api")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -462,7 +463,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.55.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.56.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

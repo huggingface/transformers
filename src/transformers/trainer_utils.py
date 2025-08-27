@@ -288,9 +288,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
     speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -799,7 +797,7 @@ def find_executable_batch_size(
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
         function (`callable`, *optional*)
             A function to wrap
@@ -896,7 +894,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if not optim_target_modules == key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True

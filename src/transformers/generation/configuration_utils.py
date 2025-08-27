@@ -35,7 +35,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from ..utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -44,34 +43,22 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-NEED_SETUP_CACHE_CLASSES_MAPPING = {}
-QUANT_BACKEND_CLASSES_MAPPING = {}
-ALL_CACHE_IMPLEMENTATIONS = []
+STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "offloaded", "quantized")
+# All the following are redundant and deprecated, but kept for BC
+DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
+    "sliding_window",
+    "hybrid",
+    "hybrid_chunked",
+    "offloaded_hybrid",
+    "offloaded_hybrid_chunked",
+)
+ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
+ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
+
 
 if is_torch_available():
-    from ..cache_utils import (
-        HQQQuantizedCache,
-        HybridCache,
-        HybridChunkedCache,
-        OffloadedHybridCache,
-        OffloadedStaticCache,
-        QuantoQuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
-    )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
-
-    NEED_SETUP_CACHE_CLASSES_MAPPING = {
-        "static": StaticCache,
-        "offloaded_static": OffloadedStaticCache,
-        "sliding_window": SlidingWindowCache,
-        "hybrid": HybridCache,
-        "hybrid_chunked": HybridChunkedCache,
-        "offloaded_hybrid": OffloadedHybridCache,
-        "offloaded_hybrid_chunked": OffloadedHybridCache,
-    }
-    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -174,9 +161,8 @@ class GenerationConfig(PushToHubMixin):
 
             - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
-            - `"offloaded_static"`: [`OffloadedStaticCache`]
-            - `"sliding_window"`: [`SlidingWindowCache`]
-            - `"hybrid"`: [`HybridCache`]
+            - `"offloaded"`: [`DynamicCache(offloaded=True)`]
+            - `"offloaded_static"`: [`StaticCache(offloaded=True)`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
@@ -397,15 +383,6 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_config is not None and not isinstance(self.cache_config, dict):
-            warnings.warn(
-                (
-                    "Passing a CacheConfig object is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
-                ),
-                FutureWarning,
-                stacklevel=2,
-            )
-            self.cache_config = self.cache_config.to_dict()
 
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
@@ -576,7 +553,6 @@ class GenerationConfig(PushToHubMixin):
                 )
         return generation_mode
 
-    @deprecate_kwarg("is_init", version="4.54.0")
     def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
@@ -616,10 +592,7 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (
-                isinstance(self.watermarking_config, WatermarkingConfig)
-                or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
-            ):
+            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
                 minor_issues["watermarking_config"] = (
                     "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
                     "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
@@ -806,8 +779,8 @@ class GenerationConfig(PushToHubMixin):
                 )
                 if logging.get_verbosity() >= logging.WARNING:
                     warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
-                logger.warning(warning_message)
-                logger.info(info_message)
+                logger.warning_once(warning_message)
+                logger.info_once(info_message)
 
     def save_pretrained(
         self,
@@ -849,7 +822,7 @@ class GenerationConfig(PushToHubMixin):
                 "Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -1112,7 +1085,7 @@ class GenerationConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
@@ -1249,7 +1222,7 @@ class GenerationConfig(PushToHubMixin):
         if decoder_config is not model_config:
             default_generation_config = GenerationConfig()
             decoder_config_dict = decoder_config.to_dict()
-            for attr in generation_config.to_dict().keys():
+            for attr in generation_config.to_dict():
                 is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
                 if attr in decoder_config_dict and is_unset:
                     setattr(generation_config, attr, decoder_config_dict[attr])
@@ -1550,8 +1523,10 @@ class CompileConfig:
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-        fullgraph (`bool`, *optional*, defaults to `True`):
-            If `True`, requires that the whole forward be capturable in a single graph.
+        fullgraph (`bool`, *optional*, defaults to `False`):
+            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            that the entire function be capturable into a single graph. If this is not possible (that is, if there are
+            graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
@@ -1580,7 +1555,7 @@ class CompileConfig:
     ```
     """
 
-    fullgraph: bool = True
+    fullgraph: bool = False
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"

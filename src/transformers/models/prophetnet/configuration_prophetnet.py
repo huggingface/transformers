@@ -167,7 +167,7 @@ class ProphetNetConfig(PretrainedConfig):
 
     @property
     def num_hidden_layers(self) -> int:
-        return self.num_encoder_layers + self.num_decoder_layers
+        return self.num_encoder_layers
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):

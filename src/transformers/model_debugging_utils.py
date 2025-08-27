@@ -21,25 +21,24 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
-from safetensors.torch import save_file
-
-from transformers.utils.import_utils import requires
-
-from .utils import is_torch_available
+from .utils.import_utils import is_torch_available, requires
 
 
 if is_torch_available():
     import torch
-    import torch.distributed.tensor
+    from safetensors.torch import save_file
 
+    # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
+    if torch.distributed.is_available():
+        import torch.distributed.tensor
 
+        _torch_distributed_available = True
+else:
+    _torch_distributed_available = False
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-# Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-_torch_distributed_available = torch.distributed.is_available()
 
 
 def _is_rank_zero():
@@ -409,7 +408,7 @@ def model_addition_debugger_context(
 
     It tracks all forward calls within a model forward and logs a slice of each input and output on a nested JSON file.
     If `use_repr=True` (the default), the JSON file will record a `repr()`-ized version of the tensors as a list of
-    strings. If `use_repr=False`, the full tensors will be stored in spearate SafeTensors files and the JSON file will
+    strings. If `use_repr=False`, the full tensors will be stored in separate SafeTensors files and the JSON file will
     provide a relative path to that file.
 
     To note, this context manager enforces `torch.no_grad()`.

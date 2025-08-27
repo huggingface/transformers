@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..utils import logging
+from ..utils import is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -10,6 +10,8 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
+_is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_xpu_available = is_torch_xpu_available()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -26,9 +28,15 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
-    # 1. torch version >= 2.5
-    # 2. attention_mask is None (otherwise it will fall back to the math kernel)
-    # 3. key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
+    # 1.cuda
+    #   - torch version >= 2.5
+    #   - attention_mask is None (otherwise it will fall back to the math kernel)
+    #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
+    # 2.xpu
+    #   - torch version >= 2.8
+    #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
+    if _is_torch_xpu_available:
+        return _is_torch_greater_or_equal_than_2_8 and not isinstance(key, torch.fx.Proxy)
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and not isinstance(key, torch.fx.Proxy)
 
 
@@ -43,7 +51,7 @@ def sdpa_attention_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
+    if kwargs.get("output_attentions", False) or kwargs.get("head_mask") is not None:
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True` or `head_mask`."
             " Please set your attention to `eager` if you want any of these features."
@@ -58,12 +66,6 @@ def sdpa_attention_forward(
 
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-
-    # SDPA with memory-efficient backend is bugged with non-contiguous inputs and custom attn_mask for some torch versions
-    # Reference: https://github.com/pytorch/pytorch/issues/112577.
-    query = query.contiguous()
-    key = key.contiguous()
-    value = value.contiguous()
 
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.

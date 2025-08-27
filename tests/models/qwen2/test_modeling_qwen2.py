@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -179,7 +178,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
     def test_model_450m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -239,6 +237,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -260,7 +259,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ],
             ("rocm", (9, 5)): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+                "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
             ]
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
@@ -303,7 +302,11 @@ class Qwen2IntegrationTest(unittest.TestCase):
         strict = version.parse(torch.__version__) != version.parse(
             "2.7.0"
         )  # Due to https://github.com/pytorch/pytorch/issues/150994
-        exported_program = exportable_module.export(strict=strict)
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+            strict=strict,
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

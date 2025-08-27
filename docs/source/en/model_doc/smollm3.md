@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-08 and added to Hugging Face Transformers on 2025-06-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # SmolLM3
 
-SmolLM3 is a fully open, compact language model designed for efficient deployment while maintaining strong performance. It uses a Transformer decoder architecture with Grouped Query Attention (GQA) to reduce the kv cache, and no RoPE, enabling improved performance on long-context tasks. It is trained using a multi-stage training approach on high-quality public datasets across web, code, and math domains. The model is multilingual and supports very large context lengths. The instruct variant is optimized for reasoning and tool use.
+[SmolLM3](https://huggingface.co/blog/smollm3) is a fully open, compact language model designed for efficient deployment while maintaining strong performance. It uses a Transformer decoder architecture with Grouped Query Attention (GQA) to reduce the kv cache, and no RoPE, enabling improved performance on long-context tasks. It is trained using a multi-stage training approach on high-quality public datasets across web, code, and math domains. The model is multilingual and supports very large context lengths. The instruct variant is optimized for reasoning and tool use.
 
 > [!TIP]
 > Click on the SmolLM3 models in the right sidebar for more examples of how to apply SmolLM3 to different language tasks.
@@ -78,7 +79,7 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(
     model_inputs.input_ids,
@@ -133,7 +134,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="flash_attention_2"
 )
 
-inputs = tokenizer("Gravity is the force", return_tensors="pt").to("cuda")
+inputs = tokenizer("Gravity is the force", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

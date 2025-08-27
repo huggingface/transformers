@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2022-11-08.*
 
 <div style="float: right;">
    <div class="flex flex-wrap space-x-1">
@@ -64,7 +65,7 @@ model = AutoModelForMaskedLM.from_pretrained(
    torch_dtype=torch.float16,
    device_map="auto",
 )
-inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
+inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
    outputs = model(**inputs)
