@@ -337,6 +337,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .video_llava import *
+    from .videollama3 import *
     from .videomae import *
     from .vilt import *
     from .vipllava import *
