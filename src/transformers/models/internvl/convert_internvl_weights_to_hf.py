@@ -322,7 +322,7 @@ def get_internvl_config(input_base_path):
         image_token_id = 151667
         language_config_class = Qwen3MoeConfig
     elif lm_type == "gpt_oss":
-        image_token_id = 200002  # From the config
+        image_token_id = 151667
         language_config_class = GptOssConfig
     else:
         image_token_id = 92546
