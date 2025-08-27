@@ -342,6 +342,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sew-d", "SEWDModel"),
         ("siglip", "SiglipModel"),
         ("siglip2", "Siglip2Model"),
+        ("siglip2_vision_model", "Siglip2VisionModel"),
         ("siglip_vision_model", "SiglipVisionModel"),
         ("smollm3", "SmolLM3Model"),
         ("smolvlm", "SmolVLMModel"),

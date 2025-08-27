@@ -17,8 +17,6 @@
 import torch
 
 from ...configuration_utils import PretrainedConfig
-from ...models.lfm2.configuration_lfm2 import Lfm2Config
-from ...models.siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 

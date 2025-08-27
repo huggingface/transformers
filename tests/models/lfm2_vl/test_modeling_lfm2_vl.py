@@ -93,7 +93,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "block_auto_adjust_ff_dim": True,
             "full_attn_idxs": [2, 5, 8, 10, 12, 14],
         },
-        image_token_index=396,
+        image_token_id=396,
         downsample_factor=2,
         max_image_tokens=256,
         encoder_patch_size=16,
@@ -109,7 +109,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
         super().__init__(parent)
         self.vision_config = vision_config
         self.text_config = text_config
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.is_training = is_training
         self.batch_size = batch_size
         self.scale_factor = scale_factor
@@ -171,7 +171,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.max_image_tokens
-        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_index
+        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         pixel_values = pixel_values.to(torch_device)
         spatial_shapes = spatial_shapes.to(torch_device)

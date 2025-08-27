@@ -15,6 +15,7 @@
 """PyTorch LFM2-VL model."""
 
 from dataclasses import dataclass
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -25,7 +26,6 @@ from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...models.siglip2.modeling_siglip2 import Siglip2VisionModel
 from ...processing_utils import Unpack
 from ...utils import can_return_tuple, logging
 from .. import AutoModel
@@ -49,7 +49,7 @@ class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -70,12 +70,12 @@ class Lfm2VlCausalLMOutputWithPast(ModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class Lfm2VlMultiModalProjector(nn.Module):
@@ -138,15 +138,18 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
 
 
 class Lfm2VlModel(Lfm2VlPreTrainedModel):
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
-        self.vision_tower = Siglip2VisionModel(config.vision_config)
+        print(config.vision_config)
+        print(config.vision_feature_layer)
+
+        self.vision_tower = AutoModel.from_config(config.vision_config)
 
         if config.vision_feature_layer != -1:
             self.vision_tower.vision_model.encoder.layers = self.vision_tower.vision_model.encoder.layers[
                 : config.vision_feature_layer + 1
             ]
+
         self.pixel_unshuffle = PixelUnshuffleBlock(config.downsample_factor)
 
         self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
@@ -212,7 +215,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 
     def get_placeholder_mask(
         self,
-        input_ids: torch.LongTensor | None,
+        input_ids: Optional[torch.LongTensor],
         inputs_embeds: torch.FloatTensor,
         image_features: torch.FloatTensor,
     ):
@@ -243,21 +246,21 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor = None,
-        spatial_shapes: torch.Tensor = None,
-        pixel_attention_mask: torch.Tensor = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.Tensor] = None,
+        pixel_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | Lfm2VlModelOutputWithPast:
+    ) -> Union[tuple, Lfm2VlModelOutputWithPast]:
         """
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
@@ -365,23 +368,23 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
     @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        spatial_shapes: torch.Tensor = None,
-        pixel_attention_mask: torch.Tensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.Tensor] = None,
+        pixel_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> tuple | Lfm2VlCausalLMOutputWithPast:
+    ) -> Union[tuple, Lfm2VlCausalLMOutputWithPast]:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`, *optional*):
             The input image tensors.
