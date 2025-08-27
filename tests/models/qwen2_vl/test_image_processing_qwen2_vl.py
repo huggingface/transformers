@@ -22,7 +22,7 @@ import requests
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
 
@@ -35,8 +35,8 @@ if is_vision_available():
 
     from transformers import Qwen2VLImageProcessor
 
-    # if is_torchvision_available():
-    #     from transformers import Qwen2VLImageProcessorFast
+    if is_torchvision_available():
+        from transformers import Qwen2VLImageProcessorFast
 
 
 class Qwen2VLImageProcessingTester:
@@ -119,7 +119,7 @@ class Qwen2VLImageProcessingTester:
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Qwen2VLImageProcessor if is_vision_available() else None
-    # fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -363,3 +363,48 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self.assertEqual(encoding_slow.image_grid_thw.dtype, encoding_fast.image_grid_thw.dtype)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.image_grid_thw.float(), encoding_fast.image_grid_thw.float()
+        )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self.assertEqual(encoding_slow.image_grid_thw.dtype, encoding_fast.image_grid_thw.dtype)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.image_grid_thw.float(), encoding_fast.image_grid_thw.float()
+        )
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 64)
+
+            num_patches = image_processing.get_number_of_image_patches(height=200, width=50, images_kwargs={})
+            self.assertEqual(num_patches, 56)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"patch_size": 28}
+            )
+            self.assertEqual(num_patches, 16)

@@ -425,7 +425,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @tooslow
     def test_batch_generation(self):
         # Marked as @tooslow due to GPU OOM
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
@@ -485,7 +485,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @slow
     def test_model_from_pretrained(self):
         model_name = "EleutherAI/gpt-j-6B"
-        model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
+        model = GPTJModel.from_pretrained(model_name, revision="float16", dtype=torch.float16)
         self.assertIsNotNone(model)
 
 
@@ -495,9 +495,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gptj(self):
         # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained(
-                "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
-            )
+            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
             if checkpointing:
                 model.gradient_checkpointing_enable()
             else:
@@ -513,7 +511,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_gptj_sample(self):
         # Marked as @tooslow due to GPU OOM (issue #13676)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -543,6 +541,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
+    # TODO joao, manuel: remove this in v4.62.0
     @tooslow
     def test_contrastive_search_gptj(self):
         article = (
@@ -551,12 +550,19 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16).to(
+            torch_device
+        )
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

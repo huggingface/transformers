@@ -131,12 +131,12 @@ class ImageToImagePipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         return inputs
 
     def postprocess(self, model_outputs):
         images = []
-        if "reconstruction" in model_outputs.keys():
+        if "reconstruction" in model_outputs:
             outputs = model_outputs.reconstruction
         for output in outputs:
             output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()

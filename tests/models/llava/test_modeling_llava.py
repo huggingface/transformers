@@ -152,9 +152,10 @@ class LlavaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
+        attention_mask = input_ids.ne(1).to(torch_device)
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -475,6 +476,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_bitsandbytes
     def test_batched_generation(self):
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
 
@@ -557,7 +559,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"

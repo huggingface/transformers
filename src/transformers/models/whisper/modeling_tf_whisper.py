@@ -1107,9 +1107,6 @@ class TFWhisperMainLayer(keras.layers.Layer):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
@@ -1592,14 +1589,14 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         ):
             forced_decoder_ids = self.generation_config.forced_decoder_ids
         else:
-            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
+            forced_decoder_ids = kwargs.get("forced_decoder_ids")
 
         if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
             forced_decoder_ids = []
             if hasattr(generation_config, "language"):
-                if generation_config.language in generation_config.lang_to_id.keys():
+                if generation_config.language in generation_config.lang_to_id:
                     language_token = generation_config.language
-                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                elif generation_config.language in TO_LANGUAGE_CODE:
                     language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
                 elif generation_config.language in TO_LANGUAGE_CODE.values():
                     language_token = f"<|{generation_config.language}|>"

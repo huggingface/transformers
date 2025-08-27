@@ -309,10 +309,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Mamba 2 weights are not tied")
-    def test_tied_weights_keys(self):
-        pass
-
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -396,7 +392,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
         model.to(torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             torch_device
@@ -429,7 +425,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -460,7 +456,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)

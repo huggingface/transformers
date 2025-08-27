@@ -47,7 +47,6 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .image_processing_mask2former import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -63,6 +62,7 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
+
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
@@ -155,9 +155,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = Mask2FormerFastImageProcessorKwargs
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     def __init__(self, **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -174,21 +171,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `Mask2FormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "size_divisibility" in kwargs:
-            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -330,7 +312,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images
@@ -388,7 +370,9 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=grouped_segmentation_maps[shape],
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT,
+                        interpolation=F.InterpolationMode.NEAREST_EXACT
+                        if is_torchvision_v2_available()
+                        else F.InterpolationMode.NEAREST,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

@@ -64,7 +64,7 @@ class QAPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
@@ -76,7 +76,7 @@ class QAPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
 
         examples = [
@@ -179,7 +179,7 @@ class QAPipelineTests(unittest.TestCase):
         question_answerer = pipeline(
             "question-answering",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         outputs = question_answerer(
@@ -194,7 +194,7 @@ class QAPipelineTests(unittest.TestCase):
         question_answerer = pipeline(
             "question-answering",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
 
         outputs = question_answerer(
@@ -412,7 +412,7 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.972, "start": 1892},
         )
 
 

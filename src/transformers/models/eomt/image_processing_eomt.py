@@ -239,7 +239,7 @@ def compute_segments(
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     """Returns the height and width from a size dict."""
     target_height = size_dict["shortest_edge"]
-    target_width = size_dict.get("longest_edge", None) or target_height
+    target_width = size_dict.get("longest_edge") or target_height
 
     return target_height, target_width
 
@@ -578,6 +578,7 @@ class EomtImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

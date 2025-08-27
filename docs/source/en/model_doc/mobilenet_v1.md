@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2017-04-17 and added to Hugging Face Transformers on 2022-11-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -42,10 +43,10 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="google/mobilenet_v1_1.0_224",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
