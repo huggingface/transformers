@@ -260,7 +260,7 @@ _OUTPUT_PATH = flags.DEFINE_string(
 
 _NUM_LINEAR_LAYERS = flags.DEFINE_integer(
     name="num_linear_layers",
-    default=1,
+    default=2,
     help="Number of linear projection layers at the end of the Sentence Transformer.",
 )
 
