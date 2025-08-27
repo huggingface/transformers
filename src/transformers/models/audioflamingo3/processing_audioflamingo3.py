@@ -8,7 +8,6 @@ import torch
 from ... import AutoTokenizer, WhisperFeatureExtractor
 from ...processing_utils import ProcessorMixin
 from ...utils.hub import snapshot_download
-from ...utils import requires_backends
 
 from .configuration_audioflamingo3 import MEDIA_TOKENS
 
