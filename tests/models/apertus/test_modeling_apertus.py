@@ -75,7 +75,6 @@ class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = ApertusModelTester
     rotary_embedding_layer = ApertusRotaryEmbedding  # Enables RoPE tests if set
 
