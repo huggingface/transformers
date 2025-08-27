@@ -125,7 +125,7 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string) and the request ID to re-use the previous KV cache.
         """
 
         generation_config: str
