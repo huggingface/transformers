@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 DeepSeek-V3 모델은 [DeepSeek-V3 기술 보고서](https://huggingface.co/papers/2412.19437)에서 DeepSeek-AI 팀에 의해 제안되었습니다.
 
 논문의 초록은 다음과 같습니다.
-총 671B개의 파라미터를 가지며 토큰당 37B개가 활성화되는 강력한 전문가 혼합(MoE) 언어 모델인 DeepSeek-V3를 소개합니다. 효율적인 추론과 비용 효율적인 훈련을 달성하기 위해, DeepSeek-V3는 DeepSeek-V2에서 철저히 검증된 Multi-head Latent Attention(MLA) 및 DeepSeekMoE 아키텍처를 채택했습니다. 나아가 DeepSeek-V3는 로드 밸런싱을 위한 보조 손실 없는 전략을 개척하고, 더 강력한 성능을 위해 다중 토큰 예측 훈련 목표를 설정합니다. 저희는 14.8조 개의 다양하고 고품질인 토큰으로 DeepSeek-V3를 사전 훈련했으며, 그 잠재력을 완전히 활용하기 위해 지도 파인튜닝 및 강화 학습 단계를 거쳤습니다. 종합적인 평가 결과, DeepSeek-V3는 다른 오픈 소스 모델들을 능가하며 선도적인 비공개 소스 모델들과 필적하는 성능을 달성했음을 보여줍니다. 뛰어난 성능에도 불구하고 DeepSeek-V3의 전체 훈련에는 278.8만 H800 GPU 시간만이 소요되었습니다. 또한, 훈련 과정이 매우 안정적입니다. 전체 훈련 과정 동안 복구 불가능한 손실 급증을 경험하거나 롤백을 수행한 적이 없습니다. 모델 체크포인트는 https://github.com/deepseek-ai/DeepSeek-V3 에서 확인할 수 있습니다.
+총 671B개의 파라미터를 가지며 토큰당 37B개가 활성화되는 강력한 Mixture-of-Experts(MoE) 언어 모델인 DeepSeek-V3를 소개합니다. 효율적인 추론과 비용 효율적인 훈련을 달성하기 위해, DeepSeek-V3는 DeepSeek-V2에서 철저히 검증된 Multi-head Latent Attention(MLA) 및 DeepSeekMoE 아키텍처를 채택했습니다. 나아가 DeepSeek-V3는 로드 밸런싱을 위한 보조 손실 없는 전략을 개척하고, 더 강력한 성능을 위해 다중 토큰 예측 훈련 목표를 설정합니다. 저희는 14.8조 개의 다양하고 고품질의 토큰으로 DeepSeek-V3를 사전 훈련했으며, 그 잠재력을 완전히 활용하기 위해 지도 파인튜닝 및 강화 학습 단계를 거쳤습니다. 종합적인 평가 결과, DeepSeek-V3는 다른 오픈 소스 모델들을 능가하며 선도적인 비공개 소스 모델들과 필적하는 성능을 달성했음을 보여줍니다. 뛰어난 성능에도 불구하고 DeepSeek-V3의 전체 훈련에는 278.8만 H800 GPU 시간만이 소요되었습니다. 또한, 훈련 과정이 매우 안정적입니다. 전체 훈련 과정 동안 복구 불가능한 손실 급증을 경험하거나 롤백을 수행한 적이 없습니다. 모델 체크포인트는 https://github.com/deepseek-ai/DeepSeek-V3 에서 확인할 수 있습니다.
 
 ## 한계 및 기여 요청![[limitations-and-call-for-contribution!]]
 
