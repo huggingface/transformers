@@ -1183,7 +1183,7 @@ class Sam2Model(SamModel):
     ]
 
     def __init__(self, config: Sam2Config):
-        Sam2PreTrainedModel.__init__(self, config)
+        PreTrainedModel.__init__(self, config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
