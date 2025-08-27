@@ -46,6 +46,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     Note: Unlike traditional CTC tokenizers, this tokenizer does NOT perform CTC decoding
     (blank removal and repetition collapse) as this is handled by the ParakeetCTC model itself.
+    NOTE @ebezzam blank removal and repetition collapse is not handled by model so added here
 
     Args:
         vocab_file (`str`):
@@ -180,6 +181,8 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
+        index = int(index)
+        
         # Check main vocabulary first
         if index in self.ids_to_tokens:
             return self.ids_to_tokens[index]
@@ -237,9 +240,9 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
     def _decode(
         self,
         token_ids: Union[int, list[int]],
-        skip_special_tokens: bool = True,
+        skip_special_tokens: bool = True, # TODO should be used to skip special token!
         clean_up_tokenization_spaces: Optional[bool] = None,
-        group_tokens: bool = False,
+        group_tokens: bool = False,  # Default False for round-trip consistency
         **kwargs,
     ) -> str:
         """
@@ -250,8 +253,9 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             token_ids: List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            group_tokens: Whether to apply CTC-style duplicate removal. Default to False
+            group_tokens: Whether to apply CTC-style duplicate removal. False by default.
         """
+
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         if len(token_ids) == 0:
@@ -267,25 +271,21 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     def batch_decode(
         self,
-        sequences: Union[list[list[int]], "torch.Tensor"],
+        sequences: list[list[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
-        group_tokens: bool = False,
+        group_tokens: bool = True,  # Default False for round-trip consistency
         **kwargs,
     ) -> list[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences: List of tokenized input ids or torch.Tensor.
+            sequences: List of tokenized input ids.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            group_tokens: Whether to apply CTC-style duplicate removal. Default to False
+            group_tokens: Whether to apply CTC-style duplicate removal. True by default.
         """
-        # Handle tensor input by converting to list
-        if hasattr(sequences, 'tolist'):
-            sequences = sequences.tolist()
-        
         return [
             self._decode(
                 seq,
@@ -315,7 +315,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
         """
-        return self.decode(
+        return self._decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,

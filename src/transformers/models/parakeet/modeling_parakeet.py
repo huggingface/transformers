@@ -21,6 +21,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -37,38 +38,32 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
-
-    def extend_pe(self, length: int, device: torch.device, dtype: torch.dtype):
-        """Reset and extend the positional encodings if needed."""
-        needed_size = 2 * length - 1
-        if hasattr(self, "pe") and self.pe is not None and self.pe.size(1) >= needed_size:
-            return
-
-        positions = torch.arange(length - 1, -length, -1, dtype=torch.float32, device=device).unsqueeze(1)
-        self.create_pe(positions=positions, dtype=dtype)
-
-    def create_pe(self, positions: torch.Tensor, dtype: torch.dtype):
-        """Create positional encoding matrix."""
-        pe = torch.zeros(positions.size(0), self.hidden_size, dtype=dtype, device=positions.device)
+        
+        # Pre-allocate PE buffer
+        dtype = torch.float32
+        max_length = self.max_position_embeddings
+        positions = torch.arange(max_length - 1, -max_length, -1, dtype=dtype).unsqueeze(1)
+        self.pe = torch.zeros(positions.size(0), self.hidden_size, dtype=dtype, device=positions.device)
         div_term = torch.exp(
-            torch.arange(0, self.hidden_size, 2, dtype=torch.float32, device=positions.device)
+            torch.arange(0, self.hidden_size, 2, dtype=dtype, device=positions.device)
             * -(math.log(10000.0) / self.hidden_size)
         )
-        pe[:, 0::2] = torch.sin(positions * div_term)
-        pe[:, 1::2] = torch.cos(positions * div_term)
+        self.pe[:, 0::2] = torch.sin(positions * div_term)
+        self.pe[:, 1::2] = torch.cos(positions * div_term)
 
-        # Register as buffer and add batch dimension
-        pe_tensor = pe.unsqueeze(0)  # (1, T, D)
-        self.register_buffer("pe", pe_tensor, persistent=False)
+        # add batch dimension
+        self.pe = self.pe.unsqueeze(0)  # (1, T, D)
+        self.center_pos = self.pe.shape[1] // 2 + 1
 
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
-        self.extend_pe(seq_length, hidden_states.device, hidden_states.dtype)
+        if seq_length > self.max_position_embeddings:
+            raise ValueError(f"Sequence length {seq_length} exceeds max_position_embeddings {self.max_position_embeddings}")
 
-        center_pos = self.pe.shape[1] // 2 + 1
-        start_pos = center_pos - seq_length
-        end_pos = center_pos + seq_length - 1
-        position_embeddings = self.pe[:, start_pos:end_pos]
+        # dynamic slicing fine since self.pe is preallocated to maximum size
+        start_pos = self.center_pos - seq_length
+        end_pos = self.center_pos + seq_length - 1
+        position_embeddings = self.pe[:, start_pos:end_pos].to(device=hidden_states.device, dtype=hidden_states.dtype)
 
         return position_embeddings
 
@@ -451,12 +446,27 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
         if attention_mask is not None:
-            # TODO: @eustlb, which mask utils to do the same?
-            # Ensure attention mask matches the actual sequence length of hidden states
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+
+            # TODO: @eustlb, which mask utils to do the same?
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
+
+            # # TODO leads to mismatch in token IDs for batch integration test
+            # batch_size, seq_len = attention_mask.shape[0], attention_mask.shape[1]
+            # cache_position = torch.arange(seq_len, device=hidden_states.device)
+            # attention_mask = create_causal_mask(
+            #     self.config,
+            #     hidden_states,
+            #     attention_mask,
+            #     cache_position=cache_position,
+            #     past_key_values=None,
+            #     position_ids=None,
+            # )
+            # # ensure boolean mask because of `~attention_mask` in later processing
+            # if attention_mask is not None and attention_mask.dtype != torch.bool:
+            #     attention_mask = attention_mask > 0
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
