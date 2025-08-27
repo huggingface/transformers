@@ -100,10 +100,10 @@ class OlmoeMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -207,9 +207,9 @@ class OlmoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = OlmoeRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.k_norm = OlmoeRMSNorm(
-            (self.hidden_size // self.num_heads) * self.num_key_value_heads, eps=config.rms_norm_eps
+            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
         )
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -222,7 +222,8 @@ class OlmoeAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_norm(self.q_proj(hidden_states))
         key_states = self.k_norm(self.k_proj(hidden_states))
@@ -233,10 +234,9 @@ class OlmoeAttention(nn.Module):
             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
+        query_states = query_states.view(*hidden_shape).transpose(1, 2)
+        key_states = key_states.view(*hidden_shape).transpose(1, 2)
+        value_states = value_states.view(*hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -568,7 +568,7 @@ class OlmoeForCausalLM(OlmoePreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
