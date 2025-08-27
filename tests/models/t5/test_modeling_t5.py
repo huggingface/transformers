@@ -25,6 +25,7 @@ from transformers import T5Config, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_accelerate,
     require_sentencepiece,
@@ -1093,18 +1094,18 @@ class T5ModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.float16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", dtype=torch.float16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.bfloat16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", dtype=torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.bfloat16, device_map="auto"
+            "google-t5/t5-small", dtype=torch.bfloat16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
@@ -1112,7 +1113,7 @@ class T5ModelFp16Tests(unittest.TestCase):
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
             "google-t5/t5-small",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
@@ -1120,14 +1121,14 @@ class T5ModelFp16Tests(unittest.TestCase):
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
             "google-t5/t5-small",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.float16, device_map="auto"
+            "google-t5/t5-small", dtype=torch.float16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
@@ -1200,7 +1201,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = Expectations(
+            {
+                (None, None): -19.0845,
+                ("rocm", (9, 4)): -19.0846,
+            }
+        ).get_expectation()
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -1563,6 +1569,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0])
         self.assertEqual(translation, expected_translation)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_t5(self):
         article = (
@@ -1597,7 +1604,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        outputs = t5_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         # TODO: @arthur?

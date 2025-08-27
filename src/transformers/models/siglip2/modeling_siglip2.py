@@ -647,7 +647,6 @@ class Siglip2TextTransformer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, config.projection_size)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @can_return_tuple
     @auto_docstring
@@ -674,7 +673,10 @@ class Siglip2TextTransformer(nn.Module):
 
         # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        uses_flash_attention = "flash" in self.config._attn_implementation
+        if uses_flash_attention:
+            attention_mask = None
+        elif attention_mask is not None and not uses_flash_attention:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 

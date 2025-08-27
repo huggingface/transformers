@@ -49,7 +49,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     >>> dataset = load_dataset("ashraq/esc50")
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
     >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion/clap-htsat-unfused")
-    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
+    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vacuum cleaner"])
     [{'score': 0.9996, 'label': 'Sound of a dog'}, {'score': 0.0004, 'label': 'Sound of vaccum cleaner'}]
     ```
 
@@ -128,7 +128,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
         if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)

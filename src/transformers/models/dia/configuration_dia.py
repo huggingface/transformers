@@ -368,7 +368,7 @@ class DiaConfig(PretrainedConfig):
             **kwargs,
         )
 
-    def get_text_config(self, decoder=False):
+    def get_text_config(self, *args, **kwargs):
         """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""
         return self.decoder_config
 

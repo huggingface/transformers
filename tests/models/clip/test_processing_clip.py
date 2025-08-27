@@ -12,24 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import CLIPTokenizer, CLIPTokenizerFast
-from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
+from transformers import AutoTokenizer, CLIPTokenizer, CLIPTokenizerFast
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import CLIPImageProcessor, CLIPProcessor
+
+
+TEST_MODEL_PATH = "openai/clip-vit-base-patch32"
 
 
 @require_vision
@@ -39,31 +39,13 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]  # fmt: skip
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
-        cls.special_tokens_map = {"unk_token": "<unk>"}
-
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(cls.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-        image_processor_map = {
-            "do_resize": True,
-            "size": 20,
-            "do_center_crop": True,
-            "crop_size": 18,
-            "do_normalize": True,
-            "image_mean": [0.48145466, 0.4578275, 0.40821073],
-            "image_std": [0.26862954, 0.26130258, 0.27577711],
-        }
-        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
+        image_processor = CLIPImageProcessor.from_pretrained(TEST_MODEL_PATH)
+        processor = CLIPProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+        )
+        processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def get_tokenizer(cls, **kwargs):
@@ -166,7 +148,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertSetEqual(set(inputs.keys()), {"input_ids", "attention_mask", "pixel_values"})
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -184,16 +166,3 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

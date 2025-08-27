@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2023-12-07.*
 
 # LLaVa
 
@@ -137,7 +138,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 conversation = [
@@ -173,7 +174,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 

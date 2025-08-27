@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-01-10 and added to Hugging Face Transformers on 2022-02-07.*
 
 # ConvNeXT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -42,8 +42,7 @@ alt="drawing" width="600"/>
 
 <small> ConvNeXT architecture. Taken from the <a href="https://huggingface.co/papers/2201.03545">original paper</a>.</small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [ariG23498](https://github.com/ariG23498),
-[gante](https://github.com/gante), and [sayakpaul](https://github.com/sayakpaul) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt).
 
 ## Resources
 
@@ -74,9 +73,6 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] ConvNextImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
-
 ## ConvNextModel
 
 [[autodoc]] ConvNextModel
@@ -86,19 +82,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ConvNextForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFConvNextModel
-
-[[autodoc]] TFConvNextModel
-    - call
-
-## TFConvNextForImageClassification
-
-[[autodoc]] TFConvNextForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>
