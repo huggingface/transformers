@@ -99,30 +99,63 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm4vVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
+        if self.size is not None and (
+            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
+        ):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def sample_frames(
         self,
-        video: torch.Tensor,
-        metadata: Union[VideoMetadata, dict],
+        metadata: VideoMetadata,
+        fps: Optional[Union[int, float]] = None,
+        **kwargs,
     ):
-        total_frames = video.shape[0]
-        video_fps = getattr(metadata, "fps", 2.0)
-        meta_frames = getattr(metadata, "total_num_frames", total_frames)
-        max_frame_idx = meta_frames - 1
-        duration = getattr(metadata, "duration", None)
-        if duration is None:
-            duration = round(max_frame_idx / video_fps) + 1
+        """
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if metadata is None or getattr(metadata, "fps", None) is None:
+            raise ValueError(
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in GLM4V. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
+        total_frames = metadata.total_num_frames
+        requested_fps = fps if fps is not None else self.fps
+
+        max_frame_idx = total_frames - 1
+        duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
 
         if duration <= self.max_duration:
-            n = int(math.floor(duration * self.fps))
-            frame_indices = [min(max_frame_idx, int(math.ceil(i * video_fps / self.fps))) for i in range(n)]
+            n = int(math.floor(duration * requested_fps))
+            frame_indices = [min(max_frame_idx, int(math.ceil(i * metadata.fps / requested_fps))) for i in range(n)]
         else:
-            num_samples = int(self.max_duration * self.fps)
-            if num_samples >= meta_frames:
-                frame_indices = list(range(meta_frames))
+            num_samples = int(self.max_duration * requested_fps)
+            if num_samples >= total_frames:
+                frame_indices = list(range(total_frames))
             else:
                 target_seconds = np.linspace(0, duration, num_samples, endpoint=True)
-                frame_indices = [min(max_frame_idx, int(math.ceil(t * video_fps))) for t in target_seconds]
+                frame_indices = [min(max_frame_idx, int(math.ceil(t * metadata.fps))) for t in target_seconds]
 
         seen, uniq = set(), []
         for idx in frame_indices:
@@ -133,22 +166,18 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        frame_indices = uniq
-        sampled_video = video[frame_indices]
-        full_second_idxs = [int(idx / video_fps) for idx in frame_indices]
-        second_idxs = full_second_idxs[::2]  # mrope
-        return sampled_video, second_idxs
+        return np.array(uniq)
 
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        video_metadata: Optional[Union[list[VideoMetadata], list[dict]]] = None,
+        do_convert_rgb: bool = True,
         do_resize: bool = True,
+        size: Optional[SizeDict] = None,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
-        do_sample_frames: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         patch_size: Optional[int] = None,
@@ -157,25 +186,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
-        timestamps_list = []
-        if do_sample_frames:
-            if video_metadata is None or (isinstance(video_metadata, list) and video_metadata[0] is None):
-                raise ValueError(
-                    "Frame sampling is enabled but no video metadata was found. "
-                    "Please pass in `VideoMetadata` object per each input video or set `do_sample_frames=False`"
-                )
-            processed_videos = []
-            for video, metadata in zip(videos, video_metadata):
-                video, timestamps = self.sample_frames(video, metadata)
-                timestamps_list.append(timestamps)
-                processed_videos.append(video)
-        else:
-            # Assume 24 fps by default and prepare timestamps for the whole video when all frames are sampled
-            processed_videos = videos
-            timestamps_list = [[idx // 24 for idx in range(len(video))] for video in videos]
-            timestamps_list = timestamps_list[::2]  # mrope
-
-        grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
@@ -188,7 +199,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
-                    max_pixels=self.max_image_size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
                 stacked_videos = self.resize(
@@ -251,7 +263,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         data = {
             "pixel_values_videos": pixel_values_videos,
             "video_grid_thw": video_grid_thw,
-            "timestamps": timestamps_list,
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)

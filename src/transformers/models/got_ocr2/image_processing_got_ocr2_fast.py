@@ -45,7 +45,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class GotOcr2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class GotOcr2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -76,13 +76,13 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_kwargs = GotOcr2ImageProcessorKwargs
+    valid_kwargs = GotOcr2FastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
@@ -247,7 +247,8 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             num_columns, num_rows = get_optimal_tiled_canvas(
                 (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
             )
-            num_patches += num_columns * num_rows
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
 
         return num_patches
 

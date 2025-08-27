@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-01-28 and added to Hugging Face Transformers on 2022-12-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -30,7 +30,7 @@ You can find all the original BLIP checkpoints under the [BLIP](https://huggingf
 
 > [!TIP]
 > This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
-> 
+>
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
 The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
@@ -45,7 +45,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="visual-question-answering",
     model="Salesforce/blip-vqa-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -63,8 +63,8 @@ from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
 
 processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 model = AutoModelForVisualQuestionAnswering.from_pretrained(
-    "Salesforce/blip-vqa-base", 
-    torch_dtype=torch.float16,
+    "Salesforce/blip-vqa-base",
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -72,7 +72,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 question = "What is the weather in this image?"
-inputs = processor(images=image, text=question, return_tensors="pt").to("cuda", torch.float16)
+inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
 
 output = model.generate(**inputs)
 processor.batch_decode(output, skip_special_tokens=True)[0]
@@ -112,9 +112,6 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 [[autodoc]] BlipImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
-
 ## BlipModel
 
 `BlipModel` is going to be deprecated in future versions, please use `BlipForConditionalGeneration`, `BlipForImageTextRetrieval` or `BlipForQuestionAnswering` depending on your usecase.
@@ -153,45 +150,3 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 
 [[autodoc]] BlipForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFBlipModel
-
-[[autodoc]] TFBlipModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFBlipTextModel
-
-[[autodoc]] TFBlipTextModel
-    - call
-
-## TFBlipTextLMHeadModel
-
-[[autodoc]] TFBlipTextLMHeadModel
-- forward
-
-## TFBlipVisionModel
-
-[[autodoc]] TFBlipVisionModel
-    - call
-
-## TFBlipForConditionalGeneration
-
-[[autodoc]] TFBlipForConditionalGeneration
-    - call
-
-## TFBlipForImageTextRetrieval
-
-[[autodoc]] TFBlipForImageTextRetrieval
-    - call
-
-## TFBlipForQuestionAnswering
-
-[[autodoc]] TFBlipForQuestionAnswering
-    - call
-</tf>
-</frameworkcontent>

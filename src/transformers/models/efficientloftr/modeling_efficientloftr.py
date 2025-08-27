@@ -23,6 +23,7 @@ from ...modeling_outputs import BackboneOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -68,7 +69,23 @@ class KeypointMatchingOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
+@compile_compatible_method_lru_cache(maxsize=32)
+def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: int, hidden_size: int) -> torch.Tensor:
+    i_indices = torch.ones(embed_height, embed_width, dtype=inv_freq.dtype, device=inv_freq.device)
+    j_indices = torch.ones(embed_height, embed_width, dtype=inv_freq.dtype, device=inv_freq.device)
+    i_indices = i_indices.cumsum(0).unsqueeze(-1)
+    j_indices = j_indices.cumsum(1).unsqueeze(-1)
+
+    emb = torch.zeros(1, embed_height, embed_width, hidden_size // 2, dtype=inv_freq.dtype, device=inv_freq.device)
+    emb[:, :, :, 0::2] = i_indices * inv_freq
+    emb[:, :, :, 1::2] = j_indices * inv_freq
+
+    return emb
+
+
 class EfficientLoFTRRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
         self.config = config
@@ -78,23 +95,18 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         inv_freq, _ = self.rope_init_fn(self.config, device)
         inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
 
-        embed_height, embed_width = config.embedding_size
-        i_indices = torch.ones(embed_height, embed_width).cumsum(0).float().unsqueeze(-1)
-        j_indices = torch.ones(embed_height, embed_width).cumsum(1).float().unsqueeze(-1)
-
-        emb = torch.zeros(1, embed_height, embed_width, self.config.hidden_size // 2)
-        emb[:, :, :, 0::2] = i_indices * inv_freq_expanded
-        emb[:, :, :, 1::2] = j_indices * inv_freq_expanded
-
-        self.register_buffer("inv_freq", emb, persistent=False)
+        self.register_buffer("inv_freq", inv_freq_expanded, persistent=False)
 
     @torch.no_grad()
     def forward(
         self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        feats_height, feats_width = x.shape[-2:]
+        embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
+        embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = self.inv_freq
+            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
             sin = emb.sin()
             cos = emb.cos()
 
@@ -320,7 +332,6 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->EfficientLoFTR
     def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -329,7 +340,7 @@ class EfficientLoFTRAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -476,12 +487,16 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
         hidden_states = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        encoder_hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
-        encoder_hidden_states = encoder_hidden_states.flip(1)
-        encoder_hidden_states = encoder_hidden_states.reshape(-1, embed_dim, height, width)
-
-        hidden_states = self.cross_attention(hidden_states, encoder_hidden_states, **kwargs)
-        hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
+        ###
+        # Implementation of a bug in the original implementation regarding the cross-attention
+        # See : https://github.com/zju3dv/MatchAnything/issues/26
+        hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
+        features_0 = hidden_states[:, 0]
+        features_1 = hidden_states[:, 1]
+        features_0 = self.cross_attention(features_0, features_1, **kwargs)
+        features_1 = self.cross_attention(features_1, features_0, **kwargs)
+        hidden_states = torch.stack((features_0, features_1), dim=1)
+        ###
 
         return hidden_states
 
@@ -748,8 +763,15 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     if border_margin <= 0:
         return tensor
 
-    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
-    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
+    tensor[:, :border_margin] = value
+    tensor[:, :, :border_margin] = value
+    tensor[:, :, :, :border_margin] = value
+    tensor[:, :, :, :, :border_margin] = value
+    tensor[:, -border_margin:] = value
+    tensor[:, :, -border_margin:] = value
+    tensor[:, :, :, -border_margin:] = value
+    tensor[:, :, :, :, -border_margin:] = value
+
     return tensor
 
 
@@ -877,7 +899,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
     Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
     Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed
-    In CVPR, 2024. https://arxiv.org/abs/2403.04765
+    In CVPR, 2024. https://huggingface.co/papers/2403.04765
     """
 
     def __init__(self, config: EfficientLoFTRConfig):
@@ -1274,6 +1296,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         # 3. Fine-level refinement
         residual_features = features[1:]
+        coarse_features = coarse_features / self.config.hidden_size**0.5
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices
