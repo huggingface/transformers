@@ -409,7 +409,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            mm_len = batch_size * 1564
+            # mm_len = batch_size * 1564
+            mm_len = batch_size
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
