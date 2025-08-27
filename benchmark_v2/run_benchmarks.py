@@ -262,6 +262,12 @@ def main():
         help="Enable mock benchmark (skipped by default)"
     )
     
+    parser.add_argument(
+        "--commit-id",
+        type=str,
+        help="Git commit ID for metadata (if not provided, will auto-detect from git)"
+    )
+    
     args = parser.parse_args()
     
     # Setup logging
@@ -312,6 +318,10 @@ def main():
         
         # Add enable_mock flag for mock benchmark
         benchmark_kwargs['enable_mock'] = args.enable_mock
+        
+        # Add commit_id if provided
+        if args.commit_id:
+            benchmark_kwargs['commit_id'] = args.commit_id
         
         # Run benchmarks
         benchmark_results = {}

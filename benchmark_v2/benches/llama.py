@@ -114,6 +114,7 @@ def run_llama(logger, output_dir, **kwargs):
     device = kwargs.get('device', 'cuda')
     torch_dtype = kwargs.get('torch_dtype', 'float16')
     batch_size = kwargs.get('batch_size', 1)
+    commit_id = kwargs.get('commit_id', None)
     
     logger.info(f"Starting LLaMA benchmark for model: {model_id}")
     logger.info(f"Configuration: warmup={warmup_iterations}, measurement={measurement_iterations}, tokens={num_tokens_to_generate}")
@@ -138,7 +139,7 @@ def run_llama(logger, output_dir, **kwargs):
         
         # Create runner and execute benchmarks
         runner = BenchmarkRunner(logger, output_dir)
-        results = runner.run_benchmark(benchmark, scenarios)
+        results = runner.run_benchmark(benchmark, scenarios, commit_id=commit_id)
         
         if not results:
             logger.warning("No successful benchmark results")

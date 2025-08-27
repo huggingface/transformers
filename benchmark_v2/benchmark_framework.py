@@ -388,16 +388,6 @@ def get_hardware_info() -> HardwareInfo:
     )
 
 
-def get_git_commit_id() -> str:
-    """Get current git commit ID."""
-    try:
-        result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
-                              capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return "unknown"
-
-
 def flush_memory():
     """Flush GPU memory and run garbage collection."""
     gc.collect()
@@ -959,7 +949,8 @@ class BenchmarkRunner:
         self, 
         benchmark: ModelBenchmark, 
         scenarios: Dict[str, BenchmarkScenario],
-        collect_gpu_metrics: bool = True
+        collect_gpu_metrics: bool = True,
+        commit_id: Optional[str] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Run benchmarks using scenarios.
@@ -968,6 +959,7 @@ class BenchmarkRunner:
             benchmark: The benchmark instance to run
             scenarios: Dictionary mapping scenario names to BenchmarkScenario instances
             collect_gpu_metrics: Whether to collect GPU utilization metrics
+            commit_id: Git commit ID for metadata (if not provided, will auto-detect from git)
             
         Returns:
             Dictionary mapping scenario names to results with statistics
@@ -1004,7 +996,7 @@ class BenchmarkRunner:
                 # Collect metadata
                 metadata = BenchmarkMetadata(
                     timestamp=datetime.utcnow().isoformat(),
-                    commit_id=get_git_commit_id(),
+                    commit_id=commit_id,
                     hardware_info=get_hardware_info(),
                     config=config
                 )
