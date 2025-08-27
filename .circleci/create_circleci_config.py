@@ -245,7 +245,7 @@ tokenization_job = CircleCIJob(
 processor_job = CircleCIJob(
     "processors",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    parallelism=8,
+    parallelism=1,
 )
 
 pipelines_torch_job = CircleCIJob(
