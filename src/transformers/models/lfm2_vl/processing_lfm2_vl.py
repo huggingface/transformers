@@ -194,7 +194,7 @@ class Lfm2VlProcessor(ProcessorMixin):
             text (`TextInput`, *optional*):
                 The sequence or batch of sequences to be encoded.
                 Wherever an image token, `<image>` is encountered it is expanded to a proper sequence of image tokens.
-            return_tensors (`str | TensorType`, *optional*):
+            return_tensors (`Optional[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
         """

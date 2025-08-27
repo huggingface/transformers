@@ -181,8 +181,8 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
 
 
 class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: bool | None
-    max_image_size: dict[str, int] | None
+    return_row_col_info: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
@@ -735,7 +735,7 @@ class Lfm2VlImageProcessor(BaseImageProcessor):
     def get_tile_grid_and_sizes(
         self,
         image: Image.Image,
-        kwargs: dict | None = None,
+        kwargs: Optional[dict] = None,
     ) -> tuple[int, int, int, int]:
         """Get the tile grid and sizes for a given image."""
         downsample_factor = kwargs.get("downsample_factor", self.downsample_factor)
