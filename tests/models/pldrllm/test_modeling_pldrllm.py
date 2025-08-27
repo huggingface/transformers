@@ -1,4 +1,5 @@
 # coding=utf-8
+# Copyright 2025 the Fromthesky Research Labs, LLC. All rights reserved.
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch LLaMA model."""
+"""Testing suite for the PyTorch PLDR-LLM model."""
 
+import pytest
 import unittest
 
 from packaging import version
@@ -44,22 +46,38 @@ if is_torch_available():
         PldrllmForSequenceClassification,
         PldrllmForTokenClassification,
         PldrllmModel,
-        PldrllmTokenizer,
+        LlamaTokenizerFast
     )
-    from transformers.models.llama.modeling_llama import PldrllmRotaryEmbedding
+    from transformers.models.pldrllm.modeling_pldrllm import PldrllmRotaryEmbedding
 
 
-class PldrllmModelTester(CausalLMModelTester):
+class PldrllmModelTester_G_NONE(CausalLMModelTester):
     if is_torch_available():
         config_class = PldrllmConfig
         base_model_class = PldrllmModel
         causal_lm_class = PldrllmForCausalLM
         sequence_class = PldrllmForSequenceClassification
         token_class = PldrllmForTokenClassification
+    
+    def __init__(self, parent, batch_size=13, seq_length=7, is_training=True, 
+                 use_input_mask=True, use_token_type_ids=False, use_labels=True, 
+                 vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=2, 
+                 num_key_value_heads=2, intermediate_size=37, hidden_act="silu", hidden_dropout_prob=0.0, 
+                 attention_probs_dropout_prob=0.0, max_position_embeddings=512, type_vocab_size=16, 
+                 type_sequence_label_size=2, initializer_range=0.02, num_labels=3, num_choices=4, 
+                 pad_token_id=0, bos_token_id=2, eos_token_id=3, is_decoder=True, scope=None, expert_interval=1, 
+                 moe_layer_start_index=0, moe_intermediate_size=12, shared_expert_intermediate_size=36, shared_expert_gate=True, 
+                 moe_num_shared_experts=2, num_experts_per_tok=2, num_experts=8, mamba_n_groups=1, mamba_n_heads=16, mamba_d_state=16, 
+                 mamba_d_conv=4, mamba_expand=2, mamba_chunk_size=16,
+                 reference_rope=False, custom_G_type=None, cache_first_G=False):
+        super().__init__(parent, batch_size, seq_length, is_training, use_input_mask, use_token_type_ids, use_labels, vocab_size, hidden_size, num_hidden_layers, num_attention_heads, num_key_value_heads, intermediate_size, hidden_act, hidden_dropout_prob, attention_probs_dropout_prob, max_position_embeddings, type_vocab_size, type_sequence_label_size, initializer_range, num_labels, num_choices, pad_token_id, bos_token_id, eos_token_id, is_decoder, scope, expert_interval, moe_layer_start_index, moe_intermediate_size, shared_expert_intermediate_size, shared_expert_gate, moe_num_shared_experts, num_experts_per_tok, num_experts, mamba_n_groups, mamba_n_heads, mamba_d_state, mamba_d_conv, mamba_expand, mamba_chunk_size)
+        self.reference_rope=reference_rope
+        self.custom_G_type=custom_G_type
+        self.cache_first_G=cache_first_G
 
 
 @require_torch
-class PldrllmModelTest(CausalLMModelTest, unittest.TestCase):
+class PldrllmModelTest_G_NONE(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             PldrllmModel,
@@ -86,7 +104,195 @@ class PldrllmModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-    model_tester_class = PldrllmModelTester
+    model_tester_class = PldrllmModelTester_G_NONE
+    rotary_embedding_layer = PldrllmRotaryEmbedding  # Enables RoPE tests if set
+
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = PldrllmForCausalLM if is_torch_available() else None
+
+class PldrllmModelTester_G_NONE_cache_first_G(CausalLMModelTester):
+    if is_torch_available():
+        config_class = PldrllmConfig
+        base_model_class = PldrllmModel
+        causal_lm_class = PldrllmForCausalLM
+        sequence_class = PldrllmForSequenceClassification
+        token_class = PldrllmForTokenClassification
+    
+    def __init__(self, parent, batch_size=13, seq_length=7, is_training=True, 
+                 use_input_mask=True, use_token_type_ids=False, use_labels=True, 
+                 vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=2, 
+                 num_key_value_heads=2, intermediate_size=37, hidden_act="silu", hidden_dropout_prob=0.0, 
+                 attention_probs_dropout_prob=0.0, max_position_embeddings=512, type_vocab_size=16, 
+                 type_sequence_label_size=2, initializer_range=0.02, num_labels=3, num_choices=4, 
+                 pad_token_id=0, bos_token_id=2, eos_token_id=3, is_decoder=True, scope=None, expert_interval=1, 
+                 moe_layer_start_index=0, moe_intermediate_size=12, shared_expert_intermediate_size=36, shared_expert_gate=True, 
+                 moe_num_shared_experts=2, num_experts_per_tok=2, num_experts=8, mamba_n_groups=1, mamba_n_heads=16, mamba_d_state=16, 
+                 mamba_d_conv=4, mamba_expand=2, mamba_chunk_size=16,
+                 reference_rope=False, custom_G_type=None, cache_first_G=True):
+        super().__init__(parent, batch_size, seq_length, is_training, use_input_mask, use_token_type_ids, use_labels, vocab_size, hidden_size, num_hidden_layers, num_attention_heads, num_key_value_heads, intermediate_size, hidden_act, hidden_dropout_prob, attention_probs_dropout_prob, max_position_embeddings, type_vocab_size, type_sequence_label_size, initializer_range, num_labels, num_choices, pad_token_id, bos_token_id, eos_token_id, is_decoder, scope, expert_interval, moe_layer_start_index, moe_intermediate_size, shared_expert_intermediate_size, shared_expert_gate, moe_num_shared_experts, num_experts_per_tok, num_experts, mamba_n_groups, mamba_n_heads, mamba_d_state, mamba_d_conv, mamba_expand, mamba_chunk_size)
+        self.reference_rope=reference_rope
+        self.custom_G_type=custom_G_type
+        self.cache_first_G=cache_first_G
+
+
+@require_torch
+class PldrllmModelTest_G_NONE_cache_first_G(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (
+            PldrllmModel,
+            PldrllmForCausalLM,
+            PldrllmForSequenceClassification,
+            PldrllmForQuestionAnswering,
+            PldrllmForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": PldrllmModel,
+            "text-classification": PldrllmForSequenceClassification,
+            "text-generation": PldrllmForCausalLM,
+            "zero-shot": PldrllmForSequenceClassification,
+            "question-answering": PldrllmForQuestionAnswering,
+            "token-classification": PldrllmForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    test_headmasking = False
+    test_pruning = False
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    model_tester_class = PldrllmModelTester_G_NONE_cache_first_G
+    rotary_embedding_layer = PldrllmRotaryEmbedding  # Enables RoPE tests if set
+
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = PldrllmForCausalLM if is_torch_available() else None
+
+
+class PldrllmModelTester_G_IDENTITY(CausalLMModelTester):
+    if is_torch_available():
+        config_class = PldrllmConfig
+        base_model_class = PldrllmModel
+        causal_lm_class = PldrllmForCausalLM
+        sequence_class = PldrllmForSequenceClassification
+        token_class = PldrllmForTokenClassification
+    
+    def __init__(self, parent, batch_size=13, seq_length=7, is_training=True, 
+                 use_input_mask=True, use_token_type_ids=False, use_labels=True, 
+                 vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=2, 
+                 num_key_value_heads=2, intermediate_size=37, hidden_act="silu", hidden_dropout_prob=0.0, 
+                 attention_probs_dropout_prob=0.0, max_position_embeddings=512, type_vocab_size=16, 
+                 type_sequence_label_size=2, initializer_range=0.02, num_labels=3, num_choices=4, 
+                 pad_token_id=0, bos_token_id=2, eos_token_id=3, is_decoder=True, scope=None, expert_interval=1, 
+                 moe_layer_start_index=0, moe_intermediate_size=12, shared_expert_intermediate_size=36, shared_expert_gate=True, 
+                 moe_num_shared_experts=2, num_experts_per_tok=2, num_experts=8, mamba_n_groups=1, mamba_n_heads=16, mamba_d_state=16, 
+                 mamba_d_conv=4, mamba_expand=2, mamba_chunk_size=16,
+                 reference_rope=False, custom_G_type='identity'):
+        super().__init__(parent, batch_size, seq_length, is_training, use_input_mask, use_token_type_ids, use_labels, vocab_size, hidden_size, num_hidden_layers, num_attention_heads, num_key_value_heads, intermediate_size, hidden_act, hidden_dropout_prob, attention_probs_dropout_prob, max_position_embeddings, type_vocab_size, type_sequence_label_size, initializer_range, num_labels, num_choices, pad_token_id, bos_token_id, eos_token_id, is_decoder, scope, expert_interval, moe_layer_start_index, moe_intermediate_size, shared_expert_intermediate_size, shared_expert_gate, moe_num_shared_experts, num_experts_per_tok, num_experts, mamba_n_groups, mamba_n_heads, mamba_d_state, mamba_d_conv, mamba_expand, mamba_chunk_size)
+        self.reference_rope=reference_rope
+        self.custom_G_type=custom_G_type
+
+
+@require_torch
+class PldrllmModelTest_G_IDENTITY(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (
+            PldrllmModel,
+            PldrllmForCausalLM,
+            PldrllmForSequenceClassification,
+            PldrllmForQuestionAnswering,
+            PldrllmForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": PldrllmModel,
+            "text-classification": PldrllmForSequenceClassification,
+            "text-generation": PldrllmForCausalLM,
+            "zero-shot": PldrllmForSequenceClassification,
+            "question-answering": PldrllmForQuestionAnswering,
+            "token-classification": PldrllmForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    test_headmasking = False
+    test_pruning = False
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    model_tester_class = PldrllmModelTester_G_IDENTITY
+    rotary_embedding_layer = PldrllmRotaryEmbedding  # Enables RoPE tests if set
+
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = PldrllmForCausalLM if is_torch_available() else None
+
+class PldrllmModelTester_G_RANDOM(CausalLMModelTester):
+    if is_torch_available():
+        config_class = PldrllmConfig
+        base_model_class = PldrllmModel
+        causal_lm_class = PldrllmForCausalLM
+        sequence_class = PldrllmForSequenceClassification
+        token_class = PldrllmForTokenClassification
+    
+    def __init__(self, parent, batch_size=13, seq_length=7, is_training=True, 
+                 use_input_mask=True, use_token_type_ids=False, use_labels=True, 
+                 vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=2, 
+                 num_key_value_heads=2, intermediate_size=37, hidden_act="silu", hidden_dropout_prob=0.0, 
+                 attention_probs_dropout_prob=0.0, max_position_embeddings=512, type_vocab_size=16, 
+                 type_sequence_label_size=2, initializer_range=0.02, num_labels=3, num_choices=4, 
+                 pad_token_id=0, bos_token_id=2, eos_token_id=3, is_decoder=True, scope=None, expert_interval=1, 
+                 moe_layer_start_index=0, moe_intermediate_size=12, shared_expert_intermediate_size=36, shared_expert_gate=True, 
+                 moe_num_shared_experts=2, num_experts_per_tok=2, num_experts=8, mamba_n_groups=1, mamba_n_heads=16, mamba_d_state=16, 
+                 mamba_d_conv=4, mamba_expand=2, mamba_chunk_size=16,
+                 reference_rope=False, custom_G_type='random'):
+        super().__init__(parent, batch_size, seq_length, is_training, use_input_mask, use_token_type_ids, use_labels, vocab_size, hidden_size, num_hidden_layers, num_attention_heads, num_key_value_heads, intermediate_size, hidden_act, hidden_dropout_prob, attention_probs_dropout_prob, max_position_embeddings, type_vocab_size, type_sequence_label_size, initializer_range, num_labels, num_choices, pad_token_id, bos_token_id, eos_token_id, is_decoder, scope, expert_interval, moe_layer_start_index, moe_intermediate_size, shared_expert_intermediate_size, shared_expert_gate, moe_num_shared_experts, num_experts_per_tok, num_experts, mamba_n_groups, mamba_n_heads, mamba_d_state, mamba_d_conv, mamba_expand, mamba_chunk_size)
+        self.reference_rope=reference_rope
+        self.custom_G_type=custom_G_type
+
+
+@require_torch
+class PldrllmModelTest_G_RANDOM(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (
+            PldrllmModel,
+            PldrllmForCausalLM,
+            PldrllmForSequenceClassification,
+            PldrllmForQuestionAnswering,
+            PldrllmForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": PldrllmModel,
+            "text-classification": PldrllmForSequenceClassification,
+            "text-generation": PldrllmForCausalLM,
+            "zero-shot": PldrllmForSequenceClassification,
+            "question-answering": PldrllmForQuestionAnswering,
+            "token-classification": PldrllmForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    test_headmasking = False
+    test_pruning = False
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    model_tester_class = PldrllmModelTester_G_RANDOM
     rotary_embedding_layer = PldrllmRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -111,36 +317,35 @@ class PldrllmIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    def test_llama_3_1_hard(self):
-        """
-        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
-        from llama 3.1.'s RoPE can be detected
-        """
+    def test_pldrllm_110M_hard(self):
+
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
-                ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
+                ("rocm", (9, 5)): "Tell me about the french revolution. I'm a french guy, and I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I",
+                ("cuda", None): "Tell me about the french revolution. I'm a french guy, and I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I'm a french guy. I",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
-
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Pldrllm-3.1-8B-Instruct")
+        model_path="fromthesky/PLDR-LLM-v51-110M-3"
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = PldrllmForCausalLM.from_pretrained(
-            "meta-llama/Meta-Pldrllm-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+            model_path, device_map="auto", dtype=torch.bfloat16
         )
         input_text = ["Tell me about the french revolution."]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
     @slow
-    def test_model_7b_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+    def test_pldrllm_110M_logits_bf16(self):
+        input_ids = [ 5273,   356,   330,   264, 13967,  6971,   262]
+        model_path = "fromthesky/PLDR-LLM-v51-110M-3"
 
         model = PldrllmForCausalLM.from_pretrained(
-            "meta-llama/Pldrllm-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_path, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -150,10 +355,10 @@ class PldrllmIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_means = Expectations(
             {
-            ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-            ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
-            ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-            ("rocm", (9, 4)): torch.tensor([[-6.5094, -4.1329, -4.9754, -3.5042,  0.8082, -2.9443,  1.2830, -3.3539]]),
+            ("xpu", 3): torch.tensor([[-13.5005, -17.2374, -18.3841, -12.8294,  -3.0489, -11.0871, -11.0553]]),
+            ("cuda", 7): torch.tensor([[-13.4639, -17.1359, -18.4118, -12.7880,  -3.1017, -11.0843, -10.9833]]),
+            ("cuda", 8): torch.tensor([[-13.4639, -17.1359, -18.4118, -12.7880,  -3.1017, -11.0843, -10.9833]]),
+            # ("rocm", (9, 4)): torch.tensor([[-6.5094, -4.1329, -4.9754, -3.5042,  0.8082, -2.9443,  1.2830, -3.3539]]),
         })
 
         expected_mean = expected_means.get_expectation().to(torch_device)
@@ -170,22 +375,22 @@ class PldrllmIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:15]
         expected_slices = Expectations(
             {
-            ("xpu", 3): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
-            ("cuda", 7): torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]),
-            ("cuda", 8): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
-            ("rocm", (9, 4)): torch.tensor([[-12.5000,  -7.0625,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9375,  -6.0312,  -7.0312,  -1.8594,   1.8438, -8.5000]])
+            ("xpu", 3): torch.tensor([[-14.8750, -14.8750, -14.8750,  -8.1875, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750]]),
+            ("cuda", 7): torch.tensor([[-14.8125, -14.8125, -14.8125,  -8.1875, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125]]),
+            ("cuda", 8): torch.tensor([[-14.8125, -14.8125, -14.8125,  -8.1875, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125]]),
         })
         # fmt: on
         expected_slice = expected_slices.get_expectation().to(torch_device)
         actual_slice = out.logits[0, 0, :15].float()
         self.assertTrue(torch.allclose(expected_slice, actual_slice, atol=1e-2, rtol=1e-2))
 
+    @pytest.mark.skip(reason="float16 resolution is too low for the model parameter weights.")
     @slow
-    def test_model_7b_logits(self):
+    def test_pldrllm110M_logits_fp16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = PldrllmForCausalLM.from_pretrained(
-            "meta-llama/Pldrllm-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+            "fromthesky/PLDR-LLM-v51-110M-test", device_map="auto", dtype=torch.float16
         )
 
         with torch.no_grad():
@@ -213,9 +418,9 @@ class PldrllmIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:15]
         expected_slices = Expectations(
             {
-              ("xpu", 3): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328]),
-              ("cuda", 7): torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]),
-              ("cuda", 8): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328])
+              ("xpu", 3): torch.tensor([-14.8750, -14.8750, -14.8750,  -8.1875, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750, -14.8750]),
+              ("cuda", 7): torch.tensor([-14.8125, -14.8125, -14.8125,  -8.1875, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125]),
+              ("cuda", 8): torch.tensor([-14.8125, -14.8125, -14.8125,  -8.1875, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125, -14.8125])
         })
         # fmt: on
 
@@ -229,30 +434,36 @@ class PldrllmIntegrationTest(unittest.TestCase):
             )
         )
 
+
     # TODO: check why we have the following strange situation.
     # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
     @run_test_using_subprocess
     @slow
-    def test_model_7b_dola_generation(self):
+    def test_pldrllm_110M_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
         EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-            "understanding of space and time."
+                                    "Simply put, the theory of relativity states that physicists can only be understood by the physical and mental processes "
+                                    "of their being. This is because the physical and mental processes of their being are not physical, but are physical and mental "
+                                    "processes of their being. This is because the physical processes of their being are physical and mental processes of their being. "
+                                    "This is because the"
         )
+        model_path="fromthesky/PLDR-LLM-v51-110M-3"
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = PldrllmTokenizer.from_pretrained("meta-llama/Pldrllm-2-7b-chat-hf")
+        tokenizer = LlamaTokenizerFast.from_pretrained(model_path, add_eos_token=False, legacy=False)
         model = PldrllmForCausalLM.from_pretrained(
-            "meta-llama/Pldrllm-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
+            model_path, device_map="sequential", dtype=torch.bfloat16
         )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
-        )
+            **model_inputs, max_new_tokens=64, 
+            top_p=None, temperature=1, 
+            do_sample=False, dola_layers="low",
+            trust_remote_code=True)
+        
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
@@ -262,33 +473,35 @@ class PldrllmIntegrationTest(unittest.TestCase):
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
+        self.maxDiff=None
 
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that 20% of the world’s population is a 20% of the world’s population. "
+            "The theory of relativity states that 20% of the world’s population is",
+            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup. I love ketchup. I love ketchup. "
+            "I love ketchup. I love ketchup. I love ketchup. I love ketchup. I love ketchup. I love ketchup.",
         ]
 
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = PldrllmTokenizer.from_pretrained(
-            "meta-llama/Pldrllm-2-7b-hf", pad_token="</s>", padding_side="right"
+        model_path="fromthesky/PLDR-LLM-v51G-106M-1"
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            model_path, padding_side="right", legacy=False, add_eos_token=False
         )
         model = PldrllmForCausalLM.from_pretrained(
-            "meta-llama/Pldrllm-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
+            model_path, device_map=torch_device, dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
@@ -296,6 +509,7 @@ class PldrllmIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
     @slow
@@ -307,16 +521,17 @@ class PldrllmIntegrationTest(unittest.TestCase):
             TorchExportableModuleWithStaticCache,
         )
 
-        llama_models = {
-            "meta-llama/Pldrllm-3.2-1B": [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
-                "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
+        model_path="fromthesky/PLDR-LLM-v51G-106M-test"
+        pldrllm_models = {
+            model_path: [
+                "Simply put, the theory of relativity states that 100% of the universe is the universe. "
+                "The theory of relativity states that 100% of the universe is the universe. The theory of relativity states that "
             ],
         }
 
-        for llama_model_ckp, EXPECTED_TEXT_COMPLETION in llama_models.items():
+        for pldrllm_model_ckp, EXPECTED_TEXT_COMPLETION in pldrllm_models.items():
             # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(llama_model_ckp, pad_token="</s>", padding_side="right")
+            tokenizer = LlamaTokenizerFast.from_pretrained(pldrllm_model_ckp, padding_side="left", legacy=False)
             max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
                 "input_ids"
             ].shape[-1]
@@ -328,9 +543,10 @@ class PldrllmIntegrationTest(unittest.TestCase):
             attn_implementation = "sdpa"
             batch_size = 1
             model = PldrllmForCausalLM.from_pretrained(
-                llama_model_ckp,
+                pldrllm_model_ckp,
                 device_map=device,
-                torch_dtype=dtype,
+                dtype=dtype,
+                use_cache=True,
                 attn_implementation=attn_implementation,
                 generation_config=GenerationConfig(
                     use_cache=True,
@@ -361,6 +577,7 @@ class PldrllmIntegrationTest(unittest.TestCase):
                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
             )
             ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+
             self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
 
@@ -372,10 +589,10 @@ class Mask4DTestHard(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        model_name = "TinyPldrllm/TinyPldrllm-1.1B-Chat-v1.0"
+        model_name="fromthesky/PLDR-LLM-v51G-106M-1"
         self.model_dtype = torch.float32
-        self.tokenizer = PldrllmTokenizer.from_pretrained(model_name)
-        self.model = PldrllmForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.tokenizer = LlamaTokenizerFast.from_pretrained(model_name)
+        self.model = PldrllmForCausalLM.from_pretrained(model_name, dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"
