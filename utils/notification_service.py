@@ -1072,18 +1072,14 @@ if __name__ == "__main__":
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
     # Add Commit/PR title with a link for push CI
-    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
-    ci_title_push = os.environ.get("CI_TITLE_PUSH")
-    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
-    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
-
+    ci_title = os.environ.get("CI_TITLE", "")
     ci_sha = os.environ.get("CI_SHA")
 
     ci_url = None
     if ci_sha:
         ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
 
-    if ci_title is not None:
+    if ci_title:
         if ci_url is None:
             raise ValueError(
                 "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
@@ -1112,9 +1108,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author} | Merged by: GH_{merged_by}"
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
