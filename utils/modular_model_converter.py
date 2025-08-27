@@ -1791,7 +1791,7 @@ if __name__ == "__main__":
     if sum(len(level_files) for level_files in ordered_files) != len(files_to_parse):
         raise ValueError(
             "Some files will not be converted because they do not appear in the dependency graph."
-            "This usually means that the modular file does not import any model-specific class"
+            "This usually means that at least one modular file does not import any model-specific class"
         )
 
     for dependency_level_files in ordered_files:
