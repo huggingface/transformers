@@ -21,10 +21,10 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import TransformersKwargs, ModelOutput, auto_docstring, can_return_tuple, logging
-from ...masking_utils import create_causal_mask
 from ...processing_utils import Unpack
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -289,13 +289,16 @@ class HiggsAudioDualFFNFastDecoderLayer(nn.Module):
             if attention_mask is None:
                 attention_mask = ~audio_out_mask
                 if self.self_attn.config._attn_implementation != "flash_attention_2":
-                    attention_mask = create_causal_mask(
-                        config=self.config,
-                        input_embeds=hidden_states,
+                    sequence_length = audio_out_mask.shape[1]
+                    attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                         attention_mask=attention_mask,
+                        sequence_length=sequence_length,
+                        target_length=sequence_length,
+                        dtype=hidden_states.dtype,
+                        min_dtype=min_dtype,
+                        device=hidden_states.device,
                         cache_position=cache_position,
-                        past_key_values=past_key_value,
-                        position_ids=position_ids,
+                        batch_size=hidden_states.shape[0],
                     )
                     if use_cache:
                         attention_mask = attention_mask[:, :, -target_length:, :]
@@ -439,8 +442,6 @@ class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
                 all tokens up to the current token.  That means, it has size (batch_size, sequence_length) while
                 hidden_states will have size (batch_size, 1). In the torch compile mode, the audio_out_mask will have
                 size (batch_size, 1).
-            is_decoding_audio_token
-                Used in the torch compile mode to determine if the current token is an audio token or not.
             past_key_value (`Cache`, *optional*): cached past key and value projection states. We fetch the corresponding cached key/value via the layer_idx.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -506,6 +507,10 @@ class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
             residual[real_audio_out_mask] += audio_hidden_states
 
             hidden_states = residual
+        else:
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
 
         return hidden_states
 
@@ -779,6 +784,69 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         audio_attention_mask = attention_mask.masked_fill(no_audio_out_mask, min_dtype)
         return fast_forward_attention_mask, audio_attention_mask
 
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+    ):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
+        if self.config._attn_implementation == "sdpa" and not using_static_cache:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            min_dtype=min_dtype,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -892,13 +960,8 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         use_static_cache = isinstance(past_key_values, StaticCache)
 
         # Apply the LLM component
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values
         )
 
         hidden_states = inputs_embeds
@@ -1096,13 +1159,13 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
 
         # Apply the audio decoder projector
         logits, audio_logits = self.audio_decoder_proj(
-            hidden_states,
+            last_hidden_states,
             audio_out_mask,
         )
 
         if audio_logits is not None:
             audio_logits = audio_logits.view(
-                audio_logits.shape[0], self.audio_num_codebooks, self.audio_codebook_size
+                audio_logits.shape[0], self.model.audio_num_codebooks, self.model.audio_codebook_size
             ).float()
 
         loss = None

@@ -715,10 +715,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
         # A tensor to keep track of all the audio placeholder tokens.
         input_ids_full = input_ids.clone()
 
-        # The default past_key_values provided by HF transformers does not have the correct number of DynamicCache when use_audio_out_self_attention is turned on
-        if self.config.use_audio_out_self_attention and "past_key_values" in model_kwargs:
-            model_kwargs.pop("past_key_values")
-
         # Initialize the audio variables based on the input prompt.
         if input_ids[0][-1] == self.config.audio_out_token_idx:
             audio_sequences = [model_kwargs["audio_out_ids"][:, model_kwargs["audio_out_ids_start"][-1] :]]
