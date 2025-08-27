@@ -53,16 +53,14 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3-14B": "qwen2",
     "OpenGVLab/InternVL3-38B": "qwen2",
     "OpenGVLab/InternVL3-78B": "qwen2",
-    "OpenGVLab/InternVL3_5-1B": "qwen3",
-    "OpenGVLab/InternVL3_5-2B": "qwen3", 
-    "OpenGVLab/InternVL3_5-4B": "qwen3",
-    "OpenGVLab/InternVL3_5-8B": "qwen3",
-    "OpenGVLab/InternVL3_5-14B": "qwen3",
-    "OpenGVLab/InternVL3_5-26B": "qwen3",
-    "OpenGVLab/InternVL3_5-38B": "qwen3",
-    "OpenGVLab/InternVL3_5-78B": "qwen3",
+    "OpenGVLab/InternVL3_5-1B": "qwen3", # works
+    "OpenGVLab/InternVL3_5-2B": "qwen3", # TODO check
+    "OpenGVLab/InternVL3_5-4B": "qwen3", # TODO check
+    "OpenGVLab/InternVL3_5-8B": "qwen3", # TODO check
+    "OpenGVLab/InternVL3_5-14B": "qwen3", # TODO check
+    "OpenGVLab/InternVL3_5-30B": "qwen3", # TODO check
     "OpenGVLab/InternVL3_5-241B-A28B": "qwen3_moe",
-    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss",
+    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss", #conversion works, generation effy
 }
 
 UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
@@ -103,25 +101,21 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN2 = {
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3 = {
-    # Basic model mappings
     r"language_model.model.":                       r"model.language_model.",
     r"language_model.lm_head":                       r"lm_head",
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3_MOE = {
-    # Qwen3Moe mappings (standard MoE structure)
     r"language_model.model.":                       r"model.language_model.",
     r"language_model.lm_head":                       r"lm_head",
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_GPT_OSS = {
-    # GptOss mappings (custom MoE structure)
     r"language_model.model.":                       r"model.language_model.",
     r"language_model.lm_head":                       r"lm_head",
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI = {
-    # Vision encoder mapping
     r"mlp1.0":                                 r"model.multi_modal_projector.layer_norm",
     r"mlp1.1":                                 r"model.multi_modal_projector.linear_1",
     r"mlp1.3":                                 r"model.multi_modal_projector.linear_2",
