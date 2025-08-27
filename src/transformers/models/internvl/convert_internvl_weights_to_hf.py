@@ -32,6 +32,7 @@ from transformers import (
     InternVLVisionConfig,
     LlamaConfig,
     Qwen2Config,
+    Qwen3Config,
 )
 
 
@@ -50,6 +51,16 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3-14B": "qwen2",
     "OpenGVLab/InternVL3-38B": "qwen2",
     "OpenGVLab/InternVL3-78B": "qwen2",
+    "OpenGVLab/InternVL3_5-1B": "qwen3",
+    "OpenGVLab/InternVL3_5-2B": "qwen3",
+    "OpenGVLab/InternVL3_5-4B": "qwen3",
+    "OpenGVLab/InternVL3_5-8B": "qwen3",
+    "OpenGVLab/InternVL3_5-14B": "qwen3",
+    "OpenGVLab/InternVL3_5-26B": "qwen3",
+    "OpenGVLab/InternVL3_5-38B": "qwen3",
+    "OpenGVLab/InternVL3_5-78B": "qwen3",
+    "OpenGVLab/InternVL3_5-241B-A28B": "qwen3",
+    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "qwen3",
 }
 
 UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
@@ -89,6 +100,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN2 = {
     r"language_model.lm_head":                       r"lm_head",
 }
 
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3 = {
+    # For Qwen3 and derivatives (same structure as Qwen2 for key mapping)
+    r"language_model.model.":                       r"model.language_model.",
+    r"language_model.lm_head":                       r"lm_head",
+}
+
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI = {
     # Vision encoder mapping
     r"mlp1.0":                                 r"model.multi_modal_projector.layer_norm",
@@ -124,9 +141,9 @@ chat_template = (
 CONTEXT_LENGTH = 8192
 
 
-def get_lm_type(path: str) -> Literal["qwen2", "llama"]:
+def get_lm_type(path: str) -> Literal["qwen2", "qwen3", "llama"]:
     """
-    Determine the type of language model (either 'qwen2' or 'llama') based on a given model path.
+    Determine the type of language model (either 'qwen2', 'qwen3', or 'llama') based on a given model path.
     """
     if path not in LM_TYPE_CORRESPONDENCE:
         base_config = AutoModel.from_pretrained(path, trust_remote_code=True).config
@@ -137,12 +154,14 @@ def get_lm_type(path: str) -> Literal["qwen2", "llama"]:
             lm_type = "llama"
         elif lm_arch == "Qwen2ForCausalLM":
             lm_type = "qwen2"
+        elif lm_arch in ("Qwen3ForCausalLM", "Qwen3MoeForCausalLM", "GptOssForCausalLM"):
+            lm_type = "qwen3"
         else:
             raise ValueError(
-                f"Architecture '{lm_arch}' is not supported. Only 'Qwen2ForCausalLM' and 'InternLM2ForCausalLM' are recognized."
+                f"Architecture '{lm_arch}' is not supported. Only 'Qwen2ForCausalLM', 'Qwen3ForCausalLM', 'Qwen3MoeForCausalLM', 'GptOssForCausalLM', and 'InternLM2ForCausalLM' are recognized."
             )
     else:
-        lm_type: Literal["qwen2", "llama"] = LM_TYPE_CORRESPONDENCE[path]
+        lm_type: Literal["qwen2", "qwen3", "llama"] = LM_TYPE_CORRESPONDENCE[path]
 
     return lm_type
 
@@ -161,11 +180,15 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: O
         output_dict = dict(zip(old_text_vision.split("\n"), new_text.split("\n")))
         old_text_language = "\n".join([key for key in state_dict_keys if key.startswith("language_model")])
         new_text = old_text_language
-        if get_lm_type(path) == "llama":
+        lm_type = get_lm_type(path)
+        if lm_type == "llama":
             for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_LLAMA.items():
                 new_text = re.sub(pattern, replacement, new_text)
-        elif LM_TYPE_CORRESPONDENCE[path] == "qwen2":
+        elif lm_type == "qwen2":
             for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN2.items():
+                new_text = re.sub(pattern, replacement, new_text)
+        elif lm_type == "qwen3":
+            for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT_QWEN3.items():
                 new_text = re.sub(pattern, replacement, new_text)
         output_dict.update(dict(zip(old_text_language.split("\n"), new_text.split("\n"))))
         old_text_multi = "\n".join(
@@ -199,9 +222,13 @@ def get_internvl_config(input_base_path):
     llm_config = base_config.llm_config.to_dict()
     vision_config = base_config.vision_config.to_dict()
     vision_config["use_absolute_position_embeddings"] = True
-    if get_lm_type(input_base_path) == "qwen2":
+    lm_type = get_lm_type(input_base_path)
+    if lm_type == "qwen2":
         image_token_id = 151667
         language_config_class = Qwen2Config
+    elif lm_type == "qwen3":
+        image_token_id = 151667
+        language_config_class = Qwen3Config
     else:
         image_token_id = 92546
         language_config_class = LlamaConfig
@@ -209,8 +236,8 @@ def get_internvl_config(input_base_path):
     llm_config = {k: v for k, v in llm_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
     # Force use_cache to True
     llm_config["use_cache"] = True
-    # Force correct eos_token_id for InternVL3
-    if "InternVL3" in input_base_path and get_lm_type(input_base_path) == "qwen2":
+    # Force correct eos_token_id for InternVL3 and InternVL3.5
+    if ("InternVL3" in input_base_path or "InternVL3_5" in input_base_path) and lm_type in ("qwen2", "qwen3"):
         llm_config["eos_token_id"] = 151645
 
     vision_config = {k: v for k, v in vision_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
@@ -321,7 +348,7 @@ def write_model(
         processor.push_to_hub(hub_dir, use_temp_dir=True)
 
     # generation config
-    if get_lm_type(input_base_path) == "llama":
+    if lm_type == "llama":
         print("Saving generation config...")
         # in the original model, eos_token is not the same in the text_config and the generation_config
         # ("</s>" - 2 in the text_config and "<|im_end|>" - 92542 in the generation_config)
@@ -345,7 +372,8 @@ def write_model(
 def write_tokenizer(
     save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
 ):
-    if get_lm_type(path) == "qwen2":
+    lm_type = get_lm_type(path)
+    if lm_type in ("qwen2", "qwen3"):
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
             return_token_type_ids=False,
