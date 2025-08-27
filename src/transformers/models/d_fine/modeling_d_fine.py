@@ -1355,9 +1355,6 @@ class DFineModel(DFinePreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad_(False)
@@ -2025,7 +2022,7 @@ class DFineHybridEncoder(nn.Module):
     """
 
     def __init__(self, config: DFineConfig):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.in_channels = config.encoder_in_channels
         self.num_fpn_stages = len(self.in_channels) - 1

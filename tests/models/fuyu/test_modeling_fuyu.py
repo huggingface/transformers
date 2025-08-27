@@ -265,7 +265,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_model(self):
-        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b", torch_dtype="float16", device_map=torch_device)
+        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b", dtype="float16", device_map=torch_device)
 
     def test_greedy_generation(self):
         processor = self.default_processor

@@ -122,15 +122,3 @@ class ClvpProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        self.assertListEqual(
-            sorted(processor.model_input_names),
-            sorted(set(feature_extractor.model_input_names + tokenizer.model_input_names)),
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )

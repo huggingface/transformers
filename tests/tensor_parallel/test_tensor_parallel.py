@@ -78,7 +78,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             has_dtensor = 0
@@ -116,7 +116,7 @@ class TestTensorParallel(TestCasePlus):
 
             model_id = "JackFram/llama-68m"
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
             torch.distributed.barrier()
 
             # Dummy forward and backward pass
@@ -144,7 +144,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             model.forward = torch.compile(model.forward)
@@ -213,6 +213,124 @@ class TestTensorParallel(TestCasePlus):
                     tp_tensor = tp_model.get_tensor(non_tp_key)
                     assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
                     del non_tp_tensor, tp_tensor
+
+
+class TestTensorParallelProperties(TestCasePlus):
+    def test_tp_plan_property_setter_getter(self):
+        """Test that tp_plan property can be set and retrieved correctly."""
+        from transformers import AutoModelForCausalLM
+
+        model_id = "JackFram/llama-68m"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test setting empty plan
+        model.tp_plan = {}
+        self.assertEqual(model.tp_plan, {})
+
+        # Test setting a valid plan
+        valid_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
+        model.tp_plan = valid_plan
+        self.assertEqual(model.tp_plan, valid_plan)
+
+        # Test updating the plan
+        model.tp_plan.update({"model.layers.*.self_attn.k_proj": "colwise"})
+        expected_plan = {"model.layers.*.self_attn.q_proj": "colwise", "model.layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(model.tp_plan, expected_plan)
+
+        # Test overriding existing entry
+        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "colwise_rep"})
+        expected_plan = {
+            "model.layers.*.self_attn.q_proj": "colwise_rep",
+            "model.layers.*.self_attn.k_proj": "colwise",
+        }
+        self.assertEqual(model.tp_plan, expected_plan)
+
+    def test_tp_plan_validation_invalid_style(self):
+        """Test that invalid parallel styles are rejected."""
+        from transformers import AutoModelForCausalLM
+
+        model_id = "JackFram/llama-68m"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test invalid parallel style
+        with self.assertRaises(ValueError) as context:
+            model.tp_plan = {"layers.*.self_attn.q_proj": "invalid_style"}
+
+        self.assertIn("Unsupported tensor parallel style 'invalid_style'", str(context.exception))
+        self.assertIn("Supported styles are", str(context.exception))
+
+    def test_tp_plan_validation_nonexistent_layer_warning(self):
+        """Test that warnings are issued for non-existent layer patterns."""
+        import warnings
+
+        from transformers import AutoModelForCausalLM
+
+        model_id = "JackFram/llama-68m"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test warning for non-existent layer pattern
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            model.tp_plan = {"nonexistent.*.layer": "colwise"}
+
+            # Check that a warning was issued
+            self.assertTrue(len(w) > 0)
+            warning_message = str(w[0].message)
+            self.assertIn("Layer pattern 'nonexistent.*.layer' does not match any parameters", warning_message)
+
+    def test_tp_plan_valid_layer_patterns(self):
+        """Test that valid layer patterns are accepted without warnings."""
+        import warnings
+
+        from transformers import AutoModelForCausalLM
+
+        model_id = "JackFram/llama-68m"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test valid layer patterns that should match the model structure
+        valid_plans = [
+            {"model.layers.*.self_attn.q_proj": "colwise"},
+            {"model.layers.*.self_attn.k_proj": "rowwise"},
+            {"model.layers.*.mlp.gate_proj": "colwise_rep"},
+        ]
+
+        for plan in valid_plans:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                model.tp_plan = plan
+
+                # Filter out any warnings that are not about layer patterns
+                layer_warnings = [
+                    warning
+                    for warning in w
+                    if "Layer pattern" in str(warning.message)
+                    and "does not match any parameters" in str(warning.message)
+                ]
+
+                # Should not have layer pattern warnings for valid patterns
+                self.assertEqual(
+                    len(layer_warnings),
+                    0,
+                    f"Unexpected warning for valid pattern {plan}: {[str(w.message) for w in layer_warnings]}",
+                )
+
+        # Verify the final plan was set correctly
+        self.assertEqual(model.tp_plan, valid_plans[-1])
+
+    def test_tp_plan_none_handling(self):
+        """Test that None values are handled correctly."""
+        from transformers import AutoModelForCausalLM
+
+        model_id = "JackFram/llama-68m"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test setting None
+        model.tp_plan = None
+        self.assertEqual(model.tp_plan, {})
+
+        # Test setting a plan after None
+        model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
+        self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
 
 @require_torch_multi_accelerator

@@ -642,34 +642,34 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -677,16 +677,16 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
