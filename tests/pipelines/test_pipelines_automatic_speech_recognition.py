@@ -68,7 +68,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
@@ -86,7 +86,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             **extra_kwargs,
         )
 
@@ -189,7 +189,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -210,7 +210,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -229,7 +229,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             model="openai/whisper-tiny",
             device=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             max_new_tokens=5,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -1255,7 +1255,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
             device=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             framework="pt",
         )
 

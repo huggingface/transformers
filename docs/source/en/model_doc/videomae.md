@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-03-23 and added to Hugging Face Transformers on 2022-08-04.*
 
 # VideoMAE
 
@@ -52,7 +53,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```
 from transformers import VideoMAEForVideoClassification
-model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 

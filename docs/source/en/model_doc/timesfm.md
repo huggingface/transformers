@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2025-04-16.*
 
 # TimesFM
 
@@ -44,9 +45,9 @@ from transformers import TimesFmModelForPrediction
 
 model = TimesFmModelForPrediction.from_pretrained(
     "google/timesfm-2.0-500m-pytorch",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="sdpa",
-    device_map="cuda" if torch.cuda.is_available() else None
+    device_map="auto"
 )
 
 
@@ -60,12 +61,10 @@ frequency_input = [0, 1, 2]
 
 # Convert inputs to sequence of tensors
 forecast_input_tensor = [
-    torch.tensor(ts, dtype=torch.bfloat16).to("cuda" if torch.cuda.is_available() else "cpu")
+    torch.tensor(ts, dtype=torch.bfloat16).to(model.device)
     for ts in forecast_input
 ]
-frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
+frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(model.device)
 
 # Get predictions from the pre-trained model
 with torch.no_grad():

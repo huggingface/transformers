@@ -21,13 +21,12 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import can_return_tuple
 from .configuration_vitpose import VitPoseConfig
 
 
@@ -67,7 +66,7 @@ class VitPosePreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -128,7 +127,7 @@ class VitPoseSimpleDecoder(nn.Module):
     feature maps into heatmaps.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: VitPoseConfig):
         super().__init__()
 
         self.activation = nn.ReLU()
@@ -193,7 +192,7 @@ class VitPoseClassicDecoder(nn.Module):
     """
 )
 class VitPoseForPoseEstimation(VitPosePreTrainedModel):
-    def __init__(self, config: VitPoseConfig) -> None:
+    def __init__(self, config: VitPoseConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -211,6 +210,7 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -218,10 +218,8 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         dataset_index: Optional[torch.Tensor] = None,
         flip_pairs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, VitPoseEstimatorOutput]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> VitPoseEstimatorOutput:
         r"""
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
             Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
@@ -251,41 +249,25 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> heatmaps = outputs.heatmaps
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        outputs = self.backbone.forward_with_filtered_kwargs(
+        outputs: BackboneOutput = self.backbone.forward_with_filtered_kwargs(
             pixel_values,
             dataset_index=dataset_index,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
-        sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
+        sequence_output = outputs.feature_maps[-1]
         batch_size = sequence_output.shape[0]
         patch_height = self.config.backbone_config.image_size[0] // self.config.backbone_config.patch_size[0]
         patch_width = self.config.backbone_config.image_size[1] // self.config.backbone_config.patch_size[1]
-        sequence_output = (
-            sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
-        )
+        sequence_output = sequence_output.permute(0, 2, 1)
+        sequence_output = sequence_output.reshape(batch_size, -1, patch_height, patch_width).contiguous()
 
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (heatmaps,) + outputs[1:]
-            else:
-                output = (heatmaps,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return VitPoseEstimatorOutput(
             loss=loss,

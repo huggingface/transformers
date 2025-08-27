@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2022-05-24.*
 
 # GPT-NeoX
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-We introduce GPT-NeoX-20B, a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
+We introduce [GPT-NeoX-20B](https://huggingface.co/papers/2204.06745), a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
 be made freely and openly available to the public through a permissive license. It is, to the best of our knowledge,
 the largest dense autoregressive model that has publicly available weights at the time of submission. In this work,
 we describe GPT-NeoX-20B's architecture and training and evaluate its performance on a range of language-understanding,
@@ -37,7 +38,7 @@ generous the support of [CoreWeave](https://www.coreweave.com/).
 GPT-NeoX-20B was trained with fp16, thus it is recommended to initialize the model as follows:
 
 ```python
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b").half().cuda()
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", device_map="auto", dtype=torch.float16)
 ```
 
 GPT-NeoX-20B also has a different tokenizer from the one used in GPT-J-6B and GPT-Neo. The new tokenizer allocates
@@ -87,7 +88,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 ```python
 >>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 ...
 ```
 
@@ -113,7 +114,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```python
 from transformers import GPTNeoXForCausalLM
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
 

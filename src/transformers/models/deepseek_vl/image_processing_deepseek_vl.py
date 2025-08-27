@@ -125,7 +125,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         if image_mean is None:
             self.background_color = (127, 127, 127)
         else:
-            self.background_color = tuple([int(x * 255) for x in image_mean])
+            self.background_color = tuple(int(x * 255) for x in image_mean)
 
     def resize(
         self,
@@ -277,6 +277,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
