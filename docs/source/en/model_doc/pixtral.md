@@ -134,7 +134,7 @@ alt="drawing" width="600"/>
     "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
     ```
 
-    The [IMG] tokens are replaced with a number of [IMG] tokens that depend on the height and width of each image. Each row of the image is separated by a [IMG_BREAK] token and each image is separated by a [IMG_END] token. Use the [~Processor.apply_chat_template] method to handle these tokens for you.
+    The `[IMG]` tokens are replaced with a number of `[IMG]` tokens that depend on the height and width of each image. Each row of the image is separated by a `[IMG_BREAK]` token and each image is separated by a `[IMG_END]` token. Use the [`~Processor.apply_chat_template`] method to handle these tokens for you.
 
 ## PixtralVisionConfig
 
