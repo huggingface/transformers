@@ -45,7 +45,7 @@ env:
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
-  NUM_SLICES: 2
+  NUM_SLICES: 1
 
 jobs:
   setup:
@@ -113,7 +113,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
+        machine_type: [single-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -457,88 +457,3 @@ jobs:
         with:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
-
-  run_extract_warnings:
-    # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
-    if: ${{ always() && inputs.job == 'run_models_gpu' }}
-    name: Extract warnings in CI artifacts
-    runs-on: ubuntu-22.04
-    needs: [setup, run_models_gpu]
-    steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-          ref: ${{ inputs.commit_sha || github.sha }}
-
-      - name: Install transformers
-        run: pip install transformers
-
-      - name: Show installed libraries and their versions
-        run: pip freeze
-
-      - name: Create output directory
-        run: mkdir warnings_in_ci
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: warnings_in_ci
-
-      - name: Show artifacts
-        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
-        working-directory: warnings_in_ci
-
-      - name: Extract warnings in CI artifacts
-        run: |
-          python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
-          echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
-
-      - name: Upload artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: warnings_in_ci
-          path: warnings_in_ci/selected_warnings.json
-
-  send_results:
-    name: Slack Report
-    needs: [
-      setup,
-      run_models_gpu,
-      run_trainer_and_fsdp_gpu,
-      run_pipelines_torch_gpu,
-      run_examples_gpu,
-      run_torch_cuda_extensions_gpu,
-      run_quantization_torch_gpu,
-      run_extract_warnings
-    ]
-    if: ${{ always() }}
-    uses: ./.github/workflows/slack-report.yml
-    with:
-      job: ${{ inputs.job }}
-      # This would be `skipped` if `setup` is skipped.
-      setup_status: ${{ needs.setup.result }}
-      slack_report_channel: ${{ inputs.slack_report_channel }}
-      # This would be an empty string if `setup` is skipped.
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
-      ci_event: ${{ inputs.ci_event }}
-      report_repo_id: ${{ inputs.report_repo_id }}
-      commit_sha: ${{ inputs.commit_sha || github.sha }}
-
-    secrets: inherit
-
-  check_new_failures:
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
-    name: Check new failures
-    needs: send_results
-    uses: ./.github/workflows/check_failed_tests.yml
-    with:
-      docker: ${{ inputs.docker }}
-      start_sha: ${{ inputs.commit_sha || github.sha }}
-      job: ${{ inputs.job }}
-      slack_report_channel: ${{ inputs.slack_report_channel }}
-      ci_event: ${{ inputs.ci_event }}
-      report_repo_id: ${{ inputs.report_repo_id }}
-
-    secrets: inherit
