@@ -218,7 +218,7 @@ class T5GemmaConfig(PretrainedConfig):
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
-        if hasattr(self, 'decoder') and self.decoder is not None:
+        if hasattr(self, "decoder") and self.decoder is not None:
             self.decoder.num_hidden_layers = value
 
     def to_dict(self):
