@@ -217,6 +217,7 @@ class GenerationTesterMixin:
             "num_return_sequences": num_return_sequences,
             "num_beam_groups": 2,  # one beam per group
             "diversity_penalty": 2.0,
+            "trust_remote_code": True,
         }
         return beam_kwargs
 
@@ -2651,6 +2652,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
@@ -2669,6 +2671,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_beam_groups=4,
             diversity_penalty=2.0,
             remove_invalid_values=True,
+            trust_remote_code=True,
         )
 
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2849,7 +2852,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = model.to(torch_device)
 
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
+        outputs = model.generate(input_ids=input_ids, trust_remote_code=True)
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)

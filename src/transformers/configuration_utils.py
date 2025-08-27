@@ -1121,8 +1121,6 @@ class PretrainedConfig(PushToHubMixin):
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
             "temperature": 1.0,
             "top_k": 50,
             "top_p": 1.0,

@@ -53,8 +53,6 @@ config_common_kwargs = {
     "do_sample": True,
     "early_stopping": True,
     "num_beams": 3,
-    "num_beam_groups": 3,
-    "diversity_penalty": 0.5,
     "temperature": 2.0,
     "top_k": 10,
     "top_p": 0.7,

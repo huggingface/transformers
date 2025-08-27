@@ -410,7 +410,6 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "BeamScorer",
-            "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
@@ -425,7 +424,6 @@ else:
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
             "GenerationMixin",
-            "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
             "LogitNormalization",
             "LogitsProcessor",
@@ -655,7 +653,6 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import BeamScorer as BeamScorer
-    from .generation import BeamSearchScorer as BeamSearchScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
     from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
@@ -686,7 +683,6 @@ if TYPE_CHECKING:
     from .generation import ForcedEOSTokenLogitsProcessor as ForcedEOSTokenLogitsProcessor
     from .generation import GenerationConfig as GenerationConfig
     from .generation import GenerationMixin as GenerationMixin
-    from .generation import HammingDiversityLogitsProcessor as HammingDiversityLogitsProcessor
     from .generation import InfNanRemoveLogitsProcessor as InfNanRemoveLogitsProcessor
     from .generation import LogitNormalization as LogitNormalization
     from .generation import LogitsProcessor as LogitsProcessor

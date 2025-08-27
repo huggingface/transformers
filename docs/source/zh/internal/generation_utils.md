@@ -133,9 +133,6 @@ generation_output[:2]
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
-    - __call__
-
 [[autodoc]] InfNanRemoveLogitsProcessor
     - __call__
 
@@ -313,10 +310,6 @@ generation_output[:2]
 ## BeamSearch
 
 [[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] BeamSearchScorer
     - process
     - finalize
 
