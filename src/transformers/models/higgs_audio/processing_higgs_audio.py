@@ -24,8 +24,7 @@ import numpy as np
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_librosa_available, is_soundfile_available, is_torch_available, logging
-from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
+from ...utils import is_soundfile_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -37,9 +36,6 @@ if is_torch_available():
 
 if is_soundfile_available():
     import soundfile as sf
-
-if is_librosa_available():
-    import librosa
 
 
 logger = logging.get_logger(__name__)
@@ -458,7 +454,6 @@ class HiggsAudioSampleProcessor:
 
 
 def audio_extraction(raw_audio, original_sr=None, target_sr=None, device="cuda"):
-    # Convert from librosa to torch
     if not isinstance(raw_audio, torch.Tensor):
         audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=device)
     else:
@@ -547,11 +542,6 @@ class HiggsAudioProcessor(ProcessorMixin):
             BatchFeature of model inputs including tokenized text and processed audio
         """
         if not is_torch_available():
-            raise ValueError(
-                "The `HiggsAudioProcessor` requires `torch` but we couldn't "
-                "find it in your environment. You can install torch via `pip install torch`."
-            )
-        if not is_librosa_available():
             raise ValueError(
                 "The `HiggsAudioProcessor` requires `torch` but we couldn't "
                 "find it in your environment. You can install torch via `pip install torch`."

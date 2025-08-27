@@ -15,16 +15,16 @@
 """Convert HiggsAudio to Hugging Face format."""
 
 import argparse
-import io
 import glob
+import io
 
-from safetensors.torch import load_file
 import torch
 import yaml
+from safetensors.torch import load_file
 
 from transformers import (
-    HiggsAudioForConditionalGeneration,
     HiggsAudioConfig,
+    HiggsAudioForConditionalGeneration,
     logging,
 )
 

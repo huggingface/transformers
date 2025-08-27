@@ -15,17 +15,17 @@
 """Higgs-Audio is an end-to-end multimodal model with the capability to understand and generate text / audio."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_utils import PreTrainedModel
-from ...utils import TransformersKwargs, ModelOutput, auto_docstring, can_return_tuple, logging
 from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,

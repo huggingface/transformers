@@ -14,7 +14,6 @@
 # limitations under the License.
 """HiggsAudioGenerationMixin."""
 
-from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
