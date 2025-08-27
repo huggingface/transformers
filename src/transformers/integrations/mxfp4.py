@@ -48,15 +48,16 @@ FP4_VALUES = [
 
 
 # Copied from GPT_OSS repo and vllm
-def quantize_to_mxfp4(w):
-    downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
-
-    w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
-    w, w_scale = swizzle_mxfp4(w, w_scale)
+def quantize_to_mxfp4(w, triton_kernels_hub):
+    downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
+    w, w_scale = downcast_to_mxfp_torch(w.to(torch.bfloat16), torch.uint8, axis=1)
     return w, w_scale
 
 
-def swizzle_mxfp4(w, w_scale):
+def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
+    """
+    Changes the layout of the tensors depending on the hardware
+    """
     FP4, convert_layout, wrap_torch_tensor = (
         triton_kernels_hub.tensor.FP4,
         triton_kernels_hub.tensor.convert_layout,
@@ -67,18 +68,6 @@ def swizzle_mxfp4(w, w_scale):
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    # TODO : add that when we are actually sure that it works on B200
-    # if torch.cuda.get_device_capability()[0] == 10:
-    #     constraints = {
-    #         "is_persistent": True,
-    #         "epilogue_subtile": 1,
-    #     }
-    #     opt_flags.update_opt_flags_constraints(constraints)
-    # # transpose the tensor so that the quantization axis is on dim1
-
-    # TODO: there is still an issue with the scales on hopper
-    # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
-    # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
     return w, w_scale
 
@@ -90,8 +79,12 @@ def convert_moe_packed_tensors(
     scales,
     *,
     dtype: torch.dtype = torch.bfloat16,
-    rows_per_chunk: int = 32768 * 1024,
+    rows_per_chunk: int = 32768 * 1024,  # TODO these values are not here by mistake ;)
 ) -> torch.Tensor:
+    """
+    Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
+    pass of GPT_OSS.
+    """
     import math
 
     # Check if blocks and scales are on CPU, and move to GPU if so
@@ -99,9 +92,9 @@ def convert_moe_packed_tensors(
         blocks = blocks.cuda()
         scales = scales.cuda()
 
-    scales = scales.to(torch.int32) - 127
+    scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
-    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
+    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape[:-1]=} does not match {scales.shape=}"
 
     lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
@@ -131,13 +124,8 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-
-    # TODO: Delete after making sure this is not necessary! since we go back to cpu in the end in create_quantized_param using .to(target_device)
-    # Move back to CPU if needed
-    # if need_to_move_back:
-    #     out = out.cpu()
     del blocks, scales, lut
-    return out
+    return out.transpose(1, 2).contiguous()
 
 
 class Mxfp4GptOssExperts(nn.Module):
@@ -175,6 +163,7 @@ class Mxfp4GptOssExperts(nn.Module):
         self.limit = getattr(config, "swiglu_limit", 7.0)
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
+        self.limit = getattr(config, "swiglu_limit", 7.0)
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         FnSpecs, FusedActivation, matmul_ogs = (
@@ -207,7 +196,6 @@ class Mxfp4GptOssExperts(nn.Module):
                 precision_config=self.down_proj_precision_config,
                 gammas=routing_data.gate_scal,
             )
-
         return intermediate_cache3
 
 
@@ -228,7 +216,7 @@ def routing_torch_dist(
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
-        rank = int(os.environ.get("LOCAL_RANK", 0))
+        rank = int(os.environ.get("LOCAL_RANK", "0"))
         replace_value = -1
 
         n_tokens = logits.shape[0]
@@ -284,12 +272,11 @@ def routing_torch_dist(
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
 
-    if dist.is_available() and dist.is_initialized():
+    if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing
 
-        routing = routing
     batch_size = hidden_states.shape[0]
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
@@ -340,16 +327,17 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
-                # TODO: this is perhaps necessary since if target_device is cpu, and the param was on gpu
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                setattr(module, proj, torch.nn.Parameter(dequantized))
+                setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
 
-def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
+def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
+    """
+    This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
+    """
     PrecisionConfig, FlexCtx, InFlexData = (
         triton_kernels_hub.matmul_ogs.PrecisionConfig,
         triton_kernels_hub.matmul_ogs.FlexCtx,
@@ -363,61 +351,54 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     to_contiguous = kwargs.get("to_contiguous")
     rank = kwargs.get("rank")
     device_mesh = kwargs.get("device_mesh")
+    if "blocks" in param_name:
+        proj = param_name.split(".")[-1].split("_blocks")[0]
+    if "scales" in param_name:
+        proj = param_name.split(".")[-1].split("_scales")[0]
+    if device_mesh is not None:
+        shard_and_distribute_module(
+            model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
+        )
+    else:
+        setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
+    blocks_attr = f"{proj}_blocks"
+    scales_attr = f"{proj}_scales"
+    blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
+    scales = getattr(module, scales_attr)
+    # Check if both blocks and scales both not on meta device
+    if blocks.device.type != "meta" and scales.device.type != "meta":
+        local_experts = blocks.size(0)
+        if proj == "gate_up_proj":
+            blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
+        else:
+            blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
+        if getattr(target_device, "type", target_device) == "cpu":
+            target_device = "cuda"
+        blocks = blocks.to(target_device).contiguous()
+        scales = scales.to(target_device).contiguous()
+        with torch.cuda.device(target_device):
+            triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
+            )
 
-    for proj in ["gate_up_proj", "down_proj"]:
-        if proj in param_name:
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
-                )
-            else:
-                setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
-            blocks_attr = f"{proj}_blocks"
-            scales_attr = f"{proj}_scales"
-            blocks = getattr(module, blocks_attr)
-            scales = getattr(module, scales_attr)
-            # Check if both blocks and scales both not on on meta device
-            if blocks.device.type != "meta" and scales.device.type != "meta":
-                # need it for ep
-                local_experts = blocks.size(0)
-                if proj == "gate_up_proj":
-                    blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
-                else:
-                    blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
-                # TODO: we need to have the weights on cuda, refactor later
-                if getattr(target_device, "type", target_device) == "cpu":
-                    target_device = "cuda"
-                # TODO: check why we still do move the tensors despite the context manager
-                blocks = blocks.to(target_device)
-                scales = scales.to(target_device)
-                with torch.cuda.device(target_device):
-                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                        blocks.transpose(-2, -1), scales.transpose(-2, -1)
-                    )
+        # need to overwrite the shapes for the kernels
+        if proj == "gate_up_proj":
+            triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+        else:
+            triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
 
-                # need to overwrite the shapes for the kernels
-                if proj == "gate_up_proj":
-                    triton_weight_tensor.shape = torch.Size(
-                        [local_experts, module.hidden_size, module.intermediate_size * 2]
-                    )
-                else:
-                    triton_weight_tensor.shape = torch.Size(
-                        [local_experts, module.intermediate_size, module.hidden_size]
-                    )
+        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+        setattr(module, proj, triton_weight_tensor)
+        setattr(
+            module,
+            f"{proj}_precision_config",
+            PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+        )
 
-                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
-                setattr(module, proj, triton_weight_tensor)
-                setattr(
-                    module,
-                    f"{proj}_precision_config",
-                    PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
-                )
-
-                # delete blocks and scales
-                delattr(module, scales_attr)
-                delattr(module, blocks_attr)
-                # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-                del blocks
+        # delete blocks and scales
+        delattr(module, scales_attr)
+        delattr(module, blocks_attr)
+        del blocks
 
 
 def _replace_with_mxfp4_linear(

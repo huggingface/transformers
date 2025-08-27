@@ -145,7 +145,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values_videos"]
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
     def __init__(
         self,
@@ -692,6 +692,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         # only single image patching is supported
         need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

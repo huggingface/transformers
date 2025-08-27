@@ -19,12 +19,11 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
 
 The model can be used to predict segmentation masks of any object of interest given an input image.
 
@@ -52,9 +51,9 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import SamModel, SamProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -78,9 +77,9 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import SamModel, SamProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -139,41 +138,24 @@ alt="drawing" width="900"/>
 
 [[autodoc]] SamPromptEncoderConfig
 
-
 ## SamProcessor
 
 [[autodoc]] SamProcessor
-
 
 ## SamImageProcessor
 
 [[autodoc]] SamImageProcessor
 
-
 ## SamImageProcessorFast
 
 [[autodoc]] SamImageProcessorFast
-
 
 ## SamVisionModel
 
 [[autodoc]] SamVisionModel
     - forward
 
-
 ## SamModel
 
 [[autodoc]] SamModel
     - forward
-
-
-## TFSamVisionModel
-
-[[autodoc]] TFSamVisionModel
-    - call
-
-
-## TFSamModel
-
-[[autodoc]] TFSamModel
-    - call

@@ -168,29 +168,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
-### Contrastive search
-
-コントラスティブ検索デコーディング戦略は、2022年の論文[A Contrastive Framework for Neural Text Generation](https://huggingface.co/papers/2202.06417)で提案されました。
-これは、非反復的でありながら一貫性のある長い出力を生成するために優れた結果を示しています。コントラスティブ検索の動作原理を学ぶには、[このブログポスト](https://huggingface.co/blog/introducing-csearch)をご覧ください。
-コントラスティブ検索の動作を有効にし、制御する2つの主要なパラメータは「penalty_alpha」と「top_k」です：
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-
->>> prompt = "Hugging Face Company is"
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
-in the business and our customer service is second to none.\n\nIf you have any questions about our
-products or services, feel free to contact us at any time. We look forward to hearing from you!']
-```
-
 ### Multinomial sampling
 
 常に最高確率のトークンを次のトークンとして選択する貪欲検索とは異なり、多項分布サンプリング（または祖先サンプリングとも呼ばれます）はモデルによって提供される語彙全体の確率分布に基づいて次のトークンをランダムに選択します。ゼロ以外の確率を持つすべてのトークンには選択される可能性があり、これにより繰り返しのリスクが減少します。
