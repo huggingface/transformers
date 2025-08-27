@@ -143,11 +143,11 @@ class MossTTSDFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         """Test feature extraction with mock audio data."""
         # Create mock audio data
         mock_audio = np.random.randn(16000).astype(np.float32)  # 1 second at 16kHz
-        
+
         try:
             feature_extractor = XYTokenizerFeatureExtractor()
             result = feature_extractor(mock_audio, return_tensors="pt")
-            
+
             if hasattr(result, "input_values"):
                 input_values = result.input_values
                 # Check that output has expected shape
@@ -157,7 +157,7 @@ class MossTTSDFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             else:
                 # If result format is different, just verify it's not None
                 self.assertIsNotNone(result)
-                
+
         except Exception as e:
             # Skip if XYTokenizerFeatureExtractor is not properly configured
             self.skipTest(f"XYTokenizerFeatureExtractor not available: {e}")
@@ -167,10 +167,10 @@ class MossTTSDFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         # Create mock stereo audio
         mono_audio = np.random.randn(8000).astype(np.float32)
         stereo_audio = [np.tile(mono_audio[None], reps=(2, 1))]  # Convert to stereo
-        
+
         feature_extractor = XYTokenizerFeatureExtractor(feature_size=2)
         input_values = feature_extractor(stereo_audio, return_tensors="pt").input_values
-        
+
         # Should still output mono features
         expected_frames = 8000 // 320  # Default hop length
         self.assertEqual(input_values.shape, (1, 1, expected_frames))
@@ -181,7 +181,7 @@ class MossTTSDFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         audio_1 = np.random.randn(16000).astype(np.float32)  # 1 second
         audio_2 = np.random.randn(8000).astype(np.float32)   # 0.5 seconds
         input_audio = [audio_1, audio_2]
-        
+
         feature_extractor = XYTokenizerFeatureExtractor()
 
         # Test that padding and truncation together raise error
@@ -228,40 +228,40 @@ class MossTTSDFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         """Test MOSS-TTSD specific parameters."""
         # Test with MOSS-TTSD specific hop length
         feature_extractor = XYTokenizerFeatureExtractor(hop_length=320, sampling_rate=16000)
-        
+
         # Create audio of known length
         audio_length = 3200  # 0.2 seconds at 16kHz
         mock_audio = np.random.randn(audio_length).astype(np.float32)
-        
+
         input_values = feature_extractor(mock_audio, return_tensors="pt")["input_values"]
-        
+
         # With hop_length=320, we expect 10 frames from 3200 samples
         expected_frames = audio_length // 320
         self.assertEqual(input_values.shape, (1, 1, expected_frames))
-        
+
     def test_batch_processing(self):
         """Test batch processing with various audio lengths."""
         # Create audios of different lengths
         audios = [
             np.random.randn(1600).astype(np.float32),   # 0.1 seconds
-            np.random.randn(3200).astype(np.float32),   # 0.2 seconds  
+            np.random.randn(3200).astype(np.float32),   # 0.2 seconds
             np.random.randn(4800).astype(np.float32),   # 0.3 seconds
         ]
-        
+
         feature_extractor = XYTokenizerFeatureExtractor()
-        
+
         # Test with padding
         padded_outputs = feature_extractor(audios, padding=True, return_tensors="pt").input_values
-        
+
         # Should pad to the longest sequence
         max_frames = 4800 // 320  # Frames for longest audio
         self.assertEqual(padded_outputs.shape, (3, 1, max_frames))
-        
+
         # Test with truncation
         truncated_outputs = feature_extractor(
             audios, truncation=True, max_length=1600, return_tensors="pt"
         ).input_values
-        
+
         # Should truncate to specified max_length
         expected_frames = 1600 // 320
         self.assertEqual(truncated_outputs.shape, (3, 1, expected_frames))
