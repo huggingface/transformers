@@ -109,7 +109,7 @@ class GptOssConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        
+
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
