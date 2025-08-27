@@ -18,7 +18,8 @@ from ..qwen2.configuration_qwen2 import Qwen2Config
 
 
 class Ovis2VisionConfig(PretrainedConfig):
-    r"""This is the configuration class to store the configuration of a [`Ovis2VisionModel`]. It is used to instantiate a
+    r"""
+    This is the configuration class to store the configuration of a [`Ovis2VisionModel`]. It is used to instantiate a
     Ovis2VisionModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of Ovis2.
 
@@ -58,7 +59,7 @@ class Ovis2VisionConfig(PretrainedConfig):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
         tokenize_function (`str`, *optional*, defaults to `"softmax"`):
             The function used to tokenize the visual indicator tokens.
-    ```"""
+    """
 
     base_config_key = "vision_config"
 
@@ -106,7 +107,8 @@ class Ovis2VisionConfig(PretrainedConfig):
 
 
 class Ovis2Config(PretrainedConfig):
-    r"""This is the configuration class to store the configuration of a [`Ovis2ForConditionalGeneration`]. It is used to instantiate a
+    r"""
+    This is the configuration class to store the configuration of a [`Ovis2ForConditionalGeneration`]. It is used to instantiate a
     Ovis2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of Ovis2.
 
@@ -140,7 +142,8 @@ class Ovis2Config(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "ovis2"
     sub_configs = {"text_config": Qwen2Config, "vision_config": Ovis2VisionConfig}

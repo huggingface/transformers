@@ -27,28 +27,12 @@ import torch.utils.checkpoint
 from torch import Tensor
 from tqdm import tqdm
 
-from transformers.models.sam2.configuration_sam2 import (
-    Sam2MaskDecoderConfig,
-    Sam2PromptEncoderConfig,
-)
-from transformers.models.sam2.modeling_sam2 import (
-    Sam2FeedForward,
-    Sam2ImageSegmentationOutput,
-    Sam2LayerNorm,
-    Sam2Model,
-    Sam2SinePositionEmbedding,
-    Sam2TwoWayAttentionBlock,
-    eager_attention_forward,
-)
-from transformers.models.sam2.processing_sam2 import Sam2Processor
-from transformers.utils.generic import OutputRecorder, TransformersKwargs
-
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -57,8 +41,23 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.generic import OutputRecorder, TransformersKwargs
 from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.configuration_sam2 import (
+    Sam2MaskDecoderConfig,
+    Sam2PromptEncoderConfig,
+)
+from ..sam2.modeling_sam2 import (
+    Sam2FeedForward,
+    Sam2ImageSegmentationOutput,
+    Sam2LayerNorm,
+    Sam2Model,
+    Sam2SinePositionEmbedding,
+    Sam2TwoWayAttentionBlock,
+    eager_attention_forward,
+)
+from ..sam2.processing_sam2 import Sam2Processor
 
 
 if is_torch_available():
@@ -393,7 +392,7 @@ class Sam2VideoInferenceSession:
             The device to store the inference state on.
         video_storage_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to store the video on.
-        torch_dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
+        dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
             The dtype to use for the video.
         max_vision_features_cache_size (`int`, *optional*, defaults to 1):
             The maximum number of vision features to cache.
@@ -407,18 +406,18 @@ class Sam2VideoInferenceSession:
         inference_device: Union[torch.device, str] = "cpu",
         inference_state_device: Union[torch.device, str] = "cpu",
         video_storage_device: Union[torch.device, str] = "cpu",
-        torch_dtype: Union[torch.dtype, str] = "float32",
+        dtype: Union[torch.dtype, str] = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
+        self.processed_frames = list(video.to(video_storage_device, dtype=dtype)) if video is not None else None
         self.video_height = video_height
         self.video_width = video_width
 
         self.inference_device = inference_device
         self.inference_state_device = inference_state_device
         self.video_storage_device = video_storage_device
-        self.torch_dtype = torch_dtype
+        self.dtype = dtype
         self.max_vision_features_cache_size = max_vision_features_cache_size
 
         # Cache for computed features
@@ -497,7 +496,7 @@ class Sam2VideoInferenceSession:
     def add_mask_inputs(self, obj_idx: int, frame_idx: int, inputs: torch.Tensor):
         """Add mask inputs with automatic device placement."""
         self.mask_inputs_per_obj[obj_idx][frame_idx] = inputs.to(
-            self.inference_device, dtype=self.torch_dtype, non_blocking=True
+            self.inference_device, dtype=self.dtype, non_blocking=True
         )
 
     def remove_mask_inputs(self, obj_idx: int, frame_idx: int):
@@ -571,7 +570,7 @@ class Sam2VideoInferenceSession:
     # Video frame management
     def add_new_frame(self, pixel_values: torch.Tensor) -> int:
         """Add new frame with automatic device placement."""
-        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.torch_dtype, non_blocking=True)
+        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 
@@ -637,7 +636,7 @@ class Sam2VideoProcessor(Sam2Processor):
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
-        Sam2Processor().__init__(image_processor, video_processor, **kwargs)
+        ProcessorMixin.__init__(self, image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
@@ -649,7 +648,7 @@ class Sam2VideoProcessor(Sam2Processor):
         processing_device: Union[str, "torch.device"] = None,
         video_storage_device: Union[str, "torch.device"] = None,
         max_vision_features_cache_size: int = 1,
-        torch_dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype = torch.float32,
     ):
         """
         Initializes a video session for inference.
@@ -668,7 +667,7 @@ class Sam2VideoProcessor(Sam2Processor):
                 The device to store the processed video frames on.
             max_vision_features_cache_size (`int`, *optional*, defaults to 1):
                 The maximum number of vision features to cache.
-            torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
@@ -689,7 +688,7 @@ class Sam2VideoProcessor(Sam2Processor):
             inference_device=inference_device,
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_vision_features_cache_size=max_vision_features_cache_size,
         )
         return inference_session
@@ -1320,7 +1319,7 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
             padding=config.memory_fuser_padding,
             groups=config.memory_fuser_embed_dim,
         )  # depthwise conv
-        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.memory_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
             config.memory_fuser_embed_dim, config.memory_fuser_intermediate_dim
@@ -1370,7 +1369,7 @@ class Sam2VideoMaskDownSamplerLayer(nn.Module):
             stride=config.mask_downsampler_stride,
             padding=config.mask_downsampler_padding,
         )
-        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.mask_downsampler_hidden_act]
 
     def forward(self, x):

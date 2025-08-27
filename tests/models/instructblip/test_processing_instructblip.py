@@ -156,26 +156,3 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        qformer_tokenizer = self.get_qformer_tokenizer()
-        processor_kwargs = self.prepare_processor_dict()
-
-        processor = InstructBlipProcessor(
-            tokenizer=tokenizer,
-            image_processor=image_processor,
-            qformer_tokenizer=qformer_tokenizer,
-            **processor_kwargs,
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(
-            list(inputs.keys()),
-            ["qformer_input_ids", "qformer_attention_mask", "input_ids", "attention_mask", "pixel_values"],
-        )
