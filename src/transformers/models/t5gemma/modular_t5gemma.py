@@ -18,8 +18,6 @@ from typing import Any, Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
@@ -33,17 +31,17 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -58,10 +56,6 @@ from ..gemma2.modeling_gemma2 import (
 
 
 _CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
-
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -487,7 +481,7 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
-        Gemma2PreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5

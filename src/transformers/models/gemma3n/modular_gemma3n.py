@@ -1922,7 +1922,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
     def _init_weights(self, module):
-        Gemma2PreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
