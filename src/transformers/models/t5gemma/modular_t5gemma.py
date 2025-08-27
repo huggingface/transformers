@@ -206,6 +206,7 @@ class T5GemmaConfig(PretrainedConfig):
             "dropout_rate",
             "attention_dropout",
             "vocab_size",
+            "num_hidden_layers",
         ]
 
         if key in shared_attr_with_submodules:
@@ -221,6 +222,11 @@ class T5GemmaConfig(PretrainedConfig):
     def num_hidden_layers(self):
         # For generation and caching purposes, use the decoder's num_hidden_layers
         return self.decoder.num_hidden_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        self.decoder.num_hidden_layers = value
+        self.encoder.num_hidden_layers = value
 
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
