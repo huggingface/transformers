@@ -19,16 +19,17 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import logging
 from ..llava.modeling_llava import (
-    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
 from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
@@ -114,21 +115,7 @@ class Mistral3ModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class Mistral3PreTrainedModel(LlavaPreTrainedModel):
-    def _init_weights(self, module):
-        # important: this ported version of Mistral3 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/Mistral3/tree/main/mistral3 should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, Mistral3RMSNorm):
-            module.weight.data.fill_(1.0)
+    pass
 
 
 class Mistral3Model(LlavaModel):
@@ -181,7 +168,7 @@ class Mistral3Model(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
@@ -204,11 +191,6 @@ class Mistral3Model(LlavaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -218,17 +200,10 @@ class Mistral3Model(LlavaModel):
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
             )
-            image_features = torch.cat(image_features, dim=0)
-
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -274,7 +249,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -284,7 +259,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Mistral3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

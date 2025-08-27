@@ -87,12 +87,13 @@ class HeliumIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
-                ("cuda", None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
+                (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
+                ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
             }
         )  # fmt: skip
         EXPECTED_TEXTS = expected_texts.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, revision="refs/pr/1").to(
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision="refs/pr/1").to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")

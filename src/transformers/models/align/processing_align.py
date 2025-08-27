@@ -19,7 +19,7 @@ Image/Text processor class for ALIGN
 from typing import Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -110,8 +110,6 @@ class AlignProcessor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             AlignProcessorKwargs,
@@ -136,26 +134,6 @@ class AlignProcessor(ProcessorMixin):
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["AlignProcessor"]

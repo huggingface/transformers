@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         GPT2TokenizerFast,
         GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
@@ -344,7 +345,7 @@ class GPTBigCodeModelTester:
     def create_and_check_gpt_bigcode_weight_initialization(self, config, *args):
         model = GPTBigCodeModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -421,14 +422,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
@@ -510,7 +503,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         output_sequence = model.generate(input_ids)
         output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
 
-        expected_output = """def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_"""
+        expected_output = 'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name'  # fmt: skip
         self.assertEqual(output_sentence, expected_output)
 
     def test_generate_batched(self):
@@ -527,10 +520,26 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         expected_output = [
-            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_',
-            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()',
+            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name',
+            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()\n',
         ]
         self.assertListEqual(outputs, expected_output)
+
+    def test_newline_regression(self):
+        """Added to prevent regressions regarding attention (scaling) indicated by excessive newlines"""
+        tokenizer = AutoTokenizer.from_pretrained("bigcode/tiny_starcoder_py")
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/tiny_starcoder_py").to(torch_device)
+
+        input_ids = tokenizer(
+            "Analyze the impact of the COVID-19 pandemic on global economic structures and future business models.\n",
+            return_tensors="pt",
+        ).input_ids.to(torch_device)
+
+        output_sequence = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
+
+        expected_output = 'Analyze the impact of the COVID-19 pandemic on global economic structures and future business models.\n\nThe impact of the COVID-19 pandemic on global economic structures and future business'  # fmt: skip
+        self.assertEqual(output_sentence, expected_output)
 
 
 @require_torch
@@ -542,6 +551,8 @@ class GPTBigCodeMQATest(unittest.TestCase):
             attn_pdrop=0,
             resid_pdrop=0,
         )
+        # We need to set it here as it's normally set by the Model's __init__
+        config._attn_implementation = "sdpa"
         return GPTBigCodeAttention(config)
 
     @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])

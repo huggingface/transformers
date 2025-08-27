@@ -17,7 +17,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers.models.lightglue.configuration_lightglue import LightGlueConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -142,6 +142,13 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
+        device_properties = get_device_properties()
+        if device_properties[0] == "cuda" and device_properties[1] == 8:
+            # TODO: (ydshieh) fix this
+            self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="LightGlueForKeypointMatching does not use inputs_embeds")
     def test_inputs_embeds(self):

@@ -16,17 +16,16 @@ import unittest
 import warnings
 
 import numpy as np
+import pytest
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput
-from transformers.testing_utils import require_flax, require_tf, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils import (
     can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     flatten_dict,
-    is_flax_available,
-    is_tf_available,
     is_torch_available,
     reshape,
     squeeze,
@@ -34,12 +33,6 @@ from transformers.utils import (
     transpose,
 )
 
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-if is_tf_available():
-    import tensorflow as tf
 
 if is_torch_available():
     import torch
@@ -88,33 +81,6 @@ class GenericTester(unittest.TestCase):
         t = torch.tensor(x)
         self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()))
 
-    @require_tf
-    def test_transpose_tf(self):
-        x = np.random.randn(3, 4)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(transpose(x), transpose(t).numpy()))
-
-        x = np.random.randn(3, 4, 5)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()))
-
-    @require_flax
-    def test_transpose_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(transpose(x), np.asarray(transpose(t))))
-
-        x = np.random.randn(3, 4, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), np.asarray(transpose(t, axes=(1, 2, 0)))))
-
-    def test_reshape_numpy(self):
-        x = np.random.randn(3, 4)
-        self.assertTrue(np.allclose(reshape(x, (4, 3)), np.reshape(x, (4, 3))))
-
-        x = np.random.randn(3, 4, 5)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), np.reshape(x, (12, 5))))
-
     @require_torch
     def test_reshape_torch(self):
         x = np.random.randn(3, 4)
@@ -124,33 +90,6 @@ class GenericTester(unittest.TestCase):
         x = np.random.randn(3, 4, 5)
         t = torch.tensor(x)
         self.assertTrue(np.allclose(reshape(x, (12, 5)), reshape(t, (12, 5)).numpy()))
-
-    @require_tf
-    def test_reshape_tf(self):
-        x = np.random.randn(3, 4)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(reshape(x, (4, 3)), reshape(t, (4, 3)).numpy()))
-
-        x = np.random.randn(3, 4, 5)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), reshape(t, (12, 5)).numpy()))
-
-    @require_flax
-    def test_reshape_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(reshape(x, (4, 3)), np.asarray(reshape(t, (4, 3)))))
-
-        x = np.random.randn(3, 4, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), np.asarray(reshape(t, (12, 5)))))
-
-    def test_squeeze_numpy(self):
-        x = np.random.randn(1, 3, 4)
-        self.assertTrue(np.allclose(squeeze(x), np.squeeze(x)))
-
-        x = np.random.randn(1, 4, 1, 5)
-        self.assertTrue(np.allclose(squeeze(x, axis=2), np.squeeze(x, axis=2)))
 
     @require_torch
     def test_squeeze_torch(self):
@@ -162,26 +101,6 @@ class GenericTester(unittest.TestCase):
         t = torch.tensor(x)
         self.assertTrue(np.allclose(squeeze(x, axis=2), squeeze(t, axis=2).numpy()))
 
-    @require_tf
-    def test_squeeze_tf(self):
-        x = np.random.randn(1, 3, 4)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(squeeze(x), squeeze(t).numpy()))
-
-        x = np.random.randn(1, 4, 1, 5)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(squeeze(x, axis=2), squeeze(t, axis=2).numpy()))
-
-    @require_flax
-    def test_squeeze_flax(self):
-        x = np.random.randn(1, 3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(squeeze(x), np.asarray(squeeze(t))))
-
-        x = np.random.randn(1, 4, 1, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(squeeze(x, axis=2), np.asarray(squeeze(t, axis=2))))
-
     def test_expand_dims_numpy(self):
         x = np.random.randn(3, 4)
         self.assertTrue(np.allclose(expand_dims(x, axis=1), np.expand_dims(x, axis=1)))
@@ -191,18 +110,6 @@ class GenericTester(unittest.TestCase):
         x = np.random.randn(3, 4)
         t = torch.tensor(x)
         self.assertTrue(np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy()))
-
-    @require_tf
-    def test_expand_dims_tf(self):
-        x = np.random.randn(3, 4)
-        t = tf.constant(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy()))
-
-    @require_flax
-    def test_expand_dims_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), np.asarray(expand_dims(t, axis=1))))
 
     def test_to_py_obj_native(self):
         self.assertTrue(to_py_obj(1) == 1)
@@ -231,49 +138,6 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    @require_tf
-    def test_to_py_obj_tf(self):
-        x1 = [[1, 2, 3], [4, 5, 6]]
-        t1 = tf.constant(x1)
-        self.assertTrue(to_py_obj(t1) == x1)
-
-        x2 = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-        t2 = tf.constant(x2)
-        self.assertTrue(to_py_obj(t2) == x2)
-
-        self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    @require_flax
-    def test_to_py_obj_flax(self):
-        x1 = [[1, 2, 3], [4, 5, 6]]
-        t1 = jnp.array(x1)
-        self.assertTrue(to_py_obj(t1) == x1)
-
-        x2 = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-        t2 = jnp.array(x2)
-        self.assertTrue(to_py_obj(t2) == x2)
-
-        self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    @require_torch
-    @require_tf
-    @require_flax
-    def test_to_py_obj_mixed(self):
-        x1 = [[1], [2]]
-        t1 = np.array(x1)
-
-        x2 = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-        t2 = torch.tensor(x2)
-
-        x3 = [1, 2, 3]
-        t3 = tf.constant(x3)
-
-        x4 = [[[1.0, 2.0]]]
-        t4 = jnp.array(x4)
-
-        mixed = [(t1, t2), (t3, t4)]
-        self.assertTrue(to_py_obj(mixed) == [[x1, x2], [x3, x4]])
 
 
 class ValidationDecoratorTester(unittest.TestCase):
@@ -388,10 +252,17 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 model = self._get_model(config)
                 output = model(torch.tensor(10), return_dict=return_dict)
 
-                expected_type = tuple if config_return_dict is False or return_dict is False else BaseModelOutput
+                expected_type = (
+                    tuple
+                    if return_dict is False
+                    else (tuple if config_return_dict is False and return_dict is None else BaseModelOutput)
+                )
+                if config_return_dict is None and return_dict is None:
+                    expected_type = tuple
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
+    @pytest.mark.torch_compile_test
     def test_decorator_compiled(self):
         """Test that the can_return_tuple decorator works with compiled mode."""
         config = PretrainedConfig()
@@ -408,6 +279,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         output = compiled_model(torch.tensor(10), return_dict=False)
         self.assertIsInstance(output, tuple)
 
+    @pytest.mark.torch_export_test
     def test_decorator_torch_export(self):
         """Test that the can_return_tuple decorator works with torch.export."""
         config = PretrainedConfig()

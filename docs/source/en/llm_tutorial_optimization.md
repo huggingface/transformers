@@ -23,11 +23,11 @@ The crux of these challenges lies in augmenting the computational and memory cap
 
 In this guide, we will go over the effective techniques for efficient LLM deployment:
 
-1.  **Lower Precision:** Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization.md) can achieve computational advantages without a considerable decline in model performance.
+1.  **Lower Precision:** Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization) can achieve computational advantages without a considerable decline in model performance.
 
 2.  **Flash Attention:** Flash Attention is a variation of the attention algorithm that not only provides a more memory-efficient approach but also realizes increased efficiency due to optimized GPU memory utilization.
 
-3.  **Architectural Innovations:** Considering that LLMs are always deployed in the same way during inference, namely autoregressive text generation with a long input context, specialized model architectures have been proposed that allow for more efficient inference. The most important advancement in model architectures hereby are [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150) and [Grouped-Query-Attention (GQA)]((https://huggingface.co/papers/2305.13245)).
+3.  **Architectural Innovations:** Considering that LLMs are always deployed in the same way during inference, namely autoregressive text generation with a long input context, specialized model architectures have been proposed that allow for more efficient inference. The most important advancement in model architectures hereby are [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150) and [Grouped-Query-Attention (GQA)](https://huggingface.co/papers/2305.13245).
 
 Throughout this guide, we will offer an analysis of auto-regressive generation from a tensor's perspective. We delve into the pros and cons of adopting lower precision, provide a comprehensive exploration of the latest attention algorithms, and discuss improved LLM architectures. While doing so, we run practical examples showcasing each of the feature improvements.
 
@@ -84,7 +84,7 @@ We first load the model and tokenizer and then pass both to Transformers' [pipel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -125,7 +125,7 @@ Note that if we had tried to run the model in full float32 precision, a whopping
 
 > Almost all models are trained in bfloat16 nowadays, there is no reason to run the model in full float32 precision if [your GPU supports bfloat16](https://discuss.pytorch.org/t/bfloat16-native-support/117155/5). Float32 won't give better inference results than the precision that was used to train the model.
 
-If you are unsure in which format the model weights are stored on the Hub, you can always look into the checkpoint's config under `"torch_dtype"`, *e.g.* [here](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). It is recommended to set the model to the same precision type as written in the config when loading with `from_pretrained(..., torch_dtype=...)` except when the original type is float32 in which case one can use both `float16` or `bfloat16` for inference.
+If you are unsure in which format the model weights are stored on the Hub, you can always look into the checkpoint's config under `"dtype"`, *e.g.* [here](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). It is recommended to set the model to the same precision type as written in the config when loading with `from_pretrained(..., dtype=...)` except when the original type is float32 in which case one can use both `float16` or `bfloat16` for inference.
 
 
 Let's define a `flush(...)` function to free all allocated memory so that we can accurately measure the peak allocated GPU memory.
@@ -394,7 +394,7 @@ long_prompt = 10 * system_prompt + prompt
 We instantiate our model again in bfloat16 precision.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)

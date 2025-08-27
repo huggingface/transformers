@@ -109,7 +109,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
@@ -120,6 +120,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
+    ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
 ]
 
 

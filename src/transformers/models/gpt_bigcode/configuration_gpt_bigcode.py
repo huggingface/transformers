@@ -134,6 +134,7 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.scale_attention_softmax_in_fp32 = scale_attention_softmax_in_fp32
         self.multi_query = multi_query
+        self.num_key_value_heads = 1 if multi_query else n_head
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

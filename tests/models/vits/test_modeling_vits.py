@@ -55,7 +55,7 @@ GENERATION_CONFIG_NAME = "generation_config.json"
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -440,7 +440,7 @@ class VitsModelIntegrationTests(unittest.TestCase):
         # GPU gives different results than CPU
         torch_device = "cpu"
 
-        model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16)
+        model = VitsModel.from_pretrained("facebook/mms-tts-eng", dtype=torch.float16)
         model.to(torch_device)
 
         tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")

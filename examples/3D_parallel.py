@@ -72,9 +72,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 1))
-    dp_size = int(os.environ.get("DP_SIZE", 1))
-    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
+    tp_size = int(os.environ.get("TP_SIZE", "1"))
+    dp_size = int(os.environ.get("DP_SIZE", "1"))
+    cp_size = int(os.environ.get("CP_SIZE", "1"))  # Add CP size configuration
     sdpa_backend = SDPBackend.FLASH_ATTENTION  # For CP
     # sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 8  # Desired global batch size
@@ -142,7 +142,7 @@ def main():
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
     device = torch.device(f"cuda:{local_rank}")

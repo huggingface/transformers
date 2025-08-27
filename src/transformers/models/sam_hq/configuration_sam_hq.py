@@ -221,8 +221,6 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
             The dimensionality of the hidden states in the IoU head module.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-
-
         vit_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """

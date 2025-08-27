@@ -105,7 +105,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -206,7 +206,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
 
     if "speech-commands" in model_name:
         # TODO: Convert dataset to Parquet
-        dataset = load_dataset("google/speech_commands", "v0.02", split="validation", trust_remote_code=True)
+        dataset = load_dataset("google/speech_commands", "v0.02", split="validation")
         waveform = dataset[0]["audio"]["array"]
     else:
         filepath = hf_hub_download(

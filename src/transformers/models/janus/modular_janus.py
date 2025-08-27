@@ -39,11 +39,17 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torch_available, is_vision_available, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    is_vision_available,
+    logging,
+)
 from ..auto import AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
@@ -367,6 +373,7 @@ class JanusConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
 
+        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
         # The default is only the index for the 1B model, 7B uses a different one
@@ -376,35 +383,16 @@ class JanusConfig(PretrainedConfig):
 
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
-    config_class = JanusConfig
+    config: JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_param_buffer_assignment = False
 
-    def _init_weights(self, module):
-        std = (
-            self.config.vision_config.initializer_range
-            if hasattr(self.config, "vision_config")
-            else self.config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.GroupNorm, nn.LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+    _can_compile_fullgraph = True
+    _supports_param_buffer_assignment = False
 
 
 @dataclass
@@ -486,8 +474,7 @@ class JanusVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -524,9 +511,7 @@ class JanusVisionAttention(nn.Module):
 
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
-
-        outputs = (output, attn_weights) if output_attentions else (output, None)
-        return outputs
+        return output, attn_weights
 
 
 class JanusVisionMLP(nn.Module):
@@ -921,6 +906,30 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -933,46 +942,23 @@ class JanusModel(JanusPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = input_ids == self.config.image_token_id
-
-            embed_dim = inputs_embeds.shape[-1]
-            image_features = image_embeds.reshape(-1, embed_dim)
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
-
-            image_attention_mask = image_attention_mask.to(inputs_embeds.device)
+            image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_attention_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         lm_output = self.language_model(
@@ -981,8 +967,6 @@ class JanusModel(JanusPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
@@ -999,7 +983,7 @@ class JanusModel(JanusPreTrainedModel):
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1021,18 +1005,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1046,10 +1018,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1057,11 +1027,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1070,8 +1035,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1082,7 +1045,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return JanusCausalLMOutputWithPast(
             loss=loss,
@@ -1249,7 +1214,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
-                device=device,
                 model_kwargs=model_kwargs,
             )
 
@@ -1386,7 +1350,7 @@ class JanusImageProcessor(BlipImageProcessor):
         if image_mean is None:
             self.background_color = (127, 127, 127)
         else:
-            self.background_color = tuple([int(x * 255) for x in image_mean])
+            self.background_color = tuple(int(x * 255) for x in image_mean)
 
     def pad_to_square(
         self,
@@ -1466,6 +1430,7 @@ class JanusImageProcessor(BlipImageProcessor):
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
+        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1477,6 +1442,10 @@ class JanusImageProcessor(BlipImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
+            size (`dict[str, int]` or `int`):
+                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -1495,6 +1464,7 @@ class JanusImageProcessor(BlipImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -1526,7 +1496,7 @@ class JanusImageProcessor(BlipImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
+            background_color=background_color,
             input_data_format=input_data_format,
         )
         return image

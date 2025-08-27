@@ -14,6 +14,7 @@
 
 import unittest
 
+import pytest
 import requests
 from packaging import version
 
@@ -123,13 +124,13 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_layoutlmv2_integration_test(self):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         for image_processing_class in self.image_processor_list:
             # with apply_OCR = True
             image_processing = image_processing_class()
 
-            image = Image.open(ds[0]["file"]).convert("RGB")
+            image = ds[0]["image"]
 
             encoding = image_processing(image, return_tensors="pt")
 
@@ -202,6 +203,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

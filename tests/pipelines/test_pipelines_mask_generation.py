@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     Expectations,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_vision,
     slow,
@@ -84,7 +83,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_segmenter = MaskGenerationPipeline(
             model=model,
@@ -92,7 +91,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -101,11 +100,6 @@ class MaskGenerationPipelineTests(unittest.TestCase):
 
     @unittest.skip(reason="TODO @Arthur: Implement me")
     def run_pipeline_test(self, mask_generator, examples):
-        pass
-
-    @require_tf
-    @unittest.skip(reason="Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
         pass
 
     @slow

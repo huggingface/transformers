@@ -1,4 +1,4 @@
-# Modular Transformers
+# Contributing a new model to Transformers
 
 Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
 
@@ -94,7 +94,7 @@ ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should
 
 ## Implementing a modular file
 
-The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
+The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere2](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
 
 | Component | Model |
 |---|---|
@@ -218,7 +218,7 @@ class Olmo2Attention(OlmoAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -236,10 +236,10 @@ class Olmo2Attention(OlmoAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -290,7 +290,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -304,7 +304,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -539,6 +539,9 @@ This makes it very easy to switch decorators and makes it explicit that the only
 `**super_kwargs` should not be used to avoid being explicit when redefining methods though. If you overwrite a method, you should explicitly write the signature as you normally would. The `**super_kwargs` syntax is a shortcut for switching decorators and a few other niche cases.
 
 ## Docstring variables
+
+> [!TIP]
+> Refer to the [Documeting a model](./auto_docstring) guide for more information about how you can use the `@auto_docstring` decorator to help automatically generate consistent docstring arguments.
 
 If an object defined in both the modular and modeling file from which it inherits, the modular definition has precedence unless for assignments containing the pattern `DOCSTRING`. These variables are typically used in `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. They are big blocks of docstrings and the linter rewrites the names everywhere. For this reason, assignments containing the `DOCSTRING` variable can use the definition found in the source file without copying the whole docstring, by simply setting the variable to `None` in the modular file.
 

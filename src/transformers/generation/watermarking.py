@@ -161,7 +161,7 @@ class WatermarkDetector:
         for batch_idx in range(ngram_tensors.shape[0]):
             frequencies_table = collections.Counter(ngram_tensors[batch_idx])
             ngram_to_watermark_lookup = {}
-            for ngram_example in frequencies_table.keys():
+            for ngram_example in frequencies_table:
                 prefix = ngram_example if selfhash else ngram_example[:-1]
                 target = ngram_example[-1]
                 ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
@@ -375,7 +375,7 @@ class BayesianDetectorModel(PreTrainedModel):
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    config_class = BayesianDetectorConfig
+    config: BayesianDetectorConfig
     base_model_prefix = "model"
 
     def __init__(self, config):

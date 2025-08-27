@@ -20,7 +20,7 @@ import warnings
 from typing import Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -111,8 +111,6 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             VisionTextDualEncoderProcessorKwargs,
@@ -136,26 +134,6 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
                 data=dict(**image_features),
                 tensor_type=output_kwargs["common_kwargs"].get("return_tensors"),
             )
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to VisionTextDualEncoderTokenizer's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to VisionTextDualEncoderTokenizer's [`~PreTrainedTokenizer.decode`].
-        Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
     @property
     def feature_extractor_class(self):

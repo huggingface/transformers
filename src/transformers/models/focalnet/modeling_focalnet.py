@@ -582,7 +582,7 @@ class FocalNetEncoder(nn.Module):
 
 @auto_docstring
 class FocalNetPreTrainedModel(PreTrainedModel):
-    config_class = FocalNetConfig
+    config: FocalNetConfig
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -885,6 +885,8 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     """
 )
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
         super()._init_backbone(config)

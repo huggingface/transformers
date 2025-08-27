@@ -153,32 +153,38 @@ class GenerationConfigTest(unittest.TestCase):
         logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
 
         # A correct configuration will not throw any warning
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             GenerationConfig()
         self.assertEqual(len(captured_logs.out), 0)
 
         # Inconsequent but technically wrong configuration will throw a warning (e.g. setting sampling
         # parameters with `do_sample=False`). May be escalated to an error in the future.
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             GenerationConfig(return_dict_in_generate=False, output_scores=True)
         self.assertNotEqual(len(captured_logs.out), 0)
 
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
         self.assertNotEqual(len(captured_logs.out), 0)
 
         # Expanding on the case above, we can update a bad configuration to get rid of the warning. Ideally,
         # that is done by unsetting the parameter (i.e. setting it to None)
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             # BAD - 0.9 means it is still set, we should warn
             generation_config_bad_temperature.update(temperature=0.9)
         self.assertNotEqual(len(captured_logs.out), 0)
 
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             # CORNER CASE - 1.0 is the default, we can't detect whether it is set by the user or not, we shouldn't warn
             generation_config_bad_temperature.update(temperature=1.0)
         self.assertEqual(len(captured_logs.out), 0)
 
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             # OK - None means it is unset, nothing to warn about
             generation_config_bad_temperature.update(temperature=None)
@@ -198,12 +204,14 @@ class GenerationConfigTest(unittest.TestCase):
             GenerationConfig(logits_processor="foo")
 
         # Model-specific parameters will NOT raise an exception or a warning
+        logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
             GenerationConfig(foo="bar")
         self.assertEqual(len(captured_logs.out), 0)
 
         # By default we throw a short warning. However, we log with INFO level the details.
         # Default: we don't log the incorrect input values, only a short summary. We explain how to get more details.
+        logger.warning_once.cache_clear()
         with LoggingLevel(logging.WARNING):
             with CaptureLogger(logger) as captured_logs:
                 GenerationConfig(do_sample=False, temperature=0.5)
@@ -212,6 +220,8 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
 
         # INFO level: we share the full deets
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
         with LoggingLevel(logging.INFO):
             with CaptureLogger(logger) as captured_logs:
                 GenerationConfig(do_sample=False, temperature=0.5)
@@ -279,6 +289,7 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig(num_beams=2)
         self.assertEqual(config.get_generation_mode(), GenerationMode.BEAM_SEARCH)
 
+        # TODO joao, manuel: remove this in v4.62.0
         config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
         self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
 

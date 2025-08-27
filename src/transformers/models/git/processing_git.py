@@ -20,7 +20,7 @@ from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -98,9 +98,6 @@ class GitProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
-
         output_kwargs = self._merge_kwargs(
             GitProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -116,24 +113,6 @@ class GitProcessor(ProcessorMixin):
             data.update(image_features)
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        return ["input_ids", "attention_mask", "pixel_values"]
 
 
 __all__ = ["GitProcessor"]

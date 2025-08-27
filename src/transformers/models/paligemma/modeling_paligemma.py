@@ -21,13 +21,19 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -43,7 +49,7 @@ logger = logging.get_logger(__name__)
 )
 class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -69,7 +75,7 @@ class PaliGemmaCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -101,15 +107,14 @@ class PaliGemmaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PaliGemmaPreTrainedModel(PreTrainedModel):
-    config_class = PaliGemmaConfig
+    config: PaliGemmaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_flash_attn_2 = True
+
+    _can_compile_fullgraph = False
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -132,6 +137,8 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
@@ -180,8 +187,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        elif isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -243,6 +248,30 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -301,7 +330,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
@@ -324,23 +353,10 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         causal_mask = self._update_causal_mask(
@@ -366,9 +382,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -397,12 +410,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -412,7 +419,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -443,7 +450,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -552,7 +559,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
         is_training = token_type_ids is not None and labels is not None
-        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+        is_static_hybrid_cache = isinstance(past_key_values, StaticCache) and any(past_key_values.is_sliding)
+        if cache_position[0] == 0 and is_static_hybrid_cache:
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self.model._update_causal_mask(
                 attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training

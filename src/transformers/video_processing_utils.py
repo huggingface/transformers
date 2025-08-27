@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
 import warnings
-from typing import Any, Optional, Union
+from copy import deepcopy
+from functools import partial
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 
@@ -43,9 +44,9 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_torch_available,
+    is_torchcodec_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .utils.import_utils import requires
@@ -53,22 +54,19 @@ from .video_utils import (
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
+    is_valid_video,
     load_video,
+    make_batched_metadata,
     make_batched_videos,
     reorder_videos,
     to_channel_dimension_format,
 )
 
 
-if is_vision_available():
-    from .image_utils import PILImageResampling
-
 if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from .image_utils import pil_torch_interpolation_mapping
-
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
@@ -125,7 +123,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             Whether to sample frames from the video before processing or to process the whole video.
         num_frames (`int`, *optional*, defaults to `self.num_frames`):
             Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`int`, *optional*, defaults to `self.fps`):
+        fps (`int` or `float`, *optional*, defaults to `self.fps`):
             Target frames to sample per second when `do_sample_frames=True`.
         return_tensors (`str` or `TensorType`, *optional*):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
@@ -141,7 +139,10 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
             - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
         device (`torch.device`, *optional*):
-            The device to process the videos on. If unset, the device is inferred from the input videos."""
+            The device to process the videos on. If unset, the device is inferred from the input videos.
+        return_metadata (`bool`, *optional*):
+            Whether to return video metadata or not.
+        """
 
 
 @add_start_docstrings(
@@ -170,6 +171,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     fps = None
     num_frames = None
     video_metadata = None
+    return_metadata = False
     valid_kwargs = VideosKwargs
     model_input_names = ["pixel_values_videos"]
 
@@ -202,7 +204,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
@@ -234,10 +236,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
     def sample_frames(
         self,
-        video: "torch.Tensor",
-        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        metadata: VideoMetadata,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
+        **kwargs,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -245,18 +247,16 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         and `fps` are mutually exclusive.
 
         Args:
-            video (`torch.Tensor`):
-                Video that need to be sampled.
-            metadata (`VideoMetadata`, *optional*):
+            metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError(
@@ -265,16 +265,16 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-        total_num_frames = video.shape[0]
+        total_num_frames = metadata.total_num_frames
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is None and fps is not None:
-            if metadata is None:
+            if metadata is None or metadata.fps is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            num_frames = int(total_num_frames / metadata["fps"] * fps)
+            num_frames = int(total_num_frames / metadata.fps * fps)
 
         if num_frames > total_num_frames:
             raise ValueError(
@@ -285,26 +285,53 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
             indices = torch.arange(0, total_num_frames).int()
+        return indices
 
-        video = video[indices].contiguous()
-        return video
+    def _decode_and_sample_videos(
+        self,
+        videos: VideoInput,
+        video_metadata: Union[VideoMetadata, dict],
+        do_sample_frames: Optional[bool] = None,
+        sample_indices_fn: Optional[Callable] = None,
+    ) -> list["torch.Tensor"]:
+        """
+        Decode input videos and sample frames if needed.
+        """
+        videos = make_batched_videos(videos)
+        video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
+
+        # Only sample frames if an array video is passed, otherwise first decode -> then sample
+        if is_valid_video(videos[0]) and do_sample_frames:
+            sampled_videos = []
+            for video, metadata in zip(videos, video_metadata):
+                indices = sample_indices_fn(metadata=metadata)
+                sampled_videos.append(video[indices])
+            videos = sampled_videos
+        elif not is_valid_video(videos[0]):
+            if isinstance(videos[0], list):
+                # Videos sometimes are passed as a list of image URLs, especially through templates
+                videos = [
+                    torch.stack([F.pil_to_tensor(image) for image in images], dim=0)
+                    for images in self.fetch_images(videos)
+                ]
+                if do_sample_frames:
+                    raise ValueError(
+                        "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`."
+                    )
+            else:
+                videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
+
+        return videos, video_metadata
 
     def _prepare_input_videos(
         self,
         videos: VideoInput,
-        video_metadata: VideoMetadata = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
+        device: Optional[str] = None,
     ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
         """
-        videos = make_batched_videos(videos)
-        if video_metadata is not None:
-            batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
-        else:
-            batch_metadata = [None] * len(videos)
-
         processed_videos = []
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
@@ -313,14 +340,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
 
-            # Now that we have torch tensors, we can move them to the right device
             if device is not None:
                 video = video.to(device)
 
             processed_videos.append(video)
-        return processed_videos, batch_metadata
+        return processed_videos
 
-    @add_start_docstrings(BASE_VIDEO_PROCESSOR_DOCSTRING)
+    @add_start_docstrings(
+        BASE_VIDEO_PROCESSOR_DOCSTRING,
+    )
     def preprocess(
         self,
         videos: VideoInput,
@@ -336,31 +364,34 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         input_data_format = kwargs.pop("input_data_format")
+        do_sample_frames = kwargs.pop("do_sample_frames")
         device = kwargs.pop("device")
         video_metadata = kwargs.pop("video_metadata")
-        videos, video_metadata = self._prepare_input_videos(
-            videos=videos, video_metadata=video_metadata, input_data_format=input_data_format, device=device
+
+        sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
+        videos, video_metadata = self._decode_and_sample_videos(
+            videos,
+            video_metadata=video_metadata,
+            do_sample_frames=do_sample_frames,
+            sample_indices_fn=sample_indices_fn,
         )
+        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
         kwargs = self._further_process_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
         # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
         kwargs.pop("data_format")
+        return_metadata = kwargs.pop("return_metadata")
 
-        return self._preprocess(videos=videos, video_metadata=video_metadata, **kwargs)
+        preprocessed_videos = self._preprocess(videos=videos, **kwargs)
+        if return_metadata:
+            preprocessed_videos["video_metadata"] = video_metadata
+        return preprocessed_videos
 
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -374,18 +405,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        do_sample_frames: Optional[bool] = None,
-        fps: Optional[int] = None,
-        num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
-        if do_sample_frames:
-            # Sample video frames
-            videos = [
-                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
-                for video, metadata in zip(videos, video_metadata)
-            ]
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -456,7 +478,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -553,7 +575,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -652,7 +674,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # Try to load with a new config name first and if not successfull try with
+                # Try to load with a new config name first and if not successful try with
                 # the old file name. In case we can load with old name only, raise a deprecation warning
                 # Deprecated until v5.0
                 video_processor_file = VIDEO_PROCESSOR_NAME
@@ -774,7 +796,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        output = deepcopy(self.__dict__)
+        output.pop("model_valid_processing_keys", None)
+        output.pop("_valid_kwargs_names", None)
         output["video_processor_type"] = self.__class__.__name__
 
         return output
@@ -859,19 +883,25 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         cls._auto_class = auto_class
 
-    def fetch_videos(self, video_url_or_urls: Union[str, list[str]]):
+    def fetch_videos(self, video_url_or_urls: Union[str, list[str], list[list[str]]], sample_indices_fn=None):
         """
         Convert a single or a list of urls into the corresponding `np.array` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
+        backend = "torchcodec"
+        if not is_torchcodec_available():
+            warnings.warn(
+                "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "
+            )
+            backend = "torchvision"
+
         if isinstance(video_url_or_urls, list):
-            return [self.fetch_videos(x) for x in video_url_or_urls]
-        elif isinstance(video_url_or_urls, str):
-            return load_video(video_url_or_urls)
+            return list(zip(*[self.fetch_videos(x, sample_indices_fn=sample_indices_fn) for x in video_url_or_urls]))
         else:
-            raise TypeError(f"only a single or a list of entries is supported but got type={type(video_url_or_urls)}")
+            return load_video(video_url_or_urls, backend=backend, sample_indices_fn=sample_indices_fn)
 
 
 BaseVideoProcessor.push_to_hub = copy_func(BaseVideoProcessor.push_to_hub)

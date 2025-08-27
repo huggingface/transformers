@@ -13,7 +13,6 @@
 # limitations under the License.
 import json
 import os
-import re
 import warnings
 from pathlib import Path
 from shutil import copyfile
@@ -104,7 +103,6 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
         self,
@@ -186,9 +184,11 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
-        match = self.language_code_re.match(text)
-        code: list = [match.group(0)] if match else []
-        return code, self.language_code_re.sub("", text)
+        code = []
+        if text.startswith(">>") and (end_loc := text.find("<<")) != -1:
+            code.append(text[: end_loc + 2])
+            text = text[end_loc + 2 :]
+        return code, text
 
     def _tokenize(self, text: str) -> list[str]:
         code, text = self.remove_language_code(text)

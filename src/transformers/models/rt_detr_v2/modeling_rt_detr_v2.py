@@ -305,6 +305,10 @@ class RTDetrV2MultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
+                )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
 
@@ -670,7 +674,7 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = RTDetrV2FrozenBatchNorm2d(module.num_features)
 
-            if not module.weight.device == torch.device("meta"):
+            if module.weight.device != torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
                 new_module.bias.data.copy_(module.bias)
                 new_module.running_mean.data.copy_(module.running_mean)
@@ -1188,16 +1192,16 @@ def get_contrastive_denoising_training_group(
     input_query_class = class_embed(input_query_class)
 
     target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    attn_mask = torch.full([target_size, target_size], 0, dtype=torch.float, device=device)
     # match query cannot see the reconstruction
-    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = -torch.inf
 
     # reconstructions cannot see each other
     for i in range(num_groups_denoising_queries):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
-        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = -torch.inf
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = -torch.inf
 
     denoising_meta_values = {
         "dn_positive_idx": denoise_positive_idx,
@@ -1214,7 +1218,7 @@ def _get_clones(partial_module, N):
 
 @auto_docstring
 class RTDetrV2PreTrainedModel(PreTrainedModel):
-    config_class = RTDetrV2Config
+    config: RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
@@ -1517,9 +1521,6 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -1853,7 +1854,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], RTDetrV2ObjectDetectionOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1961,7 +1962,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
                 denoising_meta_values=denoising_meta_values,
                 predicted_corners=predicted_corners,
                 initial_reference_points=initial_reference_points,
-                **loss_kwargs,
+                **kwargs,
             )
 
         if not return_dict:

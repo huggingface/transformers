@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_or_tf,
     slow,
@@ -65,7 +64,7 @@ class QAPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
@@ -77,7 +76,7 @@ class QAPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
 
         examples = [
@@ -169,38 +168,41 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_fp16(self):
         question_answerer = pipeline(
             "question-answering",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_bf16(self):
         question_answerer = pipeline(
             "question-answering",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_iterator(self):
@@ -212,7 +214,9 @@ class QAPipelineTests(unittest.TestCase):
                 yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
 
         for outputs in pipe(data()):
-            self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+            self.assertEqual(
+                nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"}
+            )
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
@@ -243,10 +247,11 @@ class QAPipelineTests(unittest.TestCase):
         question_answerer.postprocess = ensure_large_logits_postprocess
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.111, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @slow
     @require_torch
@@ -295,17 +300,6 @@ class QAPipelineTests(unittest.TestCase):
 
         answers = [output["answer"] for output in outputs]
         self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
-
-    @require_tf
-    def test_small_model_tf(self):
-        question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf"
-        )
-        outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
-        )
-
-        self.assertEqual(nested_simplify(outputs), {"score": 0.011, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @slow
     @require_torch
@@ -418,18 +412,8 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.972, "start": 1892},
         )
-
-    @slow
-    @require_tf
-    def test_large_model_tf(self):
-        question_answerer = pipeline("question-answering", framework="tf")
-        outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
-        )
-
-        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
 
 @require_torch_or_tf

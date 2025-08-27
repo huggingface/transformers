@@ -13,17 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import math
 import os
-import types
 import warnings
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from threading import Thread
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Callable
 
 import numpy as np
 from PIL import Image
@@ -35,14 +33,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils.parametrize as P
 from torch.nn.functional import *
-from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
+from torch.nn.init import _calculate_fan_in_and_fan_out
 from torch.nn.modules.activation import *
 from torch.nn.utils.parametrizations import weight_norm
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer, AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
+from transformers import AutoProcessor, BertTokenizerFast, PreTrainedModel, TextIteratorStreamer
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring, LossKwargs
+from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring, TransformersKwargs
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation import GenerationMixin
 from transformers.generation.utils import GenerateOutput
@@ -50,8 +48,7 @@ from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWa
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipEncoderLayer, SiglipPreTrainedModel
-from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
-from transformers.models.whisper.modeling_whisper import WhisperAttention, WhisperConfig, WhisperEncoder
+from transformers.models.whisper.modeling_whisper import WhisperConfig, WhisperEncoder
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -70,9 +67,8 @@ try:
 except:
     _tts_deps = False
 
-from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config
-from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, MiniCPM_o_2_6Processor
-from .feature_extractor_minicpm_o_2_6 import MiniCPM_o_2_6FeatureExtractor
+from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config, MiniCPMConditionalTTSTextConfig
+from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker
 
 logger = logging.get_logger(__name__)
 
@@ -373,8 +369,6 @@ class MiniCPM_o_2_6TextRotaryEmbedding(nn.Module):
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 @auto_docstring
 class MiniCPM_o_2_6TextModel(MiniCPM_o_2_6PreTrainedModel):
@@ -1034,7 +1028,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1345,9 +1339,10 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         return
         
     # Copy and modified from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
-    # if use the same method in `GenerationMixin`, it will cause an error in `_cache_dependant_input_preparation`, the error message is as follows:
+    # if use the same method in `GenerationMixin`, it will cause an error in `_cache_dependant_input_preparation` when use stream, the error message is as follows:
     #   (cache_position[-1] >= input_ids.shape[1])  # Exception 3
     #   IndexError: index -1 is out of bounds for dimension 0 with size 0
+    # in there the cache_position=[]
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1362,7 +1357,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
+                # past_length = past_key_values.seen_tokens
+                past_length = past_key_values.get_seq_length()
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
 
@@ -1421,7 +1417,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         model_inputs.update(
             {
                 "position_ids": position_ids,
-                #"cache_position": cache_position,
+                # "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
@@ -2153,13 +2149,148 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             logger.info(f"Audio saved to {output_path}")
         return wav_numpy, sr
 
+def get_cache_usable_length(past_key_value: Cache, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+    """Given the sequence length of the new inputs, returns the usable length of the cache."""
+    # Cache without size limit -> all cache is usable
+    # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
+    #   length, we will need to evict part of the cache (and thus not all cache is usable)
+    max_length = past_key_value.get_max_cache_shape()
+    previous_seq_length = past_key_value.get_seq_length(layer_idx)
+    if max_length is not None and previous_seq_length + new_seq_length > max_length:
+        return max_length - new_seq_length
+    return p
+
+# Copied from transformers.models.whisper.modeling_whisper.WhisperAttention and support past_key_value
+class MiniCPMWhisperAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+        is_causal: bool = False,
+        layer_idx: Optional[int] = None,
+        config: Optional[WhisperConfig] = None,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        self.config = config
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+        self.is_causal = is_causal
+
+        if layer_idx is None and is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+        self.layer_idx = layer_idx
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        cache_position: Optional[torch.Tensor] = None,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+
+        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # which can lead to different results (this is dependent from model
+        # to model, e.g. whisper is one such case). We therefore keep the
+        # original order of scaling to follow the original implementation
+        # and enforce no scaling (1.0) in the attention call below.
+        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = query_states.view(*q_input_shape)
+        query_states = query_states.transpose(1, 2).contiguous()
+
+        if past_key_value is not None:
+            is_updated = past_key_value.is_updated.get(self.layer_idx)
+            if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
+                past_key_value.is_updated[self.layer_idx] = True
+                past_key_value = past_key_value.cross_attention_cache
+            else:
+                past_key_value = past_key_value.self_attention_cache
+
+        # use key_value_states if cross attention
+        current_states = key_value_states if key_value_states is not None else hidden_states
+        if is_cross_attention and past_key_value and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
+        else:
+            key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
+            value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
+            key_states = key_states.transpose(1, 2).contiguous()
+            value_states = value_states.transpose(1, 2).contiguous()
+            if past_key_value is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            output_attentions=output_attentions,
+            head_mask=layer_head_mask,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights, past_key_value
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer and add use_cache for streaming inference
 class MiniCPMWhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig, layer_idx: int = None):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = WhisperAttention(
+        self.self_attn = MiniCPMWhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -2384,7 +2515,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             else:
                 pass
-            past_key_values_length = past_key_values.self_attention_cache.get_usable_length(inputs_embeds.shape[1])
+            past_key_values_length = get_cache_usable_length(past_key_values.self_attention_cache, inputs_embeds.shape[1])
             if inputs_embeds.shape[1] + past_key_values_length > embed_pos.shape[0]:
                 logger.warning("seems the audio is longer than 30s. repeating the last part of the audio")
                 embed_pos_front = embed_pos[past_key_values_length:, :]
@@ -2906,13 +3037,325 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
     return causal_mask
 
+@use_kernel_forward_from_hub("RMSNorm")
+class MiniCPMConditionalTTSTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        MiniCPMConditionalTTSTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-class PatchLlamaModel(LlamaModel):
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class MiniCPMConditionalTTSTextRotaryEmbedding(nn.Module):
+    def __init__(self, config: MiniCPMConditionalTTSTextConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class MiniCPMConditionalTTSTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    This is a patch for LlamaModel to support our audio
-    Mainly modifies by changing `create_causal_mask` to `_update_causal_mask`
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class MiniCPMConditionalTTSTextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: MiniCPMConditionalTTSTextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class MiniCPMConditionalTTSTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniCPMConditionalTTSTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = MiniCPMConditionalTTSTextAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = MiniCPMConditionalTTSTextMLP(config)
+        self.input_layernorm = MiniCPMConditionalTTSTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniCPMConditionalTTSTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
+
+@auto_docstring
+class MiniCPMConditionalTTSTextPreTrainedModel(PreTrainedModel):
+    config_class = MiniCPMConditionalTTSTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MiniCPMConditionalTTSTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MiniCPMConditionalTTSTextRMSNorm):
+            module.weight.data.fill_(1.0)
+
+
+@auto_docstring
+class MiniCPMConditionalTTSTextModel(MiniCPMConditionalTTSTextPreTrainedModel):
+    def __init__(self, config: MiniCPMConditionalTTSTextConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [MiniCPMConditionalTTSTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = MiniCPMConditionalTTSTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MiniCPMConditionalTTSTextRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     @can_return_tuple
     def forward(
         self,
@@ -3009,8 +3452,7 @@ class PatchLlamaModel(LlamaModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
+    
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -3081,6 +3523,7 @@ class PatchLlamaModel(LlamaModel):
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
+
 
 class ConditionalChatTTS(PreTrainedModel):
     """A conditional text-to-speech model that can generate speech from text with speaker conditioning.
@@ -3215,7 +3658,7 @@ class ConditionalChatTTS(PreTrainedModel):
         dvae = DVAE()
         self.dvae = dvae
 
-        model_config = LlamaConfig(
+        model_config = MiniCPMConditionalTTSTextConfig(
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
             num_attention_heads=config.num_attention_heads,
@@ -3224,7 +3667,7 @@ class ConditionalChatTTS(PreTrainedModel):
             attn_implementation=config.attn_implementation,
         )
 
-        model = PatchLlamaModel(model_config)
+        model = MiniCPMConditionalTTSTextModel(model_config)
         self.model = model
 
     @torch.inference_mode()
@@ -3692,89 +4135,6 @@ def gen_logits(
         logits_processors.append(CustomRepetitionPenaltyLogitsProcessorRepeat(repetition_penalty, num_code, 16))
 
     return logits_warpers, logits_processors
-
-
-# Copy and modified from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
-def prepare_inputs_for_generation(
-    self,
-    input_ids,
-    past_key_values=None,
-    attention_mask=None,
-    inputs_embeds=None,
-    cache_position=None,
-    position_ids=None,
-    use_cache=True,
-    **kwargs,
-):
-    if past_key_values is not None:
-        if isinstance(past_key_values, Cache):
-            cache_length = past_key_values.get_seq_length()
-            past_length = past_key_values.seen_tokens
-        else:
-            cache_length = past_length = past_key_values[0][0].shape[2]
-
-        # Keep only the unprocessed tokens:
-        # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-        # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
-        # input)
-        if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-            input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-        # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-        # input_ids based on the past_length.
-        elif past_length < input_ids.shape[1]:
-            input_ids = input_ids[:, past_length:]
-        # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-    #print("--------- my prepare_inputs_for_generation")
-    if attention_mask is not None and position_ids is None:
-        # create position_ids on the fly for batch generation
-        position_ids = attention_mask.long().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        if past_key_values:
-            position_ids = position_ids[:, -input_ids.shape[1] :]
-
-            # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
-            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-    # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-    if inputs_embeds is not None and cache_position[0] == 0:
-        model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-    else:
-        # The clone here is for the same reason as for `position_ids`.
-        model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
-
-    if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-        if model_inputs["inputs_embeds"] is not None:
-            batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-            device = model_inputs["inputs_embeds"].device
-        else:
-            batch_size, sequence_length = model_inputs["input_ids"].shape
-            device = model_inputs["input_ids"].device
-
-        dtype = self.lm_head.weight.dtype
-        min_dtype = torch.finfo(dtype).min
-
-        attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=past_key_values.get_max_length(),
-            dtype=dtype,
-            device=device,
-            min_dtype=min_dtype,
-            cache_position=cache_position,
-            batch_size=batch_size,
-        )
-
-    model_inputs.update(
-        {
-            "position_ids": position_ids,
-            #"cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-        }
-    )
-    return model_inputs
 
 
 def get_2d_sincos_pos_embed(embed_dim, image_size):
