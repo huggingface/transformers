@@ -25,6 +25,7 @@ import threading
 import time
 from argparse import ArgumentParser, Namespace
 from collections.abc import Generator, Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
@@ -279,6 +280,9 @@ def create_generation_config_from_req(
         generation_config.top_p = float(req["top_p"])
     if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
+    if generation_config.max_new_tokens is None:
+        # Default to 512 tokens if not set
+        generation_config.max_new_tokens = 512
 
     return generation_config
 
@@ -313,16 +317,16 @@ class TimedModel:
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
         self.timeout_seconds = timeout_seconds
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
     def reset_timer(self):
         """Reset the timer for the deletion of the instances."""
         self._timer.cancel()
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
-    def _delete_model(self):
+    def delete_model(self):
         """Delete the wrapped model and processor and clean up resources."""
         if hasattr(self, "model") and self.model is not None:
             del self.model
@@ -335,9 +339,12 @@ class TimedModel:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            logger.info(
-                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
-            )
+            # XXX: in case we manually delete the model, like on server shutdown
+            self._timer.cancel()
+
+    def timeout_reached(self):
+        self.delete_model()
+        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
@@ -353,6 +360,10 @@ class ServeArguments:
     `transformers serve --help`
     """
 
+    continuous_batching: bool = field(
+        default=False,
+        metadata={"help": "Whether to use continuous batching for chat completions."},
+    )
     device: str = field(
         default="auto",
         metadata={
@@ -469,7 +480,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Store and process input arguments
         self.args = args
-        self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
+        self.use_continuous_batching = self.args.continuous_batching
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:
@@ -635,7 +646,15 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
-        app = FastAPI()
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        app = FastAPI(lifespan=lifespan)
 
         # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
         # security purposes, it's disabled by default
@@ -774,10 +793,7 @@ class ServeCommand(BaseTransformersCLICommand):
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
             use_cache=False,
-            num_blocks=1,
-            block_size=1024,
             do_sample=False,
-            max_batch_tokens=10,
             scheduler="fifo",
         )
 
@@ -802,25 +818,14 @@ class ServeCommand(BaseTransformersCLICommand):
                     _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )
 
-                queue_is_flushed = False
-
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
-                for result in self.running_continuous_batching_manager:
-                    if result.request_id != request_id:
-                        continue
-                    if req.get("request_id") is not None and not queue_is_flushed:
-                        if result.status == RequestStatus.FINISHED:
-                            continue
-                        else:
-                            queue_is_flushed = True
-
-                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     if result.status == RequestStatus.FINISHED:
                         yield self.build_chat_completion_chunk(
-                            request_id, finish_reason=finish_reason, model=model_id_and_revision
+                            request_id, finish_reason="stop", model=model_id_and_revision
                         )
                         break
                     else:
