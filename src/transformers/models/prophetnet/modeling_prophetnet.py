@@ -1579,7 +1579,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
