@@ -41,7 +41,7 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
     return sorting_list
 
 
-# All the potential file types to create
+# All the model file types that may be imported in modular files
 ALL_FILE_TYPES = (
     "modeling",
     "configuration",
