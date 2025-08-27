@@ -240,13 +240,6 @@ class GenerationMixin(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class HammingDiversityLogitsProcessor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class InfNanRemoveLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 

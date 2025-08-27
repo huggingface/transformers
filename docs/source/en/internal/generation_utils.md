@@ -108,9 +108,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
-    - __call__
-
 [[autodoc]] InfNanRemoveLogitsProcessor
     - __call__
 
@@ -200,6 +197,18 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] EosTokenCriteria
     - __call__
+
+## Constraints
+
+A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
+
+[[autodoc]] Constraint
+
+[[autodoc]] PhrasalConstraint
+
+[[autodoc]] DisjunctiveConstraint
+
+[[autodoc]] ConstraintListState
 
 ## Streamers
 

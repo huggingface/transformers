@@ -163,6 +163,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -410,6 +411,9 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "ClassifierFreeGuidanceLogitsProcessor",
+            "Constraint",
+            "ConstraintListState",
+            "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -419,7 +423,6 @@ else:
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
             "GenerationMixin",
-            "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
             "LogitNormalization",
             "LogitsProcessor",
@@ -674,7 +677,6 @@ if TYPE_CHECKING:
     from .generation import ForcedEOSTokenLogitsProcessor as ForcedEOSTokenLogitsProcessor
     from .generation import GenerationConfig as GenerationConfig
     from .generation import GenerationMixin as GenerationMixin
-    from .generation import HammingDiversityLogitsProcessor as HammingDiversityLogitsProcessor
     from .generation import InfNanRemoveLogitsProcessor as InfNanRemoveLogitsProcessor
     from .generation import LogitNormalization as LogitNormalization
     from .generation import LogitsProcessor as LogitsProcessor
@@ -814,6 +816,7 @@ if TYPE_CHECKING:
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
+    from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline
