@@ -2704,7 +2704,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         expected_output = Expectations(
             {("cuda", None): cuda_expectation, ("rocm", (9, 4)): rocm_expectation}
         ).get_expectation()
-        expected_output1 = Expectations(
+        expected_output2 = Expectations(
             {("cuda", None): cuda_expectation2, ("rocm", (9, 4)): rocm_expectation}
         ).get_expectation()
 
@@ -2746,7 +2746,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
-        self.assertEqual(decoded, expected_output1)
+        self.assertEqual(decoded, expected_output2)
 
     @slow
     def test_whisper_longform_single_batch_beam(self):
