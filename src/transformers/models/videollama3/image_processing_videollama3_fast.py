@@ -81,8 +81,12 @@ class Videollama3ImageProcessorFast(BaseImageProcessorFast):
     max_tokens = 16384
     valid_kwargs = Videollama3FastImageProcessorKwargs
     model_input_names = [
-        "pixel_values", "grid_sizes", "merge_sizes",
-        "pixel_values_videos", "grid_sizes_videos", "merge_sizes_videos",
+        "pixel_values",
+        "grid_sizes",
+        "merge_sizes",
+        "pixel_values_videos",
+        "grid_sizes_videos",
+        "merge_sizes_videos",
     ]
 
     @auto_docstring
@@ -259,7 +263,8 @@ class Videollama3ImageProcessorFast(BaseImageProcessorFast):
         )
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "grid_sizes": grid_sizes, "merge_sizes": merge_sizes}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "grid_sizes": grid_sizes, "merge_sizes": merge_sizes},
+            tensor_type=return_tensors,
         )
 
 

@@ -24,7 +24,6 @@ import pytest
 from transformers import AutoProcessor, Qwen2Tokenizer
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
-from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -65,7 +64,7 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
@@ -134,7 +133,9 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "grid_sizes", "merge_sizes"])
+        self.assertListEqual(
+            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "grid_sizes", "merge_sizes"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -217,11 +218,7 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
 
         out_dict = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors=return_tensors
+            batch_messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors=return_tensors
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)

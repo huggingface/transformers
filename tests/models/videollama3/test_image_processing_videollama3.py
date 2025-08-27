@@ -1,4 +1,3 @@
-import itertools
 import tempfile
 import unittest
 
@@ -308,9 +307,7 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
         self.assertEqual(encoding_slow.grid_sizes.dtype, encoding_fast.grid_sizes.dtype)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float()
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float())
         self.assertEqual(encoding_slow.merge_sizes.dtype, encoding_fast.merge_sizes.dtype)
         self._assert_slow_fast_tensors_equivalence(
             encoding_slow.merge_sizes.float(), encoding_fast.merge_sizes.float()
@@ -339,9 +336,7 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
         self.assertEqual(encoding_slow.grid_sizes.dtype, encoding_fast.grid_sizes.dtype)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float()
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float())
         self.assertEqual(encoding_slow.merge_sizes.dtype, encoding_fast.merge_sizes.dtype)
         self._assert_slow_fast_tensors_equivalence(
             encoding_slow.merge_sizes.float(), encoding_fast.merge_sizes.float()

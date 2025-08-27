@@ -121,7 +121,7 @@ class Videollama3VideoProcessingTester:
                 height,
                 width,
                 factor=self.patch_size * self.video_merge_size,
-                min_pixels=self.min_tokens * (self.patch_size * self.video_merge_size) ** 2 // num_frames ,
+                min_pixels=self.min_tokens * (self.patch_size * self.video_merge_size) ** 2 // num_frames,
                 max_pixels=self.max_tokens * (self.patch_size * self.video_merge_size) ** 2 // num_frames,
             )
             grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
@@ -191,16 +191,16 @@ class Videollama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
             # Test not batched input
             video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched
-            encoded_videos = video_processing(
-                video_inputs, video_metadata=video_metadata, return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
@@ -217,16 +217,16 @@ class Videollama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
             # Test not batched input
             video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched
-            encoded_videos = video_processing(
-                video_inputs, video_metadata=video_metadata, return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
@@ -244,17 +244,17 @@ class Videollama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
             # Test not batched input
             video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs[0], video_metadata=video_metadata[:1], return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs, video_metadata=video_metadata, return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             self.assertEqual(
                 list(encoded_videos.shape),
                 expected_output_video_shape,
@@ -279,9 +279,9 @@ class Videollama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
             # Test batched
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs_nested, video_metadata=video_metadata, return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs_nested, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
     @unittest.skip(reason="Videollama3ImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
