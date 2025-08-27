@@ -23,6 +23,7 @@ from urllib.request import urlopen
 import librosa
 import pytest
 import requests
+from pytest import mark
 
 from transformers import (
     AutoProcessor,
@@ -34,6 +35,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -590,6 +592,39 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
             self.assertTrue(torch.equal(position_ids, expected_position_ids))
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
+        previous_rope_scaling = self.model_tester.text_config["rope_scaling"]["mrope_section"][:]
+        self.model_tester.text_config["rope_scaling"]["mrope_section"] = [2, 2, 4]
+        try:
+            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
+        except Exception as e:
+            self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
+            raise e
+        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
+
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
+        previous_rope_scaling = self.model_tester.text_config["rope_scaling"]["mrope_section"][:]
+        self.model_tester.text_config["rope_scaling"]["mrope_section"] = [2, 2, 4]
+        try:
+            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
+        except Exception as e:
+            self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
+            raise e
+        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
+
 
 @require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
@@ -843,16 +878,11 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
-            "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
-        ]
+        expected_decoded_text = Expectations({
+            ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+        }).get_expectation()  # fmt: skip
 
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True)[0],
-            self.processor.batch_decode(output, skip_special_tokens=True)[1],
-        )
+        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_texts[0], expected_decoded_text)
+        self.assertEqual(decoded_texts[1], expected_decoded_text)
