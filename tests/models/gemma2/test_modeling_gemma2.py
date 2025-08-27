@@ -255,6 +255,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
                 ],
+                ("rocm", (9, 5)): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -320,7 +323,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         # Export + hybrid cache
         model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
             cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
