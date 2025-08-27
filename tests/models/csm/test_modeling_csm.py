@@ -248,11 +248,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support Dola decoding.")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_beam_sample_generate(self):
         pass
@@ -295,21 +290,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     @pytest.mark.generate
     @unittest.skip(reason="CSM does not support constrained beam search.")
     def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_low_memory(self):
         pass
 
     @pytest.mark.generate

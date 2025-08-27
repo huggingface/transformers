@@ -239,7 +239,7 @@ class BitNetIntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "What is your favourite food?"}], add_generation_prompt=True, tokenize=False
         )
         model = BitNetForCausalLM.from_pretrained(
-            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", torch_dtype=torch.bfloat16
+            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

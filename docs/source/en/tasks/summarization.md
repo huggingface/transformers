@@ -119,24 +119,11 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 
 Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length.
 
-<frameworkcontent>
-<pt>
-
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -172,8 +159,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -227,97 +212,12 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
 
-If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Then you can load T5 with [`TFAutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_billsum["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_billsum["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-The last two things to setup before you start training is to compute the ROUGE score from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).
-
-Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_test_set)
-```
-
-Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_billsum_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Then bundle your callbacks together:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callbacks to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for summarization, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
 
 </Tip>
 
@@ -343,9 +243,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-
-<frameworkcontent>
-<pt>
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 
 ```py
@@ -370,31 +267,3 @@ Decode the generated token ids back into text:
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-<tf>
-Tokenize the text and return the `input_ids` as TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_billsum_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](../main_classes/text_generation) API.
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("username/my_awesome_billsum_model")
->>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=False)
-```
-
-Decode the generated token ids back into text:
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
-```
-</tf>
-</frameworkcontent>

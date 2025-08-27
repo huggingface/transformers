@@ -50,7 +50,7 @@ from transformers import pipeline
 detector = pipeline(
     task="object-detection",
     model="hustvl/yolos-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
@@ -68,7 +68,7 @@ from transformers import AutoImageProcessor, AutoModelForObjectDetection, infer_
 device = infer_device()
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_dtype=torch.float16, attn_implementation="sdpa").to(device)
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype=torch.float16, attn_implementation="sdpa").to(device)
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")

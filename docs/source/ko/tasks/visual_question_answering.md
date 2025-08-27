@@ -342,7 +342,7 @@ Predicted answer: down
 >>> import torch
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+>>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)
 ```
