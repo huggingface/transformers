@@ -140,18 +140,8 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
 class Lfm2VlModel(Lfm2VlPreTrainedModel):
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
-        print(config.vision_config)
-        print(config.vision_feature_layer)
-
         self.vision_tower = AutoModel.from_config(config.vision_config)
-
-        if config.vision_feature_layer != -1:
-            self.vision_tower.vision_model.encoder.layers = self.vision_tower.vision_model.encoder.layers[
-                : config.vision_feature_layer + 1
-            ]
-
         self.pixel_unshuffle = PixelUnshuffleBlock(config.downsample_factor)
-
         self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
