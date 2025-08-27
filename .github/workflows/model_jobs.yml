@@ -124,6 +124,10 @@ jobs:
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
+      - name: Uninstall FA2
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y flash-attn
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: |
