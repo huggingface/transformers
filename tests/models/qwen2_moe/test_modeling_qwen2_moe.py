@@ -13,18 +13,18 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2MoE model."""
 
-import gc
 import unittest
 
 import pytest
 
 from transformers import AutoTokenizer, Qwen2MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    run_first,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -145,10 +145,26 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Qwen2MoeIntegrationTest(unittest.TestCase):
+    model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        return cls.model
+
+    def tearDownClass(cls):
+        if cls.model is not None:
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     def test_model_a2_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -160,16 +176,12 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     def test_model_a2_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
-        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        model = self.get_model()
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -177,15 +189,12 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @require_bitsandbytes
+    @run_first
+    @run_test_using_subprocess
     @slow
     @require_flash_attn
     @pytest.mark.flash_attn_test
-    def test_model_a2_7b_long_prompt(self):
+    def test_model_a2_7b_long_prompt_flash_attn(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
@@ -206,22 +215,12 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     def test_model_a2_7b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Qwen2MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen1.5-MoE-A2.7B",
-            device_map="auto",
-            dtype = torch.float16,
-            attn_implementation="sdpa",
-        )
+        model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
@@ -233,10 +232,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
         EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
         prompt = "To be or not to"
@@ -257,9 +253,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
         model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
-        assistant_model = Qwen2MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
-        )
+        assistant_model = model
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -269,7 +263,3 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
