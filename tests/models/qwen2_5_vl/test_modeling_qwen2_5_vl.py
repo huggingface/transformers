@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import requests
+from pytest import mark
 
 from transformers import (
     AutoProcessor,
@@ -91,20 +92,8 @@ class Qwen2_5_VLVisionText2TextModelTester:
         rope_theta=10000,
         tie_word_embeddings=True,
         is_training=True,
-        vision_config={
-            "depth": 2,
-            "in_chans": 3,
-            "hidden_act": "silu",
-            "intermediate_size": 32,
-            "out_hidden_size": 32,
-            "hidden_size": 32,
-            "num_heads": 4,
-            "patch_size": 14,
-            "spatial_patch_size": 14,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-        },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
+        vision_config=None,
+        rope_scaling=None,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -125,8 +114,6 @@ class Qwen2_5_VLVisionText2TextModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
-        self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -134,6 +121,26 @@ class Qwen2_5_VLVisionText2TextModelTester:
         self.vocab_size = vocab_size
         self.num_image_tokens = 32
         self.seq_length = seq_length + self.num_image_tokens
+        # Default vision config is None to avoid a mutable default argument
+        if vision_config is None:
+            vision_config = {
+                "depth": 2,
+                "in_chans": 3,
+                "hidden_act": "silu",
+                "intermediate_size": 32,
+                "out_hidden_size": 32,
+                "hidden_size": 32,
+                "num_heads": 4,
+                "patch_size": 14,
+                "spatial_patch_size": 14,
+                "spatial_merge_size": 1,
+                "temporal_patch_size": 2,
+            }
+        self.vision_config = vision_config
+        # Same goes for rope scaling
+        if rope_scaling is None:
+            rope_scaling = {"type": "mrope", "mrope_section": [2, 1, 1]}
+        self.rope_scaling = rope_scaling
 
     def get_config(self):
         return Qwen2_5_VLConfig(
@@ -408,6 +415,32 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
+        self.model_tester.rope_scaling["mrope_section"] = [4, 2, 2]
+        try:
+            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
+        finally:
+            self.model_tester.rope_scaling["mrope_section"] = [2, 1, 1]
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
+        self.model_tester.rope_scaling["mrope_section"] = [4, 2, 2]
+        try:
+            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
+        finally:
+            self.model_tester.rope_scaling["mrope_section"] = [2, 1, 1]
+
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass
@@ -635,19 +668,15 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
-        ]
+        expected_decoded_text = Expectations({
+            ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
+            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
+        }).get_expectation()  # fmt: skip
 
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True)[0],
-            self.processor.batch_decode(output, skip_special_tokens=True)[1],
-        )
+        # Since the test is to generate twice the same text, we just test twice against the expected decoded text
+        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_texts[0], expected_decoded_text)
+        self.assertEqual(decoded_texts[1], expected_decoded_text)
 
     @slow
     @require_flash_attn
