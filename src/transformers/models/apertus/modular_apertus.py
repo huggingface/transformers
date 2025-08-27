@@ -36,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..nemotron.modeling_nemotron import NemotronMLP
 
 
 logger = logging.get_logger(__name__)
@@ -215,18 +216,11 @@ class ApertusConfig(LlamaConfig):
         del self.head_dim
 
 
-class ApertusMLP(nn.Module):
+class ApertusMLP(NemotronMLP):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 class ApertusRMSNorm(LlamaRMSNorm):
@@ -363,8 +357,6 @@ class ApertusForCausalLM(LlamaForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         return super().forward(**super_kwargs)
-
-    pass
 
 
 class ApertusForTokenClassification(LlamaForTokenClassification):
