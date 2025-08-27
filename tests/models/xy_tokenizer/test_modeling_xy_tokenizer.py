@@ -131,7 +131,8 @@ class XYTokenizerModelTester:
                 "rvq_dim": self.code_dim,
                 "output_dim": self.code_dim,  # Output back to code_dim for post_rvq_adapter
                 "codebook_size": self.codebook_size,
-                "codebook_dim": self.code_dim // self.num_quantizers,  # Each quantizer uses rvq_dim/num_quantizers dimensional codes
+                "codebook_dim": self.code_dim
+                // self.num_quantizers,  # Each quantizer uses rvq_dim/num_quantizers dimensional codes
             },
             "post_rvq_adapter_kwargs": {
                 "input_dim": self.code_dim,  # Input from quantizer
@@ -202,10 +203,10 @@ class XYTokenizerModelTester:
             self.parent.assertEqual(len(result), self.batch_size)
             for item in result:
                 self.parent.assertIsInstance(item, torch.Tensor)
-        elif hasattr(result, 'audio_values'):
+        elif hasattr(result, "audio_values"):
             # XYTokenizerOutput or XYTokenizerDecodeOutput
             self.parent.assertIsNotNone(result.audio_values)
-            if hasattr(result, 'audio_codes'):
+            if hasattr(result, "audio_codes"):
                 self.parent.assertIsNotNone(result.audio_codes)
 
     def create_and_check_encode(self, config, input_values):
@@ -215,10 +216,9 @@ class XYTokenizerModelTester:
 
         # Create BatchFeature with attention mask
         attention_mask = torch.ones(self.batch_size, input_values.shape[-1]).to(torch_device)
-        batch_feature = BatchFeature({
-            "input_features": input_values.to(torch_device),
-            "attention_mask": attention_mask
-        })
+        batch_feature = BatchFeature(
+            {"input_features": input_values.to(torch_device), "attention_mask": attention_mask}
+        )
 
         with torch.no_grad():
             result = model.encode(batch_feature)
@@ -265,12 +265,8 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = XYTokenizerModelTester(self)
         self.config_tester = ConfigTester(
-            self,
-            config_class=XYTokenizerConfig,
-            common_properties=[],
-            has_text_modality=False
+            self, config_class=XYTokenizerConfig, common_properties=[], has_text_modality=False
         )
-
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -405,10 +401,7 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         # Test with single input
         single_input = input_values[:1]
         single_mask = torch.ones(1, single_input.shape[-1]).to(torch_device)
-        single_batch = BatchFeature({
-            "input_features": single_input.to(torch_device),
-            "attention_mask": single_mask
-        })
+        single_batch = BatchFeature({"input_features": single_input.to(torch_device), "attention_mask": single_mask})
 
         with torch.no_grad():
             single_output = model.encode(single_batch)
@@ -416,10 +409,7 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         # Test with batched input (repeat the same input)
         batch_input = input_values
         batch_mask = torch.ones(self.model_tester.batch_size, batch_input.shape[-1]).to(torch_device)
-        batch_feature = BatchFeature({
-            "input_features": batch_input.to(torch_device),
-            "attention_mask": batch_mask
-        })
+        batch_feature = BatchFeature({"input_features": batch_input.to(torch_device), "attention_mask": batch_mask})
 
         with torch.no_grad():
             batch_output = model.encode(batch_feature)
@@ -427,15 +417,13 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         # Check first batch element matches single output
         self.assertTrue(
             torch.allclose(
-                single_output.quantized_representation,
-                batch_output.quantized_representation[:1],
-                atol=1e-4
+                single_output.quantized_representation, batch_output.quantized_representation[:1], atol=1e-4
             )
         )
 
-
     def test_save_load(self):
         """Override to handle XY Tokenizer's list output format."""
+
         def check_save_load(out1, out2):
             # Handle list outputs from XY Tokenizer
             if isinstance(out1, list) and isinstance(out2, list):
@@ -507,10 +495,9 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
         # Create BatchFeature
         attention_mask = torch.ones(self.model_tester.batch_size, input_values.shape[-1]).to(torch_device)
-        batch_feature = BatchFeature({
-            "input_features": input_values.to(torch_device),
-            "attention_mask": attention_mask
-        })
+        batch_feature = BatchFeature(
+            {"input_features": input_values.to(torch_device), "attention_mask": attention_mask}
+        )
 
         with torch.no_grad():
             # Encode
@@ -537,10 +524,9 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
         # Create BatchFeature
         attention_mask = torch.ones(self.model_tester.batch_size, input_values.shape[-1]).to(torch_device)
-        batch_feature = BatchFeature({
-            "input_features": input_values.to(torch_device),
-            "attention_mask": attention_mask
-        })
+        batch_feature = BatchFeature(
+            {"input_features": input_values.to(torch_device), "attention_mask": attention_mask}
+        )
 
         with torch.no_grad():
             result = model.encode(batch_feature)
