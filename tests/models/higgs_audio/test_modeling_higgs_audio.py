@@ -87,7 +87,6 @@ class HiggsAudioModelTester:
         num_attention_heads=4,
         num_key_value_heads=2,
         hidden_act="silu",
-        use_audio_out_self_attention=True,
         audio_decoder_proj_num_layers=1,
         audio_dual_ffn_layers=[0, 1],
         audio_adapter_type="dual_ffn",
@@ -117,7 +116,6 @@ class HiggsAudioModelTester:
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.use_audio_out_self_attention = use_audio_out_self_attention
         self.audio_decoder_proj_num_layers = audio_decoder_proj_num_layers
         self.audio_dual_ffn_layers = audio_dual_ffn_layers
         self.audio_adapter_type = audio_adapter_type
@@ -152,7 +150,6 @@ class HiggsAudioModelTester:
             audio_dual_ffn_layers=self.audio_dual_ffn_layers,
             audio_decoder_proj_num_layers=self.audio_decoder_proj_num_layers,
             encode_audio_in_tokens=self.encode_audio_in_tokens,
-            use_audio_out_self_attention=self.use_audio_out_self_attention,
             audio_num_codebooks=audio_num_codebooks,
             audio_codebook_size=audio_codebook_size,
             audio_stream_bos_id=audio_codebook_size,
@@ -210,8 +207,7 @@ class HiggsAudioModelTester:
             last_hidden_states.shape,
             (
                 self.batch_size,
-                self.seq_length
-                + (self.audio_length - 1) * (self.num_audio_in + self.num_audio_out),
+                self.seq_length + (self.audio_length - 1) * (self.num_audio_in + self.num_audio_out),
                 config.text_config.hidden_size,
             ),
         )
@@ -364,10 +360,6 @@ class HiggsAudioForConditionalGenerationTest(
         self.assertTrue(
             hasattr(config.text_config, "vocab_size"),
             msg="LLM backbone `vocab_size` does not exist",
-        )
-        self.assertTrue(
-            hasattr(config.audio_encoder_config, "num_mel_bins"),
-            msg="Audio feature encoder `num_mel_bins` does not exist",
         )
 
     def test_model_forward(self):

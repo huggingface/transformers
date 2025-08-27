@@ -72,9 +72,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     original_model_config.pop("skip_audio_tower")
     original_model_config["text_config"]["rms_norm_eps"] = float(original_model_config["text_config"]["rms_norm_eps"])
 
-    config = HiggsAudioConfig(
-        **original_model_config
-    )
+    config = HiggsAudioConfig(**original_model_config)
 
     # create model
     if not torch.cuda.is_available():
@@ -134,4 +132,3 @@ if __name__ == "__main__":
         args.config_path,
         args.push_to_hub,
     )
-

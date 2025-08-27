@@ -15,7 +15,7 @@
 """Higgs-Audio is an end-to-end multimodal model with the capability to understand and generate text / audio."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -60,47 +60,8 @@ class HiggsAudioAttention(LlamaAttention):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Higgs Audio Model outputting raw hidden-states without any specific head on top.
-    """
-)
-@auto_docstring
-class HiggsAudioPreTrainedModel(PreTrainedModel):
-    config_class = HiggsAudioConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    _can_record_outputs = {
-        "hidden_states": HiggsAudioDecoderLayer,
-        "attentions": HiggsAudioAttention,
-    }
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "init_std", 0.02)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, HiggsAudioRMSNorm):
-            module.weight.data.fill_(1.0)
-
-
 class HiggsAudioDecoderProjector(nn.Module):
-    """Projection layers that map hidden states from the LLM component to audio / text logits.
-    """
+    """Projection layers that map hidden states from the LLM component to audio / text logits."""
 
     def __init__(self, config: HiggsAudioConfig):
         super().__init__()
@@ -213,9 +174,7 @@ class HiggsAudioDualFFNFastDecoderLayer(nn.Module):
     o_t  o_t  o_t  a  a  a  o_t  o_t  o_t
     """
 
-    def __init__(
-        self, config: HiggsAudioConfig, layer_idx: int
-    ):
+    def __init__(self, config: HiggsAudioConfig, layer_idx: int):
         super().__init__()
         text_config = config.text_config
         self.hidden_size = text_config.hidden_size
@@ -395,9 +354,7 @@ class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
 
     """
 
-    def __init__(
-        self, config: HiggsAudioConfig, layer_idx: int
-    ):
+    def __init__(self, config: HiggsAudioConfig, layer_idx: int):
         super().__init__()
         text_config = config.text_config
         self.hidden_size = text_config.hidden_size
@@ -513,6 +470,50 @@ class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
             hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+@auto_docstring(
+    custom_intro="""
+    The bare Higgs Audio Model outputting raw hidden-states without any specific head on top.
+    """
+)
+@auto_docstring
+class HiggsAudioPreTrainedModel(PreTrainedModel):
+    config_class = HiggsAudioConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = []
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+
+    _can_record_outputs = {
+        "hidden_states": Union[
+            HiggsAudioDecoderLayer, HiggsAudioDualFFNFastDecoderLayer, HiggsAudioDualFFNSlowDecoderLayer
+        ],
+        "attentions": HiggsAudioAttention,
+    }
+
+    def _init_weights(self, module):
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, HiggsAudioRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 @dataclass
@@ -684,11 +685,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             layers = []
             for j in range(config.text_config.num_hidden_layers):
                 if j in config.audio_dual_ffn_layers:
-                    layers.append(
-                        HiggsAudioDualFFNSlowDecoderLayer(
-                            config, j
-                        )
-                    )
+                    layers.append(HiggsAudioDualFFNSlowDecoderLayer(config, j))
                 else:
                     layers.append(HiggsAudioDecoderLayer(config.text_config, j))
             self.layers = nn.ModuleList(layers)
@@ -703,9 +700,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                         )
                     )
                 else:
-                    layers.append(
-                        HiggsAudioDualFFNFastDecoderLayer(config, j)
-                    )
+                    layers.append(HiggsAudioDualFFNFastDecoderLayer(config, j))
             self.layers = nn.ModuleList(layers)
         elif config.audio_adapter_type == "stack":
             self.layers = nn.ModuleList(
@@ -734,6 +729,8 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self.audio_codebook_embeddings = nn.Embedding(
             config.audio_num_codebooks * self.audio_codebook_size, config.text_config.hidden_size
         )
+
+        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -960,9 +957,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         use_static_cache = isinstance(past_key_values, StaticCache)
 
         # Apply the LLM component
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values
-        )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
 
         hidden_states = inputs_embeds
 
@@ -1030,13 +1025,10 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    **kwargs
+                    **kwargs,
                 )
 
-            if isinstance(layer_outputs, tuple):
-                hidden_states = layer_outputs[0]
-            else:
-                hidden_states = layer_outputs
+            hidden_states = layer_outputs
 
         hidden_states = self.norm(hidden_states)
 
@@ -1082,6 +1074,8 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         self.audio_codebook_weights = (
             torch.ones(config.audio_num_codebooks) / config.audio_num_codebooks
         )  # default to equal weights
+
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple

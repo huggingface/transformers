@@ -106,9 +106,7 @@ class HiggsAudioConfig(PretrainedConfig):
     model_type = "higgs_audio"
     is_composition = True
 
-    sub_configs = {
-        "text_config": AutoConfig
-    }
+    sub_configs = {"text_config": AutoConfig}
 
     def __init__(
         self,
