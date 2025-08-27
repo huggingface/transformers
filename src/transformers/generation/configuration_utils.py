@@ -69,6 +69,16 @@ if is_torch_available():
         SlidingWindowCache,
         StaticCache,
     )
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        HybridChunkedCache,
+        OffloadedHybridCache,
+        OffloadedStaticCache,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -573,6 +583,9 @@ class GenerationConfig(PushToHubMixin):
 
 
 
+
+
+
     def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
@@ -1050,6 +1063,21 @@ class GenerationConfig(PushToHubMixin):
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
 
+    def get_logit_processors(self):
+        """Get LogitsProcessorList from configuration."""
+        if self.logit_processors is None:
+            return None
+        
+        # Import here to avoid circular imports
+        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
+        
+        # If it's already a processor list, return it
+        if isinstance(self.logit_processors, LogitsProcessorList):
+            return self.logit_processors
+        
+        # Otherwise, create from config
+        return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
+    
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
         with open(json_file, "r", encoding="utf-8") as reader:
