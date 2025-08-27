@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Qwen2.5-VL model."""
+"""PyTorch Ernie4.5-VL model."""
 
 from typing import Optional, Union
 
@@ -359,9 +354,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
-            hidden_states, _ = self.mlp(
-                hidden_states, token_type_ids
-            )
+            hidden_states, _ = self.mlp(hidden_states, token_type_ids)
         else:
             hidden_states = self.mlp(hidden_states)
         hidden_states = hidden_states + residual
@@ -917,6 +910,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
 
         return model_inputs
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,
