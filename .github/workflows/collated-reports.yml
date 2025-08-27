@@ -35,7 +35,7 @@ jobs:
         run: |
           pip install huggingface_hub
           python3 utils/collated_reports.py                  \
-            --path /transformers/reports/                    \
+            --path .                                         \
             --machine-type ${{ inputs.machine_type }}        \
             --commit-hash ${{ env.CI_SHA }}                  \
             --job ${{ inputs.job }}                          \

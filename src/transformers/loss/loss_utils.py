@@ -151,6 +151,7 @@ LOSS_MAPPING = {
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForImageClassification": ForSequenceClassificationLoss,
     "ForVideoClassification": ForSequenceClassificationLoss,
+    "ForAudioClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,

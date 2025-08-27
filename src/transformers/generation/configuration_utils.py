@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
-DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "offloaded", "quantized")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
 DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
     "sliding_window",
@@ -86,14 +86,12 @@ class GenerationConfig(PushToHubMixin):
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
-        - *contrastive search* if `penalty_alpha>0.` and `top_k>1`
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
         - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
-        - *dola decoding* if `dola_layers` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
@@ -139,17 +137,6 @@ class GenerationConfig(PushToHubMixin):
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
-        penalty_alpha (`float`, *optional*):
-            The values balance the model confidence and the degeneration penalty in contrastive search decoding.
-        dola_layers (`str` or `list[int]`, *optional*):
-            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
-            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
-            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
-            layers up to the last 20 layers.
-            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
-            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
-            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://huggingface.co/papers/2309.03883) for more details.
 
         > Parameters that control the cache
 
@@ -265,9 +252,6 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
-        low_memory (`bool`, *optional*):
-            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
-            Used with beam search and contrastive search.
         watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
@@ -376,8 +360,6 @@ class GenerationConfig(PushToHubMixin):
         self.do_sample = kwargs.pop("do_sample", False)
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
-        self.penalty_alpha = kwargs.pop("penalty_alpha", None)
-        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", True)
@@ -413,7 +395,7 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
-        self.low_memory = kwargs.pop("low_memory", None)
+
         watermarking_config = kwargs.pop("watermarking_config", None)
         if watermarking_config is None:
             self.watermarking_config = None
@@ -454,6 +436,11 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
+
+        # Deprecated (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+        self.low_memory = kwargs.pop("low_memory", None)
+        self.penalty_alpha = kwargs.pop("penalty_alpha", None)
+        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
@@ -542,6 +529,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # DoLa generation may extend some generation modes
+        # TODO joao, manuel: remove this in v4.62.0
         if self.dola_layers is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.DOLA_GENERATION
@@ -619,9 +607,7 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if (
-                self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
-            ):  # contrastive search uses top_k
+            if self.top_k is not None and self.top_k != 50:
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
@@ -657,13 +643,6 @@ class GenerationConfig(PushToHubMixin):
             if self.constraints is not None:
                 minor_issues["constraints"] = single_beam_wrong_parameter_msg.format(
                     flag_name="constraints", flag_value=self.constraints
-                )
-            # DoLa generation needs num_beams == 1
-            if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
-                minor_issues["repetition_penalty"] = (
-                    "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
-                    f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
-                    "DoLa decoding is `repetition_penalty>=1.2`.",
                 )
 
         # 2.3. detect incorrect parameterization specific to advanced beam modes

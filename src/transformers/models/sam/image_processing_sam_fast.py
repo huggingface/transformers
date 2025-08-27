@@ -36,6 +36,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -185,10 +186,18 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         kwargs["pad_size"] = pad_size
         kwargs["mask_size"] = mask_size
         kwargs["mask_pad_size"] = mask_pad_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
