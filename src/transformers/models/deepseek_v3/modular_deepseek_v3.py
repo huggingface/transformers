@@ -324,7 +324,7 @@ class DeepseekV3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
+class DeepseekV3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
