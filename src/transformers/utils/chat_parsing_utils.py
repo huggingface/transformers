@@ -1,6 +1,7 @@
 import re
+import ast
 import json
-from .chat_template_utils import _parse_type_hint
+from .chat_template_utils import _parse_type_hint, parse_google_format_docstring
 
 # Next line only used because eval might grab them. Can be removed once we have something better than eval
 from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: F401
@@ -57,22 +58,22 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         parser = node_schema["x-parser"]
         if parser == "json":
             try:
-                return json.loads(node_content)
+                node_content = json.loads(node_content)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Node has JSON parser but could not parse its contents as JSON: {node_content}\n"
                                  f"Error: {e}")
         elif parser == "python_type":
             # TODO eval is obviously enormously insecure and only used for prototyping here
             #      make a safer parser before merging
-            return _parse_type_hint(eval(node_content))
+            node_content = _parse_type_hint(eval(node_content))
         elif parser == "python_function":
-            fn = eval(node_content)
+            if "x-parser-args" in node_schema:
+                parser_args = node_schema["x-parser-args"]
+            else:
+                parser_args = {}
+            node_content = _extract_args_and_docstring_from_function_text(node_content, **parser_args)
         else:
             raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
-
-
-
-
 
 
     # If not, we have to do a little parsing. First, set some vars and do basic validation
@@ -123,6 +124,20 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         node_content = output_content
         if not node_content:
             return None
+
+    # If there's a mapping, apply it now
+    if "x-mapping" in node_schema:
+        if not isinstance(node_content, str):
+            raise TypeError(f"Schema node with type {node_type} cannot use x-mapping on non-string content.\n"
+                            f"Content: {node_content}\n"
+                            f"Schema: {node_schema}")
+        mapping = node_schema["x-mapping"]
+        if node_content in mapping:
+            node_content = mapping[node_content]
+        else:
+            raise ValueError(f"Value {node_content} not found in x-mapping.\n"
+                             f"Mapping: {mapping}\n"
+                             f"Schema: {node_schema}")
 
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
@@ -177,122 +192,57 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         return node_content
     else:
         # TODO Should we handle null types?
-        raise TypeError(f"Unsupported schema type {node_type} for node: {node_type}")
+        raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
 
 
-def _split_at_top_level(s: str, delimiter: str) -> list[str]:
-    """
-    Splits a string by a delimiter, but only at the top level (not inside brackets).
 
-    For example:
-    _split_at_top_level("int | list[str, int]", "|") -> ["int", "list[str, int]"]
-    _split_at_top_level("str, list[str, int]", ",") -> ["str", "list[str, int]"]
+def _extract_args_and_docstring_from_function_text(function_text: str, include_return: bool = True) -> dict:
+    tree = ast.parse(function_text)
+    func = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)), None)
+    if func is None:
+        raise ValueError("Parser `python_function` couldn't find a function def: \n\n", function_text)
 
-    Args:
-        s: The string to split.
-        delimiter: The character to split on.
+    docstring = ast.get_docstring(func)
+    if docstring:
+        description, args_dict, return_description = parse_google_format_docstring(docstring)
+        args_dict = {key: {"description": value} for key, value in args_dict.items()}
+    else:
+        description = args_dict = return_description = None
 
-    Returns:
-        A list of substrings.
-    """
-    parts = []
-    bracket_level = 0
-    current_part_start_index = 0
-    for i, char in enumerate(s):
-        if char == '[':
-            bracket_level += 1
-        elif char == ']':
-            bracket_level -= 1
-            if bracket_level < 0:
-                # This indicates a malformed string like "str]]"
-                # We'll let it be handled as a simple name later.
-                pass
-        elif char == delimiter and bracket_level == 0:
-            parts.append(s[current_part_start_index:i].strip())
-            current_part_start_index = i + 1
+    required_args = []
+    # Right-align defaults to args
+    defaults = [None] * (len(func.args.args) - len(func.args.defaults)) + func.args.defaults
+    for arg, default in zip(func.args.args, defaults):
+        if not default:
+            required_args.append(arg.arg)
+        # TODO This is a horrific temporary hack, write a better function to parse the AST and not eval the unparse
+        #      like some kind of hobgoblin
+        arg_type = _parse_type_hint(eval(ast.unparse(arg.annotation))) if arg.annotation else None
+        if arg_type:
+            args_dict[arg.arg] = args_dict.get(arg.arg, {})
+            args_dict[arg.arg]["type"] = arg_type["type"]
+    if func.returns:
+        return_type = _parse_type_hint(eval(ast.unparse(func.returns)))
+    else:
+        return_type = None
 
-    # Add the final part of the string
-    parts.append(s[current_part_start_index:].strip())
-    return parts
-
-
-def parse_type_string(type_str: str) -> dict:
-    """
-    Recursively parses a Python type hint string into a structured dictionary.
-
-    This parser specifically handles:
-    - Simple types (e.g., 'int', 'str')
-    - The union operator '|' (e.g., 'int | str')
-    - Generic types like 'Optional[T]', 'Union[S, T]', and 'list[U]'
-
-    It does NOT use `eval()` or `ast.parse()`.
-
-    Args:
-        type_str: The string representation of the type hint.
-
-    Returns:
-        A dictionary representing the parsed type structure.
-    """
-    # Clean up any leading/trailing whitespace
-    type_str = type_str.strip()
-
-    # 1. Handle unions with the '|' operator first, as it has lower precedence
-    #    than the generic type syntax (e.g., list[...]).
-    top_level_or_parts = _split_at_top_level(type_str, '|')
-    if len(top_level_or_parts) > 1:
-        return {
-            "type": "union",
-            "args": [parse_type_string(part) for part in top_level_or_parts]
-        }
-
-    # 2. Handle generic types (e.g., Optional[...], Union[...], list[...])
-    if type_str.endswith(']'):
-        try:
-            first_bracket_index = type_str.index('[')
-            base_type = type_str[:first_bracket_index].strip()
-
-            # Extract the content within the brackets
-            args_str = type_str[first_bracket_index + 1:-1].strip()
-
-            if not args_str:
-                # Handle cases like list[] with no arguments
-                return {"type": "generic", "base": base_type, "args": []}
-
-            # Split the arguments inside the brackets, respecting nested structures
-            arg_parts = _split_at_top_level(args_str, ',')
-
-            # Special handling for Union[...] syntax
-            if base_type == "Union":
-                return {
-                    "type": "union",
-                    "args": [parse_type_string(part) for part in arg_parts]
-                }
-
-            # Special handling for Optional[...] syntax
-            if base_type == "Optional":
-                if len(arg_parts) != 1:
-                    raise ValueError("Parser error: Optional[] must have exactly one argument.")
-                # We can represent it as a specific "optional" type or as a union with None.
-                # Here, we'll keep it distinct.
-                return {
-                    "type": "generic",
-                    "base": "Optional",
-                    "args": [parse_type_string(arg_parts[0])]
-                }
-
-            # Handle all other generic types like list, dict, etc.
-            return {
-                "type": "generic",
-                "base": base_type,
-                "args": [parse_type_string(part) for part in arg_parts]
-            }
-        except ValueError:
-            # This can happen if '[' is not found or if the string is malformed.
-            # In such cases, we fall through to treat it as a simple name.
-            pass
-
-    # 3. Base case: The string is a simple type name (e.g., 'int', 'str', 'MyClass')
-    return {
-        "type": "name",
-        "value": type_str
+    parameters_dict = {
+        "type": "object",
+        "properties": args_dict
     }
+    if required_args:
+        parameters_dict["required"] = required_args
+
+    out = {
+            "name": func.name,
+            "description": description,
+            "parameters": parameters_dict
+        }
+    if include_return and (return_type or return_description):
+        returns = {}
+        if return_type:
+            returns["type"] = return_type["type"]
+        if return_description:
+            returns["description"] = return_description
+        out["return"] = returns
+    return out

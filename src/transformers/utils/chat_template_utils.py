@@ -62,10 +62,13 @@ args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOT
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
-(?:^|\n)  # Match the start of the args block, or a newline
-\s*(\w+):\s*  # Capture the argument name and strip spacing
-(.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+(?:^|\n)                 # Start of the args block or a newline
+\s*(\w+)                 # Capture the argument name
+(?:\s*\([^)]*\))?        # Optional (type) with optional surrounding spaces
+\s*:\s*                  # Colon (allowing spaces around it)
+(.*?)\s*                 # Capture the description (multi-line), trim trailing spaces
+(?=\n\s*\w+(?:\s*\([^)]*\))?\s*:|\Z)  # Next arg (optionally with type) or end
+
 """,
     re.DOTALL | re.VERBOSE,
 )
