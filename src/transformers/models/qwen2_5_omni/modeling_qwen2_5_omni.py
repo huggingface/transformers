@@ -3959,13 +3959,11 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
-        )
+        eos_token = torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
-        )
+        pad_token = torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
             [
