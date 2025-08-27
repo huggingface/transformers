@@ -153,7 +153,7 @@ class DebugUnderflowOverflow:
         self.batch_number = 0
         self.total_calls = 0
         self.detected_overflow = False
-        self.prefix = "                 "
+        self.prefix = " " * 17
 
         self.analyse_model()
 
