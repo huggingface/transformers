@@ -14,7 +14,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Get changed files using GitHub API
+      - name: Get changed files using `actions/github-script`
         id: get-changed-files
         uses: actions/github-script@v7
         with:
@@ -68,6 +68,8 @@ jobs:
 
       - name: Parse changed files with Python
         if: steps.get-changed-files.outputs.any_changed == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.get-changed-files.outputs.changed_files }}
         id: set-matrix
         run: |
           python3 - << 'EOF'
@@ -84,7 +86,7 @@ jobs:
           print(f"Important models: {IMPORTANT_MODELS}")
           
           # Get the changed files from the previous step
-          changed_files_str = "${{ steps.get-changed-files.outputs.changed_files }}"
+          changed_files_str = os.environ.get('CHANGED_FILES', '')
           changed_files = changed_files_str.split() if changed_files_str else []
           
           # Filter to only Python files
@@ -115,7 +117,7 @@ jobs:
                           result_models.add(model_dir)
                           print(f"Added model directory: {model_dir}")
               
-              # Check for specific files under src/transformers/ or generation files
+              # Check for specific files under src/transformers/ or src/transformers/generation/ files
               elif file.startswith('src/transformers/generation/') or \
                    (file.startswith('src/transformers/') and os.path.basename(file) in transformers_utils_files):
                   print(f"Found core file: {file} - including all important models")
