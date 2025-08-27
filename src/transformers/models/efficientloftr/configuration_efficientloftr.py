@@ -160,7 +160,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         if self.hidden_size != self.out_features[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.stage_out_channels}"
+                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.out_features[-1]}"
             )
 
         self.activation_function = activation_function
