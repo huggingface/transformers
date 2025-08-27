@@ -33,6 +33,7 @@ from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from tokenizers.decoders import DecodeStream
 
 import transformers
 from transformers.models.auto.modeling_auto import (
@@ -580,11 +581,13 @@ class ServeCommand(BaseTransformersCLICommand):
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
-        content: Optional[str] = None,
+        content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
+        decode_stream: Optional[DecodeStream] = None,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
     ) -> str:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -609,6 +612,8 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if decode_stream is not None and content is not None and tokenizer is not None:
+            content = decode_stream.step(tokenizer._tokenizer, content)
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
@@ -814,6 +819,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_chat_completion(_inputs):
             try:
+                decode_stream = DecodeStream(skip_special_tokens=False)
+                for id in _inputs:
+                    decode_stream.step(tokenizer._tokenizer, id.item())
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )
@@ -825,12 +833,18 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     if result.status == RequestStatus.FINISHED:
                         yield self.build_chat_completion_chunk(
-                            request_id, finish_reason="stop", model=model_id_and_revision
+                            request_id,
+                            finish_reason="stop",
+                            model=model_id_and_revision,
                         )
                         break
                     else:
                         yield self.build_chat_completion_chunk(
-                            request_id=request_id, content=result.next_token, model=model_id_and_revision
+                            request_id=request_id,
+                            content=result.generated_tokens[-1],
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
                         )
 
             except Exception as e:

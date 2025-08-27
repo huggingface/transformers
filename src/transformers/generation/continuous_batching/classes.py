@@ -15,10 +15,9 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from tokenizers.decoders import DecodeStream
 
 from ...utils.logging import logging
 from ...utils.metrics import traced
@@ -76,7 +75,6 @@ class GenerationOutput:
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
         status (RequestStatus): The status of the request.
         created_time (float): The time the request was created.
-        next_token (Optional[int]): The next token to be generated.
     """
 
     request_id: str
@@ -86,7 +84,6 @@ class GenerationOutput:
     error: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
-    next_token: Optional[Union[int, str]] = field(default_factory=int)
 
 
 @dataclass
@@ -107,7 +104,6 @@ class RequestState:
         eos_token_id (int): The ID of the end-of-sequence token.
         created_time (float): The time the request was created.
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
-        next_token (Optional[str]): The next token to be generated.
     """
 
     # Required fields
@@ -123,11 +119,7 @@ class RequestState:
     eos_token_id: int = -1  # ID of the end-of-sequence token
     created_time: float = field(default_factory=time.time)  # Time the request was created
     error: Optional[str] = None  # Error message if the request failed
-    next_token: Optional[Union[int, str]] = (
-        None  # Next token to be generated, either the raw ID or the decoded token depending on wether a DecodeStream was set
-    )
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
-    decode_stream: Optional[DecodeStream] = None
 
     @property
     def status(self) -> RequestStatus:
@@ -210,5 +202,4 @@ class RequestState:
             generated_tokens=self.static_outputs,
             logprobs=[],
             error=self.error,
-            next_token=self.next_token,
         )
