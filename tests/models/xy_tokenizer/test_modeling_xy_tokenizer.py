@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
 
 if is_torch_available():
@@ -233,7 +233,7 @@ class XYTokenizerModelTester:
         config, input_values = self.prepare_config_and_inputs()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
-    
+
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config, input_values = self.prepare_config_and_inputs()
         inputs_dict = {"input_values": input_values}
@@ -401,7 +401,7 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         model = XYTokenizer(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         # Test with single input
         single_input = input_values[:1]
         single_mask = torch.ones(1, single_input.shape[-1]).to(torch_device)
@@ -409,25 +409,25 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             "input_features": single_input.to(torch_device),
             "attention_mask": single_mask
         })
-        
+
         with torch.no_grad():
             single_output = model.encode(single_batch)
-        
+
         # Test with batched input (repeat the same input)
         batch_input = input_values
         batch_mask = torch.ones(self.model_tester.batch_size, batch_input.shape[-1]).to(torch_device)
         batch_feature = BatchFeature({
-            "input_features": batch_input.to(torch_device), 
+            "input_features": batch_input.to(torch_device),
             "attention_mask": batch_mask
         })
-        
+
         with torch.no_grad():
             batch_output = model.encode(batch_feature)
-        
+
         # Check first batch element matches single output
         self.assertTrue(
             torch.allclose(
-                single_output.quantized_representation, 
+                single_output.quantized_representation,
                 batch_output.quantized_representation[:1],
                 atol=1e-4
             )
@@ -500,24 +500,24 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_encode_decode_consistency(self):
         """Test that encode->decode produces reasonable output."""
         config, input_values = self.model_tester.prepare_config_and_inputs()
-        
+
         model = XYTokenizer(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         # Create BatchFeature
         attention_mask = torch.ones(self.model_tester.batch_size, input_values.shape[-1]).to(torch_device)
         batch_feature = BatchFeature({
             "input_features": input_values.to(torch_device),
             "attention_mask": attention_mask
         })
-        
+
         with torch.no_grad():
             # Encode
             encode_result = model.encode(batch_feature)
             # Decode
             decode_result = model.decode(encode_result.audio_codes)
-        
+
         # Check consistency - decode_result.audio_values is a list
         if isinstance(decode_result.audio_values, list):
             self.assertEqual(len(decode_result.audio_values), self.model_tester.batch_size)
@@ -530,28 +530,28 @@ class XYTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_audio_codes_properties(self):
         """Test properties of generated audio codes."""
         config, input_values = self.model_tester.prepare_config_and_inputs()
-        
+
         model = XYTokenizer(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         # Create BatchFeature
         attention_mask = torch.ones(self.model_tester.batch_size, input_values.shape[-1]).to(torch_device)
         batch_feature = BatchFeature({
             "input_features": input_values.to(torch_device),
             "attention_mask": attention_mask
         })
-        
+
         with torch.no_grad():
             result = model.encode(batch_feature)
-        
+
         # Check audio codes are discrete
         self.assertEqual(result.audio_codes.dtype, torch.long)
-        
+
         # Check codes are within valid range
         self.assertTrue(torch.all(result.audio_codes >= 0))
         self.assertTrue(torch.all(result.audio_codes < config.codebook_size))
-        
+
         # Check number of quantizers
         self.assertEqual(result.audio_codes.shape[0], config.num_quantizers)
 

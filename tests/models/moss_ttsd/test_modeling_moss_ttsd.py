@@ -325,7 +325,7 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
     @skip("Shape mismatch handling not applicable")
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
-    
+
 
     @skip("Embeddings not applicable for audio model")
     def test_model_get_set_embeddings(self):
@@ -377,7 +377,7 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
     def test_greedy_generate(self):
         pass
 
-    @skip("Generation with 3D inputs requires special handling not yet implemented") 
+    @skip("Generation with 3D inputs requires special handling not yet implemented")
     def test_sample_generate(self):
         pass
 
@@ -402,12 +402,12 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
 
 class MossTTSDForConditionalGenerationIntegrationTest(unittest.TestCase):
     """Integration tests for MOSS-TTSD model generation."""
-    
+
     def setUp(self):
         # Use a dummy checkpoint for testing purposes
         self.model_checkpoint = "fnlp/MOSS-TTSD-v0.5"
         self.sampling_rate = 24000
-        
+
         # Prepare test audio if needed
         if is_datasets_available():
             try:
@@ -416,41 +416,41 @@ class MossTTSDForConditionalGenerationIntegrationTest(unittest.TestCase):
                 self.audio_sample = librispeech_dummy[-1]["audio"]["array"]
             except Exception:
                 self.audio_sample = None
-        
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-        
+
     @unittest.skipUnless(is_torch_available(), "PyTorch not available")
     def test_moss_ttsd_model_integration_generate_tts(self):
         """Test MOSS-TTSD model integration with TTS generation."""
         # This is a placeholder test - real integration would require actual model
-        text_inputs = ["Artificial intelligence is transforming the world", "This is a test"]
-        
+        # text_inputs = ["Artificial intelligence is transforming the world", "This is a test"]
+
         # In a real integration test, we would:
         # processor = MossTTSDProcessor.from_pretrained(self.model_checkpoint)
         # inputs = processor(text_inputs, padding=True, return_tensors="pt").to(torch_device)
         # model = MossTTSDForCausalLM.from_pretrained(self.model_checkpoint).to(torch_device)
         # outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)
-        
+
         # For now, just test that the class exists and can be instantiated
         config = MossTTSDConfig()
         model = MossTTSDForCausalLM(config)
         self.assertIsNotNone(model)
-        
+
     @unittest.skipUnless(is_torch_available(), "PyTorch not available")
     def test_moss_ttsd_model_integration_generate_audio_context(self):
         """Test MOSS-TTSD model integration with audio context."""
         # Placeholder for audio context generation test
         config = MossTTSDConfig()
         model = MossTTSDForCausalLM(config)
-        
+
         # Test with 3D input
         batch_size, seq_length, channels = 1, 10, 8
         input_ids = torch.zeros([batch_size, seq_length, channels], dtype=torch.long)
-        
+
         with torch.no_grad():
             outputs = model(input_ids)
-            
+
         self.assertEqual(outputs.logits.shape[0], batch_size)
         self.assertEqual(outputs.logits.shape[1], seq_length)
         self.assertEqual(outputs.logits.shape[2], config.vocab_size)
