@@ -147,6 +147,10 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         if isinstance(node_content, str):
             # This means we don't have a regex at this level, so all of our child nodes need to parse the whole
             # string themselves to extract their value.
+            if "properties" not in node_schema:
+                raise ValueError(f"Object node received string content but has no regex or parser to handle it.\n"
+                                 f"Content: {node_content}\n"
+                                 f"Schema: {node_schema}")
             for key, child_node in node_schema["properties"].items():
                 parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key], scope_vars)
             return parsed_schema

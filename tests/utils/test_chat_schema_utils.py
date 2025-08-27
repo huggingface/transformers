@@ -176,14 +176,15 @@ gpt_oss_schema = {
     "properties": {
         "tools": {
             "type": "array",
-            "x-regex": "\n\nnamespace functions \{\n\n",
-            "x-regex-iterator": "type \w+ = \(_: \{\n.*?\n\}\) \=\> any;",
+            "x-regex": "\n\nnamespace functions \{\n\n(.*?)\} \/\/ namespace functions<\|end\|>",
+            "x-regex-iterator": r"\/\/ .*?type \w+ = \(_: \{\n.*?\n\}\) \=\> any;",
             "items": {
                 "type": "object",
                 "properties": {
                     "type": {"const": "function"},
                     "function": {
                         "type": "object",
+                        "x-regex": r"\/\/ (?P<description>.*?)\ntype (?P<name>\w+) = \(_: \{\n(?P<parameters>.*?)\n\}\) \=\> any;",
                         "properties": {
                             "name": {"type": "string"},
                             "description": {"type": "string"},
@@ -192,16 +193,17 @@ gpt_oss_schema = {
                                 "properties": {
                                     "type": {"const": "object"},
                                     "properties": {
+                                        "x-regex-to-dict": r"(?P<value>\/\/ .*?\n(?P<key>\w+)\??: \w+,)",
                                         "type": "object",
                                         "additionalProperties": {
                                             "type": "object",
                                             "properties": {
-                                                "type": {"type": "string"},
-                                                "description": {"type": "string"},
+                                                "type": {"type": "string", "x-regex": r": (.*?),$" },
+                                                "description": {"type": "string", "x-regex": r"^\/\/ (.*?)\n" },
                                             },
                                         },
                                     },
-                                    "required": {"type": "array", "items": {"type": "string"}},
+                                    "required": {"type": "array", "items": {"type": "string"}, "x-regex-iterator": r"\n([^?\n]+?):"},
                                 },
                             },
                         }
@@ -340,17 +342,17 @@ class ChatSchemaParserTest(unittest.TestCase):
             """
             return -40.0
 
-        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.):
+        def tool_with_everything_all_at_once(x_1: str, y_2: int, z_3: float = 43.):
             """
             Test function with multiple args, and docstring args that we have to strip out.
 
             Args:
-                x: The first input. It's got a big multiline
+                x_1: The first input. It's got a big multiline
                    description and also contains
 
-                y: The second input. It's a big list with a single-line description.
+                y_2: The second input. It's a big list with a single-line description.
 
-                z: The third input. It's some kind of tuple with a default arg.
+                z_3: The third input. It's some kind of tuple with a default arg.
             """
             return -40.0
 
@@ -362,6 +364,8 @@ class ChatSchemaParserTest(unittest.TestCase):
         ]
         formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], reasoning_effort="high")
         parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
-        breakpoint()
-        self.assertEqual(parsed_chat['messages'][1:], chat)  # Remove the first message because the template adds it
-        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)])
+        self.assertEqual(parsed_chat['messages'], chat)
+        self.assertEqual(parsed_chat['tools'][0], get_json_schema(simple_tool))
+        complex_schema = get_json_schema(tool_with_everything_all_at_once)
+        complex_schema['function']['parameters']['properties']['y_2']['type'] = 'number'  # The GPT template maps these all to 'number' so we can't recover int vs float
+        self.assertEqual(parsed_chat['tools'][1], complex_schema)
