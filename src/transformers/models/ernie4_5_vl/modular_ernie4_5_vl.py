@@ -58,14 +58,6 @@ class TokenType:
     video = 2
 
 
-class Ernie4_5_VLMLP(Ernie4_5_MoeMLP):
-    pass
-
-
-class Ernie4_5_VLRMSNorm(Ernie4_5_MoeRMSNorm):
-    pass
-
-
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
@@ -158,6 +150,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class Ernie4_5_VLTextAttention(Ernie4_5_MoeAttention):
+    pass
+
+
+class Ernie4_5_VLRMSNorm(Ernie4_5_MoeRMSNorm):
+    pass
+
+
+class Ernie4_5_VLMLP(Ernie4_5_MoeMLP):
     pass
 
 
@@ -456,7 +456,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
         )
 
 
-class Ernie4_5_VLVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Ernie4_5VLVisionMLP(VisionMlp):
     pass
 
 
@@ -478,7 +478,7 @@ class Ernie4_5_VLPatchEmbed(Qwen2_5_VisionPatchEmbed):
         return self.proj(hidden_states.to(target_dtype))
 
 
-class Ernie4_5VLVisionMLP(VisionMlp):
+class Ernie4_5_VLVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
@@ -495,7 +495,7 @@ class Ernie4_5_VLVisionBlock(Qwen2_5_VLVisionBlock):
         )
 
 
-class Ernie4_5_VLVisionTransformerPreTrainedModel(Qwen2_5_VisionTransformerPretrainedModel):
+class Ernie4_5_VLVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerPretrainedModel):
     _no_split_modules = ["Ernie4_5_VLVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
@@ -670,13 +670,14 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         return x
 
 
+# TODO: refactor a bit
 class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
     def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
 
         self.language_model = Ernie4_5_VLTextModel(config.text_config)
 
-        self.vision_tower = Ernie4_5_VLVisionTransformerPreTrainedModel(config.vision_config)
+        self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel(config.vision_config)
         self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config.vision_config)
         self.image_preprocess = None  # TODO: move to preprocessor
 
@@ -984,6 +985,6 @@ __all__ = [
     "Ernie4_5_VLForConditionalGeneration",
     "Ernie4_5_VLModel",
     "Ernie4_5_VLTextModel",
-    "Ernie4_5_VLVisionTransformerPreTrainedModel",
+    "Ernie4_5_VLVisionTransformerPretrainedModel",
     "Ernie4_5_VLVariableResolutionResamplerModel",
 ]

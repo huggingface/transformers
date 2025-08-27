@@ -51,44 +51,6 @@ class TokenType:
     video = 2
 
 
-class Ernie4_5_VLMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class Ernie4_5_VLRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Ernie4_5_VLRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
@@ -280,6 +242,44 @@ class Ernie4_5_VLTextAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Ernie4_5_VLRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Ernie4_5_VLRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class Ernie4_5_VLMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Ernie4_5_VLMoeStatics(nn.Module):
@@ -615,18 +615,15 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         )
 
 
-class Ernie4_5_VLVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+class Ernie4_5VLVisionMLP(nn.Module):
+    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.act = ACT2FN[hidden_act]
+        self.fc2 = nn.Linear(hidden_dim, dim)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, x) -> torch.Tensor:
+        return self.fc2(self.act(self.fc1(x)))
 
 
 class Ernie4_5_VLPatchEmbed(nn.Module):
@@ -647,15 +644,18 @@ class Ernie4_5_VLPatchEmbed(nn.Module):
         return self.proj(hidden_states.to(target_dtype))
 
 
-class Ernie4_5VLVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
-        super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+class Ernie4_5_VLVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
 
 
 def rotate_half(x):
@@ -805,7 +805,7 @@ class Ernie4_5_VLVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Ernie4_5_VLVisionTransformerPreTrainedModel(Ernie4_5_VLPreTrainedModel):
+class Ernie4_5_VLVisionTransformerPretrainedModel(Ernie4_5_VLPreTrainedModel):
     config: Ernie4_5_VLVisionConfig
     _no_split_modules = ["Ernie4_5_VLVisionBlock"]
 
@@ -1013,13 +1013,14 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         return x
 
 
+# TODO: refactor a bit
 class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
     def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
 
         self.language_model = Ernie4_5_VLTextModel(config.text_config)
 
-        self.vision_tower = Ernie4_5_VLVisionTransformerPreTrainedModel(config.vision_config)
+        self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel(config.vision_config)
         self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config.vision_config)
         self.image_preprocess = None  # TODO: move to preprocessor
 
@@ -1318,6 +1319,6 @@ __all__ = [
     "Ernie4_5_VLForConditionalGeneration",
     "Ernie4_5_VLModel",
     "Ernie4_5_VLTextModel",
-    "Ernie4_5_VLVisionTransformerPreTrainedModel",
+    "Ernie4_5_VLVisionTransformerPretrainedModel",
     "Ernie4_5_VLVariableResolutionResamplerModel",
 ]
