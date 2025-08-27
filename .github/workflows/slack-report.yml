@@ -75,6 +75,8 @@ jobs:
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
+          # This `CI_TITLE` would be empty for `schedule` or `workflow_run` events.
+          CI_TITLE: ${{ github.event.head_commit.message }}
           CI_SHA: ${{ inputs.commit_sha || github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
