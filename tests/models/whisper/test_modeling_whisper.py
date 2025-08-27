@@ -2055,7 +2055,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         expected_output = Expectations(
-            {("cuda", None): EXPECTED_CUDA, ("rocm", None): EXPECTED_ROCM}
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
         ).get_expectation()
 
         transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
@@ -2697,12 +2697,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_shortform_single_batch_prev_cond(self):
         # fmt: off
-        cuda = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
-        cuda1 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
-        rocm = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
+        cuda_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
+        cuda_expectation2 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
+        rocm_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
         # fmt: on
-        expected_output = Expectations({("cuda", None): cuda, ("rocm", None): rocm}).get_expectation()
-        expected_output1 = Expectations({("cuda", None): cuda1, ("rocm", None): rocm}).get_expectation()
+        expected_output = Expectations(
+            {("cuda", None): cuda_expectation, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
+        expected_output1 = Expectations(
+            {("cuda", None): cuda_expectation2, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -2903,7 +2907,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         expected_output = Expectations(
-            {("cuda", None): EXPECTED_CUDA, ("rocm", None): EXPECTED_ROCM}
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
         ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
