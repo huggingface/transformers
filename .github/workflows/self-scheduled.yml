@@ -115,6 +115,7 @@ jobs:
       matrix:
         machine_type: [single-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+        commit: [2c55c7fc, ba095d38, 40299134, 04c2bae3, d8f2edcc, ef406902, 8ce633cc]
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
@@ -123,6 +124,7 @@ jobs:
       runner_map: ${{ needs.setup.outputs.runner_map }}
       docker: ${{ inputs.docker }}
       commit_sha: ${{ inputs.commit_sha || github.sha }}
+      commit: ${{ matrix.commit }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
