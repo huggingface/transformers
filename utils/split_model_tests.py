@@ -64,6 +64,7 @@ if __name__ == "__main__":
         model_tests = ast.literal_eval(args.models)
         d = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
 
+    d = d[:4]
     num_jobs = len(d)
     num_jobs_per_splits = num_jobs // args.num_splits
 
