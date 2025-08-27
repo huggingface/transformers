@@ -377,9 +377,7 @@ class MossTTSDTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertDictEqual(encoding_data, expected_encoding)
 
             # Test decoding - ensure sequences round-trip correctly
-            decoded_sequences = [
-                tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]
-            ]
+            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
 
             for expected, decoded in zip(sequences, decoded_sequences):
                 # For MOSS-TTSD, the decoded text should match the original
