@@ -418,33 +418,11 @@ def write_model(
         elif lm_type in ("qwen3", "qwen3_moe", "gpt_oss"):
             # Handle architecture-specific weight conversion
             handled = handle_specialized_architecture_weights(key, new_key, state_dict_old[key], lm_type, state_dict)
-            if handled:
-                continue
+            if not handled:
+                state_dict[new_key] = state_dict_old[key]
         else:
             state_dict[new_key] = state_dict_old[key]
 
-    # Handle missing q_norm and k_norm for Qwen3 models if they're expected but missing
-    if lm_type in ("qwen3", "qwen3_moe"):
-        missing_q_norm = []
-        missing_k_norm = []
-        hidden_size = config.text_config.hidden_size
-        num_layers = config.text_config.num_hidden_layers
-        
-        for layer_idx in range(num_layers):
-            q_norm_key = f"model.language_model.layers.{layer_idx}.self_attn.q_norm.weight"
-            k_norm_key = f"model.language_model.layers.{layer_idx}.self_attn.k_norm.weight"
-            
-            if q_norm_key not in state_dict:
-                missing_q_norm.append(q_norm_key)
-            if k_norm_key not in state_dict:
-                missing_k_norm.append(k_norm_key)
-        
-        if missing_q_norm or missing_k_norm:
-            print(f"Adding missing normalization weights: {len(missing_q_norm)} q_norm, {len(missing_k_norm)} k_norm")
-            for key in missing_q_norm:
-                state_dict[key] = torch.ones(hidden_size, dtype=torch.bfloat16)
-            for key in missing_k_norm:
-                state_dict[key] = torch.ones(hidden_size, dtype=torch.bfloat16)
 
     del state_dict_old
     gc.collect()
