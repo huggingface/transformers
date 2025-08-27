@@ -23,8 +23,25 @@ The original implementation can be found in [NVIDIA NeMo](https://github.com/NVI
 
 ## Usage
 
-### Basic Speech Recognition
+### Speech Recognition With `pipeline`
 
+Hugging Face's `pipeline` interface can be used to conveniently transcribe audio:
+```python
+from transformers import pipeline
+
+pipe = pipeline(
+    task="automatic-speech-recognition",
+    model="bezzam/parakeet-ctc-1.1b-hf",
+    device=0
+)
+res = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+print("Transcription:", res["text"])
+# Transcription: i have a dream that one day this nation will rise up and live out the true meaning of its creed
+```
+
+### With `ParakeetForCTC`
+
+For a more manual approach:
 ```python
 import torch
 from transformers import ParakeetForCTC, AutoProcessor
