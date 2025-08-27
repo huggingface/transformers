@@ -173,7 +173,6 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
-
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
