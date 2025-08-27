@@ -66,7 +66,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
 
-output = model.generate(**input_ids, cache_implementation="static")
+output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
