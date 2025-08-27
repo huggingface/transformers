@@ -1476,7 +1476,6 @@ class TestConfigurableLogitsProcessorList(unittest.TestCase):
         self.assertEqual(len(back_to_config), 1)
         self.assertEqual(back_to_config[0]["type"], "TemperatureLogitsWarper")
 
-
 class TestGenerationConfigIntegration(unittest.TestCase):
     """Test integration of logit processors with GenerationConfig"""
 
