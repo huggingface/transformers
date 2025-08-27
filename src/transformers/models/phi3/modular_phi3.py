@@ -23,8 +23,9 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
@@ -240,7 +241,7 @@ class Phi3ForCausalLM(MistralForCausalLM):
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
-        model_inputs = PreTrainedModel.prepare_inputs_for_generation(
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(
             self,
             input_ids=input_ids,
             past_key_values=past_key_values,
