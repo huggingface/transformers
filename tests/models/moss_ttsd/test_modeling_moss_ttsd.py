@@ -110,7 +110,9 @@ class MossTTSDModelTester:
 
         # Channels 1-7: speech tokens
         for i in range(1, self.channels):
-            input_ids[:, :, i] = ids_tensor([self.batch_size, self.seq_length], self.speech_vocab_size).to(torch_device)
+            input_ids[:, :, i] = ids_tensor([self.batch_size, self.seq_length], self.speech_vocab_size).to(
+                torch_device
+            )
 
         return input_ids
 
@@ -189,13 +191,11 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
             "test_assisted_decoding",
             "test_prompt_lookup",
             "test_generation_tester_mixin_inheritance",
-
             # Tests requiring special handling
             "test_generate_from_inputs_embeds",
             "test_generate_from_random_inputs_embeds",
             "test_generate_continue_from_inputs_embeds",
             "test_generate_continue_from_past_key_values",
-
             # Model structure tests
             "test_inputs_embeds",
             "test_inputs_embeds_matches_input_ids",
@@ -206,19 +206,26 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
             "test_internal_model_config_and_subconfig_are_same",
             "test_keep_in_fp32_modules",
             "test_load_save_without_tied_weights",
-
             # CPU/Disk offload tests (require meta device support)
             "test_cpu_offload",
             "test_disk_offload_bin",
             "test_disk_offload_safetensors",
-
             # Training tests (need custom setup)
             "test_training",
             "test_training_gradient_checkpointing",
         ]
 
         for test_name in skippable_tests:
-            for suffix in ["", "_dict_output", "_dict_outputs", "_dict_outputs_use_cache", "_0_random", "_1_same", "_0_greedy", "_1_beam_search"]:
+            for suffix in [
+                "",
+                "_dict_output",
+                "_dict_outputs",
+                "_dict_outputs_use_cache",
+                "_0_random",
+                "_1_same",
+                "_0_greedy",
+                "_1_beam_search",
+            ]:
                 full_test_name = f"{test_name}{suffix}"
                 if hasattr(self, full_test_name):
                     setattr(self, full_test_name, None)
@@ -326,7 +333,6 @@ class MossTTSDModelTest(ModelTesterMixin, unittest.TestCase):
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
-
     @skip("Embeddings not applicable for audio model")
     def test_model_get_set_embeddings(self):
         pass
@@ -411,7 +417,9 @@ class MossTTSDForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Prepare test audio if needed
         if is_datasets_available():
             try:
-                librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+                librispeech_dummy = load_dataset(
+                    "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+                )
                 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=self.sampling_rate))
                 self.audio_sample = librispeech_dummy[-1]["audio"]["array"]
             except Exception:
