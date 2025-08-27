@@ -651,6 +651,9 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
+        # NOTE:
+        # This is how you handle startup and shutdown events in FastAPI
+        # cf https://fastapi.tiangolo.com/advanced/events/#async-context-manager
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
