@@ -8,22 +8,21 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ..auto import AutoModel
-from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...activations import ACT2FN
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
-from ...processing_utils import Unpack
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
-from .configuration_videollama3 import Videollama3VisionConfig, Videollama3Config
+from ..auto import AutoModel
+from .configuration_videollama3 import Videollama3Config, Videollama3VisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -189,9 +188,7 @@ class Videollama3VisionEmbeddings(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states.view(
-            -1, self.config.num_channels, self.patch_size, self.patch_size
-        )
+        hidden_states = hidden_states.view(-1, self.config.num_channels, self.patch_size, self.patch_size)
         patch_embeds = self.patch_embedding(hidden_states)
         embeddings = patch_embeds.view(-1, self.embed_dim)
         return embeddings
@@ -348,9 +345,7 @@ class Videollama3VisionTransformerEncoder(nn.Module):
         self.config = config
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_pos_emb = Videollama3VisionRotaryEmbedding(head_dim // 2)
-        self.layers = nn.ModuleList(
-            [Videollama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([Videollama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def rot_pos_emb(self, grid_sizes, merge_sizes):
@@ -495,15 +490,11 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
         for hidden_states, grid_size, merge_size in zip(hidden_states_chunks, grid_sizes, merge_sizes):
             c = hidden_states.shape[-1]
             hidden_states = hidden_states.view(
-                grid_size[0], grid_size[1] // merge_size, grid_size[2] // merge_size, merge_size, merge_size,  c
+                grid_size[0], grid_size[1] // merge_size, grid_size[2] // merge_size, merge_size, merge_size, c
             ).permute(0, 1, 3, 2, 4, 5)
-            hidden_states = hidden_states.reshape(
-                grid_size[0], grid_size[1], grid_size[2], c
-            ).permute(0, 3, 1, 2)
+            hidden_states = hidden_states.reshape(grid_size[0], grid_size[1], grid_size[2], c).permute(0, 3, 1, 2)
             hidden_states = torch.nn.functional.interpolate(
-                hidden_states,
-                size=(grid_size[1] // merge_size, grid_size[2] // merge_size),
-                mode='bilinear'
+                hidden_states, size=(grid_size[1] // merge_size, grid_size[2] // merge_size), mode="bilinear"
             )
             hidden_states = hidden_states.permute(0, 2, 3, 1).view(-1, c)
             outputs.append(hidden_states)
@@ -609,8 +600,8 @@ class Videollama3Model(Videollama3PreTrainedModel):
             grid_sizes_videos = pixel_values.new_zeros((0, 3), dtype=torch.long)
             merge_sizes_videos = pixel_values.new_ones((0,), dtype=torch.long)
 
-        num_image_features = torch.sum(grid_sizes.prod(dim=1) // (merge_sizes ** 2)).item()
-        num_video_features = torch.sum(grid_sizes_videos.prod(dim=1).sum() // (merge_sizes_videos ** 2)).item()
+        num_image_features = torch.sum(grid_sizes.prod(dim=1) // (merge_sizes**2)).item()
+        num_video_features = torch.sum(grid_sizes_videos.prod(dim=1).sum() // (merge_sizes_videos**2)).item()
 
         pixel_values = torch.cat([pixel_values, pixel_values_videos], dim=0)
         grid_sizes = torch.cat([grid_sizes, grid_sizes_videos], dim=0)
@@ -641,7 +632,7 @@ class Videollama3Model(Videollama3PreTrainedModel):
         for images, grid_size, merge_size in zip(videos, grid_sizes_videos, merge_sizes_videos):
             t, h, w = grid_size
             if t == 1:
-                num_tokens = images.size(0) // (merge_size ** 2)
+                num_tokens = images.size(0) // (merge_size**2)
                 compression_masks.append(torch.ones((num_tokens,), dtype=torch.bool, device=images.device))
             else:
                 # NOTE: video token compressor
@@ -748,7 +739,9 @@ class Videollama3Model(Videollama3PreTrainedModel):
                     print(cache_position.shape)
 
             elif inputs_embeds.size(0) != 1:
-                logger.info("Token compression is automatically disabled since the input batch size is not equal to 1.")
+                logger.info(
+                    "Token compression is automatically disabled since the input batch size is not equal to 1."
+                )
 
         outputs = self.language_model(
             input_ids=None,
@@ -927,4 +920,9 @@ class Videollama3ForConditionalGeneration(Videollama3PreTrainedModel, Generation
         return model_inputs
 
 
-__all__ = ["Videollama3ForConditionalGeneration", "Videollama3Model", "Videollama3PreTrainedModel", "Videollama3VisionModel"]
+__all__ = [
+    "Videollama3ForConditionalGeneration",
+    "Videollama3Model",
+    "Videollama3PreTrainedModel",
+    "Videollama3VisionModel",
+]

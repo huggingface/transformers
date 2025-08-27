@@ -1,7 +1,7 @@
 """Image processor class for VideoLLaMA3."""
 
 import math
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union
 
 import numpy as np
 
@@ -64,8 +64,12 @@ def smart_resize(
 
 class Videollama3ImageProcessor(BaseImageProcessor):
     model_input_names = [
-        "pixel_values", "grid_sizes", "merge_sizes",
-        "pixel_values_videos", "grid_sizes_videos", "merge_sizes_videos",
+        "pixel_values",
+        "grid_sizes",
+        "merge_sizes",
+        "pixel_values_videos",
+        "grid_sizes_videos",
+        "merge_sizes_videos",
     ]
 
     def __init__(
@@ -75,8 +79,8 @@ class Videollama3ImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         min_tokens: int = 16,
         max_tokens: int = 16384,
@@ -110,8 +114,8 @@ class Videollama3ImageProcessor(BaseImageProcessor):
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         patch_size: Optional[int] = None,
         merge_size: int = None,
         do_convert_rgb: bool = None,
@@ -179,9 +183,7 @@ class Videollama3ImageProcessor(BaseImageProcessor):
             patch_size,
         )
         patches = patches.transpose(0, 2, 5, 3, 6, 1, 4, 7)
-        flatten_patches = patches.reshape(
-            t * grid_h * grid_w, channel * patch_size * patch_size
-        )
+        flatten_patches = patches.reshape(t * grid_h * grid_w, channel * patch_size * patch_size)
 
         return flatten_patches, (t, grid_h, grid_w)
 

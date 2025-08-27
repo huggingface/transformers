@@ -1,9 +1,9 @@
 """VideoLLaMA3 model configuration"""
 
-from ..auto import AutoConfig, CONFIG_MAPPING
-from ..qwen2 import Qwen2Config
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..qwen2 import Qwen2Config
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +32,7 @@ class Videollama3VisionConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
     """
+
     model_type = "videollama3_vision"
     base_config_key = "vision_config"
 

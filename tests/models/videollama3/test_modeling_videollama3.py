@@ -1,14 +1,10 @@
 """Testing suite for the PyTorch VideoLLaMA3 model."""
 
 import copy
-import gc
 import tempfile
 import unittest
 
-import requests
-
 from transformers import (
-    AutoProcessor,
     Videollama3Config,
     Videollama3ForConditionalGeneration,
     Videollama3Model,
@@ -16,12 +12,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    Expectations,
-    backend_empty_cache,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    slow,
     torch_device,
 )
 
@@ -40,7 +31,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Videollama3VisionText2TextModelTester:
@@ -71,7 +62,7 @@ class Videollama3VisionText2TextModelTester:
             "rope_theta": 1000000.0,
             "sliding_window": None,
             "tie_word_embeddings": True,
-            "vocab_size": 99
+            "vocab_size": 99,
         },
         vision_config={
             "attention_dropout": 0.0,
@@ -180,7 +171,7 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             num_image_tokens = torch.sum(input_ids == self.model_tester.image_token_id)
             num_video_tokens = torch.sum(input_ids == self.model_tester.video_token_id)
             patch_size = self.model_tester.patch_size
-            num_pixels = self.model_tester.num_channels * patch_size ** 2
+            num_pixels = self.model_tester.num_channels * patch_size**2
             if num_image_tokens > 0:
                 inputs_dict.update(
                     {
@@ -246,7 +237,9 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, grid_sizes=grid_sizes, merge_sizes=merge_sizes)
+                _ = model(
+                    input_ids=input_ids, pixel_values=pixel_values, grid_sizes=grid_sizes, merge_sizes=merge_sizes
+                )
 
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)

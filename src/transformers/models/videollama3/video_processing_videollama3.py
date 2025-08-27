@@ -222,7 +222,7 @@ class Videollama3VideoProcessor(BaseVideoProcessor):
                     height,
                     width,
                     factor=patch_size * video_merge_size,
-                    min_pixels=min_tokens * (patch_size * video_merge_size) ** 2 // num_frames ,
+                    min_pixels=min_tokens * (patch_size * video_merge_size) ** 2 // num_frames,
                     max_pixels=max_tokens * (patch_size * video_merge_size) ** 2 // num_frames,
                 )
                 video = self.resize(

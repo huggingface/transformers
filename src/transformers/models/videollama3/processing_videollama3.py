@@ -9,8 +9,11 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
-    AllKwargsForChatTemplate, ImagesKwargs, MultiModalData,
-    ProcessingKwargs, ProcessorMixin, Unpack
+    AllKwargsForChatTemplate,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -82,7 +85,9 @@ class Videollama3Processor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             timestamps = videos_inputs.pop("timestamps")
-            num_frame_tokens = videos_inputs["grid_sizes_videos"][:, 1:].prod(dim=1) // (videos_inputs["merge_sizes_videos"] ** 2)
+            num_frame_tokens = videos_inputs["grid_sizes_videos"][:, 1:].prod(dim=1) // (
+                videos_inputs["merge_sizes_videos"] ** 2
+            )
         else:
             timestamps = []
             num_frame_tokens = []
@@ -179,11 +184,7 @@ class Videollama3Processor(ProcessorMixin):
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ):
         return super().apply_chat_template(
-            conversation,
-            chat_template,
-            image_token=self.image_token,
-            video_token=self.video_token,
-            **kwargs
+            conversation, chat_template, image_token=self.image_token, video_token=self.video_token, **kwargs
         )
 
 
