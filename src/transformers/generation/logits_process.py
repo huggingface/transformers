@@ -3335,7 +3335,23 @@ LogitProcessorRegistry.register(DiaEOSDelayPatternLogitsProcessor)
 
 # Enhanced LogitsProcessorList
 class ConfigurableLogitsProcessorList(LogitsProcessorList):
-    """Extended LogitsProcessorList that supports configuration-based construction."""
+    """Extended LogitsProcessorList that supports configuration-based construction.
+
+    Example
+    -------
+    >>> from transformers import GenerationConfig, AutoModelForCausalLM, AutoTokenizer
+    >>> config = GenerationConfig(
+    ...     do_sample=True,
+    ...     logit_processors=[
+    ...         {"type": "TemperatureLogitsWarper", "temperature": 0.7},
+    ...         {"type": "TopKLogitsWarper", "top_k": 40},
+    ...     ]
+    ... )
+    >>> tok = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> out = model.generate(tok("Hello", return_tensors="pt").input_ids, generation_config=config)
+    >>> tok.decode(out[0], skip_special_tokens=True)
+    """
     
     @classmethod
     def from_config(cls, config: Union[str, List[Dict[str, Any]]]) -> 'ConfigurableLogitsProcessorList':

@@ -1304,25 +1304,26 @@ class GenerationMixin(ContinuousMixin):
                 )
             )
 
-        # Add configured processors from GenerationConfig
-        configured_processors = generation_config.get_logit_processors()
-        if configured_processors is not None:
-            # Check for duplicates and warn
-            existing_types = {type(p).__name__ for p in processors}
-            config_types = {type(p).__name__ for p in configured_processors}
-            duplicates = existing_types & config_types
-            
-            if duplicates:
-                warnings.warn(
-                    f"Duplicate LogitProcessors detected: {duplicates}. "
-                    f"Configured processors will be added after standard ones."
-                )
-            
-            processors.extend(configured_processors)
-        
-        # Add any directly passed processors last
+        # Build processors declared via configuration (list[dict] or JSON string)
+        if generation_config.logit_processors is not None:
+            from transformers.generation.logits_process import (
+                ConfigurableLogitsProcessorList,
+                LogitsProcessorList as _LPL,
+            )
+            cfg_value = generation_config.logit_processors
+            if isinstance(cfg_value, _LPL):
+                cfg_list = cfg_value
+            else:
+                try:
+                    cfg_list = ConfigurableLogitsProcessorList.from_config(cfg_value)
+                except Exception as e:  # pragma: no cover - defensive
+                    raise ValueError(f"Failed constructing logit processors from generation_config.logit_processors: {e}")
+            # Merge with existing list (user-defined passed via argument still handled below)
+            processors = self._merge_criteria_processor_list(processors, cfg_list)
+
+        # Merge any directly passed processors last (they take precedence)
         if logits_processor is not None:
-            processors.extend(logits_processor)
+            processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -2203,9 +2204,11 @@ class GenerationMixin(ContinuousMixin):
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
             logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
+                Custom logits processors that complement the default ones built from arguments and the generation
+                config. If a processor is passed that duplicates one implicitly created from other generation
+                arguments, an error is raised. For a configuration‑driven alternative (allowing JSON or list‑of‑dict
+                declarations), see the `logit_processors` field of [`~generation.GenerationConfig`] and the example
+                script `examples/pytorch/text-generation/logit_processors_example.py`.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 Custom stopping criteria that complements the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a

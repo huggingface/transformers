@@ -39,6 +39,7 @@ from ..utils import (
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -265,6 +266,22 @@ class GenerationConfig(PushToHubMixin):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
             details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+
+        logit_processors (`list[dict]` or `str`, *optional*):
+                A configuration-driven way to declare additional custom logits processors (or warpers) that should be
+                applied during generation. This sits alongside the classic argument-based controls (`temperature`, `top_k`,
+                `repetition_penalty`, etc.). Two input formats are supported:
+
+                * Python list of dict objects, each having a required key `"type"` whose value is the class name of a
+                    registered processor (see [`LogitProcessorRegistry`]) plus any keyword arguments needed for
+                    instantiation. Example: `[{"type": "TemperatureLogitsWarper", "temperature": 0.7}, {"type": "TopKLogitsWarper", "top_k": 40}]`.
+                * A JSON string encoding the exact same list (useful for CLI / config file usage and for seamless
+                    serialization via `GenerationConfig.to_dict()`).
+
+        Processors are applied in list order (with duplicate types overriding internally created ones). Invalid JSON,
+            unknown processor names, or incompatible constructor arguments raise a `ValueError` at access time
+            (inside `model.generate()`). See
+            `examples/pytorch/text-generation/logit_processors_example.py` for end‑to‑end usage.
 
         > Parameters that define the output variables of generate
 
@@ -1033,21 +1050,6 @@ class GenerationConfig(PushToHubMixin):
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
 
-    def get_logit_processors(self):
-        """Get LogitsProcessorList from configuration."""
-        if self.logit_processors is None:
-            return None
-        
-        # Import here to avoid circular imports
-        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
-        
-        # If it's already a processor list, return it
-        if isinstance(self.logit_processors, LogitsProcessorList):
-            return self.logit_processors
-        
-        # Otherwise, create from config
-        return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
-    
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
         with open(json_file, "r", encoding="utf-8") as reader:
@@ -1140,11 +1142,7 @@ class GenerationConfig(PushToHubMixin):
         if "compile_config" in output:
             del output["compile_config"]
 
-        # Special handling for logit_processors - serialize to JSON string
-        if "logit_processors" in output and output["logit_processors"] is not None:
-            if not isinstance(output["logit_processors"], str):
-                # Convert to JSON string
-                output["logit_processors"] = json.dumps(output["logit_processors"])
+    # Leave logit_processors structure (list or JSON string) as-is for transparency
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__

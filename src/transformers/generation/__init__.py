@@ -55,6 +55,8 @@ else:
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
+        "LogitProcessorRegistry",
+        "ConfigurableLogitsProcessorList",
         "ClassifierFreeGuidanceLogitsProcessor",
         "EncoderNoRepeatNGramLogitsProcessor",
         "EncoderRepetitionPenaltyLogitsProcessor",
@@ -219,6 +221,8 @@ if TYPE_CHECKING:
         from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
+            LogitProcessorRegistry,
+            ConfigurableLogitsProcessorList,
             ClassifierFreeGuidanceLogitsProcessor,
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,

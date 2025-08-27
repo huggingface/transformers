@@ -7,7 +7,14 @@ of manual LogitsProcessor instantiation.
 """
 
 import json
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+import torch  # noqa: F401 (used in custom processor example)
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    GenerationConfig,
+    LogitProcessorRegistry,
+    LogitsProcessor,
+)
 
 
 def example_basic_usage():
@@ -65,21 +72,15 @@ def example_json_string_config():
 
 def example_custom_processor():
     """Example with custom LogitProcessor."""
-    
-    from transformers.generation.logits_process import LogitsProcessor, LogitProcessorRegistry
-    import torch
-    
+
     @LogitProcessorRegistry.register
-    class WordBanLogitsProcessor(LogitsProcessor):
+    class WordBanLogitsProcessor(LogitsProcessor):  # type: ignore
         """Custom processor that bans specific words."""
-        
+
         def __init__(self, banned_words, tokenizer_vocab):
-            self.banned_token_ids = []
-            for word in banned_words:
-                if word in tokenizer_vocab:
-                    self.banned_token_ids.append(tokenizer_vocab[word])
-        
-        def __call__(self, input_ids, scores):
+            self.banned_token_ids = [tokenizer_vocab[w] for w in banned_words if w in tokenizer_vocab]
+
+        def __call__(self, input_ids, scores):  # type: ignore
             for token_id in self.banned_token_ids:
                 scores[:, token_id] = float('-inf')
             return scores

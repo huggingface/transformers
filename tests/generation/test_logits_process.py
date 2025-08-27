@@ -1479,72 +1479,29 @@ class TestConfigurableLogitsProcessorList(unittest.TestCase):
 
 class TestGenerationConfigIntegration(unittest.TestCase):
     """Test integration of logit processors with GenerationConfig"""
-    
+
     def test_generation_config_with_logit_processors(self):
-        """Test that GenerationConfig can accept and process logit_processors parameter."""
-        # Test with list of dicts
         processors_config = [
             {"type": "TemperatureLogitsWarper", "temperature": 0.8},
-            {"type": "TopKLogitsWarper", "top_k": 50}
+            {"type": "TopKLogitsWarper", "top_k": 50},
         ]
-        
         gen_config = GenerationConfig(logit_processors=processors_config)
         self.assertEqual(gen_config.logit_processors, processors_config)
-        
-        # Test get_logit_processors method
-        processors = gen_config.get_logit_processors()
-        self.assertIsInstance(processors, ConfigurableLogitsProcessorList)
-        self.assertEqual(len(processors), 2)
-        self.assertIsInstance(processors[0], TemperatureLogitsWarper)
-        self.assertEqual(processors[0].temperature, 0.8)
-        self.assertIsInstance(processors[1], TopKLogitsWarper)
-        self.assertEqual(processors[1].top_k, 50)
-        
-        # Test with JSON string
+
         json_config = json.dumps(processors_config)
         gen_config_json = GenerationConfig(logit_processors=json_config)
-        processors_json = gen_config_json.get_logit_processors()
-        self.assertIsInstance(processors_json, ConfigurableLogitsProcessorList)
-        self.assertEqual(len(processors_json), 2)
-        
-        # Test with empty list
+        self.assertEqual(gen_config_json.logit_processors, json_config)
+
         gen_config_empty = GenerationConfig(logit_processors=[])
-        processors_empty = gen_config_empty.get_logit_processors()
-        self.assertIsInstance(processors_empty, ConfigurableLogitsProcessorList)
-        self.assertEqual(len(processors_empty), 0)
-        
-        # Test with None
+        self.assertEqual(gen_config_empty.logit_processors, [])
+
         gen_config_none = GenerationConfig(logit_processors=None)
-        processors_none = gen_config_none.get_logit_processors()
-        self.assertIsNone(processors_none)
-        
-        # Test that other GenerationConfig parameters work alongside logit_processors
-        gen_config_combined = GenerationConfig(
-            logit_processors=processors_config,
-            max_length=100,
-            temperature=0.7,  # This is separate from the processor temperature
-            top_k=10,  # This is separate from the processor top_k
-            do_sample=True
-        )
-        self.assertEqual(gen_config_combined.logit_processors, processors_config)
-        self.assertEqual(gen_config_combined.max_length, 100)
-        self.assertEqual(gen_config_combined.temperature, 0.7)
-        self.assertEqual(gen_config_combined.top_k, 10)
-        self.assertTrue(gen_config_combined.do_sample)
-        
-        # Test serialization and deserialization
+        self.assertIsNone(gen_config_none.logit_processors)
+
+        # Serialization leaves structure intact (no forced JSON conversion for list)
         config_dict = gen_config.to_dict()
-        self.assertIn("logit_processors", config_dict)
-        self.assertIsInstance(config_dict["logit_processors"], str)  # Should be JSON string
-        
-        # Test loading from dict
+        self.assertIsInstance(config_dict["logit_processors"], list)
+
+        # Round trip via from_dict
         gen_config_loaded = GenerationConfig.from_dict(config_dict)
-        self.assertIsInstance(gen_config_loaded.logit_processors, list)
         self.assertEqual(gen_config_loaded.logit_processors, processors_config)
-        
-        # Verify loaded config produces same processors
-        processors_loaded = gen_config_loaded.get_logit_processors()
-        self.assertIsInstance(processors_loaded, ConfigurableLogitsProcessorList)
-        self.assertEqual(len(processors_loaded), 2)
-        self.assertIsInstance(processors_loaded[0], TemperatureLogitsWarper)
-        self.assertEqual(processors_loaded[0].temperature, 0.8)

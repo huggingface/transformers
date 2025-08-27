@@ -408,6 +408,7 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "LogitProcessorRegistry",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "BeamScorer",
@@ -652,6 +653,7 @@ if TYPE_CHECKING:
 
     # Generation
     from .generation import AlternatingCodebooksLogitsProcessor as AlternatingCodebooksLogitsProcessor
+    from .generation import LogitProcessorRegistry as LogitProcessorRegistry
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
