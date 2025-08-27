@@ -1799,4 +1799,4 @@ if __name__ == "__main__":
         # Process files with diff
         workers = min(num_workers, len(dependency_level_files))
         with mp.Pool(workers) as pool:
-            _ = pool.map(run_converter, dependency_level_files)
+            pool.map(run_converter, dependency_level_files)
