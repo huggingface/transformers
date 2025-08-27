@@ -45,5 +45,5 @@ jobs:
       - name: Upload collated reports
         uses: actions/upload-artifact@v4
         with:
-          name: collated_reports_${{ env.CI_SHA }}.json
-          path: collated_reports_${{ env.CI_SHA }}.json
+          name: collated_reports_${{ github.sha }}.json
+          path: collated_reports_${{ github.sha }}.json
