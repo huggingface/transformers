@@ -46,7 +46,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     Note: Unlike traditional CTC tokenizers, this tokenizer does NOT perform CTC decoding
     (blank removal and repetition collapse) as this is handled by the ParakeetCTC model itself.
-    NOTE @ebezzam blank removal and repetition collapse is not handled by model so added here
+    NOTE @ebezzam blank removal and repetition collapse is not handled by model so I've added here.
 
     Args:
         vocab_file (`str`):
@@ -64,16 +64,17 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         >>> from transformers import ParakeetForCTC, ParakeetCTCTokenizer, ParakeetFeatureExtractor
         >>>
         >>> # Load model, tokenizer, and feature extractor
-        >>> model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
-        >>> tokenizer = ParakeetCTCTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
-        >>> feature_extractor = ParakeetFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>> repo_id = "bezzam/parakeet-ctc-1.1b-hf"
+        >>> model = ParakeetForCTC.from_pretrained(repo_id)
+        >>> tokenizer = ParakeetCTCTokenizer.from_pretrained(repo_id)
+        >>> feature_extractor = ParakeetFeatureExtractor.from_pretrained(repo_id)
         >>>
-        >>> # Process audio and generate token sequences (already CTC-decoded)
+        >>> # Process audio and generate token sequences (with CTC greedy decoding)
         >>> inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate)
         >>> token_sequences = model.generate(**inputs)
         >>>
-        >>> # Decode to text (no additional CTC decoding needed)
-        >>> transcription = tokenizer.decode(token_sequences[0])
+        >>> # Decode to text (blank removal and repetition collapse applied)
+        >>> transcription = tokenizer.decode_ctc(token_sequences[0])
         ```
     """
 
@@ -198,7 +199,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         # Return unknown token for unrecognized IDs
         return self.unk_token
 
-    def convert_tokens_to_string(self, tokens: list[str], group_tokens: bool = True) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """
         Converts a sequence of tokens (string) into a single string.
 
@@ -206,14 +207,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         
         Args:
             tokens: List of token strings to convert
-            group_tokens: Whether to apply CTC-style duplicate removal. True by default.
         """
-        if group_tokens:
-            # Apply CTC-style duplicate removal for real inference
-            grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
-        else:
-            # Keep all tokens for round-trip consistency (used by internal tests)
-            grouped_tokens = tokens
 
         # Filter None, blank tokens, pad_token, and unk_token
         filtered_tokens = list(
@@ -223,7 +217,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
                 and token != "<blank>"  # Filter blank special tokens
                 and token != self.pad_token 
                 and token != self.unk_token
-            ), grouped_tokens)
+            ), tokens)
         )
 
         # Join tokens and handle SentencePiece-style subwords
@@ -236,66 +230,6 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         text = re.sub(r"\s+", " ", text).strip()
 
         return text
-
-    def _decode(
-        self,
-        token_ids: Union[int, list[int]],
-        skip_special_tokens: bool = True, # TODO should be used to skip special token!
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        group_tokens: bool = False,  # Default False for round-trip consistency
-        **kwargs,
-    ) -> str:
-        """
-        Converts a sequence of ids to a string, using the tokenizer and vocabulary with options to remove special
-        tokens and clean up tokenization spaces.
-
-        Args:
-            token_ids: List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens: Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            group_tokens: Whether to apply CTC-style duplicate removal. False by default.
-        """
-
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        if len(token_ids) == 0:
-            return ""
-
-        # Convert IDs to tokens 
-        tokens = [self._convert_id_to_token(id_) for id_ in token_ids]
-        
-        # Convert tokens to string with specified grouping behavior
-        return self.convert_tokens_to_string(
-            tokens, group_tokens=group_tokens,
-        )
-
-    def batch_decode(
-        self,
-        sequences: list[list[int]],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        group_tokens: bool = True,  # Default False for round-trip consistency
-        **kwargs,
-    ) -> list[str]:
-        """
-        Convert a list of lists of token ids into a list of strings by calling decode.
-
-        Args:
-            sequences: List of tokenized input ids.
-            skip_special_tokens: Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            group_tokens: Whether to apply CTC-style duplicate removal. True by default.
-        """
-        return [
-            self._decode(
-                seq,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                group_tokens=group_tokens,
-                **kwargs,
-            )
-            for seq in sequences
-        ]
 
     def decode_ctc(
         self,
