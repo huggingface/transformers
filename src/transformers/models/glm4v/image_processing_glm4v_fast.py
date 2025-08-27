@@ -167,7 +167,9 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
                 patches = patches.unsqueeze(1)  # (B, T=1, C, H, W)
 
             if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - (patches.shape[1] % temporal_patch_size), 1, 1, 1)
+                repeats = patches[:, -1:].repeat(
+                    1, temporal_patch_size - (patches.shape[1] % temporal_patch_size), 1, 1, 1
+                )
                 patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, t_len, channel = patches.shape[:3]
@@ -218,4 +220,3 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
 
 
 __all__ = ["Glm4vImageProcessorFast"]
-
