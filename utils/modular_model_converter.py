@@ -1227,7 +1227,8 @@ class ModularFileMapper(ModuleMapper):
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(
-                    rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement
+                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*",
+                    import_statement,
                 )
                 if _import:
                     source = _import.group(1)
