@@ -562,14 +562,9 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         self.temporal_conv_size = config.temporal_conv_size
 
         # compress 2d conv(picture) to 1d
-        self.spatial_dim = self.in_dim * self.spatial_conv_size * self.spatial_conv_size
+        self.spatial_dim = self.in_dim * self.spatial_conv_size**2
         # compress 3d conv(video) to 1d
-        self.temporal_dim = (
-            self.in_dim
-            * self.spatial_conv_size
-            * self.spatial_conv_size
-            * self.temporal_conv_size
-        )
+        self.temporal_dim = self.in_dim * self.spatial_conv_size**2 * self.temporal_conv_size
 
         self.spatial_linear = nn.Sequential(
             nn.Linear(self.spatial_dim, self.spatial_dim),
