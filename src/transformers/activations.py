@@ -211,6 +211,9 @@ class XIELUActivation(nn.Module):
         self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
         self.with_vector_loads = with_vector_loads
+        # Temporary until xIELU CUDA fully implemented
+        self._beta_scalar = float(self.beta.detach().cpu().float().item())
+        self._eps_scalar = float(self.eps.detach().cpu().float().item())
 
         self._xielu_cuda_obj = None
         try:
@@ -261,8 +264,9 @@ class XIELUActivation(nn.Module):
             x,
             self.alpha_p,
             self.alpha_n,
-            self.beta.item(),
-            self.eps.item(),
+            # Temporary until xIELU CUDA fully implemented -> self.{beta,eps}.item()
+            self._beta_scalar,
+            self._eps_scalar,
             self.with_vector_loads,
         )
         return result.view(original_shape)
