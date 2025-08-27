@@ -211,6 +211,11 @@ class T5GemmaConfig(PretrainedConfig):
         # Always return self, regardless of the decoder option.
         return self
 
+    @property
+    def num_hidden_layers(self):
+        # For generation and caching purposes, use the decoder's num_hidden_layers
+        return self.decoder.num_hidden_layers
+
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
