@@ -340,6 +340,7 @@ class EsmSelfAttention(nn.Module):
         self.scaling = 1.0  # For BC we apply scaling before RoPE
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
+        self.is_causal = self.is_decoder  # used only in FA2/FA3
 
     def forward(
         self,
