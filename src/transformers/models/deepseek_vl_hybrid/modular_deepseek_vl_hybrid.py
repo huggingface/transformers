@@ -19,6 +19,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
     get_size_dict,
@@ -760,7 +761,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             high_res_background_color = (127, 127, 127)
         else:
             high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
-        DeepseekVLImageProcessorFast().__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)
 

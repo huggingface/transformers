@@ -516,6 +516,8 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         else:
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
 
+        del moe_hidden_states
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)

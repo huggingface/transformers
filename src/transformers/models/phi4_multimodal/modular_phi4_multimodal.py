@@ -1449,7 +1449,7 @@ class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
-        Phi3PreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
             module.global_img_feature_extensor.data.zero_()
             module.sub_img_feature_extensor.data.zero_()
