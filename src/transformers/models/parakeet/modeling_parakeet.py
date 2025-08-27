@@ -229,24 +229,24 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         self.padding = (self.kernel_size - 1) // 2
         self.num_layers = int(math.log2(config.subsampling_factor))
 
-        layers = [
-            nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=self.padding),
-            nn.ReLU(),
-        ]
-
+        # define layers
+        self.layers = nn.ModuleList()
+        self.layers.append(nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=self.padding))
+        self.layers.append(nn.ReLU())
         for i in range(self.num_layers - 1):
-            depthwise_conv = nn.Conv2d(
+            # depthwise conv
+            self.layers.append(nn.Conv2d(
                 self.channels,
                 self.channels,
                 kernel_size=self.kernel_size,
                 stride=self.stride,
                 padding=self.padding,
                 groups=self.channels,
-            )
-            pointwise_conv = nn.Conv2d(self.channels, self.channels, kernel_size=1)
-            layers.extend([depthwise_conv, pointwise_conv, nn.ReLU()])
-
-        self.layers = nn.Sequential(*layers)
+            ))
+            # pointwise conv
+            self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
+            # activation
+            self.layers.append(nn.ReLU())
 
         out_length = config.num_mel_bins // (self.stride**self.num_layers)
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
