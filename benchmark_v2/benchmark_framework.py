@@ -1019,7 +1019,6 @@ class BenchmarkRunner:
                 warmup_failures = 0
                 for i in range(config.warmup_iterations):
                     try:
-                        flush_memory()
                         _ = benchmark.measure_latency(config)
                     except Exception as e:
                         warmup_failures += 1
@@ -1048,9 +1047,7 @@ class BenchmarkRunner:
                 measurement_failures = 0
                 
                 for i in range(config.measurement_iterations):
-                    try:
-                        flush_memory()
-                        
+                    try:                        
                         # Measure time to first token
                         ttft = benchmark.measure_time_to_first_token(config)
                         ttft_measurements.append(ttft)
