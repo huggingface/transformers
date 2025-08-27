@@ -106,11 +106,11 @@ def find_priority_list(py_files):
 
         For example, ordered_files might be:
         [
-            ["../modular_llama.py", "../modular_gemma.py"],    # level 0
+            ["../modular_mistral.py", "../modular_gemma.py"],    # level 0
             ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
             ["../modular_glm4.py"],                            # level 2
         ]
-        which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
+        which means mistral and gemma do not depend on any other modular models, while llama4 and gemma2
         depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
     """
     dependencies = map_dependencies(py_files)
