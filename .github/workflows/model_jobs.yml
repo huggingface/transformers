@@ -126,7 +126,9 @@ jobs:
 
       - name: Uninstall FA2
         working-directory: /transformers
-        run: python3 -m pip uninstall -y flash-attn
+        run: |
+          python3 -m pip uninstall -y flash-attn
+          python3 -m pip uninstall -y accelerate && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@7c25f696b87e0f82cdb915cdba3945cce3ded0bc#egg=accelerate
 
       - name: Run all tests on GPU
         working-directory: /transformers

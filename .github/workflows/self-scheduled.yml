@@ -115,7 +115,7 @@ jobs:
       matrix:
         machine_type: [single-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-        commit: [1, 2, 3, 4, 5, 6, 7, 8]
+        commit: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
