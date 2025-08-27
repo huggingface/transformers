@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
+from ..llama.modeling_llama import eager_attention_forward
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -122,28 +123,6 @@ class ParakeetEncoderConvModule(nn.Module):
         return hidden_states.transpose(1, 2)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class ParakeetEncoderAttention(nn.Module):
     """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
 
@@ -152,6 +131,7 @@ class ParakeetEncoderAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = 1
         self.scaling = 1 / math.sqrt(self.head_dim)
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
