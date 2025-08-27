@@ -6202,7 +6202,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_cuda_warm_up_factor()
+    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {

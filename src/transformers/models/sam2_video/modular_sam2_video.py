@@ -1320,7 +1320,7 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
             padding=config.memory_fuser_padding,
             groups=config.memory_fuser_embed_dim,
         )  # depthwise conv
-        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.memory_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
             config.memory_fuser_embed_dim, config.memory_fuser_intermediate_dim
@@ -1370,7 +1370,7 @@ class Sam2VideoMaskDownSamplerLayer(nn.Module):
             stride=config.mask_downsampler_stride,
             padding=config.mask_downsampler_padding,
         )
-        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.mask_downsampler_hidden_act]
 
     def forward(self, x):
