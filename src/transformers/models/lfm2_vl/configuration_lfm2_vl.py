@@ -14,8 +14,6 @@
 # limitations under the License.
 """PyTorch LFM2-VL model."""
 
-import torch
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -97,7 +95,6 @@ class Lfm2VlConfig(PretrainedConfig):
         tile_size=512,
         max_pixels_tolerance=2.0,
         use_thumbnail=True,
-        torch_dtype=torch.bfloat16,
         **kwargs,
     ):
         self.vision_config = vision_config
@@ -118,7 +115,6 @@ class Lfm2VlConfig(PretrainedConfig):
         self.tile_size = tile_size
         self.max_pixels_tolerance = max_pixels_tolerance
         self.use_thumbnail = use_thumbnail
-        self.torch_dtype = torch_dtype
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "siglip2")
