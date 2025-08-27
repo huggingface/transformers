@@ -430,7 +430,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             self.model_tester.rope_scaling["mrope_section"] = previous_rope_scaling
             raise e
         self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-        
 
     @require_flash_attn
     @require_torch_gpu

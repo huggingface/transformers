@@ -35,8 +35,8 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
     cleanup,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -607,7 +607,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
             self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
             raise e
         self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-
 
     @require_flash_attn
     @require_torch_gpu
