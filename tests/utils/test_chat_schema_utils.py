@@ -75,7 +75,7 @@ tools_schema_with_named_groups = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "enum": ["function"]},
+                    "type": {"const": "function"},
                     "function": {
                         "type": "object",
                         "properties": {
@@ -84,8 +84,7 @@ tools_schema_with_named_groups = {
                             "parameters": {
                                 "type": "object",
                                 "properties": {
-                                    # TODO I think this schema is wrong, gotta double check first
-                                    "type": {"type": "string", "enum": ["object"]},
+                                    "type": {"const": "object"},
                                     "required": {"type": "array", "items": {"type": "string"}},
                                     "properties": {
                                         "type": "object",
@@ -123,53 +122,28 @@ cohere_schema = {
                 "properties": {
                     "type": {"const": "function"},
                     "function": {
+                        "x-parser": "python_function",
+                        "x-parser-args": {"include_return": False},
                         "type": "object",
-                        "x-scope-vars": {
-                            "argument_types": {
-                                "type": "object",
-                                "x-regex": r"def \w+\((.*?)\)(?:\:| ->)",
-                                "x-regex-to-dict": r"(?P<key>\w+)\s*:\s*(?P<value>\w+)",
-                                "additionalProperties": {
-                                    "x-parser": "python_type"
-                                }
-                            }
-                        },
                         "properties": {
-                            "name": {"type": "string", "x-regex": r"def (\w+)\("},
-                            "description": {"type": "string", "x-regex": r"\"\"\"(.*?)(?:\"\"\"|\n+\s*Args:\n)"},
+                            "name": {"type": "string"},
+                            "description": {"type": "string"},
                             "parameters": {
                                 "type": "object",
-                                "x-regex": r"\n\s*Args:\n\s*(.*?)$",
                                 "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "x-regex": r"\s*(\w+*):"
-                                    },
-                                    "description": {
-                                        "type": "string",
-                                        "x-regex": r"\s*:\s*(.*?)(?:\n\s*\w+:|$)"
-                                    },
-                                    "parameters": {
-                                        # TODO We need to build the "parameters" key here using both their docstring
-                                        #  descriptions and the "argument_types" scope
-                                        #  var, but I don't know what the syntax for that should look like.
+                                    "type": {"const": "object"},
+                                    "properties": {
                                         "type": "object",
-                                        "properties": {
-                                            "type": {"const": "object"},
-                                            "required": {"type": "array", "items": {"type": "string"}},
+                                        "additionalProperties": {
+                                            "type": "object",
                                             "properties": {
-                                                "type": "object",
-                                                "additionalProperties": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "type": {"type": "string"},
-                                                        "description": {"type": "string"},
-                                                    }
-                                                }
+                                                "type": {"type": "string"},
+                                                "description": {"type": "string"},
                                             },
-                                        }
-                                    }
-                                }
+                                        },
+                                    },
+                                    "required": {"type": "array", "items": {"type": "string"}},
+                                },
                             },
                         }
                     }
@@ -181,12 +155,79 @@ cohere_schema = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "role": {"type": "string", "enum": ["user", "assistant", "system"]},
+                    "role": {
+                        "type": "string",
+                        "enum": ["user", "assistant", "system"],
+                        "x-mapping": {"SYSTEM": "system", "USER": "user", "CHATBOT": "assistant"}
+                    },
                     "content": {"type": "string"}
                 },
                 "required": ["role", "content"]
             },
-            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|>(?P<role><\(?SYSTEM|USER|CHATBOT)_TOKEN\|>(?P<content>.*?)(?:<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
+            "x-regex": "^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
+            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|><\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\|>(?P<content>.*?)(?:<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
+            #      2) Mapping the role names like CHATBOT -> assistant with some kind of re.sub or mapping deal
+        }
+    }
+}
+
+gpt_oss_schema = {
+    "type": "object",
+    "properties": {
+        "tools": {
+            "type": "array",
+            "x-regex": "\n\nnamespace functions \{\n\n",
+            "x-regex-iterator": "type \w+ = \(_: \{\n.*?\n\}\) \=\> any;",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "description": {"type": "string"},
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"const": "object"},
+                                    "properties": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {"type": "string"},
+                                                "description": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                    "required": {"type": "array", "items": {"type": "string"}},
+                                },
+                            },
+                        }
+                    }
+                }
+            }
+        },
+        "messages": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "role": {
+                        "type": "string",
+                        "enum": ["user", "assistant", "system"],
+                        "x-mapping": {"developer": "system", "user": "user", "assistant": "assistant"}
+                    },
+                    "content": {
+                        "type": "string",
+                        "x-regex": "^(?:\# Instructions\n\n)?(.*?)(?:\n\n# Tools\n\n.*?)?$"
+                    }
+                },
+                "required": ["role", "content"]
+            },
+            "x-regex": "<\|start\|>system<\|message\|>.*?<\|end\|>(.*?)$",
+            "x-regex-iterator": "<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>)",
         }
     }
 }
@@ -239,7 +280,6 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.tokenizer.chat_template = tool_template
         formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False, tools=[tool])
         parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
-        breakpoint()  # Check we're parsing correctly and the schema is good before we send to GPT-5
         self.assertEqual(parsed_chat['messages'], chat)
         self.assertEqual(parsed_chat['tools'], [get_json_schema(tool)])
 
@@ -254,24 +294,23 @@ class ChatSchemaParserTest(unittest.TestCase):
         # Test we still extract messages
         self.assertEqual(parsed_chat['messages'], chat)
 
-    def test_horrific_template(self):
+    def test_cohere_template(self):
         def simple_tool(temperature_format: str):
             """
             Test function
 
             Args:
-                temperature_format: The temperature format to use (Choices: ["celsius", "fahrenheit"])
+                temperature_format: The temperature format to use
             """
             return -40.0
 
-        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.) -> float:
+        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.):
             """
             Test function with multiple args, and docstring args that we have to strip out.
 
             Args:
                 x: The first input. It's got a big multiline
                    description and also contains
-                   (choices: ["a", "b", "c"])
 
                 y: The second input. It's a big list with a single-line description.
 
@@ -288,6 +327,41 @@ class ChatSchemaParserTest(unittest.TestCase):
         ]
         formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use")
         parsed_chat = recursive_parse(formatted_chat, cohere_schema)
+        self.assertEqual(parsed_chat['messages'][1:], chat)  # Remove the first message because the template adds it
+        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)])
+
+    def test_gpt_oss_template(self):
+        def simple_tool(temperature_format: str):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use
+            """
+            return -40.0
+
+        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.):
+            """
+            Test function with multiple args, and docstring args that we have to strip out.
+
+            Args:
+                x: The first input. It's got a big multiline
+                   description and also contains
+
+                y: The second input. It's a big list with a single-line description.
+
+                z: The third input. It's some kind of tuple with a default arg.
+            """
+            return -40.0
+
+        tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+        chat = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there! How can I help you today?"},
+        ]
+        formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], reasoning_effort="high")
+        parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
         breakpoint()
-        self.assertEqual(parsed_chat['messages'], chat)
-        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), tool_with_everything_all_at_once])
+        self.assertEqual(parsed_chat['messages'][1:], chat)  # Remove the first message because the template adds it
+        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)])
