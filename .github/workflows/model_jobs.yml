@@ -128,5 +128,5 @@ jobs:
         working-directory: /transformers
         run: |
           free -g
-          git checkout ${{ inputs.commit }}
+          git checkout 2c55c7fc
           python3 -m pytest -v tests/models/qwen2_moe/test_modeling_qwen2_moe.py::Qwen2MoeIntegrationTest
