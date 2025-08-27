@@ -1,4 +1,5 @@
-# Copyright (c) 2025 Baidu, Inc. All Rights Reserved.
+# coding=utf-8
+# Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""Ernie model configuration"""
-from transformers import PretrainedConfig
+"""Ernie4.5-VL model configuration"""
 
 from ...modeling_rope_utils import rope_config_validation
+from ...modeling_utils import PretrainedConfig
 
 
 class Ernie4_5_VLVisionConfig(PretrainedConfig):
@@ -92,6 +92,8 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         freq_allocation=20,
         rope_scaling=None,
         initializer_range=0.02,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -115,11 +117,13 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.freq_allocation = freq_allocation
+        self.initializer_range = initializer_range
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.rope_scaling = rope_scaling
         if rope_scaling is None:
             self.rope_scaling = {"rope_type": "ernie_3d", "freq_allocation": freq_allocation}
         rope_config_validation(self)
-        self.initializer_range = initializer_range
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

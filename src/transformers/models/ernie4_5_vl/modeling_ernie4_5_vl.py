@@ -1270,7 +1270,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ):
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else None  # self.config.output_router_logits
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
 
         outputs = self.model(
