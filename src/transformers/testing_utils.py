@@ -49,7 +49,11 @@ import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
 
-from transformers import Trainer
+
+try:
+    from transformers import Trainer
+except ModuleNotFoundError:
+    Trainer = None
 from transformers import logging as transformers_logging
 
 from .integrations import (
