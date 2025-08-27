@@ -69,7 +69,7 @@ output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/main/en/quantization#bitsandbytes) to quantize the model to 4-bits, making it runnable on consumer GPUs.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bits.
 
 ```python
 import torch
