@@ -657,7 +657,10 @@ def create_hf_model(
                 shape_mismatches += 1
 
     model.load_state_dict(updated_state_dict, strict=False)
-    logger.info(f"Loaded {matched_params}/{len(model_state_dict)} model parameters")
+    if matched_params != len(model_state_dict):
+        raise ValueError(f"Missing parameters when copying! {matched_params}/{len(model_state_dict)} parameters were copied.")
+    else:
+        logger.info(f"Loaded {matched_params}/{len(model_state_dict)} model parameters")
     if shape_mismatches > 0:
         logger.warning(f"Found {shape_mismatches} shape mismatches")
 
