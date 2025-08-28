@@ -129,6 +129,7 @@ jobs:
       runner_map: ${{ needs.setup.outputs.runner_map }}
       docker: ${{ inputs.docker }}
       commit_sha: ${{ inputs.commit_sha || github.sha }}
+      runner_type: ${{ inputs.runner_type }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -547,16 +548,4 @@ jobs:
       ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
 
-    secrets: inherit
-
-  collated_reports:
-    name: Collated Reports
-    if: ${{ always() }}
-    needs: run_models_gpu
-    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
-    with:
-      job: run_models_gpu
-      report_repo_id: ${{ inputs.report_repo_id }}
-      gpu_name: ${{ inputs.runner_type }}
-      machine_type: ${{ matrix.machine_type }}
     secrets: inherit
