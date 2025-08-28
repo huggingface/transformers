@@ -730,7 +730,6 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 constraints=constraints,
                 beam_kwargs=beam_kwargs,
-                trust_remote_code=True,
             )
 
             if model.config.get_text_config(decoder=True).is_encoder_decoder:
@@ -755,7 +754,6 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 constraints=constraints,
                 beam_kwargs=beam_kwargs,
-                trust_remote_code=True,
             )
 
             if model.config.get_text_config(decoder=True).is_encoder_decoder:
@@ -795,7 +793,6 @@ class GenerationTesterMixin:
                 output_hidden_states=True,
                 output_attentions=self.has_attentions,
                 return_dict_in_generate=True,
-                trust_remote_code=True,
                 use_cache=False,
             )
 
