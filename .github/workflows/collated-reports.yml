@@ -35,15 +35,9 @@ jobs:
         run: |
           pip install huggingface_hub
           python3 utils/collated_reports.py                  \
-            --path /transformers/reports/                    \
+            --path .                                         \
             --machine-type ${{ inputs.machine_type }}        \
             --commit-hash ${{ env.CI_SHA }}                  \
             --job ${{ inputs.job }}                          \
             --report-repo-id ${{ inputs.report_repo_id }}    \
             --gpu-name ${{ inputs.gpu_name }}
-
-      - name: Upload collated reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: collated_reports_${{ env.CI_SHA }}.json
-          path: collated_reports_${{ env.CI_SHA }}.json

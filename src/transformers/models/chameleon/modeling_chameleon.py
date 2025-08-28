@@ -961,7 +961,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1043,12 +1043,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)

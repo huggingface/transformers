@@ -841,7 +841,7 @@ class GPT2Model(GPT2PreTrainedModel):
         # based on pattern from src/transformers/models/whisper/modeling_whisper.py::WhisperDecoder
         if use_cache:
             if past_key_values is None:
-                past_key_values = DynamicCache()
+                past_key_values = DynamicCache(config=self.config)
             elif isinstance(past_key_values, tuple):
                 logger.warning_once(
                     "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.53.0. "
@@ -851,7 +851,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
             if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)

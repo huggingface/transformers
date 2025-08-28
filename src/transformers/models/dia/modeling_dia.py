@@ -727,9 +727,6 @@ class DiaModel(DiaPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -788,7 +785,7 @@ class DiaModel(DiaPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

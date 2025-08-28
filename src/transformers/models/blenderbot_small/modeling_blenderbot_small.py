@@ -986,9 +986,9 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(), DynamicCache())
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None
-                else DynamicCache()
+                else DynamicCache(config=self.config)
             )
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
@@ -1126,9 +1126,6 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(

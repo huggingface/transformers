@@ -522,7 +522,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -678,9 +678,6 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     # Ignore copy
@@ -1369,9 +1366,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         # get the text encoder to compute the conditioning hidden-states for generation
         return self.get_text_encoder()
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()

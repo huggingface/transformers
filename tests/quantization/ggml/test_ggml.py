@@ -279,7 +279,7 @@ class GgufModelTests(unittest.TestCase):
     falcon7b_model_id_fp16 = "medmekk/falcon-7b-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
-    t5_model_id = "repetitio/flan-t5-small"
+    t5_model_id = "Felladrin/gguf-flan-t5-small"
     original_t5_model_id = "google/flan-t5-small"
     stablelm_model_id = "afrideva/stablelm-3b-4e1t-GGUF"
     stablelm2_model_id = "afrideva/stablelm-2-1_6b-GGUF"
@@ -317,8 +317,8 @@ class GgufModelTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
-    fp16_t5_model_id = "flan-t5-small-f16.gguf"
-    q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
+    fp16_t5_model_id = "flan-t5-small.F16.gguf"
+    q8_0_t5_model_id = "flan-t5-small.Q8_0.gguf"
     fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
     fp16_gpt2_model_id = "gpt2.f16.gguf"
     q8_gpt2_model_id = "gpt2.Q8_0.gguf"
@@ -335,6 +335,10 @@ class GgufModelTests(unittest.TestCase):
     q4_0_gemma3_qat_model_id = "gemma-3-1b-it-q4_0.gguf"
     bf16_gemma3_text_model_id = "gemma-3-1b-it-BF16.gguf"
     bf16_gemma3_vision_model_id = "gemma-3-4b-it-BF16.gguf"
+    deci_original_model_id = "Deci/DeciLM-7B"
+    deci_model_id = "Deci/DeciLM-7B-instruct-GGUF"
+    q8_0_deci_model_id = "decilm-7b-uniform-gqa-q8_0.gguf"
+    fp16_deci_model_id = "decilm-7b-uniform-gqa-f16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
 
@@ -821,8 +825,8 @@ class GgufModelTests(unittest.TestCase):
             gguf_file=self.q6_k_nemotron_model_id,
             dtype=torch.float16,
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
+        # use the original tokenizer from nvidia to avoid long load times
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-Mini-4B-Instruct")
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=16)
 
@@ -948,6 +952,50 @@ class GgufModelTests(unittest.TestCase):
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
             dtype=torch.float16,
+        ).model
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_deci_q8_0(self):
+        """Test Deci model loading and inference with Q4_0 quantization."""
+        tokenizer = AutoTokenizer.from_pretrained(self.deci_model_id, gguf_file=self.q8_0_deci_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.deci_model_id,
+            gguf_file=self.q8_0_deci_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I am a language model developed"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_deci_weights_conversion_fp16(self):
+        """Test that GGUF Deci model weights match the original model weights."""
+        original_model_id = "Deci/DeciLM-7B"
+        original_model = AutoModelForCausalLM.from_pretrained(
+            original_model_id,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+            device_map="auto",
+        )
+        # You need to have an FP16 version of your GGUF model for accurate comparison
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.deci_model_id,
+            gguf_file=self.fp16_deci_model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -959,6 +1007,41 @@ class GgufModelTests(unittest.TestCase):
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_deci_config_mapping(self):
+        """Test that Deci GGUF config mapping is correctly applied."""
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        self.assertIn("deci", GGUF_CONFIG_MAPPING)
+
+        deci_mapping = GGUF_CONFIG_MAPPING["deci"]
+
+        expected_mappings = {
+            "context_length": "max_position_embeddings",
+            "block_count": "num_hidden_layers",
+            "feed_forward_length": "intermediate_size",
+            "embedding_length": "hidden_size",
+            "rope.freq_base": "rope_theta",
+            "attention.head_count": "num_attention_heads",
+            "attention.head_count_kv": "num_key_value_heads",
+            "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+            "vocab_size": "vocab_size",
+        }
+
+        for gguf_key, transformers_key in expected_mappings.items():
+            self.assertEqual(deci_mapping[gguf_key], transformers_key)
+
+        self.assertIsNone(deci_mapping["rope.dimension_count"])
+
+    def test_deci_architecture_mapping(self):
+        """Test that Deci architectures are mapped to GGUFLlamaConverter."""
+        from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFLlamaConverter
+
+        self.assertIn("deci", GGUF_TO_FAST_CONVERTERS)
+        self.assertIn("decilm", GGUF_TO_FAST_CONVERTERS)
+
+        self.assertEqual(GGUF_TO_FAST_CONVERTERS["deci"], GGUFLlamaConverter)
+        self.assertEqual(GGUF_TO_FAST_CONVERTERS["decilm"], GGUFLlamaConverter)
 
     @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")

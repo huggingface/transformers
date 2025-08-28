@@ -606,7 +606,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(),
+            past_key_values=DynamicCache(config=model.config),
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
@@ -622,7 +622,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             ),
         )
 
-        past_key_values_eager = DynamicCache()
+        past_key_values_eager = DynamicCache(config=model.config)
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -654,7 +654,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(),
+            past_key_values=DynamicCache(config=model.config),
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
@@ -673,7 +673,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(),
+            past_key_values=DynamicCache(config=model.config),
             use_cache=True,
         )
         past_key_values_eager = res_eager.past_key_values

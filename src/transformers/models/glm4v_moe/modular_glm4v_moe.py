@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -48,7 +49,7 @@ class Glm4vMoeVisionConfig(Glm4vVisionConfig):
     pass
 
 
-class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
+class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -77,7 +78,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 65536):
@@ -197,10 +198,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
         norm_topk_prob=True,
         **kwargs,
     ):
-        nn.Module().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PretrainedConfig.__init__(self, tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

@@ -745,9 +745,11 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         if self.is_decoder:
             if use_cache and past_key_values is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                    past_key_values = EncoderDecoderCache(
+                        DynamicCache(config=self.config), DynamicCache(config=self.config)
+                    )
                 else:
-                    past_key_values = DynamicCache()
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -1048,9 +1050,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_mel_conditioner_outputs(
         self,

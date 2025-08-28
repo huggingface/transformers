@@ -1070,7 +1070,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -1187,9 +1187,6 @@ class ClvpModel(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.input_embeds_layer = value
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1260,8 +1257,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         self.post_init()
 
     def get_output_embeddings(self):
-        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
-        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
         return None
 
     def get_input_embeddings(self):
