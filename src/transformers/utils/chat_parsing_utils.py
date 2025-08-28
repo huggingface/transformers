@@ -1,12 +1,14 @@
-import re
 import ast
 import json
-from .chat_template_utils import _parse_type_hint, parse_google_format_docstring
+import re
 
 # Next line only used because eval might grab them. Can be removed once we have something better than eval
 from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: F401
 
-def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_vars: dict = None):
+from .chat_template_utils import _parse_type_hint, parse_google_format_docstring
+
+
+def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_vars: dict | None = None):
     """
     This function takes content and a JSON schema node which includes
     regex extractors, and recursively parses the content according to the schema. It uses recursion to handle
@@ -23,6 +25,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
     Returns:
         The parsed data structure for the current node.
     """
+
     def _parse_re_match(node_match):
         # If the regex has named groups, return a dict of those groups
         if node_match.groupdict():
@@ -30,13 +33,12 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         # If the regex has unnamed groups, it MUST only have one, and we return that group
         elif groups := list(node_match.groups()):
             if len(groups) > 1:
-                raise ValueError(f"Regex has multiple unnamed groups!\n"
-                                 f"Groups: {groups}\n"
-                                 )
+                raise ValueError(f"Regex has multiple unnamed groups!\nGroups: {groups}\n")
             return groups[0]
         # If no groups, use the whole match
         else:
             return node_match.group(0)
+
     # If the schema has a const, we just return that value and do absolutely nothing else
     if "const" in node_schema:
         return node_schema["const"]
@@ -50,8 +52,9 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         if scope_vars is None:
             scope_vars = {}
         # Make sure we create a new dict so we don't accidentally send modifications up the tree
-        scope_vars = scope_vars | {key: recursive_parse(node_content, value, scope_vars)
-                          for key, value in node_schema["x-scope-vars"].items()}
+        scope_vars = scope_vars | {
+            key: recursive_parse(node_content, value, scope_vars) for key, value in node_schema["x-scope-vars"].items()
+        }
 
     # Next, if the node has a parser we can just use that and ignore everything else.
     if "x-parser" in node_schema:
@@ -60,8 +63,9 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
             try:
                 node_content = json.loads(node_content)
             except json.JSONDecodeError as e:
-                raise ValueError(f"Node has JSON parser but could not parse its contents as JSON: {node_content}\n"
-                                 f"Error: {e}")
+                raise ValueError(
+                    f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
+                )
         elif parser == "python_type":
             # TODO eval is obviously enormously insecure and only used for prototyping here
             #      make a safer parser before merging
@@ -75,19 +79,20 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         else:
             raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
 
-
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema["type"]
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-to-dict" in node_schema
     if not has_regex and isinstance(node_content, str) and node_type == "array":
-        raise TypeError(f"array node got a string input, but has no parser or regex.\n"
-                        f"Input: {node_content}\n",
-                        f"Schema: {node_schema}")
+        raise TypeError(
+            f"array node got a string input, but has no parser or regex.\nInput: {node_content}\n",
+            f"Schema: {node_schema}",
+        )
     if has_regex and not isinstance(node_content, str):
-        raise TypeError("Schema node got a non-string input, but has a regex for parsing.\n"
-                        f"Input: {node_content}\n"
-                        f"Schema: {node_schema}")
-
+        raise TypeError(
+            "Schema node got a non-string input, but has a regex for parsing.\n"
+            f"Input: {node_content}\n"
+            f"Schema: {node_schema}"
+        )
 
     node_regex = node_schema.get("x-regex")
     node_regex_iterator = node_schema.get("x-regex-iterator")
@@ -99,27 +104,32 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         node_content = _parse_re_match(node_match)
     if node_regex_iterator is not None:
         if node_type != "array":
-            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-iterator.\n"
-                            f"Schema: {node_schema}")
+            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-iterator.\nSchema: {node_schema}")
         # Note that this can be applied after a standard node-regex search
-        node_content = [_parse_re_match(node_match) for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)]
+        node_content = [
+            _parse_re_match(node_match)
+            for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)
+        ]
         if not node_content:
             return None  # TODO Is this correct? Should I raise an error?
     if node_regex_to_dict is not None:
         if node_type != "object":
-            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-to-dict.\n"
-                            f"Schema: {node_schema}")
+            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-to-dict.\nSchema: {node_schema}")
         # Note that this can be applied after a standard node-regex search
         output_content = {}
         for node_match in re.finditer(node_regex_to_dict, node_content, flags=re.DOTALL):
             if not (match_keys := node_match.groupdict()):
-                raise ValueError(f"Regex for x-regex-to-dict must return groups named \"key\" and \"value\".\n"
-                                 f"Regex: {node_regex_to_dict}\n"
-                                 f"Match: {node_match.group(0)}\n")
+                raise ValueError(
+                    f'Regex for x-regex-to-dict must return groups named "key" and "value".\n'
+                    f"Regex: {node_regex_to_dict}\n"
+                    f"Match: {node_match.group(0)}\n"
+                )
             if not set(match_keys.keys()) == {"key", "value"}:
-                raise ValueError(f"Regex for x-regex-to-dict must return groups named \"key\" and \"value\".\n"
-                                 f"Regex: {node_regex_to_dict}\n"
-                                 f"Match: {node_match.group(0)}\n")
+                raise ValueError(
+                    f'Regex for x-regex-to-dict must return groups named "key" and "value".\n'
+                    f"Regex: {node_regex_to_dict}\n"
+                    f"Match: {node_match.group(0)}\n"
+                )
             output_content[match_keys["key"]] = match_keys["value"]
         node_content = output_content
         if not node_content:
@@ -128,16 +138,18 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
     # If there's a mapping, apply it now
     if "x-mapping" in node_schema:
         if not isinstance(node_content, str):
-            raise TypeError(f"Schema node with type {node_type} cannot use x-mapping on non-string content.\n"
-                            f"Content: {node_content}\n"
-                            f"Schema: {node_schema}")
+            raise TypeError(
+                f"Schema node with type {node_type} cannot use x-mapping on non-string content.\n"
+                f"Content: {node_content}\n"
+                f"Schema: {node_schema}"
+            )
         mapping = node_schema["x-mapping"]
         if node_content in mapping:
             node_content = mapping[node_content]
         else:
-            raise ValueError(f"Value {node_content} not found in x-mapping.\n"
-                             f"Mapping: {mapping}\n"
-                             f"Schema: {node_schema}")
+            raise ValueError(
+                f"Value {node_content} not found in x-mapping.\nMapping: {mapping}\nSchema: {node_schema}"
+            )
 
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
@@ -148,9 +160,11 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
             # This means we don't have a regex at this level, so all of our child nodes need to parse the whole
             # string themselves to extract their value.
             if "properties" not in node_schema:
-                raise ValueError(f"Object node received string content but has no regex or parser to handle it.\n"
-                                 f"Content: {node_content}\n"
-                                 f"Schema: {node_schema}")
+                raise ValueError(
+                    f"Object node received string content but has no regex or parser to handle it.\n"
+                    f"Content: {node_content}\n"
+                    f"Schema: {node_schema}"
+                )
             for key, child_node in node_schema["properties"].items():
                 parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key], scope_vars)
             return parsed_schema
@@ -199,7 +213,6 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
 
 
-
 def _extract_args_and_docstring_from_function_text(function_text: str, include_return: bool = True) -> dict:
     tree = ast.parse(function_text)
     func = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)), None)
@@ -230,18 +243,11 @@ def _extract_args_and_docstring_from_function_text(function_text: str, include_r
     else:
         return_type = None
 
-    parameters_dict = {
-        "type": "object",
-        "properties": args_dict
-    }
+    parameters_dict = {"type": "object", "properties": args_dict}
     if required_args:
         parameters_dict["required"] = required_args
 
-    out = {
-            "name": func.name,
-            "description": description,
-            "parameters": parameters_dict
-        }
+    out = {"name": func.name, "description": description, "parameters": parameters_dict}
     if include_return and (return_type or return_description):
         returns = {}
         if return_type:

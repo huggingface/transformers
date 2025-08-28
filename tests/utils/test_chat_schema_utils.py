@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+
+from transformers import AutoTokenizer
 from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.chat_template_utils import get_json_schema
-from transformers import AutoTokenizer
-from typing import Optional, Union
 
-import unittest
 
 basic_template = """
 {%- for message in messages %}
@@ -47,9 +47,9 @@ basic_schema = {
         "type": "object",
         "properties": {
             "role": {"type": "string", "x-regex": r"<\|im_start\|>(.*?)\n"},
-            "content": {"type": "string", "x-regex": r"<\|im_start\|>.*?\n(.*?)<\|im_end\|>\n"}
+            "content": {"type": "string", "x-regex": r"<\|im_start\|>.*?\n(.*?)<\|im_end\|>\n"},
         },
-        "required": ["role", "content"]
+        "required": ["role", "content"],
     },
     "x-regex-iterator": r"\<\|im_start\|\>.*?\<\|im_end\|\>\n",
 }
@@ -58,11 +58,8 @@ basic_schema_with_named_groups = {
     "type": "array",
     "items": {
         "type": "object",
-        "properties": {
-            "role": {"type": "string"},
-            "content": {"type": "string"}
-        },
-        "required": ["role", "content"]
+        "properties": {"role": {"type": "string"}, "content": {"type": "string"}},
+        "required": ["role", "content"],
     },
     "x-regex-iterator": r"<\|im_start\|>(?P<role>.*?)\n(?P<content>.*?)<\|im_end\|>\n",
 }
@@ -91,21 +88,21 @@ tools_schema_with_named_groups = {
                                         "additionalProperties": {
                                             "type": "object",
                                             "properties": {
-                                                    "type": {"type": "string"},
-                                                    "description": {"type": "string"},
-                                                    "enum": {"type": "array", "items": {"type": "string"}},
-                                            }
-                                        }
+                                                "type": {"type": "string"},
+                                                "description": {"type": "string"},
+                                                "enum": {"type": "array", "items": {"type": "string"}},
+                                            },
+                                        },
                                     },
-                                }
-                            }
-                        }
-                    }
+                                },
+                            },
+                        },
+                    },
                 },
             },
             "x-parser": "json",
         },
-        "messages": basic_schema_with_named_groups
+        "messages": basic_schema_with_named_groups,
     },
     "x-regex": r"(?:<\|tools\|>\n(?P<tools>.*?)\n<\|endtools\|>\n)?(?P<messages>.*)",
 }
@@ -145,10 +142,10 @@ cohere_schema = {
                                     "required": {"type": "array", "items": {"type": "string"}},
                                 },
                             },
-                        }
-                    }
-                }
-            }
+                        },
+                    },
+                },
+            },
         },
         "messages": {
             "type": "array",
@@ -158,17 +155,17 @@ cohere_schema = {
                     "role": {
                         "type": "string",
                         "enum": ["user", "assistant", "system"],
-                        "x-mapping": {"SYSTEM": "system", "USER": "user", "CHATBOT": "assistant"}
+                        "x-mapping": {"SYSTEM": "system", "USER": "user", "CHATBOT": "assistant"},
                     },
-                    "content": {"type": "string"}
+                    "content": {"type": "string"},
                 },
-                "required": ["role", "content"]
+                "required": ["role", "content"],
             },
-            "x-regex": "^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
-            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|><\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\|>(?P<content>.*?)(?:<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
+            "x-regex": r"^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
+            "x-regex-iterator": "<\\|START_OF_TURN_TOKEN\\|><\\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\\|>(?P<content>.*?)(?:<\\|END_OF_TURN_TOKEN\\|>|\n\n## Available Tools)",
             #      2) Mapping the role names like CHATBOT -> assistant with some kind of re.sub or mapping deal
-        }
-    }
+        },
+    },
 }
 
 gpt_oss_schema = {
@@ -177,7 +174,7 @@ gpt_oss_schema = {
     "properties": {
         "tools": {
             "type": "array",
-            "x-regex": "\n\nnamespace functions \{\n\n(.*?)\} \/\/ namespace functions<\|end\|>",
+            "x-regex": "\n\nnamespace functions \\{\n\n(.*?)\\} \\/\\/ namespace functions<\\|end\\|>",
             "x-regex-iterator": r"\/\/ .*?type \w+ = \(_: \{\n.*?\n\}\) \=\> any;",
             "items": {
                 "type": "object",
@@ -199,18 +196,22 @@ gpt_oss_schema = {
                                         "additionalProperties": {
                                             "type": "object",
                                             "properties": {
-                                                "type": {"type": "string", "x-regex": r": (.*?),$" },
-                                                "description": {"type": "string", "x-regex": r"^\/\/ (.*?)\n" },
+                                                "type": {"type": "string", "x-regex": r": (.*?),$"},
+                                                "description": {"type": "string", "x-regex": r"^\/\/ (.*?)\n"},
                                             },
                                         },
                                     },
-                                    "required": {"type": "array", "items": {"type": "string"}, "x-regex-iterator": r"\n([^?\n]+?):"},
+                                    "required": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "x-regex-iterator": r"\n([^?\n]+?):",
+                                    },
                                 },
                             },
-                        }
-                    }
-                }
-            }
+                        },
+                    },
+                },
+            },
         },
         "messages": {
             "type": "array",
@@ -220,20 +221,21 @@ gpt_oss_schema = {
                     "role": {
                         "type": "string",
                         "enum": ["user", "assistant", "system"],
-                        "x-mapping": {"developer": "system", "user": "user", "assistant": "assistant"}
+                        "x-mapping": {"developer": "system", "user": "user", "assistant": "assistant"},
                     },
                     "content": {
                         "type": "string",
-                        "x-regex": "^(?:\# Instructions\n\n)?(.*?)(?:\n\n# Tools\n\n.*?)?$"
-                    }
+                        "x-regex": "^(?:\\# Instructions\n\n)?(.*?)(?:\n\n# Tools\n\n.*?)?$",
+                    },
                 },
-                "required": ["role", "content"]
+                "required": ["role", "content"],
             },
-            "x-regex": "<\|start\|>system<\|message\|>.*?<\|end\|>(.*?)$",
-            "x-regex-iterator": "<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>)",
-        }
-    }
+            "x-regex": r"<\|start\|>system<\|message\|>.*?<\|end\|>(.*?)$",
+            "x-regex-iterator": r"<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>)",
+        },
+    },
 }
+
 
 class ChatSchemaParserTest(unittest.TestCase):
     def setUp(self):
@@ -283,8 +285,8 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.tokenizer.chat_template = tool_template
         formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False, tools=[tool])
         parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
-        self.assertEqual(parsed_chat['messages'], chat)
-        self.assertEqual(parsed_chat['tools'], [get_json_schema(tool)])
+        self.assertEqual(parsed_chat["messages"], chat)
+        self.assertEqual(parsed_chat["tools"], [get_json_schema(tool)])
 
     def test_tool_template_with_no_tools(self):
         chat = [
@@ -295,7 +297,7 @@ class ChatSchemaParserTest(unittest.TestCase):
         formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
         parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
         # Test we still extract messages
-        self.assertEqual(parsed_chat['messages'], chat)
+        self.assertEqual(parsed_chat["messages"], chat)
 
     def test_cohere_template(self):
         def simple_tool(temperature_format: str):
@@ -307,7 +309,7 @@ class ChatSchemaParserTest(unittest.TestCase):
             """
             return -40.0
 
-        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.):
+        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.0):
             """
             Test function with multiple args, and docstring args that we have to strip out.
 
@@ -328,10 +330,14 @@ class ChatSchemaParserTest(unittest.TestCase):
             {"role": "user", "content": "Hello!"},
             {"role": "assistant", "content": "Hi there! How can I help you today?"},
         ]
-        formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use")
+        formatted_chat = tokenizer.apply_chat_template(
+            chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use"
+        )
         parsed_chat = recursive_parse(formatted_chat, cohere_schema)
-        self.assertEqual(parsed_chat['messages'][1:], chat)  # Remove the first message because the template adds it
-        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)])
+        self.assertEqual(parsed_chat["messages"][1:], chat)  # Remove the first message because the template adds it
+        self.assertEqual(
+            parsed_chat["tools"], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)]
+        )
 
     def test_gpt_oss_template(self):
         def simple_tool(temperature_format: str):
@@ -343,7 +349,7 @@ class ChatSchemaParserTest(unittest.TestCase):
             """
             return -40.0
 
-        def tool_with_everything_all_at_once(x_1: str, y_2: int, z_3: float = 43.):
+        def tool_with_everything_all_at_once(x_1: str, y_2: int, z_3: float = 43.0):
             """
             Test function with multiple args, and docstring args that we have to strip out.
 
@@ -363,10 +369,14 @@ class ChatSchemaParserTest(unittest.TestCase):
             {"role": "user", "content": "Hello!"},
             {"role": "assistant", "content": "Hi there! How can I help you today?"},
         ]
-        formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], reasoning_effort="high")
+        formatted_chat = tokenizer.apply_chat_template(
+            chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], reasoning_effort="high"
+        )
         parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
-        self.assertEqual(parsed_chat['messages'], chat)
-        self.assertEqual(parsed_chat['tools'][0], get_json_schema(simple_tool))
+        self.assertEqual(parsed_chat["messages"], chat)
+        self.assertEqual(parsed_chat["tools"][0], get_json_schema(simple_tool))
         complex_schema = get_json_schema(tool_with_everything_all_at_once)
-        complex_schema['function']['parameters']['properties']['y_2']['type'] = 'number'  # The GPT template maps these all to 'number' so we can't recover int vs float
-        self.assertEqual(parsed_chat['tools'][1], complex_schema)
+        complex_schema["function"]["parameters"]["properties"]["y_2"]["type"] = (
+            "number"  # The GPT template maps these all to 'number' so we can't recover int vs float
+        )
+        self.assertEqual(parsed_chat["tools"][1], complex_schema)
