@@ -2565,22 +2565,23 @@ class GenerationMixin(ContinuousMixin):
 
         elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
             logger.warning_once(
-                "Constrained Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
-                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+                "Constrained Beam Search was moved to a `custom_generate` repository: https://hf.co/transformers-community/constrained-beam-search. "
+                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/constrained-beam-search'` "
+                "to your `generate` call before v4.62.0."
             )
-
-            # 11. prepare beam search scorer
-
-            # # 12. run beam search
-            # result = self._constrained_beam_search(
-            #     input_ids,
-            #     constrained_beam_scorer=constrained_beam_scorer,
-            #     logits_processor=prepared_logits_processor,
-            #     stopping_criteria=prepared_stopping_criteria,
-            #     generation_config=generation_config,
-            #     synced_gpus=synced_gpus,
-            #     **model_kwargs,
-            # )
+            if not trust_remote_code:
+                raise ValueError(
+                    "Constrained Beam Search requires `trust_remote_code=True` in your `generate` call, since "
+                    "it loads https://hf.co/transformers-community/constrained-beam-search."
+                )
+            return GenerationMixin.generate(
+                self,
+                inputs,
+                custom_generate="transformers-community/constrained-beam-search",
+                generation_config=generation_config,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
 
         # Convert to legacy cache format if requested
         if (
