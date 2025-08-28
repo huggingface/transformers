@@ -21,6 +21,7 @@ import torch
 from einops import rearrange
 
 from transformers import (
+    AutoConfig,
     AutoModel,
     AutoTokenizer,
     GenerationConfig,
@@ -219,8 +220,7 @@ def get_lm_type(path: str) -> Literal["qwen2", "qwen3", "qwen3_moe", "gpt_oss", 
     Determine the type of language model based on a given model path.
     """
     if path not in LM_TYPE_CORRESPONDENCE:
-        base_config = AutoModel.from_pretrained(path, trust_remote_code=True).config
-
+        base_config = AutoConfig.from_pretrained(path, trust_remote_code=True)
         lm_arch = base_config.llm_config.architectures[0]
 
         if lm_arch == "InternLM2ForCausalLM":
@@ -316,7 +316,7 @@ def get_internvl_config(input_base_path):
         image_token_id = 151667
         language_config_class = Qwen3MoeConfig
     elif lm_type == "gpt_oss":
-        image_token_id = 151667
+        image_token_id = 200021
         language_config_class = GptOssConfig
     else:
         image_token_id = 92546
@@ -473,7 +473,7 @@ def write_tokenizer(
     save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
 ):
     lm_type = get_lm_type(path)
-    if lm_type in ("qwen2", "qwen3", "qwen3_moe", "gpt_oss"):
+    if lm_type in ("qwen2", "qwen3", "qwen3_moe"):
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
             return_token_type_ids=False,
@@ -501,6 +501,18 @@ def write_tokenizer(
             },
             replace_additional_special_tokens=False,
         )
+    elif lm_type == "gpt_oss":
+        tokenizer = AutoTokenizer.from_pretrained(
+            path,
+            return_token_type_ids=False,
+            extra_special_tokens={
+                "start_image_token": "<img>",
+                "end_image_token": "</img>",
+                "context_image_token": "<IMG_CONTEXT>",
+                "video_token": "<video>",
+            },
+        )
+        tokenizer.model_max_length = CONTEXT_LENGTH
     else:
         # Obtained with:
         # tokenizer_llama_fast = LlamaTokenizerFast.from_pretrained(
