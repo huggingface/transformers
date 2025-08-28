@@ -360,7 +360,7 @@ class GemmaRMSNorm(nn.Module):
 
 class GemmaMLP(LlamaMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)

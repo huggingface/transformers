@@ -65,7 +65,7 @@ logger = logging.get_logger(__name__)
 
 class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         # remove the position_ids in EsmEmbeddings
         self.position_ids = None
 
@@ -127,7 +127,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         )
 
 
-class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
+class EvollaSaProtSelfAttention(EsmSelfAttention):
     def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         nn.Module.__init__(self)
         self.config = config
