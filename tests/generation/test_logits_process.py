@@ -12,25 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import unittest
 from typing import Union
 
 import numpy as np
 from parameterized import parameterized
 
-import unittest
-import json
 import torch
-from transformers.generation.logits_processor_base import LogitsProcessor, LogitsProcessorList
+from transformers import is_torch_available
+from transformers.generation.configuration_utils import GenerationConfig
 from transformers.generation.logits_process import (
-    LogitProcessorRegistry,
     ConfigurableLogitsProcessorList,
+    LogitProcessorRegistry,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
 )
-from transformers.generation.configuration_utils import GenerationConfig
-
-from transformers import is_torch_available
+from transformers.generation.logits_processor_base import LogitsProcessorList
 from transformers.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor

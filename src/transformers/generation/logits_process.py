@@ -14,15 +14,13 @@
 # limitations under the License.
 
 import inspect
+import json
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import numpy as np
 import torch
-
-import json
-from typing import Dict, List, Union, Any, Optional
 
 from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
@@ -3244,17 +3242,16 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 class LogitProcessorRegistry:
-    """Registry for LogitProcessor classes to enable configuration-based instantiation
-    with external classes."""
-    
+    """Registry for LogitProcessor classes to enable configuration-based instantiation with external classes."""
+
     _registry = {}
-    
+
     @classmethod
     def register(cls, processor_class: type):
         """Register a LogitProcessor class."""
         cls._registry[processor_class.__name__] = processor_class
         return processor_class
-    
+
     @classmethod
     def get_processor_class(cls, name: str) -> type:
         """Get a LogitProcessor class by name."""
@@ -3269,24 +3266,24 @@ class LogitProcessorRegistry:
                     return processor_class
             raise ValueError(f"LogitProcessor '{name}' not found in registry. Available: {list(cls._registry.keys())}")
         return cls._registry[name]
-    
+
     @classmethod
-    def list_processors(cls) -> List[str]:
+    def list_processors(cls) -> list[str]:
         """List all registered processor names."""
         return list(cls._registry.keys())
-    
+
     @classmethod
-    def create_processor(cls, config: Dict[str, Any]) -> LogitsProcessor:
+    def create_processor(cls, config: dict[str, Any]) -> LogitsProcessor:
         """Create a LogitProcessor instance from configuration."""
         if "type" not in config:
             raise ValueError("LogitProcessor config must contain 'type' field")
-        
+
         processor_type = config["type"]
         processor_class = cls.get_processor_class(processor_type)
-        
+
         # Extract arguments (everything except 'type')
         args = {k: v for k, v in config.items() if k != "type"}
-        
+
         try:
             return processor_class(**args)
         except TypeError as e:
@@ -3354,37 +3351,37 @@ class ConfigurableLogitsProcessorList(LogitsProcessorList):
     """
     
     @classmethod
-    def from_config(cls, config: Union[str, List[Dict[str, Any]]]) -> 'ConfigurableLogitsProcessorList':
+    def from_config(cls, config: Union[str, list[dict[str, Any]]]) -> "ConfigurableLogitsProcessorList":
         """Create LogitsProcessorList from JSON config or list of dicts."""
         if isinstance(config, str):
             try:
                 config = json.loads(config)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in logit_processors config: {e}")
-        
+
         if not isinstance(config, list):
             raise ValueError("logit_processors config must be a list of processor configurations")
-        
+
         processors = []
         for proc_config in config:
             if not isinstance(proc_config, dict):
                 raise ValueError("Each processor configuration must be a dictionary")
             processors.append(LogitProcessorRegistry.create_processor(proc_config))
-        
+
         return cls(processors)
     
-    def to_config(self) -> List[Dict[str, Any]]:
+    def to_config(self) -> list[dict[str, Any]]:
         """Convert LogitsProcessorList to configuration format."""
         config = []
         for processor in self:
             proc_config = {"type": processor.__class__.__name__}
-            
+
             for attr in dir(processor):
                 if not attr.startswith('_') and not callable(getattr(processor, attr)):
                     value = getattr(processor, attr)
                     if isinstance(value, (int, float, str, bool, list, dict)):
                         proc_config[attr] = value
-            
+
             config.append(proc_config)
         
         return config
