@@ -37,6 +37,7 @@ from transformers import (
     Qwen3MoeConfig,
 )
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
+from transformers.models.internvl3_5 import InternVL3_5ImageProcessor
 
 
 LM_TYPE_CORRESPONDENCE = {
@@ -434,7 +435,11 @@ def write_model(
     if push_to_hub:
         model.push_to_hub(hub_dir, use_temp_dir=True)
 
-    image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
+    # Load the correct image processor based on model type
+    if "InternVL3_5" in input_base_path:
+        image_processor = InternVL3_5ImageProcessor.from_pretrained(model_path)
+    else:
+        image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     processor = InternVLProcessor(
@@ -537,17 +542,34 @@ def write_tokenizer(
         tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
 
 
-def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None):
-    image_processor = GotOcr2ImageProcessorFast(
-        do_resize=True,
-        size={"height": 448, "width": 448},
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
-        do_convert_rgb=True,
-    )
+def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None, path: Optional[str] = None):
+    # Use InternVL3.5 image processor for InternVL3.5 models, otherwise use GotOcr2ImageProcessorFast
+    if path and "InternVL3_5" in path:
+        image_processor = InternVL3_5ImageProcessor(
+            do_resize=True,
+            size={"height": 448, "width": 448},
+            do_rescale=True,
+            rescale_factor=1 / 255,
+            do_normalize=True,
+            image_mean=[0.485, 0.456, 0.406],
+            image_std=[0.229, 0.224, 0.225],
+            do_convert_rgb=True,
+            max_patches=12,
+            min_patches=1,
+            patch_size=448,
+            crop_to_patches=True,
+        )
+    else:
+        image_processor = GotOcr2ImageProcessorFast(
+            do_resize=True,
+            size={"height": 448, "width": 448},
+            do_rescale=True,
+            rescale_factor=1 / 255,
+            do_normalize=True,
+            image_mean=[0.485, 0.456, 0.406],
+            image_std=[0.229, 0.224, 0.225],
+            do_convert_rgb=True,
+        )
 
     image_processor.save_pretrained(save_dir)
     if push_to_hub:
@@ -587,6 +609,7 @@ def main():
         save_dir=args.output_dir,
         push_to_hub=args.push_to_hub,
         hub_dir=args.hub_dir,
+        path=args.input_dir,
     )
     write_model(
         model_path=args.output_dir,
