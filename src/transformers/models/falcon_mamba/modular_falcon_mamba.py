@@ -517,7 +517,7 @@ class FalconMambaCausalLMOutput(MambaCausalLMOutput):
 
 class FalconMambaModel(MambaModel, FalconMambaPreTrainedModel):
     def __init__(self, config):
-        FalconMambaPreTrainedModel.__init__(config)
+        FalconMambaPreTrainedModel.__init__(self, config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
