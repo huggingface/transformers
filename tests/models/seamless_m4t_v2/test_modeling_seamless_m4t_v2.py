@@ -76,6 +76,9 @@ class SeamlessM4Tv2ModelTester:
         decoder_layers=2,
         encoder_ffn_dim=6,
         decoder_ffn_dim=6,
+        encoder_layerdrop=0.0,
+        speech_encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
         t2u_encoder_layers=2,
         t2u_decoder_layers=2,
         t2u_encoder_ffn_dim=6,
@@ -154,6 +157,10 @@ class SeamlessM4Tv2ModelTester:
         self.speech_encoder_chunk_size = speech_encoder_chunk_size
         self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num
 
+        self.encoder_layerdrop = encoder_layerdrop
+        self.speech_encoder_layerdrop = speech_encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
@@ -218,6 +225,9 @@ class SeamlessM4Tv2ModelTester:
             right_max_position_embeddings=self.right_max_position_embeddings,
             speech_encoder_chunk_size=self.speech_encoder_chunk_size,
             speech_encoder_left_chunk_num=self.speech_encoder_left_chunk_num,
+            encoder_layerdrop=self.encoder_layerdrop,
+            speech_encoder_layerdrop=self.speech_encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
