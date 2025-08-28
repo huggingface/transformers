@@ -59,28 +59,8 @@ ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMP
 
 
 if is_torch_available():
-    from ..cache_utils import (
-        HQQQuantizedCache,
-        HybridCache,
-        HybridChunkedCache,
-        OffloadedHybridCache,
-        OffloadedStaticCache,
-        QuantoQuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
-    )
-    from ..cache_utils import (
-        HQQQuantizedCache,
-        HybridCache,
-        HybridChunkedCache,
-        OffloadedHybridCache,
-        OffloadedStaticCache,
-        QuantoQuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
-    )
-
-
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+    
 class GenerationMode(ExplicitEnum):
     """
     Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
