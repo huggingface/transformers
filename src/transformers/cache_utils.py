@@ -99,7 +99,7 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -182,7 +182,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -303,7 +303,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -378,7 +378,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -457,7 +457,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -566,7 +566,7 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -996,7 +996,6 @@ class DynamicCache(Cache):
     >>> past_key_values = DynamicCache(config=model.config)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation
-    DynamicCache()
     ```
     """
 
@@ -1223,8 +1222,8 @@ class EncoderDecoderCache(Cache):
     >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
 
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
-    >>> self_attention_cache = DynamicCache()
-    >>> cross_attention_cache = DynamicCache()
+    >>> self_attention_cache = DynamicCache(config=self.config)
+    >>> cross_attention_cache = DynamicCache(config=self.config)
     >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation
