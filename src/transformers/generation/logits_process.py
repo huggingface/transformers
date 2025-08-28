@@ -3349,7 +3349,7 @@ class ConfigurableLogitsProcessorList(LogitsProcessorList):
     >>> out = model.generate(tok("Hello", return_tensors="pt").input_ids, generation_config=config)
     >>> tok.decode(out[0], skip_special_tokens=True)
     """
-    
+
     @classmethod
     def from_config(cls, config: Union[str, list[dict[str, Any]]]) -> "ConfigurableLogitsProcessorList":
         """Create LogitsProcessorList from JSON config or list of dicts."""
@@ -3368,8 +3368,8 @@ class ConfigurableLogitsProcessorList(LogitsProcessorList):
                 raise ValueError("Each processor configuration must be a dictionary")
             processors.append(LogitProcessorRegistry.create_processor(proc_config))
 
-        return cls(processors)
-    
+    return cls(processors)
+
     def to_config(self) -> list[dict[str, Any]]:
         """Convert LogitsProcessorList to configuration format."""
         config = []
@@ -3383,5 +3383,5 @@ class ConfigurableLogitsProcessorList(LogitsProcessorList):
                         proc_config[attr] = value
 
             config.append(proc_config)
-        
+
         return config

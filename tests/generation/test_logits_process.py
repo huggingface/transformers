@@ -17,9 +17,9 @@ import unittest
 from typing import Union
 
 import numpy as np
+import torch
 from parameterized import parameterized
 
-import torch
 from transformers import is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.generation.logits_process import (

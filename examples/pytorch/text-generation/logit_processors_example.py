@@ -8,7 +8,13 @@ manual ``LogitsProcessor`` instantiation.
 import json
 
 import torch  # noqa: F401 (used in custom processor example)
-from transformers import (AutoModelForCausalLM, AutoTokenizer, GenerationConfig, LogitProcessorRegistry, LogitsProcessor)
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    LogitProcessorRegistry,
+    LogitsProcessor,
+)
 
 
 def example_basic_usage():
@@ -78,7 +84,7 @@ def example_custom_processor():
             for token_id in self.banned_token_ids:
                 scores[:, token_id] = float('-inf')
             return scores
-    
+
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     model = AutoModelForCausalLM.from_pretrained("gpt2")
 

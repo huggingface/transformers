@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -37,9 +37,9 @@ from ..utils import (
 )
 
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # noqa: D401 - type checking imports only
     from ..modeling_utils import PreTrainedModel
-    from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -1042,7 +1042,7 @@ class GenerationConfig(PushToHubMixin):
             config = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
-    
+
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
         with open(json_file, "r", encoding="utf-8") as reader:

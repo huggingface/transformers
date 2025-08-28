@@ -1334,14 +1334,11 @@ class GenerationMixin(ContinuousMixin):
         """Get LogitsProcessorList from configuration."""
         if self.logit_processors is None:
             return None
-        
         # Import here to avoid circular imports
-        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
-        
+        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList  # noqa: F401
         # If it's already a processor list, return it
         if isinstance(self.logit_processors, LogitsProcessorList):
             return self.logit_processors
-        
         # Otherwise, create from config
         return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
 
