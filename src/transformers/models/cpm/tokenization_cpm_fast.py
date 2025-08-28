@@ -28,7 +28,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 
 
 class CpmTokenizerFast(PreTrainedTokenizerFast):
-    """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
+    """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     def __init__(
         self,
