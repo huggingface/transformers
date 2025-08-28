@@ -207,6 +207,27 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
+    def get_text_config(self, decoder=None, encoder=None):
+        """
+        Returns the text config related to the text input (encoder) or text output (decoder) of the model.
+        
+        Args:
+            decoder (`Optional[bool]`, *optional*):
+                If set to `True`, returns the decoder config.
+            encoder (`Optional[bool]`, *optional*):
+                If set to `True`, returns the encoder config.
+        """
+        if decoder is True and encoder is False:
+            return self.decoder
+        elif encoder is True and decoder is False:
+            return self.encoder
+        elif decoder is None and encoder is None:
+            # Default case - return decoder for generation compatibility
+            return self.decoder
+        else:
+            # For any other case (both True, both False, etc.), return self
+            return self
+
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
