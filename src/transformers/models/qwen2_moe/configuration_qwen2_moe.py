@@ -14,7 +14,7 @@
 # limitations under the License.
 """Qwen2MoE model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -197,6 +197,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         router_aux_loss_coef=0.001,
         mlp_only_layers=None,
         qkv_bias=True,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -234,7 +235,11 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
         self.qkv_bias = qkv_bias
-
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % 2) and i < self.max_window_layers else "full_attention" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
