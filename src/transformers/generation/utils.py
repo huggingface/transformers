@@ -2123,6 +2123,39 @@ class GenerationMixin(ContinuousMixin):
 
         return can_compile
 
+    def _get_deprecated_gen_repo(
+        self,
+        generation_config: GenerationConfig,
+        trust_remote_code: bool,
+        custom_generate: Optional[str] = None,
+        assistant_model: Optional["PreTrainedModel"] = None,
+    ) -> Optional[str]:
+        """
+        Returns the Hub repo for a deprecated generation strategy, if any.
+        """
+        generation_mode = generation_config.get_generation_mode(assistant_model)
+        moved_to_hub_modes = {
+            GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+            GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+            GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
+            GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
+        }
+        if custom_generate is not None or generation_mode not in moved_to_hub_modes:
+            return custom_generate
+
+        repo = moved_to_hub_modes[generation_mode]
+        logger.warning_once(
+            f"{generation_mode.name.replace('_', ' ').title()} was moved to a `custom_generate` repo: https://hf.co/{repo}. "
+            f"To prevent loss of backward compatibility, add `custom_generate='{repo}'` "
+            "to your `generate` call before v4.62.0."
+        )
+        if not trust_remote_code:
+            raise ValueError(
+                f"{generation_mode.name.replace('_', ' ').title()} requires `trust_remote_code=True` in your `generate` call, "
+                f"since it loads https://hf.co/{repo}."
+            )
+        return repo
+
     @torch.no_grad()
     def generate(
         self,
@@ -2237,8 +2270,25 @@ class GenerationMixin(ContinuousMixin):
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
-        # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
+        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+
+        # 2 If requested, load an arbitrary generation recipe from the Hub and run it instead
+
+        # Set Hub repo for deprecated strategies. (TODO joao, manuel: remove this in v4.62.0)
+        custom_generate = self._get_deprecated_gen_repo(
+            generation_config, trust_remote_code, custom_generate, assistant_model
+        )
+
+        # Load custom generation function from the Hub or local path
         if custom_generate is not None and isinstance(custom_generate, str):
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
@@ -2249,6 +2299,7 @@ class GenerationMixin(ContinuousMixin):
                 "global_keys_to_exclude",
                 "trust_remote_code",
                 "custom_generate",
+                "model_kwargs",
             }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
@@ -2258,17 +2309,7 @@ class GenerationMixin(ContinuousMixin):
             )
             return custom_generate_function(model=self, **generate_arguments)
 
-        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
-
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
-        self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
-
-        # 2. Set generation parameters if not already defined
+        # 3. Set generation parameters if not already defined
         if synced_gpus is None:
             synced_gpus = (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
 
@@ -2279,7 +2320,7 @@ class GenerationMixin(ContinuousMixin):
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
-        # 3. Define model inputs
+        # 4. Define model inputs
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
@@ -2303,7 +2344,7 @@ class GenerationMixin(ContinuousMixin):
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
 
-        # 4. Define other model kwargs
+        # 5. Define other model kwargs
         # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
@@ -2324,7 +2365,7 @@ class GenerationMixin(ContinuousMixin):
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 
-        # 5. Prepare `input_ids` which will be used for auto-regressive generation
+        # 6. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
             input_ids, model_kwargs = self._prepare_decoder_input_ids_for_generation(
                 batch_size=batch_size,
@@ -2350,7 +2391,7 @@ class GenerationMixin(ContinuousMixin):
         if streamer is not None:
             streamer.put(input_ids.cpu())
 
-        # 6. Prepare `max_length` depending on other stopping criteria.
+        # 7. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
@@ -2371,7 +2412,7 @@ class GenerationMixin(ContinuousMixin):
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
-        # 7. Prepare the cache.
+        # 8. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
@@ -2386,7 +2427,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
         )
 
-        # 8. determine generation mode
+        # 9. determine generation mode
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
         if streamer is not None and (generation_config.num_beams > 1):
@@ -2405,7 +2446,7 @@ class GenerationMixin(ContinuousMixin):
                 UserWarning,
             )
 
-        # 9. prepare logits processors and stopping criteria
+        # 10. prepare logits processors and stopping criteria
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
@@ -2424,7 +2465,7 @@ class GenerationMixin(ContinuousMixin):
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
-        # 10. go into different generation modes
+        # 11. go into different generation modes
         if isinstance(custom_generate, Callable):
             result = custom_generate(
                 self,
@@ -2455,7 +2496,7 @@ class GenerationMixin(ContinuousMixin):
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
-            # 11. Get the candidate generator, given the parameterization
+            # 12. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
                 generation_config=generation_config,
                 input_ids=input_ids,
@@ -2467,7 +2508,7 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs=model_kwargs,
             )
 
-            # 12. run assisted generate
+            # 13. run assisted generate
             result = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
@@ -2478,50 +2519,9 @@ class GenerationMixin(ContinuousMixin):
                 streamer=streamer,
                 **model_kwargs,
             )
-        # TODO joao, manuel: remove this in v4.62.0
-        elif generation_mode == GenerationMode.DOLA_GENERATION:
-            logger.warning_once(
-                "DoLa generation was moved to a `custom_generate` repo: https://hf.co/transformers-community/dola. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/dola'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                raise ValueError(
-                    "DoLa generation requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/dola."
-                )
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/dola",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            )
-        # TODO joao, manuel: remove this in v4.62.0
-        elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
-            logger.warning_once(
-                "Contrastive search was moved to a `custom_generate` repo: https://hf.co/transformers-community/contrastive-search. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/contrastive-search'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                logger.warning_once(
-                    "Contrastive search requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/contrastive-search."
-                )
-            # Avoid calling the model-defined `generate` method, since some models (e.g. Janus, Whisper) override it.
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/contrastive-search",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
+            # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
             result = self._sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
@@ -2533,7 +2533,7 @@ class GenerationMixin(ContinuousMixin):
             )
 
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
-            # 11. run beam sample
+            # 12. run beam sample
             result = self._beam_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
@@ -2541,46 +2541,6 @@ class GenerationMixin(ContinuousMixin):
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 **model_kwargs,
-            )
-
-        elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
-            logger.warning_once(
-                "Group Beam Search was moved to a `custom_generate` repo: https://hf.co/transformers-community/group-beam-search. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/group-beam-search'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                raise ValueError(
-                    "Group Beam Search requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/group-beam-search."
-                )
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/group-beam-search",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            )
-
-        elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
-            logger.warning_once(
-                "Constrained Beam Search was moved to a `custom_generate` repository: https://hf.co/transformers-community/constrained-beam-search. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/constrained-beam-search'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                raise ValueError(
-                    "Constrained Beam Search requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/constrained-beam-search."
-                )
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/constrained-beam-search",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
             )
 
         # Convert to legacy cache format if requested

@@ -3051,7 +3051,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(outputs, ["Wie alt sind Sie?"])
 
-    @slow
     def test_constrained_beam_search_example_integration(self):
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
