@@ -229,6 +229,9 @@ class StopStringCriteria(StoppingCriteria):
     >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
     >>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
     >>> inputs = tokenizer("The biggest states in the USA by land area:", return_tensors="pt")
+
+    >>> # Passing one or more stop strings will halt generation after those strings are emitted
+    >>> # Note that generating with stop strings requires you to pass the tokenizer too
     >>> stopping_criteria = StoppingCriteriaList([StopStringCriteria(tokenizer, ["Texas"])])
 
     >>> gen_out = model.generate(**inputs)
@@ -238,9 +241,7 @@ class StopStringCriteria(StoppingCriteria):
     - Texas
     - California
 
-    >>> # Passing one or more stop strings will halt generation after those strings are emitted
-    >>> # Note that generating with stop strings requires you to pass the tokenizer too
-    >>> gen_out = model.generate(**inputs, stop_strings=["Texas"], tokenizer=tokenizer)
+    >>> gen_out = model.generate(**inputs, stopping_criteria=stopping_criteria)
     >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
     The biggest states in the USA by land area:
     - Alaska
