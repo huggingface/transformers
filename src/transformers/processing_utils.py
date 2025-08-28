@@ -598,7 +598,6 @@ class ProcessorMixin(PushToHubMixin):
             del output["chat_template"]
 
         # Serialize attributes as a dict
-        print(output.keys(), attrs_to_save)
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
