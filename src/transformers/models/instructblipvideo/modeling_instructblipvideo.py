@@ -126,6 +126,45 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
+class InstructBlipVideoPreTrainedModel(PreTrainedModel):
+    config: InstructBlipVideoConfig
+    base_model_prefix = "blip"
+    supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+
+    _no_split_modules = [
+        "InstructBlipVideoQFormerEmbeddings",
+        "InstructBlipVideoAttention",
+        "InstructBlipVideoQFormerMultiHeadAttention",
+        "InstructBlipVideoQFormerSelfOutput",
+    ]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_range
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, InstructBlipVideoVisionEmbeddings):
+            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
+            module.query_tokens.data.zero_()
+
+
 # Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
 def eager_attention_forward(
     module: nn.Module,
@@ -307,6 +346,59 @@ class InstructBlipVideoEncoder(nn.Module):
             )
 
         return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
+    main_input_name = "pixel_values"
+    config: InstructBlipVideoVisionConfig
+
+    _can_record_outputs = {
+        "hidden_states": InstructBlipVideoEncoderLayer,
+        "attentions": InstructBlipVideoAttention,
+    }
+
+    def __init__(self, config: InstructBlipVideoVisionConfig):
+        super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = InstructBlipVideoVisionEmbeddings(config)
+        self.encoder = InstructBlipVideoEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        self.post_init()
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+        )
+
+    def get_input_embeddings(self):
+        return self.embeddings
 
 
 class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
@@ -696,98 +788,6 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         embeddings = self.layernorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-
-@auto_docstring
-class InstructBlipVideoPreTrainedModel(PreTrainedModel):
-    config: InstructBlipVideoConfig
-    base_model_prefix = "blip"
-    supports_gradient_checkpointing = True
-    _supports_attention_backend = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-
-    _no_split_modules = [
-        "InstructBlipVideoQFormerEmbeddings",
-        "InstructBlipVideoAttention",
-        "InstructBlipVideoQFormerMultiHeadAttention",
-        "InstructBlipVideoQFormerSelfOutput",
-    ]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InstructBlipVideoVisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
-        elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
-            module.query_tokens.data.zero_()
-
-
-class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
-    main_input_name = "pixel_values"
-    config: InstructBlipVideoVisionConfig
-
-    _can_record_outputs = {
-        "hidden_states": InstructBlipVideoEncoderLayer,
-        "attentions": InstructBlipVideoAttention,
-    }
-
-    def __init__(self, config: InstructBlipVideoVisionConfig):
-        super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = InstructBlipVideoVisionEmbeddings(config)
-        self.encoder = InstructBlipVideoEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-        self.post_init()
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            **kwargs,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.post_layernorm(last_hidden_state)
-
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-        )
-
-    def get_input_embeddings(self):
-        return self.embeddings
 
 
 class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):

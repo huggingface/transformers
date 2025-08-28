@@ -539,6 +539,75 @@ def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
+@auto_docstring
+class Siglip2PreTrainedModel(PreTrainedModel):
+    config: Siglip2Config
+    base_model_prefix = "siglip2"
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = [
+        "Siglip2TextEmbeddings",
+        "Siglip2VisionEmbeddings",
+        "Siglip2EncoderLayer",
+        "Siglip2MultiheadAttentionPoolingHead",
+    ]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": Siglip2EncoderLayer,
+        "attentions": Siglip2Attention,
+    }
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, Siglip2VisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, Siglip2Config)
+                else self.config.hidden_size
+            )
+            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, Siglip2Attention):
+            nn.init.xavier_uniform_(module.q_proj.weight)
+            nn.init.xavier_uniform_(module.k_proj.weight)
+            nn.init.xavier_uniform_(module.v_proj.weight)
+            nn.init.xavier_uniform_(module.out_proj.weight)
+            nn.init.zeros_(module.q_proj.bias)
+            nn.init.zeros_(module.k_proj.bias)
+            nn.init.zeros_(module.v_proj.bias)
+            nn.init.zeros_(module.out_proj.bias)
+        elif isinstance(module, Siglip2MLP):
+            nn.init.xavier_uniform_(module.fc1.weight)
+            nn.init.xavier_uniform_(module.fc2.weight)
+            nn.init.normal_(module.fc1.bias, std=1e-6)
+            nn.init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
+            nn.init.xavier_uniform_(module.probe.data)
+            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
+            nn.init.zeros_(module.attention.in_proj_bias.data)
+        elif isinstance(module, Siglip2Model):
+            logit_scale_init = torch.log(torch.tensor(1.0))
+            module.logit_scale.data.fill_(logit_scale_init)
+            module.logit_bias.data.zero_()
+        elif isinstance(module, Siglip2ForImageClassification):
+            nn.init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
 class Siglip2TextEmbeddings(nn.Module):
     def __init__(self, config: Siglip2TextConfig):
         super().__init__()
@@ -633,75 +702,6 @@ class Siglip2TextTransformer(nn.Module):
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
         )
-
-
-@auto_docstring
-class Siglip2PreTrainedModel(PreTrainedModel):
-    config: Siglip2Config
-    base_model_prefix = "siglip2"
-    supports_gradient_checkpointing = True
-
-    _no_split_modules = [
-        "Siglip2TextEmbeddings",
-        "Siglip2VisionEmbeddings",
-        "Siglip2EncoderLayer",
-        "Siglip2MultiheadAttentionPoolingHead",
-    ]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    _can_record_outputs = {
-        "hidden_states": Siglip2EncoderLayer,
-        "attentions": Siglip2Attention,
-    }
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, Siglip2VisionEmbeddings):
-            width = (
-                self.config.vision_config.hidden_size
-                if isinstance(self.config, Siglip2Config)
-                else self.config.hidden_size
-            )
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-        elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
-        elif isinstance(module, Siglip2Attention):
-            nn.init.xavier_uniform_(module.q_proj.weight)
-            nn.init.xavier_uniform_(module.k_proj.weight)
-            nn.init.xavier_uniform_(module.v_proj.weight)
-            nn.init.xavier_uniform_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
-        elif isinstance(module, Siglip2MLP):
-            nn.init.xavier_uniform_(module.fc1.weight)
-            nn.init.xavier_uniform_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
-        elif isinstance(module, Siglip2Model):
-            logit_scale_init = torch.log(torch.tensor(1.0))
-            module.logit_scale.data.fill_(logit_scale_init)
-            module.logit_bias.data.zero_()
-        elif isinstance(module, Siglip2ForImageClassification):
-            nn.init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring(
@@ -1126,7 +1126,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
         labels: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -1164,12 +1165,17 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         Predicted class: LABEL_1
         ```
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            **kwargs,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs.last_hidden_state
@@ -1212,6 +1218,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
