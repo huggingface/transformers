@@ -25,7 +25,7 @@ class Constraint(ABC):
 
     def __init__(self):
         logger.warning_once(
-            "Importing `Constraint` classes is deprecated and will be removed in v4.58.0. Contrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search. Please import using `from transformers.generation import Constraint` instead."
+            "Importing `Constraint` classes is deprecated and will be removed in v4.58.0. Constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search. Please import using `from transformers.generation import Constraint` instead."
         )
         # test for the above condition
         self.test()
