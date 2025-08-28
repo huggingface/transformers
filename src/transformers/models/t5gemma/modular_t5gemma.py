@@ -210,7 +210,7 @@ class T5GemmaConfig(PretrainedConfig):
     def get_text_config(self, decoder=None, encoder=None):
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model.
-        
+
         Args:
             decoder (`Optional[bool]`, *optional*):
                 If set to `True`, returns the decoder config.
