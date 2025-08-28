@@ -334,7 +334,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg",
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -402,7 +405,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg",
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
