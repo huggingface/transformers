@@ -35,7 +35,6 @@ from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
-    SoundMultimodalProjectorConfig,
     LlavaConfig,
 )
 
@@ -423,34 +422,17 @@ __all__ = ["AudioFlamingo3"]
 
 
 def get_model_config(config):
-    default_keys = ["llm_cfg", "sound_tower_cfg", "sound_mm_projector_cfg"]
-    if hasattr(config, "_name_or_path") and len(config._name_or_path) >= 2:
-        root_path = config._name_or_path
-    else:
-        root_path = config.resume_path
+    root_path = config._name_or_path
     # download from huggingface
     if root_path is not None and not osp.exists(root_path):
         try:
-            valid_hf_repo = repo_exists(root_path)
+            if repo_exists(root_path):
+                root_path = snapshot_download(root_path)
         except HFValidationError as e:
-            valid_hf_repo = False
-        if valid_hf_repo:
-            root_path = snapshot_download(root_path)
+            pass
 
-    return_list = []
-    for key in default_keys:
-        cfg = getattr(config, key, None)
-        if isinstance(cfg, dict):
-            try:
-                return_list.append(os.path.join(root_path, key[:-4]))
-            except:
-                raise ValueError(f"Cannot find resume path in config for {key}!")
-        elif isinstance(cfg, PretrainedConfig):
-            return_list.append(os.path.join(root_path, key[:-4]))
-        elif isinstance(cfg, str):
-            return_list.append(cfg)
-
-    return return_list
+    default_keys = ["llm_cfg", "sound_tower_cfg", "sound_mm_projector_cfg"]
+    return [os.path.join(root_path, key[:-4]) for key in default_keys]
 
 
 def has_tokenizer(repo_id_or_path: str) -> bool:
@@ -752,17 +734,9 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
     def from_pretrained(
         cls,
         model_path: str,
-        devices: Optional[List[int]] = None,
-        load_8bit: bool = False,
-        load_4bit: bool = False,
         device_map: str = "auto",
         device: str = "cuda",
-        *,
         # minimal Hub args
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        local_files_only: bool = False,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
         **kwargs,
     ) -> "AudioFlamingo3":
         # — resolve to local path (supports repo_id) ---------------------
@@ -771,38 +745,15 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
             # treat as HF repo id
             model_path = snapshot_download(
                 repo_id=model_path,
-                revision=revision,
-                token=token,
-                local_files_only=local_files_only,
-                cache_dir=cache_dir,
             )
         if os.path.exists(os.path.join(model_path, "model")):
             model_path = os.path.join(model_path, "model")
 
-        # — optional GPU selection --------------------------------------
-        if devices is not None:
-            assert "max_memory" not in kwargs, "`max_memory` should not be set when `devices` is set"
-            kwargs["max_memory"] = {d: torch.cuda.get_device_properties(d).total_memory for d in devices}
-
         # — device map & quantisation -----------------------------------
         kwargs["device_map"] = {"": device} if device != "cuda" else device_map
 
-        if load_8bit:
-            kwargs["load_in_8bit"] = True
-        elif load_4bit:
-            kwargs["load_in_4bit"] = True
-            kwargs["quantization_config"] = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-            )
-        else:
-            kwargs["torch_dtype"] = torch.float16
-
         # — build config -------------------------------------------------
         config = AutoConfig.from_pretrained(model_path)
-        config.resume_path = model_path
         config.model_dtype = str(kwargs.pop("torch_dtype", torch.float16))
 
         # — instantiate & return ----------------------------------------
@@ -815,6 +766,14 @@ AutoConfig.register("llava_llama", LlavaConfig)
 
 
 # -------------------------------------------------------------------------------------------------
+
+
+class SoundMultimodalProjectorConfig(PretrainedConfig):
+    model_type = "sound_mm_projector"
+
+    def __init__(self, sound_mm_projector_type: str = None, **kwargs):
+        super().__init__()
+        self.sound_mm_projector_type = sound_mm_projector_type
 
 
 class SoundMultimodalProjector(PreTrainedModel):
@@ -830,10 +789,6 @@ class SoundMultimodalProjector(PreTrainedModel):
 
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
-
-
-AutoConfig.register("sound_mm_projector", SoundMultimodalProjectorConfig)
-AutoModel.register(SoundMultimodalProjectorConfig, SoundMultimodalProjector)
 
 
 # -------------------------------------------------------------------------------------------------

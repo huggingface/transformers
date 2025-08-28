@@ -17,7 +17,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor=None, tokenizer=None):
+    def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
     @classmethod

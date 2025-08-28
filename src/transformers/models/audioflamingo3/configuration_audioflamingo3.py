@@ -34,14 +34,6 @@ class LlavaConfig(PretrainedConfig):
         self.sound_encoder = sound_encoder
 
 
-class SoundMultimodalProjectorConfig(PretrainedConfig):
-    model_type = "sound_mm_projector"
-
-    def __init__(self, sound_mm_projector_type: str = None, **kwargs):
-        super().__init__()
-        self.sound_mm_projector_type = sound_mm_projector_type
-
-
 # -------------------------------------------------------------------------------------------------
 
 
