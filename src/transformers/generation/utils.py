@@ -3249,7 +3249,7 @@ class GenerationMixin(ContinuousMixin):
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = self.config.get_text_config(decoder=True).vocab_size
+            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
