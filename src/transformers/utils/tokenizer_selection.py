@@ -161,25 +161,41 @@ class TokenizerRecommender:
         # Rule-based recommendation logic
         if corpus_stats.language_hint == "cjk":
             recommendations.append(
-                {"type": "SentencePiece", "score": 0.9, "rationale": "SentencePiece handles CJK languages effectively without whitespace dependency"}
+                {
+                    "type": "SentencePiece",
+                    "score": 0.9,
+                    "rationale": "SentencePiece handles CJK languages effectively without whitespace dependency",
+                }
             )
 
         if corpus_stats.morphological_complexity > 0.7:
             recommendations.append(
-                {"type": "BPE", "score": 0.8, "rationale": "High morphological complexity benefits from BPE's subword handling"}
+                {
+                    "type": "BPE",
+                    "score": 0.8,
+                    "rationale": "High morphological complexity benefits from BPE's subword handling",
+                }
             )
 
         if corpus_stats.vocab_size > 50000:
-            recommendations.append({"type": "WordPiece", "score": 0.7, "rationale": "Large vocabulary size suits WordPiece tokenization"})
+            recommendations.append(
+                {"type": "WordPiece", "score": 0.7, "rationale": "Large vocabulary size suits WordPiece tokenization"}
+            )
 
         if corpus_stats.avg_word_length > 8.0:
             recommendations.append(
-                {"type": "BPE", "score": 0.8, "rationale": "Long average word length benefits from subword tokenization"}
+                {
+                    "type": "BPE",
+                    "score": 0.8,
+                    "rationale": "Long average word length benefits from subword tokenization",
+                }
             )
 
         # Default fallback
         if not recommendations:
-            recommendations.append({"type": "BPE", "score": 0.6, "rationale": "BPE is a robust default choice for most corpora"})
+            recommendations.append(
+                {"type": "BPE", "score": 0.6, "rationale": "BPE is a robust default choice for most corpora"}
+            )
 
         # Select highest scoring recommendation
         best_rec = max(recommendations, key=lambda x: x["score"])
@@ -187,7 +203,12 @@ class TokenizerRecommender:
         # Generate configuration suggestions
         config = TokenizerRecommender._generate_config(corpus_stats, best_rec["type"])
 
-        return {"type": best_rec["type"], "rationale": best_rec["rationale"], "config": config, "corpus_stats": corpus_stats}
+        return {
+            "type": best_rec["type"],
+            "rationale": best_rec["rationale"],
+            "config": config,
+            "corpus_stats": corpus_stats,
+        }
 
     @staticmethod
     def _generate_config(corpus_stats: CorpusStats, tokenizer_type: str) -> dict[str, Any]:
@@ -204,7 +225,12 @@ class TokenizerRecommender:
 
         # Type-specific configurations
         if tokenizer_type == "BPE":
-            config.update({"dropout": 0.1 if corpus_stats.morphological_complexity > 0.5 else None, "continuing_subword_prefix": "##"})
+            config.update(
+                {
+                    "dropout": 0.1 if corpus_stats.morphological_complexity > 0.5 else None,
+                    "continuing_subword_prefix": "##",
+                }
+            )
         elif tokenizer_type == "WordPiece":
             config.update(
                 {
@@ -234,7 +260,7 @@ class TokenizerSelector:
         vocab_size: Optional[int] = None,
         base_tokenizer: str = "google-bert/bert-base-uncased",
         sample_size: int = 10000,
-        **trainer_kwargs
+        **trainer_kwargs,
     ):
         """
         End-to-end utility to analyze corpus, recommend tokenizer, and train it.
@@ -284,7 +310,9 @@ class TokenizerSelector:
         # Train new tokenizer using existing method
         logger.info(f"Training {recommendation['type']} tokenizer with vocab_size={vocab_size}")
 
-        trained_tokenizer = base_tok.train_new_from_iterator(text_iterator=iter(text_batches), vocab_size=vocab_size, **trainer_config)
+        trained_tokenizer = base_tok.train_new_from_iterator(
+            text_iterator=iter(text_batches), vocab_size=vocab_size, **trainer_config
+        )
 
         return trained_tokenizer, recommendation
 
