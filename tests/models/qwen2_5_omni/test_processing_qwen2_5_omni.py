@@ -408,6 +408,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
+        elif modality == "audio":
+            mm_len = batch_size
         else:
             mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
