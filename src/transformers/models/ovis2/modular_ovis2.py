@@ -60,7 +60,7 @@ class Ovis2VisionMLP(LlamaMLP):
 
 class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def interpolate_pos_encoding(self):
@@ -87,7 +87,7 @@ class Ovis2VisionEncoderLayer(Aimv2EncoderLayer):
 
 class Ovis2VisionEncoder(SiglipEncoder):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.layers = nn.ModuleList([Ovis2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
