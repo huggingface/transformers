@@ -568,7 +568,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return proper_class
 
-    def to_dict(self, legacy_serialization=False) -> dict[str, Any]:
+    def to_dict(self, legacy_serialization=True) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -584,11 +584,10 @@ class ProcessorMixin(PushToHubMixin):
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if not legacy_serialization:
-            # Don't save attributes like `tokenizer`, `image processor` etc.
+        if legacy_serialization:
+            # Don't save attributes like `tokenizer`, `image processor` etc. in processor config if `legacy=True`
             attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
 
-        output = {k: v for k, v in output.items() if k in attrs_to_save}
         output["processor_class"] = self.__class__.__name__
 
         if "tokenizer" in output:
@@ -600,7 +599,21 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
-        if legacy_serialization and "audio_tokenizer" in output:
+        # Serialize attributes as a dict
+        output = {
+            k: v.to_dict() if isinstance(v, PushToHubMixin) else v
+            for k, v in output.items()
+            if (
+                k in attrs_to_save  # keep all attributes that have to be serialized
+                and v.__class__.__name__ != "BeamSearchDecoderCTC"  # remove attributes with that are objects
+                and (
+                    (legacy_serialization and not isinstance(v, PushToHubMixin)) or not legacy_serialization
+                )  # remove `PushToHubMixin` objects
+            )
+        }
+
+        # Special case, add `audio_tokenizer` dict which points to model weights and path
+        if not legacy_serialization and "audio_tokenizer" in output:
             audio_tokenizer_dict = {
                 "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
@@ -608,16 +621,9 @@ class ProcessorMixin(PushToHubMixin):
             # Update or overwrite, what do audio tokenizers expect when loading?
             output["audio_tokenizer"] = audio_tokenizer_dict
 
-        # Some attributes have different names but containing objects that are not simple strings
-        output = {k: v for k, v in output.items() if v.__class__.__name__ != "BeamSearchDecoderCTC"}
-        if not legacy_serialization:
-            output = {k: v for k, v in output.items() if not isinstance(v, PushToHubMixin)}
-
-        # Serialize attributes as a dict
-        output = {k: v.to_dict() if isinstance(v, PushToHubMixin) else v for k, v in output.items()}
         return output
 
-    def to_json_string(self, legacy_serialization=False) -> str:
+    def to_json_string(self, legacy_serialization=True) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -628,7 +634,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=False):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=True):
         """
         Save this instance to a JSON file.
 
@@ -644,7 +650,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = False, **kwargs):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = True, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -665,9 +671,10 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            legacy_serialization (`bool`, *optional*, defaults to `False`):
-                Whether or not to save processor attributes in processor's config files as a nested dict. Saving all attributes
-                in a single dict will become the default in future versions, set to `False` until then.
+            legacy_serialization (`bool`, *optional*, defaults to `True`):
+                Whether or not to save processor attributes in separate config files (legacy) or in processor's config
+                file as a nested dict. Saving all attributes in a single dict will become the default in future versions.
+                Set to `legacy_serialization=True` until then.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -710,7 +717,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            elif not legacy_serialization:
+            elif legacy_serialization:
                 attribute = getattr(self, attribute_name)
                 # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
                 if hasattr(attribute, "_set_processor_class"):
@@ -773,7 +780,7 @@ class ProcessorMixin(PushToHubMixin):
                     "separate files using the `save_jinja_files` argument."
                 )
 
-        if not legacy_serialization:
+        if legacy_serialization:
             output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
             processor_dict = self.to_dict()
 
@@ -803,7 +810,7 @@ class ProcessorMixin(PushToHubMixin):
         # NOTE: this will become the default way to save all processor attrbiutes in future versions. Toggled off for now to give
         # us time for smoother transition
         else:
-            self.to_json_file(output_processor_file, legacy_serialization=True)
+            self.to_json_file(output_processor_file, legacy_serialization=False)
             logger.info(f"processor saved in {output_processor_file}")
             return_files = [output_processor_file]
 
