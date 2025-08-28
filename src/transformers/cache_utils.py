@@ -1017,6 +1017,7 @@ class DynamicCache(Cache):
                     "sliding_attention" if sliding_window is not None else "full_attention"
                     for _ in range(config.num_hidden_layers)
                 ]
+            # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
             if hasattr(config, "num_kv_shared_layers"):
                 layer_types = layer_types[: -config.num_kv_shared_layers]
 
@@ -1130,6 +1131,7 @@ class StaticCache(Cache):
                 layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
             else:
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
         if hasattr(config, "num_kv_shared_layers"):
             layer_types = layer_types[: -config.num_kv_shared_layers]
 
