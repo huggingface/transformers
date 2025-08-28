@@ -109,11 +109,11 @@ class Qwen2MoeRotaryEmbedding(nn.Module):
 
 
 class Qwen2MoeMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -215,16 +215,16 @@ class Qwen2MoeAttention(nn.Module):
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=True
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
         )
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -273,31 +273,15 @@ class Qwen2MoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Qwen2MoeBlockSparseTop2MLP(nn.Module):
-    def __init__(self, config: Qwen2MoeConfig):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
-
 
 class Qwen2MoeNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         for _ in range(self.num_experts):
-            self += [Qwen2MoeBlockSparseTop2MLP(config)]
+            self += [Qwen2MoeMLP(config, config.moe_intermediate_size)]
+
 
     def forward(self, hidden_states, routing_weights):
         routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
@@ -363,8 +347,6 @@ class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
-
-        self.block_sparse_moe = Qwen2MoeSparseMoeBlock(config)
         self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         if (layer_idx not in config.mlp_only_layers) and (
@@ -607,7 +589,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
