@@ -65,7 +65,7 @@ class InternVL3_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     crop_to_patches: Optional[bool]
 
 
-@auto_docstring
+@auto_docstring(custom_intro="InternVL3.5 image processor")
 class InternVL3_5ImageProcessor(BaseImageProcessorFast):
     r"""
     Constructs an InternVL3.5 image processor with dynamic multi-patch preprocessing.
