@@ -1783,7 +1783,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = query_states.transpose(1, 2)
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
-        if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_values is not None:
+        if self.is_kv_shared_layer and past_key_values is not None:
             key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             key_states = key_states.to(query_states.device)
