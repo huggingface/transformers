@@ -2755,6 +2755,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
+    # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_constrained_beam_search_example_integration(self):
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")

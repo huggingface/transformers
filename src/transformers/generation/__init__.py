@@ -41,6 +41,12 @@ else:
         "DisjunctiveConstraint",
         "PhrasalConstraint",
     ]
+    _import_structure["beam_search"] = [
+        "BeamHypotheses",
+        "BeamScorer",
+        "BeamSearchScorer",
+        "ConstrainedBeamSearchScorer",
+    ]
     _import_structure["candidate_generator"] = [
         "AssistedCandidateGenerator",
         "CandidateGenerator",
@@ -57,6 +63,7 @@ else:
         "ExponentialDecayLengthPenalty",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
+        "HammingDiversityLogitsProcessor",
         "InfNanRemoveLogitsProcessor",
         "LogitNormalization",
         "LogitsProcessor",
@@ -202,6 +209,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
+        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,
@@ -219,6 +227,7 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
             LogitNormalization,
             LogitsProcessor,
