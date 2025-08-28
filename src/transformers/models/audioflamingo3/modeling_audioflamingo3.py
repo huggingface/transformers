@@ -35,9 +35,6 @@ from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
-    IGNORE_INDEX,
-    MEDIA_TOKENS,
-    NUM_EXTRA_TOKENS,
     SoundMultimodalProjectorConfig,
     LlavaConfig,
 )
@@ -524,7 +521,7 @@ class LlavaMetaForCausalLM(ABC):
         attention_mask: Optional[torch.Tensor],
         media_meta: Dict[str, Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        labels = labels if labels is not None else torch.full_like(input_ids, IGNORE_INDEX)
+        labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
 
         # Extract text and media embeddings
@@ -614,7 +611,7 @@ class LlavaMetaForCausalLM(ABC):
         final_labels = None
         if labels is not None:
             labels = labels.to(target_device)
-            final_labels = torch.full_like(final_attention_mask, IGNORE_INDEX, dtype=torch.long)  # .to(torch.long)
+            final_labels = torch.full_like(final_attention_mask, self.config.ignore_index, dtype=torch.long)  # .to(torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_audio_indices]
 
         # 5. Fill the embeddings corresponding to the audios. Anything that is still zeros needs filling
@@ -664,7 +661,7 @@ class LlavaMetaForCausalLM(ABC):
         for k in range(batch_size):
             size_pk = max_length - inputs[k].shape[0]
             inputs_pk = torch.zeros((size_pk, hidden_size), dtype=inputs[k].dtype, device=device)
-            labels_pk = torch.full((size_pk,), IGNORE_INDEX, dtype=labels[k].dtype, device=device)
+            labels_pk = torch.full((size_pk,), self.config.ignore_index, dtype=labels[k].dtype, device=device)
             if self.tokenizer.padding_side == "right":
                 attention_mask[k, inputs[k].shape[0] :] = False
                 inputs_pk = torch.cat([inputs[k], inputs_pk], dim=0)
@@ -709,21 +706,17 @@ class LlavaMetaForCausalLM(ABC):
         return generation_config
 
 
-class AudioFlamingo3Config(LlavaConfig):
-    model_type = "llava_llama"
-
-
 class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
-    config_class = AudioFlamingo3Config
+    config_class = LlavaConfig
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     prepare_inputs_for_generation = LlamaForCausalLM.prepare_inputs_for_generation
 
-    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
+    def __init__(self, config: LlavaConfig = None, *args, **kwargs):
         super().__init__(config)
         self.is_loaded = False
-        
+
         llm_path, sound_tower_cfg, sound_mm_projector_cfg = get_model_config(config)
 
         llm_cfg = AutoConfig.from_pretrained(llm_path)
@@ -735,9 +728,9 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         tokenizer.stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.stop_tokens)
 
         # Add media tokens to the tokenizer
-        tokenizer.media_tokens = MEDIA_TOKENS
+        tokenizer.media_tokens = config.media_tokens
         tokenizer.media_token_ids = {}
-        for name, token in MEDIA_TOKENS.items():
+        for name, token in tokenizer.media_tokens.items():
             tokenizer.add_tokens([token], special_tokens=True)
             tokenizer.media_token_ids[name] = tokenizer.convert_tokens_to_ids(token)
 
@@ -751,8 +744,6 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
         self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
         self.sound_encoder = BasicSoundEncoder(parent=self)
-
-        self.vocab_size = config.llm_cfg["vocab_size"] + NUM_EXTRA_TOKENS
 
         self.post_config()
         self.is_loaded = True
@@ -820,8 +811,7 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         return model
 
 
-AutoConfig.register("llava_llama", AudioFlamingo3Config)
-AutoModel.register(AudioFlamingo3Config, AudioFlamingo3)
+AutoConfig.register("llava_llama", LlavaConfig)
 
 
 # -------------------------------------------------------------------------------------------------

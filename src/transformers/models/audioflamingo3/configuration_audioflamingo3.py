@@ -8,14 +8,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-# Model Constants
-IGNORE_INDEX = -100
-
-MEDIA_TOKENS = {"sound": "<sound>"}
-
-NUM_EXTRA_TOKENS = 10
-
-
 class LlavaConfig(PretrainedConfig):
     model_type = "llava_llama"
 
@@ -24,22 +16,22 @@ class LlavaConfig(PretrainedConfig):
         llm_cfg=None,
         sound_tower_cfg=None,
         sound_mm_projector_cfg=None,
-        architectures=None,
-        resume_path=None,
         hidden_size=None,
+        media_tokens=None,
+        ignore_index=None,
         sound_hidden_size=None,
-        sound_encoder: str = '{"_target_": "llava.encoders.BasicSoundEncoder"}',
+        sound_encoder: str = "",
         **kwargs,
     ):
         super().__init__()
-        self.architectures = architectures
         self.llm_cfg = llm_cfg
         self.sound_tower_cfg = sound_tower_cfg
         self.sound_mm_projector_cfg = sound_mm_projector_cfg
-        self.resume_path = resume_path
         self.hidden_size = hidden_size
+        self.media_tokens = media_tokens
+        self.ignore_index = ignore_index
         self.sound_hidden_size = sound_hidden_size
-        self.sound_encoder = '{"_target_": "llava.encoders.BasicSoundEncoder"}'
+        self.sound_encoder = sound_encoder
 
 
 class SoundMultimodalProjectorConfig(PretrainedConfig):
@@ -54,63 +46,6 @@ class SoundMultimodalProjectorConfig(PretrainedConfig):
 
 
 class AudioFlamingo3EncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`AudioFlamingo3Encoder`]. It is used to instantiate a
-    AudioFlamingo3 audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the AudioFlamingo3
-    architecture.
-
-    e.g. [NVIDIA/AudioFlamingo3](https://huggingface.co/NVIDIA/AudioFlamingo3)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `AudioFlamingo3Processor` class.
-        encoder_layers (`int`, *optional*, defaults to 32):
-            Number of encoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        d_model (`int`, *optional*, defaults to 1280):
-            Dimensionality of the layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-
-    Example:
-
-    ```python
-    >>> from transformers import AudioFlamingo3EncoderConfig, AudioFlamingo3Encoder
-
-    >>> # Initializing a AudioFlamingo3EncoderConfig
-    >>> configuration = AudioFlamingo3EncoderConfig()
-
-    >>> # Initializing a AudioFlamingo3Encoder (with random weights)
-    >>> model = AudioFlamingo3Encoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
     model_type = "audioflamingo3_encoder"
 
     def __init__(
@@ -149,42 +84,6 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
 
 
 class AudioFlamingo3Config(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`AudioFlamingo3ForConditionalGeneration`]. It is used to instantiate an
-    AudioFlamingo3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the AudioFlamingo3.
-
-    e.g. [NVIDIA/AudioFlamingo3-7B](https://huggingface.co/NVIDIA/AudioFlamingo3-7B)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        audio_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the audio backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        audio_token_index (`int`, *optional*, defaults to 151646):
-            The image token index to encode the image prompt.
-
-    Example:
-
-    ```python
-    >>> from transformers import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Config, AudioFlamingo3EncoderConfig
-
-    >>> # Initializing a AudioFlamingo3Encoder config
-    >>> audio_config = AudioFlamingo3EncoderConfig()
-
-    >>> # Initializing a AudioFlamingo3 configuration
-    >>> configuration = AudioFlamingo3Config(audio_config, text_config)
-
-    >>> # Initializing a model from the AudioFlamingo3 style configuration
-    >>> model = AudioFlamingo3ForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
     model_type = "audioflamingo3"
     attribute_map = {
         "audio_token_id": "audio_token_index",

@@ -5,11 +5,9 @@ from typing import Dict, Optional, Sequence, Union
 
 import numpy as np
 import torch
-from ... import AutoTokenizer, WhisperFeatureExtractor
+from ... import AutoTokenizer, WhisperFeatureExtractor, AutoConfig
 from ...processing_utils import ProcessorMixin
 from ...utils.hub import snapshot_download
-
-from .configuration_audioflamingo3 import MEDIA_TOKENS
 
 __all__ = ["AudioFlamingo3Processor"]
 
@@ -60,9 +58,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
             legacy=False,
         )
 
+        config = AutoConfig.from_pretrained(path)
         # Post-init tweaks
-        tok.media_tokens = MEDIA_TOKENS
-        for _, t in MEDIA_TOKENS.items():
+        tok.media_tokens = config.media_tokens
+        for _, t in tok.media_tokens.items():
             tok.add_tokens([t], special_tokens=True)
 
         return cls(fe, tok)
@@ -133,37 +132,32 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_feature_masks = []
         audio_embed_masks = []
 
-        try:
-            T = len(audio_data)
-            audio_data = audio_data.reshape(1, -1)
-            num_windows, full_length = self._get_num_windows(T, sample_rate)
+        T = len(audio_data)
+        audio_data = audio_data.reshape(1, -1)
+        num_windows, full_length = self._get_num_windows(T, sample_rate)
 
-            int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
-            float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
+        float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
 
-            audio_data_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio_data))).float()
-            for i in range(num_windows):
-                audio_embed_mask = torch.zeros(750)
-                start = i * (window_length - window_overlap)
-                audio_data_tensor_this = audio_data_tensor[:, start : start + window_length]
-                orig_length = audio_data_tensor_this.shape[1]
-                audio_data_tensor_this = self.feature_extractor(audio_data_tensor_this.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
-                sound_outputs.append(audio_data_tensor_this["input_features"])
-                # calculate the mask for the input melspec to Whisper
-                melspec_frames_this_window = int(math.ceil(orig_length / 160))
-                feature_attention_mask = torch.zeros(3000, dtype=torch.int32)
-                feature_attention_mask[:melspec_frames_this_window] = 1
-                audio_feature_masks.append(feature_attention_mask.unsqueeze(0))
-                # calculate the mask for the output embedding for use in AF3
-                conv_lengths = (melspec_frames_this_window - 1) // 2 + 1
-                output_embedding_lengths = (conv_lengths - 2) // 2 + 1
-                audio_embed_mask[:output_embedding_lengths] = 1
-                audio_embed_masks.append(audio_embed_mask)
-        except:
-            print("Error loading sound file")
-            sound_outputs.append(torch.zeros(1, 128, 3000))
-            audio_feature_masks.append(torch.zeros(1, 3000, dtype=torch.int32))
-            audio_embed_masks.append(torch.zeros(750))
+        audio_data_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio_data))).float()
+        for i in range(num_windows):
+            audio_embed_mask = torch.zeros(750)
+            start = i * (window_length - window_overlap)
+            audio_data_tensor_this = audio_data_tensor[:, start : start + window_length]
+            orig_length = audio_data_tensor_this.shape[1]
+            audio_data_tensor_this = self.feature_extractor(audio_data_tensor_this.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
+            sound_outputs.append(audio_data_tensor_this["input_features"])
+            # calculate the mask for the input melspec to Whisper
+            melspec_frames_this_window = int(math.ceil(orig_length / 160))
+            feature_attention_mask = torch.zeros(3000, dtype=torch.int32)
+            feature_attention_mask[:melspec_frames_this_window] = 1
+            audio_feature_masks.append(feature_attention_mask.unsqueeze(0))
+            # calculate the mask for the output embedding for use in AF3
+            conv_lengths = (melspec_frames_this_window - 1) // 2 + 1
+            output_embedding_lengths = (conv_lengths - 2) // 2 + 1
+            audio_embed_mask[:output_embedding_lengths] = 1
+            audio_embed_masks.append(audio_embed_mask)
+
         sound_outputs = torch.stack(sound_outputs, dim=0)
         audio_feature_masks = torch.stack(audio_feature_masks, dim=0)
         audio_embed_masks = torch.stack(audio_embed_masks, dim=0)
@@ -178,8 +172,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         media.append(sound)
         media_meta["sound_feature_masks"].append(audio_feature_masks)
         media_meta["sound_embed_masks"].append(audio_embed_masks)
-        final_text += MEDIA_TOKENS["sound"] * len(sound)
-        final_text += text.replace(MEDIA_TOKENS["sound"], "").strip()
+        final_text += self.tokenizer.media_tokens["sound"] * len(sound)
+        final_text += text.replace(self.tokenizer.media_tokens["sound"], "").strip()
 
         conversation = [{"from": "human", "value": final_text}]
         input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).cuda().unsqueeze(0)
