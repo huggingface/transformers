@@ -69,9 +69,11 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             Mel filterbank normalization.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether or not [`~ParakeetFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_features"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
@@ -88,6 +90,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         mag_power=2.0,
         mel_scale="slaney",
         padding_value=0.0,
+        return_attention_mask=True,
         **kwargs,
     ):
         requires_backends(self, ["librosa"])
@@ -98,6 +101,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
+        self.return_attention_mask = return_attention_mask
 
         # Core parameters
         self.n_fft = n_fft
@@ -396,6 +400,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         audios: AudioInput,
         sampling_rate: Optional[int] = 16000,
         device: Optional[str] = None,
+        return_attention_mask: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -413,6 +418,9 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the call for clarity.
             device (`str`, *optional*):
                 The device to use for computation and output tensors. If None, uses the same device as the input tensor.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific feature_extractor's default.
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for Parakeet feature extraction")
@@ -421,6 +429,9 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             raise ImportError(
                 "librosa is required for Parakeet feature extraction. Please install it with `pip install librosa`."
             )
+
+        if return_attention_mask is None:
+            return_attention_mask = self.return_attention_mask
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -467,12 +478,9 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         attention_mask = torch.arange(max_frames, device=target_device).unsqueeze(0) < seq_lens.unsqueeze(1)
 
         # Prepare output - always return PyTorch tensors
-        encoded_inputs = BatchFeature(
-            {
-                "input_features": input_features,
-                "attention_mask": attention_mask,
-            }
-        )
+        encoded_inputs = BatchFeature({"input_features": input_features})
+        if return_attention_mask:
+            encoded_inputs["attention_mask"] = attention_mask
 
         return encoded_inputs
 
