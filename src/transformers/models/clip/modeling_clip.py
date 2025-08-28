@@ -1056,6 +1056,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=True,
         )
         pooled_output = text_outputs.pooler_output
         text_embeds = self.text_projection(pooled_output)
@@ -1119,6 +1120,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
         pooled_output = vision_outputs.pooler_output
         image_embeds = self.visual_projection(pooled_output)
@@ -1178,6 +1180,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=True,
         )
 
         sequence_output = outputs.last_hidden_state
