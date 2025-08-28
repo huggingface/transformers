@@ -234,6 +234,7 @@ class BertSelfAttention(nn.Module):
             1, 2
         )
 
+        is_updated = False
         is_cross_attention = encoder_hidden_states is not None
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -268,7 +269,7 @@ class BertSelfAttention(nn.Module):
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
