@@ -121,6 +121,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_attention_heads  # LlamaAttention compatibility
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
 
@@ -143,6 +144,8 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.scale_input = scale_input
         self.initializer_range = initializer_range
+
+        self.attention_bias = True  # LlamaAttention compatibility
         self.use_bias = True
 
 

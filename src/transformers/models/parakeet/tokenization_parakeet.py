@@ -20,7 +20,6 @@ import json
 import os
 import re
 from typing import Optional
-from itertools import groupby
 from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -42,11 +41,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     The tokenizer handles:
     - Converting token IDs to text with SentencePiece-style processing
-    - Proper handling of subword tokens and spacing
-
-    Note: Unlike traditional CTC tokenizers, this tokenizer does NOT perform CTC decoding
-    (blank removal and repetition collapse) as this is handled by the ParakeetCTC model itself.
-    NOTE @ebezzam blank removal and repetition collapse is not handled by model so I've added here.
+    - Proper handling of subword tokens and spacing can be done with `group_tokens=True` (see `ParakeetProcessor`).
 
     Args:
         vocab_file (`str`):
@@ -73,7 +68,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         >>> inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate)
         >>> token_sequences = model.generate(**inputs)
         >>>
-        >>> # Decode to text (blank removal and repetition collapse applied)
+        >>> # Decode to text
         >>> transcription = tokenizer.decode_ctc(token_sequences[0])
         ```
     """
@@ -230,55 +225,6 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         text = re.sub(r"\s+", " ", text).strip()
 
         return text
-
-    def decode_ctc(
-        self,
-        token_ids: Union[int, list[int]],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        **kwargs,
-    ) -> str:
-        """
-        Convenience method for CTC inference that applies duplicate removal.
-        
-        This method should be used when decoding CTC model outputs for speech recognition.
-        It applies CTC-style duplicate removal (groupby) to collapse consecutive identical tokens.
-        
-        Args:
-            token_ids: List of tokenized input ids from CTC model output.
-            skip_special_tokens: Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-        """
-        return self._decode(
-            token_ids,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            group_tokens=True,  # Apply CTC duplicate removal
-            **kwargs,
-        )
-
-    def batch_decode_ctc(
-        self,
-        sequences: list[list[int]],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        **kwargs,
-    ) -> list[str]:
-        """
-        Convenience method for batch CTC inference that applies duplicate removal.
-        
-        Args:
-            sequences: List of tokenized input id sequences from CTC model output.
-            skip_special_tokens: Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-        """
-        return self.batch_decode(
-            sequences,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            group_tokens=True,  # Apply CTC duplicate removal
-            **kwargs,
-        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple:
         """
