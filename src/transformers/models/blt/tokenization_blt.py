@@ -16,21 +16,11 @@
 
 from typing import Optional
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-# Blt tokenizer constants
-SEP = " "
-BOS_ID: int = 1
-EOS_ID: int = 2
-PAD_ID: int = 260  # Use valid ID after byte tokens (4-259)
-BOE_ID: int = 0
-BPE_ID: int = 3
-OFFSET: int = 4
-BYTE_UNITS: int = 256
 
 VOCAB_FILES_NAMES = {}  # Blt doesn't require external vocab files
 
@@ -56,6 +46,8 @@ class BltTokenizer(PreTrainedTokenizer):
                 token instead.
             boe_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<boe>"`):
                 The beginning of example token used for marking the start of individual examples in a sequence.
+            additional_special_tokens (`list[str]` or `list[tokenizers.AddedToken]`, *optional*):
+                A list of additional special tokens to be added to the tokenizer's vocabulary.
             add_bos_token (`bool`, *optional*, defaults to `True`):
                 Whether or not to add an `bos_token` at the start of sequences.
             add_eos_token (`bool`, *optional*, defaults to `False`):
@@ -77,6 +69,7 @@ class BltTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         unk_token="<unk>",
         boe_token="<boe>",
+        additional_special_tokens=None,
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
@@ -86,30 +79,22 @@ class BltTokenizer(PreTrainedTokenizer):
         # Store Blt-specific parameters first
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.vocab_size_unit_1 = BYTE_UNITS
-        self.offsetting_special_char = OFFSET
+        self.byte_vocab_size = 256  # byte units (0-255)
+        
+        boe_token = AddedToken(boe_token, lstrip=False, rstrip=False) if isinstance(boe_token, str) else boe_token
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        
+        self._added_tokens_decoder = {0: boe_token, 1: bos_token, 2: eos_token, 3: pad_token}
+        self.offset = len(self._added_tokens_decoder)
+        self._utf_vocab_size = 2**8  # utf is 8 bits
 
-        # Blt token IDs (exactly like original)
-        self.boe_id = BOE_ID
-        self.bos_id = BOS_ID
-        self.eos_id = EOS_ID
-        self.pad_id = PAD_ID
-        self.bpe_id = BPE_ID
-        self.n_words = self.vocab_size_unit_1 + self.offsetting_special_char
-        self.boe_token = boe_token
-
-        # Build encoder (token -> id) and decoder (id -> token) mappings
         self.encoder = {}
 
-        # Add special tokens to encoder
-        self.encoder[str(bos_token)] = self.bos_id
-        self.encoder[str(eos_token)] = self.eos_id
-        self.encoder[str(pad_token)] = self.pad_id
-        self.encoder[str(boe_token)] = self.boe_id
-
-        # Add byte tokens (0-255) to encoder
-        for i in range(self.vocab_size_unit_1):
-            self.encoder[str(i)] = i + self.offsetting_special_char
+        # Add byte tokens (0-255) to encoder with offset
+        for i in range(self.byte_vocab_size):
+            self.encoder[str(i)] = i + self.offset
 
         # Create decoder as reverse of encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -120,6 +105,7 @@ class BltTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             unk_token=unk_token,
             boe_token=boe_token,
+            additional_special_tokens=additional_special_tokens,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
@@ -130,8 +116,8 @@ class BltTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         """Returns vocab size"""
-        # Account for byte tokens (4-259) plus special tokens (0,1,2,3,260)
-        return max(self.vocab_size_unit_1 + self.offsetting_special_char, PAD_ID + 1)
+        # Account for byte tokens plus special tokens
+        return self._utf_vocab_size + self.offset
 
     def get_vocab(self):
         """Returns vocab as a dict"""
@@ -155,13 +141,8 @@ class BltTokenizer(PreTrainedTokenizer):
         byte_values = []
 
         for token in tokens:
-            # Skip special tokens by checking if they're in encoder but not byte tokens
-            if token in self.encoder and token in {
-                str(self.bos_token),
-                str(self.eos_token),
-                str(self.pad_token),
-                str(self.boe_token),
-            }:
+            # Skip special tokens by checking if they're in added_tokens_encoder
+            if token in self.added_tokens_encoder:
                 continue
 
             try:
@@ -196,8 +177,8 @@ class BltTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        bos = [self.bos_id] if self.add_bos_token else []
-        eos = [self.eos_id] if self.add_eos_token else []
+        bos = [self.bos_token_id] if self.add_bos_token else []
+        eos = [self.eos_token_id] if self.add_eos_token else []
 
         if token_ids_1 is None:
             return bos + token_ids_0 + eos

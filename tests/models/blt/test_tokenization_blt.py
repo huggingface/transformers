@@ -47,19 +47,17 @@ class BltTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         """Test basic Blt tokenizer functionality"""
         tokenizer = BltTokenizer()
 
-        # Test vocab size (256 bytes + 4 offset + special tokens)
-        self.assertEqual(tokenizer.vocab_size, 261)
+        # Test vocab size (256 bytes + 4 special tokens)
+        self.assertEqual(tokenizer.vocab_size, 260)
 
         # Test special token IDs
-        self.assertEqual(tokenizer.bos_id, 1)
-        self.assertEqual(tokenizer.eos_id, 2)
-        self.assertEqual(tokenizer.boe_id, 0)
-        self.assertEqual(tokenizer.pad_id, 260)
+        self.assertEqual(tokenizer.bos_token_id, 1)
+        self.assertEqual(tokenizer.eos_token_id, 2)
+        self.assertEqual(tokenizer.pad_token_id, 3)
 
         # Test special tokens
         self.assertEqual(str(tokenizer.bos_token), "<s>")
         self.assertEqual(str(tokenizer.eos_token), "</s>")
-        self.assertEqual(str(tokenizer.boe_token), "<boe>")
         self.assertEqual(str(tokenizer.pad_token), "<pad>")
 
     def test_simple_encode_decode(self):

@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 from parameterized import parameterized
-from torch import return_types
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -287,7 +286,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():
-        return_types
+        pass
 
 
 @require_torch_accelerator
