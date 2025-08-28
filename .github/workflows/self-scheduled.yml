@@ -130,6 +130,7 @@ jobs:
       docker: ${{ inputs.docker }}
       commit_sha: ${{ inputs.commit_sha || github.sha }}
       runner_type: ${{ inputs.runner_type }}
+      report_repo_id: ${{ inputs.report_repo_id }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
