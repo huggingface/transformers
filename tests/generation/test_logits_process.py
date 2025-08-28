@@ -1404,81 +1404,60 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(delay_pattern_processor.active_batches.all())
         self.assertTrue((delay_pattern_processor.delay_pattern == torch.tensor(delay_pattern) - 1).all())
 
-class TestLogitProcessorRegistry(unittest.TestCase):
-    
-    def test_register_and_get_processor(self):
-        """Test processor registration and retrieval."""
-        
-        # Test getting built-in processor
+class TestConfigurableLogitsProcessors(unittest.TestCase):
+    """Unified tests for registry, configurable list, and GenerationConfig integration of logits processors."""
+
+    # Registry tests
+    def test_registry_register_and_get(self):
         temp_class = LogitProcessorRegistry.get_processor_class("TemperatureLogitsWarper")
         self.assertEqual(temp_class, TemperatureLogitsWarper)
-        
-        # Test creating processor from config
         config = {"type": "TemperatureLogitsWarper", "temperature": 0.8}
         processor = LogitProcessorRegistry.create_processor(config)
         self.assertIsInstance(processor, TemperatureLogitsWarper)
-    
-    def test_invalid_processor(self):
-        """Test handling of invalid processor names."""
+
+    def test_registry_invalid_name(self):
         with self.assertRaises(ValueError):
             LogitProcessorRegistry.get_processor_class("NonExistentProcessor")
-    
-    def test_create_processor_invalid_args(self):
-        """Test handling of invalid arguments."""
+
+    def test_registry_invalid_args(self):
         config = {"type": "TemperatureLogitsWarper", "invalid_arg": "value"}
         with self.assertRaises(ValueError):
             LogitProcessorRegistry.create_processor(config)
 
-class TestConfigurableLogitsProcessorList(unittest.TestCase):
-    
-    def test_from_config_dict_list(self):
-        """Test creating from list of dictionaries."""
+    # Configurable list tests
+    def test_list_from_config_dict_list(self):
         config = [
             {"type": "TemperatureLogitsWarper", "temperature": 0.8},
-            {"type": "TopKLogitsWarper", "top_k": 50}
+            {"type": "TopKLogitsWarper", "top_k": 50},
         ]
-        
         processor_list = ConfigurableLogitsProcessorList.from_config(config)
         self.assertEqual(len(processor_list), 2)
         self.assertIsInstance(processor_list[0], TemperatureLogitsWarper)
         self.assertIsInstance(processor_list[1], TopKLogitsWarper)
-    
-    def test_from_config_json_string(self):
-        """Test creating from JSON string."""
-        config_dict = [
-            {"type": "TemperatureLogitsWarper", "temperature": 0.8}
-        ]
+
+    def test_list_from_config_json_string(self):
+        config_dict = [{"type": "TemperatureLogitsWarper", "temperature": 0.8}]
         config_json = json.dumps(config_dict)
-        
         processor_list = ConfigurableLogitsProcessorList.from_config(config_json)
         self.assertEqual(len(processor_list), 1)
         self.assertIsInstance(processor_list[0], TemperatureLogitsWarper)
-    
-    def test_invalid_json(self):
-        """Test handling of invalid JSON."""
+
+    def test_list_invalid_json(self):
         with self.assertRaises(ValueError):
             ConfigurableLogitsProcessorList.from_config("{invalid json}")
-    
-    def test_invalid_config_format(self):
-        """Test handling of invalid configuration format."""
+
+    def test_list_invalid_config_format(self):
         with self.assertRaises(ValueError):
             ConfigurableLogitsProcessorList.from_config("not a list")
-    
-    def test_to_config(self):
-        """Test converting back to configuration."""
-        config = [
-            {"type": "TemperatureLogitsWarper", "temperature": 0.8}
-        ]
-        
+
+    def test_list_to_config_roundtrip(self):
+        config = [{"type": "TemperatureLogitsWarper", "temperature": 0.8}]
         processor_list = ConfigurableLogitsProcessorList.from_config(config)
         back_to_config = processor_list.to_config()
-        
         self.assertEqual(len(back_to_config), 1)
         self.assertEqual(back_to_config[0]["type"], "TemperatureLogitsWarper")
 
-class TestGenerationConfigIntegration(unittest.TestCase):
-    """Test integration of logit processors with GenerationConfig"""
-
+    # GenerationConfig integration
     def test_generation_config_with_logit_processors(self):
         processors_config = [
             {"type": "TemperatureLogitsWarper", "temperature": 0.8},
@@ -1497,10 +1476,8 @@ class TestGenerationConfigIntegration(unittest.TestCase):
         gen_config_none = GenerationConfig(logit_processors=None)
         self.assertIsNone(gen_config_none.logit_processors)
 
-        # Serialization leaves structure intact (no forced JSON conversion for list)
         config_dict = gen_config.to_dict()
         self.assertIsInstance(config_dict["logit_processors"], list)
 
-        # Round trip via from_dict
         gen_config_loaded = GenerationConfig.from_dict(config_dict)
         self.assertEqual(gen_config_loaded.logit_processors, processors_config)
