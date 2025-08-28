@@ -404,7 +404,7 @@ class AriaCrossAttention(nn.Module):
         self.q_proj = nn.Linear(hidden_size, num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(num_heads * self.head_dim, hidden_size, bias=False)
+        self.linear = nn.Linear(num_heads * self.head_dim, hidden_size, bias=False)
 
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
@@ -431,7 +431,7 @@ class AriaCrossAttention(nn.Module):
             dropout=self.dropout_p,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.linear(attn_output)
         return attn_output, attn_weights
 
 
