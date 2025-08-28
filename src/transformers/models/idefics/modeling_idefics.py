@@ -776,6 +776,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         past_key_values: Optional[tuple[torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        r"""
+        image_hidden_states (<fill_type>):
+            <fill_docstring>
+        image_attention_mask (<fill_type>):
+            <fill_docstring>
+        cross_attention_gate (<fill_type>):
+            <fill_docstring>
+        """
         if image_hidden_states is None:
             raise ValueError(
                 "`image_hidden_states` is required for Idefics cross attention module which are visual features to be"
@@ -1067,7 +1075,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
+        print(self.config._attn_implementation, attention_mask[0, 0, :32, :32])
 
         hidden_states = inputs_embeds
 

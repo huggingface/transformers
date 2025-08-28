@@ -34,7 +34,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
@@ -445,10 +444,6 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
-    _can_record_outputs = {
-        "hidden_states": Ovis2VisionEncoderLayer,
-        "attentions": Ovis2VisionAttention,
-    }
 
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__(config)
@@ -463,10 +458,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    @check_model_inputs
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
-        last_hidden_state = outputs.last_hidden_state
+        last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
             num_images, seq_len, hidden_dim = last_hidden_state.shape
             hidden_stride = self.config.hidden_stride

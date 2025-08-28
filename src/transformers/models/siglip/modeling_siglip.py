@@ -635,7 +635,7 @@ class SiglipTextModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1021,8 +1021,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

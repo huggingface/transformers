@@ -892,8 +892,9 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        query_embeds (<fill_type>):
-            <fill_docstring>
+        query_embeds (`torch.FloatTensor`  of shape `(batch_size, sequence_length, hidden_size)`):
+            Hidden states to be used in the attention computation. If cross-attention,
+            will be used for the query (i.e., key and value will use the encoder_hidden_states).
         """
         if input_ids is None and query_embeds is None:
             raise ValueError("You have to specify query_embeds when input_ids is None")
