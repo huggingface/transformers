@@ -1650,9 +1650,7 @@ class Gemma3nTextAltUp(nn.Module):
         modalities = self.compute_router_modalities(hidden_states[self.config.altup_active_idx])
 
         if self.training and self.config.altup_coef_clip is not None:
-            # Only clamp if the weight is not quantized
-            if not hasattr(self.prediction_coefs.weight, "quant_state"):
-                self.prediction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            self.prediction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
 
         # Project and then transpose all 2D matrices contained so that mulmat gives the correct result
         all_coefs: torch.Tensor = (
@@ -1684,9 +1682,7 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
         if self.config.altup_coef_clip is not None:
-            # Only clamp if the weight is not quantized
-            if not hasattr(self.correction_coefs.weight, "quant_state"):
-                self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
         # Permute to (altup_num_inputs, batch_size, num_tokens) as the last dim is a scalar applied to each altup input

@@ -447,6 +447,10 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Gemma3n only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
         """
