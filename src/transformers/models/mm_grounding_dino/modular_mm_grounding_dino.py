@@ -337,7 +337,7 @@ class MMGroundingDinoDecoder(GroundingDinoDecoder):
 
 class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
     def __init__(self, config: MMGroundingDinoConfig):
-        MMGroundingDinoPreTrainedModel.__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         # Create backbone + positional encoding
         backbone = MMGroundingDinoConvEncoder(config)
@@ -400,7 +400,7 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
     ]
 
     def __init__(self, config: MMGroundingDinoConfig):
-        MMGroundingDinoPreTrainedModel.__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         self.model = MMGroundingDinoModel(config)
 
