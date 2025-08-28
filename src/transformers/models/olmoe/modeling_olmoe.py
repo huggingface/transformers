@@ -39,7 +39,7 @@ from .configuration_olmoe import OlmoeConfig
 
 @use_kernel_forward_from_hub("RMSNorm")
 class OlmoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-5):
         """
         OlmoeRMSNorm is equivalent to T5LayerNorm
         """
@@ -209,7 +209,7 @@ class OlmoeAttention(nn.Module):
         )
         self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.k_norm = OlmoeRMSNorm(
-            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
+            (self.head_dim) * config.num_key_value_heads, eps=config.rms_norm_eps
         )
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
