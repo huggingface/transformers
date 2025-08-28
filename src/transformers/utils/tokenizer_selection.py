@@ -20,7 +20,8 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Iterator, Optional
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,7 @@ class CorpusAnalyzer:
     """
 
     @staticmethod
-    def analyze_corpus(
-        text_iterator: Iterator[List[str]], sample_size: int = 10000
-    ) -> CorpusStats:
+    def analyze_corpus(text_iterator: Iterator[list[str]], sample_size: int = 10000) -> CorpusStats:
         """
         Analyze corpus characteristics.
 
@@ -73,9 +72,7 @@ class CorpusAnalyzer:
 
                 # Basic text processing
                 sentences = text.split(".")
-                sentence_lengths.extend(
-                    [len(s.split()) for s in sentences if s.strip()]
-                )
+                sentence_lengths.extend([len(s.split()) for s in sentences if s.strip()])
 
                 words = re.findall(r"\b\w+\b", text.lower())
                 word_lengths.extend([len(word) for word in words])
@@ -104,13 +101,9 @@ class CorpusAnalyzer:
 
         # Token frequency distribution (how concentrated the vocabulary is)
         word_frequencies = list(word_counter.values())
-        token_frequency_ratio = (
-            max(word_frequencies) / sum(word_frequencies) if word_frequencies else 0
-        )
+        token_frequency_ratio = max(word_frequencies) / sum(word_frequencies) if word_frequencies else 0
 
-        avg_sentence_length = (
-            sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0
-        )
+        avg_sentence_length = sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0
 
         # Simple language detection based on character patterns
         language_hint = CorpusAnalyzer._detect_language_hint(char_counter)
@@ -133,12 +126,8 @@ class CorpusAnalyzer:
             return None
 
         # Check for common patterns
-        latin_chars = sum(
-            count for char, count in char_counter.items() if ord(char) < 256
-        )
-        asian_chars = sum(
-            count for char, count in char_counter.items() if ord(char) > 4352
-        )  # CJK range approximation
+        latin_chars = sum(count for char, count in char_counter.items() if ord(char) < 256)
+        asian_chars = sum(count for char, count in char_counter.items() if ord(char) > 4352)  # CJK range approximation
 
         latin_ratio = latin_chars / total_chars
         asian_ratio = asian_chars / total_chars
@@ -157,7 +146,7 @@ class TokenizerRecommender:
     """
 
     @staticmethod
-    def recommend_tokenizer(corpus_stats: CorpusStats) -> Dict[str, Any]:
+    def recommend_tokenizer(corpus_stats: CorpusStats) -> dict[str, Any]:
         """
         Recommend tokenizer type and configuration based on corpus characteristics.
 
@@ -172,49 +161,25 @@ class TokenizerRecommender:
         # Rule-based recommendation logic
         if corpus_stats.language_hint == "cjk":
             recommendations.append(
-                {
-                    "type": "SentencePiece",
-                    "score": 0.9,
-                    "rationale": "SentencePiece handles CJK languages effectively without whitespace dependency",
-                }
+                {"type": "SentencePiece", "score": 0.9, "rationale": "SentencePiece handles CJK languages effectively without whitespace dependency"}
             )
 
         if corpus_stats.morphological_complexity > 0.7:
             recommendations.append(
-                {
-                    "type": "BPE",
-                    "score": 0.8,
-                    "rationale": "High morphological complexity benefits from BPE's subword handling",
-                }
+                {"type": "BPE", "score": 0.8, "rationale": "High morphological complexity benefits from BPE's subword handling"}
             )
 
         if corpus_stats.vocab_size > 50000:
-            recommendations.append(
-                {
-                    "type": "WordPiece",
-                    "score": 0.7,
-                    "rationale": "Large vocabulary size suits WordPiece tokenization",
-                }
-            )
+            recommendations.append({"type": "WordPiece", "score": 0.7, "rationale": "Large vocabulary size suits WordPiece tokenization"})
 
         if corpus_stats.avg_word_length > 8.0:
             recommendations.append(
-                {
-                    "type": "BPE",
-                    "score": 0.8,
-                    "rationale": "Long average word length benefits from subword tokenization",
-                }
+                {"type": "BPE", "score": 0.8, "rationale": "Long average word length benefits from subword tokenization"}
             )
 
         # Default fallback
         if not recommendations:
-            recommendations.append(
-                {
-                    "type": "BPE",
-                    "score": 0.6,
-                    "rationale": "BPE is a robust default choice for most corpora",
-                }
-            )
+            recommendations.append({"type": "BPE", "score": 0.6, "rationale": "BPE is a robust default choice for most corpora"})
 
         # Select highest scoring recommendation
         best_rec = max(recommendations, key=lambda x: x["score"])
@@ -222,17 +187,10 @@ class TokenizerRecommender:
         # Generate configuration suggestions
         config = TokenizerRecommender._generate_config(corpus_stats, best_rec["type"])
 
-        return {
-            "type": best_rec["type"],
-            "rationale": best_rec["rationale"],
-            "config": config,
-            "corpus_stats": corpus_stats,
-        }
+        return {"type": best_rec["type"], "rationale": best_rec["rationale"], "config": config, "corpus_stats": corpus_stats}
 
     @staticmethod
-    def _generate_config(
-        corpus_stats: CorpusStats, tokenizer_type: str
-    ) -> Dict[str, Any]:
+    def _generate_config(corpus_stats: CorpusStats, tokenizer_type: str) -> dict[str, Any]:
         """Generate tokenizer configuration based on corpus stats and type."""
         config = {}
 
@@ -246,29 +204,18 @@ class TokenizerRecommender:
 
         # Type-specific configurations
         if tokenizer_type == "BPE":
-            config.update(
-                {
-                    "dropout": (
-                        0.1 if corpus_stats.morphological_complexity > 0.5 else None
-                    ),
-                    "continuing_subword_prefix": "##",
-                }
-            )
+            config.update({"dropout": 0.1 if corpus_stats.morphological_complexity > 0.5 else None, "continuing_subword_prefix": "##"})
         elif tokenizer_type == "WordPiece":
             config.update(
                 {
                     "continuing_subword_prefix": "##",
-                    "max_input_chars_per_word": max(
-                        100, int(corpus_stats.avg_word_length * 10)
-                    ),
+                    "max_input_chars_per_word": max(100, int(corpus_stats.avg_word_length * 10)),
                 }
             )
         elif tokenizer_type == "SentencePiece":
             config.update(
                 {
-                    "character_coverage": (
-                        0.9995 if corpus_stats.language_hint == "latin" else 0.995
-                    ),
+                    "character_coverage": 0.9995 if corpus_stats.language_hint == "latin" else 0.995,
                     "model_type": "unigram",
                 }
             )
@@ -283,11 +230,11 @@ class TokenizerSelector:
 
     @staticmethod
     def suggest_and_train_tokenizer(
-        text_iterator: Iterator[List[str]],
+        text_iterator: Iterator[list[str]],
         vocab_size: Optional[int] = None,
         base_tokenizer: str = "google-bert/bert-base-uncased",
         sample_size: int = 10000,
-        **trainer_kwargs,
+        **trainer_kwargs
     ):
         """
         End-to-end utility to analyze corpus, recommend tokenizer, and train it.
@@ -326,12 +273,8 @@ class TokenizerSelector:
         try:
             base_tok = AutoTokenizer.from_pretrained(base_tokenizer, use_fast=True)
         except Exception:
-            logger.warning(
-                f"Could not load {base_tokenizer}, falling back to bert-base-uncased"
-            )
-            base_tok = AutoTokenizer.from_pretrained(
-                "google-bert/bert-base-uncased", use_fast=True
-            )
+            logger.warning(f"Could not load {base_tokenizer}, falling back to bert-base-uncased")
+            base_tok = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
 
         # Merge trainer configs
         trainer_config = {**recommendation["config"], **trainer_kwargs}
@@ -339,20 +282,14 @@ class TokenizerSelector:
         trainer_config.pop("vocab_size", None)
 
         # Train new tokenizer using existing method
-        logger.info(
-            f"Training {recommendation['type']} tokenizer with vocab_size={vocab_size}"
-        )
+        logger.info(f"Training {recommendation['type']} tokenizer with vocab_size={vocab_size}")
 
-        trained_tokenizer = base_tok.train_new_from_iterator(
-            text_iterator=iter(text_batches), vocab_size=vocab_size, **trainer_config
-        )
+        trained_tokenizer = base_tok.train_new_from_iterator(text_iterator=iter(text_batches), vocab_size=vocab_size, **trainer_config)
 
         return trained_tokenizer, recommendation
 
     @staticmethod
-    def analyze_corpus(
-        text_iterator: Iterator[List[str]], sample_size: int = 10000
-    ) -> CorpusStats:
+    def analyze_corpus(text_iterator: Iterator[list[str]], sample_size: int = 10000) -> CorpusStats:
         """
         Analyze corpus and return statistics.
 
@@ -366,7 +303,7 @@ class TokenizerSelector:
         return CorpusAnalyzer.analyze_corpus(text_iterator, sample_size)
 
     @staticmethod
-    def recommend_tokenizer(corpus_stats: CorpusStats) -> Dict[str, Any]:
+    def recommend_tokenizer(corpus_stats: CorpusStats) -> dict[str, Any]:
         """
         Get tokenizer recommendation based on corpus statistics.
 
@@ -380,9 +317,7 @@ class TokenizerSelector:
 
 
 # Convenience function for simple usage
-def suggest_and_train_tokenizer(
-    text_iterator: Iterator[List[str]], vocab_size: Optional[int] = None, **kwargs
-):
+def suggest_and_train_tokenizer(text_iterator: Iterator[list[str]], vocab_size: Optional[int] = None, **kwargs):
     """
     Convenience function for end-to-end tokenizer selection and training.
 
@@ -399,6 +334,4 @@ def suggest_and_train_tokenizer(
         >>> tokenizer, info = suggest_and_train_tokenizer(iter(texts))
         >>> print(f"Trained {info['type']} tokenizer: {info['rationale']}")
     """
-    return TokenizerSelector.suggest_and_train_tokenizer(
-        text_iterator, vocab_size, **kwargs
-    )
+    return TokenizerSelector.suggest_and_train_tokenizer(text_iterator, vocab_size, **kwargs)

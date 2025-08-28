@@ -16,8 +16,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from transformers.utils.tokenizer_selection import (
-    CorpusAnalyzer, CorpusStats, TokenizerRecommender, TokenizerSelector,
-    suggest_and_train_tokenizer)
+    CorpusAnalyzer,
+    CorpusStats,
+    TokenizerRecommender,
+    TokenizerSelector,
+    suggest_and_train_tokenizer,
+)
 
 
 class TestCorpusAnalyzer(unittest.TestCase):
@@ -25,19 +29,13 @@ class TestCorpusAnalyzer(unittest.TestCase):
         """Set up test data."""
         self.test_texts = [
             ["Hello world, this is a test.", "Machine learning is fascinating."],
-            [
-                "Natural language processing helps computers.",
-                "Tokenization is important.",
-            ],
-            [
-                "BPE and WordPiece are popular algorithms.",
-                "SentencePiece works well too.",
-            ],
+            ["Natural language processing helps computers.", "Tokenization is important."],
+            ["BPE and WordPiece are popular algorithms.", "SentencePiece works well too."]
         ]
 
         self.cjk_texts = [
             ["你好世界", "机器学习很有趣"],
-            ["自然语言处理帮助计算机", "分词很重要"],
+            ["自然语言处理帮助计算机", "分词很重要"]
         ]
 
     def test_analyze_corpus_basic(self):
@@ -88,7 +86,7 @@ class TestTokenizerRecommender(unittest.TestCase):
             morphological_complexity=0.3,
             token_frequency_ratio=0.1,
             avg_sentence_length=10.0,
-            language_hint="latin",
+            language_hint="latin"
         )
 
         self.cjk_stats = CorpusStats(
@@ -98,7 +96,7 @@ class TestTokenizerRecommender(unittest.TestCase):
             morphological_complexity=0.8,
             token_frequency_ratio=0.05,
             avg_sentence_length=15.0,
-            language_hint="cjk",
+            language_hint="cjk"
         )
 
         self.complex_stats = CorpusStats(
@@ -108,7 +106,7 @@ class TestTokenizerRecommender(unittest.TestCase):
             morphological_complexity=0.9,
             token_frequency_ratio=0.02,
             avg_sentence_length=20.0,
-            language_hint="latin",
+            language_hint="latin"
         )
 
     def test_recommend_tokenizer_cjk(self):
@@ -135,7 +133,7 @@ class TestTokenizerRecommender(unittest.TestCase):
             morphological_complexity=0.4,
             token_frequency_ratio=0.05,
             avg_sentence_length=12.0,
-            language_hint="latin",
+            language_hint="latin"
         )
 
         recommendation = TokenizerRecommender.recommend_tokenizer(large_vocab_stats)
@@ -165,16 +163,16 @@ class TestTokenizerRecommender(unittest.TestCase):
     def test_vocab_size_scaling(self):
         """Test vocabulary size recommendations scale appropriately."""
         small_vocab = CorpusStats(5000, 5.0, 50, 0.3, 0.1, 10.0, "latin")
-        medium_vocab = CorpusStats(30000, 6.0, 60, 0.4, 0.08, 12.0, "latin")
+        #medium_vocab = CorpusStats(30000, 6.0, 60, 0.4, 0.08, 12.0, "latin")
         large_vocab = CorpusStats(100000, 7.0, 80, 0.5, 0.05, 15.0, "latin")
 
         small_rec = TokenizerRecommender.recommend_tokenizer(small_vocab)
-        medium_rec = TokenizerRecommender.recommend_tokenizer(medium_vocab)
         large_rec = TokenizerRecommender.recommend_tokenizer(large_vocab)
 
         # Vocabulary size recommendations should scale
         self.assertLess(
-            small_rec["config"]["vocab_size"], large_rec["config"]["vocab_size"]
+            small_rec["config"]["vocab_size"],
+            large_rec["config"]["vocab_size"]
         )
 
 
@@ -183,10 +181,7 @@ class TestTokenizerSelector(unittest.TestCase):
         """Set up test data."""
         self.test_texts = [
             ["Hello world, this is a test.", "Machine learning is fascinating."],
-            [
-                "Natural language processing helps computers.",
-                "Tokenization is important.",
-            ],
+            ["Natural language processing helps computers.", "Tokenization is important."],
         ]
 
     def test_analyze_corpus(self):
@@ -206,7 +201,7 @@ class TestTokenizerSelector(unittest.TestCase):
         self.assertIn("config", recommendation)
         self.assertIn(recommendation["type"], ["BPE", "WordPiece", "SentencePiece"])
 
-    @patch("transformers.models.auto.AutoTokenizer")
+    @patch('transformers.models.auto.AutoTokenizer')
     def test_suggest_and_train_tokenizer_mock(self, mock_auto_tokenizer):
         """Test end-to-end tokenizer training with mocked AutoTokenizer."""
         # Mock the tokenizer and its training method
@@ -215,10 +210,9 @@ class TestTokenizerSelector(unittest.TestCase):
         mock_tokenizer.train_new_from_iterator.return_value = mock_trained_tokenizer
         mock_auto_tokenizer.from_pretrained.return_value = mock_tokenizer
 
-        trained_tokenizer, recommendation = (
-            TokenizerSelector.suggest_and_train_tokenizer(
-                iter(self.test_texts), vocab_size=1000
-            )
+        trained_tokenizer, recommendation = TokenizerSelector.suggest_and_train_tokenizer(
+            iter(self.test_texts),
+            vocab_size=1000
         )
 
         # Verify the method was called
@@ -233,9 +227,7 @@ class TestTokenizerSelector(unittest.TestCase):
     def test_convenience_function(self):
         """Test the convenience function."""
         # This test would require mocking as well since it calls the main method
-        with patch(
-            "transformers.utils.tokenizer_selection.TokenizerSelector.suggest_and_train_tokenizer"
-        ) as mock_method:
+        with patch('transformers.utils.tokenizer_selection.TokenizerSelector.suggest_and_train_tokenizer') as mock_method:
             mock_method.return_value = (MagicMock(), {"type": "BPE"})
 
             tokenizer, info = suggest_and_train_tokenizer(iter(self.test_texts))
@@ -253,17 +245,13 @@ class TestIntegration(unittest.TestCase):
         self.english_texts = [
             ["The quick brown fox jumps over the lazy dog."],
             ["Machine learning models require substantial computational resources."],
-            [
-                "Natural language processing enables computers to understand human language."
-            ],
+            ["Natural language processing enables computers to understand human language."]
         ]
 
         self.technical_texts = [
             ["Hyperparameter optimization improves model performance significantly."],
             ["Convolutional neural networks excel at computer vision tasks."],
-            [
-                "Transformer architectures revolutionized natural language understanding."
-            ],
+            ["Transformer architectures revolutionized natural language understanding."]
         ]
 
     def test_different_corpus_types(self):
@@ -281,7 +269,7 @@ class TestIntegration(unittest.TestCase):
         # Technical text typically has higher complexity
         self.assertGreaterEqual(
             technical_stats.morphological_complexity,
-            english_stats.morphological_complexity,
+            english_stats.morphological_complexity
         )
 
 
