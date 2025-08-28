@@ -42,10 +42,20 @@ class ParakeetProcessor(ParakeetProcessor):
             raise ValueError(
                 f"Expecting a single output to be decoded but received {token_ids.shape[0]} samples instead."
             )
-        return self.tokenizer.decode(token_ids[0], group_tokens=True, **kwargs)
+        # Default to grouping tokens for CTC duplicate removal
+        group_tokens = kwargs.pop("group_tokens", True)
+        return self.tokenizer.decode(token_ids[0], group_tokens=group_tokens, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.batch_decode(*args, group_tokens=True, **kwargs)
+        # Default to grouping tokens for CTC duplicate removal
+        group_tokens = kwargs.pop("group_tokens", True)
+        return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
+
+    def get_prompt_ids(self):
+        raise AttributeError("Not needed for Parakeet")
+
+    def get_decoder_prompt_ids(self):
+        raise AttributeError("Not needed for Parakeet")
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):

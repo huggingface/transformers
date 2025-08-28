@@ -46,9 +46,6 @@ class ParakeetProcessor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-    def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
-
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to ParakeetFeatureExtractor's [`~ParakeetFeatureExtractor.__call__`] and the `text`
@@ -88,7 +85,9 @@ class ParakeetProcessor(ProcessorMixin):
         This method forwards all its arguments to ParakeetTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        return self.tokenizer.batch_decode(*args, group_tokens=True, **kwargs)
+        # Default to grouping tokens for CTC duplicate removal
+        group_tokens = kwargs.pop("group_tokens", True)
+        return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
 
     def decode(self, token_ids, **kwargs):
         """
@@ -99,10 +98,9 @@ class ParakeetProcessor(ProcessorMixin):
             raise ValueError(
                 f"Expecting a single output to be decoded but received {token_ids.shape[0]} samples instead."
             )
-        return self.tokenizer.decode(token_ids[0], group_tokens=True, **kwargs)
-
-    def get_prompt_ids(self, text: str, return_tensors="np"):
-        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
+        # Default to grouping tokens for CTC duplicate removal
+        group_tokens = kwargs.pop("group_tokens", True)
+        return self.tokenizer.decode(token_ids[0], group_tokens=group_tokens, **kwargs)
 
 
 __all__ = ["ParakeetProcessor"]
