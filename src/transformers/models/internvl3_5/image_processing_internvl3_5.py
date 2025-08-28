@@ -459,13 +459,13 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
                     patch = to_numpy_array(patch)
 
                 if do_resize:
-                    patch = resize(patch, size, resample=resample, input_data_format=input_data_format)
+                    patch = self.resize(image=patch, size=size, resample=resample, input_data_format=input_data_format)
 
                 if do_rescale:
-                    patch = rescale(patch, scale=rescale_factor, input_data_format=input_data_format)
+                    patch = self.rescale(image=patch, scale=rescale_factor, input_data_format=input_data_format)
 
                 if do_normalize:
-                    patch = normalize(patch, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                    patch = self.normalize(image=patch, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
                 patch = to_channel_dimension_format(patch, data_format, input_channel_dim=input_data_format)
                 batch_patches.append(patch)
