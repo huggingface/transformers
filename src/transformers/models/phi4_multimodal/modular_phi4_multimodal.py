@@ -528,7 +528,7 @@ class Phi4MultimodalVisionEncoderLayer(SiglipEncoderLayer):
 
 class Phi4MultimodalVisionEncoder(SiglipEncoder):
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.layers = nn.ModuleList(
             [Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
@@ -582,7 +582,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
+class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         nn.Module.__init__(self)
         self.config = config
@@ -1455,7 +1455,7 @@ class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
             module.sub_img_feature_extensor.data.zero_()
 
 
-class Phi4MultimodalModel(Phi3Model, nn.Module):
+class Phi4MultimodalModel(Phi3Model):
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1570,7 +1570,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         )
 
 
-class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
+class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
