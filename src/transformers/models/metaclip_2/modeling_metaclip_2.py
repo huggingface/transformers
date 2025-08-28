@@ -715,54 +715,6 @@ class MetaClip2Output(ModelOutput):
         )
 
 
-class MetaClip2VisionTransformer(nn.Module):
-    def __init__(self, config: MetaClip2VisionConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = MetaClip2VisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MetaClip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-    ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-metaclip_2.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -1006,6 +958,54 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
             image_embeds=image_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
+        )
+
+
+class MetaClip2VisionTransformer(nn.Module):
+    def __init__(self, config: MetaClip2VisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = MetaClip2VisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = MetaClip2Encoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> BaseModelOutputWithPooling:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
