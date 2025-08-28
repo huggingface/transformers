@@ -100,6 +100,52 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
+def grouped_experts_gemm(token_states, expert_weights, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert using torch._grouped_mm.
+    This is more efficient than the sequential approach for multiple experts.
+
+    Args:
+        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    # Check if torch._grouped_mm is available
+    if not hasattr(torch, '_grouped_mm'):
+        logger.warning(
+            "torch._grouped_mm is not available. Falling back to sequential implementation. "
+            "Consider upgrading to a newer version of PyTorch for better performance."
+        )
+        return sequential_experts_gemm(token_states, expert_weights, tokens_per_expert)
+    
+    device = token_states.device
+    dtype = token_states.dtype
+    num_tokens, in_features = token_states.shape
+    num_experts, _, out_features = expert_weights.shape
+    
+    # Prepare inputs for torch._grouped_mm
+    # token_states: (num_tokens, in_features) - already in correct format
+    a = token_states
+    
+    # expert_weights: (num_experts, in_features, out_features) -> (num_experts, out_features, in_features)
+    # Need to transpose the last two dimensions for grouped_mm
+    b = expert_weights.transpose(-2, -1)
+    
+    # Create offsets tensor - cumulative sum of tokens per expert
+    cumsum_tokens = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+    # Insert zero at the beginning
+    zero_tensor = torch.zeros(1, dtype=torch.int32, device=device)
+    offs = torch.cat((zero_tensor, cumsum_tokens))
+    
+    # Use torch._grouped_mm for efficient computation
+    output = torch._grouped_mm(a, b, offs=offs, out_dtype=dtype)
+    
+    return output
+
+
 class AriaTextConfig(LlamaConfig):
     r"""
     This class handles the configuration for the text component of the Aria model.
@@ -1095,8 +1141,9 @@ class AriaGroupedExpertsGemm(nn.Module):
             Number of expert groups.
     """
 
-    def __init__(self, in_features, out_features, groups):
+    def __init__(self, config, in_features, out_features, groups):
         super().__init__()
+        self.config = config
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
@@ -1115,10 +1162,17 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
+        # Use the optimized grouped_experts_gemm which has fallback built-in
+        if self.config.use_grouped_gemm:
+            return grouped_experts_gemm(
+                input,
+                self.weight,
+                tokens_per_expert,
+            )
         return sequential_experts_gemm(
             input,
             self.weight,
-            tokens_per_expert.cpu(),
+            tokens_per_expert,
         )
 
 
@@ -1134,8 +1188,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGemm(config, config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGemm(config, config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
