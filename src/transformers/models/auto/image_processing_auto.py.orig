@@ -138,7 +138,8 @@ else:
 <<<<<<< HEAD
             ("lw_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
 =======
->>>>>>> f686016bad (refactor: replace LwDetrImageProcessor with DeformableDetrImageProcessor)
+            ("lw_detr", ("LwDetrImageProcessor", "LwDetrImageProcessorFast")),
+>>>>>>> 2e57767fc2 (feat: add LWDetr model)
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
