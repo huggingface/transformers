@@ -20,130 +20,105 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    to_channel_dimension_format,
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorKwargs,
+    Unpack,
 )
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
+from ...image_utils import ImageInput, SizeDict
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_vision_available,
+    logging,
 )
-from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
     from PIL import Image
+    from ...image_utils import PILImageResampling
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
 
 
-class InternVL3_5ImageProcessor(BaseImageProcessor):
+class InternVL3_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     r"""
-    Constructs an InternVL3.5 image processor.
+    max_patches (`int`, *optional*):
+        Maximum number of patches per image for dynamic preprocessing.
+    min_patches (`int`, *optional*):
+        Minimum number of patches per image for dynamic preprocessing.
+    patch_size (`int`, *optional*):
+        Size of each patch when using dynamic preprocessing.
+    crop_to_patches (`bool`, *optional*):
+        Whether to crop images to patches using dynamic preprocessing.
+    """
+
+    max_patches: Optional[int]
+    min_patches: Optional[int]
+    patch_size: Optional[int]
+    crop_to_patches: Optional[bool]
+
+
+@auto_docstring
+class InternVL3_5ImageProcessor(BaseImageProcessorFast):
+    r"""
+    Constructs an InternVL3.5 image processor with dynamic multi-patch preprocessing.
+
+    This processor supports dynamic aspect ratio handling by splitting images into multiple patches
+    based on their aspect ratio, allowing the model to handle images of various dimensions efficiently.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
+            Whether to resize the image's (height, width) dimensions to the specified `size`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 448, "width": 448}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
+            Size of the output image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
+            Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
+            Whether to rescale the image by the specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
+            Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
+            Mean to use if normalizing the image.
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
+            Standard deviation to use if normalizing the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
         max_patches (`int`, *optional*, defaults to 12):
             Maximum number of patches per image for dynamic preprocessing.
+        min_patches (`int`, *optional*, defaults to 1):
+            Minimum number of patches per image for dynamic preprocessing.
         patch_size (`int`, *optional*, defaults to 448):
             Size of each patch when using dynamic preprocessing.
         crop_to_patches (`bool`, *optional*, defaults to `True`):
             Whether to crop images to patches using dynamic preprocessing.
     """
 
-    model_input_names = ["pixel_values"]
+    resample = PILImageResampling.BICUBIC
+    size = {"height": 448, "width": 448}
+    image_mean = [0.485, 0.456, 0.406]
+    image_std = [0.229, 0.224, 0.225]
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    max_patches = 12
+    min_patches = 1
+    patch_size = 448
+    crop_to_patches = True
+    valid_kwargs = InternVL3_5FastImageProcessorKwargs
+    model_input_names = ["pixel_values", "num_patches"]
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = True,
-        max_patches: int = 12,
-        min_patches: int = 1,
-        patch_size: int = 448,
-        crop_to_patches: bool = True,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[InternVL3_5FastImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-        size = size if size is not None else {"height": 448, "width": 448}
-        size = get_size_dict(size, default_to_square=True)
-
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = max_patches
-        self.min_patches = min_patches
-        self.patch_size = patch_size
-        self.crop_to_patches = crop_to_patches
-        self.valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "max_patches",
-            "min_patches",
-            "patch_size",
-            "crop_to_patches",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def find_closest_aspect_ratio(
         self, aspect_ratio: float, target_ratios: List[Tuple[int, int]], width: int, height: int, image_size: int
@@ -177,35 +152,45 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
 
     def dynamic_preprocess(
         self,
-        image: np.ndarray,
+        image: Union[np.ndarray, "torch.Tensor", Image.Image],
         min_num: int = 1,
         max_num: int = 12,
         image_size: int = 448,
-        use_thumbnail: bool = False,
-    ) -> List[np.ndarray]:
+        use_thumbnail: bool = True,
+    ) -> List[Union[np.ndarray, "torch.Tensor", Image.Image]]:
         """
         Dynamically preprocess an image into patches based on its aspect ratio.
 
         Args:
-            image (`np.ndarray`): The input image.
+            image: The input image.
             min_num (`int`, *optional*, defaults to 1): Minimum number of patches.
             max_num (`int`, *optional*, defaults to 12): Maximum number of patches.
             image_size (`int`, *optional*, defaults to 448): Size of each patch.
-            use_thumbnail (`bool`, *optional*, defaults to False): Whether to add a thumbnail.
+            use_thumbnail (`bool`, *optional*, defaults to True): Whether to add a thumbnail.
 
         Returns:
-            `List[np.ndarray]`: List of processed image patches.
+            List of processed image patches.
         """
+        # Handle different image formats
         if isinstance(image, Image.Image):
             orig_width, orig_height = image.size
-        else:
-            # Handle numpy array
-            if image.ndim == 3 and image.shape[-1] == 3:  # HWC
+            is_pil = True
+        elif is_torch_available() and isinstance(image, torch.Tensor):
+            if image.ndim == 3 and image.shape[0] in [1, 3]:  # CHW
+                orig_height, orig_width = image.shape[1:]
+            elif image.ndim == 3:  # HWC
                 orig_height, orig_width = image.shape[:2]
-            elif image.ndim == 3 and image.shape[0] == 3:  # CHW
+            else:
+                raise ValueError(f"Unsupported tensor shape: {image.shape}")
+            is_pil = False
+        else:  # numpy array
+            if image.ndim == 3 and image.shape[-1] in [1, 3]:  # HWC
+                orig_height, orig_width = image.shape[:2]
+            elif image.ndim == 3:  # CHW
                 orig_height, orig_width = image.shape[1:]
             else:
                 raise ValueError(f"Unsupported image shape: {image.shape}")
+            is_pil = False
 
         aspect_ratio = orig_width / orig_height
 
@@ -229,47 +214,75 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
         target_height = image_size * target_aspect_ratio[1]
         blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
-        # Resize the image
-        if isinstance(image, Image.Image):
+        # Resize the image based on format
+        if is_pil:
             resized_img = image.resize((target_width, target_height), Image.Resampling.BICUBIC)
-        else:
-            # Convert numpy array to PIL Image for resizing, then back
-            if image.ndim == 3 and image.shape[0] == 3:  # CHW to HWC
-                image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8))
+        elif is_torch_available() and isinstance(image, torch.Tensor):
+            import torch.nn.functional as F
+            # Ensure CHW format for resize
+            if image.ndim == 3 and image.shape[-1] in [1, 3]:  # HWC to CHW
+                image = image.permute(2, 0, 1)
+            resized_img = F.interpolate(
+                image.unsqueeze(0), size=(target_height, target_width), mode='bicubic', align_corners=False
+            ).squeeze(0)
+        else:  # numpy array
+            # Convert to PIL for resizing
+            if image.ndim == 3 and image.shape[0] in [1, 3]:  # CHW to HWC
+                image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8) if image.max() <= 1.0 else image.transpose(1, 2, 0).astype(np.uint8))
             else:  # Already HWC
-                if image.max() <= 1.0:
-                    image_pil = Image.fromarray((image * 255).astype(np.uint8))
-                else:
-                    image_pil = Image.fromarray(image.astype(np.uint8))
+                image_pil = Image.fromarray((image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8))
             
             resized_img = image_pil.resize((target_width, target_height), Image.Resampling.BICUBIC)
 
+        # Split into patches
         processed_images = []
         for i in range(blocks):
-            box = (
-                (i % (target_width // image_size)) * image_size,
-                (i // (target_width // image_size)) * image_size,
-                ((i % (target_width // image_size)) + 1) * image_size,
-                ((i // (target_width // image_size)) + 1) * image_size,
-            )
-            # Split the image
-            split_img = resized_img.crop(box)
-            processed_images.append(split_img)
+            if is_pil:
+                box = (
+                    (i % (target_width // image_size)) * image_size,
+                    (i // (target_width // image_size)) * image_size,
+                    ((i % (target_width // image_size)) + 1) * image_size,
+                    ((i // (target_width // image_size)) + 1) * image_size,
+                )
+                split_img = resized_img.crop(box)
+                processed_images.append(split_img)
+            else:
+                # Handle tensor cropping
+                row = i // (target_width // image_size)
+                col = i % (target_width // image_size)
+                start_row = row * image_size
+                end_row = (row + 1) * image_size
+                start_col = col * image_size
+                end_col = (col + 1) * image_size
+                
+                if isinstance(resized_img, torch.Tensor):
+                    split_img = resized_img[:, start_row:end_row, start_col:end_col]
+                else:  # PIL was used for numpy
+                    box = (start_col, start_row, end_col, end_row)
+                    split_img = resized_img.crop(box)
+                processed_images.append(split_img)
 
         assert len(processed_images) == blocks
-        if use_thumbnail and len(processed_images) != 1:
-            if isinstance(image, Image.Image):
+        
+        # Add thumbnail if requested and we have multiple patches
+        if use_thumbnail and len(processed_images) > 1:
+            if is_pil:
                 thumbnail_img = image.resize((image_size, image_size), Image.Resampling.BICUBIC)
+            elif is_torch_available() and isinstance(image, torch.Tensor):
+                import torch.nn.functional as F
+                if image.ndim == 3 and image.shape[-1] in [1, 3]:  # HWC to CHW
+                    image = image.permute(2, 0, 1)
+                thumbnail_img = F.interpolate(
+                    image.unsqueeze(0), size=(image_size, image_size), mode='bicubic', align_corners=False
+                ).squeeze(0)
             else:
                 # Convert to PIL for thumbnail
-                if image.ndim == 3 and image.shape[0] == 3:  # CHW to HWC
-                    image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8))
+                if image.ndim == 3 and image.shape[0] in [1, 3]:  # CHW to HWC
+                    image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8) if image.max() <= 1.0 else image.transpose(1, 2, 0).astype(np.uint8))
                 else:  # Already HWC
-                    if image.max() <= 1.0:
-                        image_pil = Image.fromarray((image * 255).astype(np.uint8))
-                    else:
-                        image_pil = Image.fromarray(image.astype(np.uint8))
+                    image_pil = Image.fromarray((image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8))
                 thumbnail_img = image_pil.resize((image_size, image_size), Image.Resampling.BICUBIC)
+            
             processed_images.append(thumbnail_img)
         
         return processed_images
@@ -286,7 +299,7 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches.
         """
-        if not processor_kwargs.get("crop_to_patches", True):
+        if not processor_kwargs.get("crop_to_patches", self.crop_to_patches):
             return 1
 
         max_patches = processor_kwargs.get("max_patches", self.max_patches)
@@ -307,137 +320,41 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
             aspect_ratio, target_ratios, width, height, image_size
         )
 
-        return target_aspect_ratio[0] * target_aspect_ratio[1]
+        patches = target_aspect_ratio[0] * target_aspect_ratio[1]
+        # Add 1 for thumbnail if multiple patches
+        if patches > 1:
+            patches += 1
+        return patches
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
+        **kwargs: Unpack[InternVL3_5FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: List[Union[np.ndarray, "torch.Tensor", Image.Image]],
+        size: SizeDict,
+        interpolation: Optional["PILImageResampling"],
+        max_patches: int,
+        min_patches: int,
+        patch_size: int,
+        crop_to_patches: bool,
+        do_rescale: bool,
+        rescale_factor: Optional[float],
+        do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        max_patches: Optional[int] = None,
-        min_patches: Optional[int] = None,
-        patch_size: Optional[int] = None,
-        crop_to_patches: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images. Copy of the superclass method. Here for typing purposes.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single image, a batch of images, or a list of batches of images. 
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Controls the size of the image after `resize`. The shortest edge of the image is resized to
-                `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
-                is > `size["longest_edge"]`, then the image is resized again to make the longest edge equal to
-                `size["longest_edge"]`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                Maximum number of patches per image.
-            min_patches (`int`, *optional*, defaults to `self.min_patches`):
-                Minimum number of patches per image.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                Size of each patch.
-            crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
-                Whether to crop images to patches using dynamic preprocessing.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        max_patches = max_patches if max_patches is not None else self.max_patches
-        min_patches = min_patches if min_patches is not None else self.min_patches
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
-
-        images = make_list_of_images(images)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_processor_keys)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
         all_processed_images = []
         all_num_patches = []
 
         for image in images:
-            if do_convert_rgb:
-                image = convert_to_rgb(image)
-
             # Dynamic preprocessing if crop_to_patches is enabled
             if crop_to_patches:
                 processed_patches = self.dynamic_preprocess(
@@ -448,24 +365,21 @@ class InternVL3_5ImageProcessor(BaseImageProcessor):
                 processed_patches = [image]
                 all_num_patches.append(1)
 
-            # Process each patch
+            # Process each patch using base class methods
             batch_patches = []
             for patch in processed_patches:
-                # Convert PIL image back to numpy array if needed
+                # Convert to format expected by base class
                 if isinstance(patch, Image.Image):
-                    patch = to_numpy_array(patch)
+                    patch_processed = self.convert_to_rgb(patch)
+                else:
+                    patch_processed = patch
 
-                if do_resize:
-                    patch = self.resize(image=patch, size=size, resample=resample, input_data_format=input_data_format)
-
-                if do_rescale:
-                    patch = self.rescale(image=patch, scale=rescale_factor, input_data_format=input_data_format)
-
-                if do_normalize:
-                    patch = self.normalize(image=patch, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-                patch = to_channel_dimension_format(patch, data_format, input_channel_dim=input_data_format)
-                batch_patches.append(patch)
+                # Use base class processing methods
+                patch_processed = self.resize(patch_processed, size, interpolation=interpolation, antialias=False)
+                patch_processed = self.rescale_and_normalize(
+                    patch_processed, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+                batch_patches.append(patch_processed)
 
             all_processed_images.extend(batch_patches)
 
