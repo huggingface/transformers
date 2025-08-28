@@ -252,7 +252,7 @@ class FalconH1Attention(LlamaAttention):
 
 class FalconH1RMSNormGated(MambaRMSNormGated):
     def __init__(self, hidden_size, eps=1e-6, n_groups=1, norm_before_gate=True):
-        super().__init__()
+        super().__init__(hidden_size=hidden_size, eps=eps)
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.n_groups = n_groups
@@ -812,8 +812,8 @@ class FalconH1Mixer(nn.Module):
 
 
 class FalconH1MLP(LlamaMLP):
-    def __init__(self, config: FalconH1Config = None):
-        super().__init__()
+    def __init__(self, config: FalconH1Config):
+        super().__init__(config)
         self.gate_multiplier, self.down_multiplier = config.mlp_multipliers
 
     def forward(self, x):

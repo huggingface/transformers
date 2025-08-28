@@ -52,7 +52,7 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        paper](https://huggingface.co/papers/2006.11477).
     projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
         projected quantized states.
@@ -215,7 +215,7 @@ UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechConfig):
-        UniSpeechPreTrainedModel.__init__(config)
+        UniSpeechPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = UniSpeechFeatureEncoder(config)
         self.feature_projection = UniSpeechFeatureProjection(config)

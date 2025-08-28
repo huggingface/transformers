@@ -883,7 +883,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
 
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # only eager/sdpa creation is supported
     _can_compile_fullgraph = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
     _supports_attention_backend = True
 
@@ -1053,7 +1053,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         batch_size, seq_length, _ = inputs_embeds.shape
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1341,12 +1341,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     def tie_weights(self):
         """

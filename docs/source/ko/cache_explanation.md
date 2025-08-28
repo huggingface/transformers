@@ -99,18 +99,20 @@ cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], d
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+
+device = f"{infer_device()}:0"
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 messages = [{"role": "user", "content": "Hello, what's your name."}]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 generated_ids = inputs.input_ids
-cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device="cuda:0")
+cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device=model.device)
 max_new_tokens = 10
 
 for _ in range(max_new_tokens):
@@ -143,14 +145,16 @@ print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+
+device = f"{infer_device()}:0"
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [{"role": "user", "content": "You are a helpful assistant."}]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
 ```
@@ -172,7 +176,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
 # 캐시를 반환하려면 `return_dict_in_generate=True`가 필요하고 `return_legacy_cache`는 반환된 캐시를

@@ -305,6 +305,10 @@ class RTDetrV2MultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
+                )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
 
@@ -445,6 +449,72 @@ class RTDetrV2DecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
+class RTDetrV2PreTrainedModel(PreTrainedModel):
+    config: RTDetrV2Config
+    base_model_prefix = "rt_detr_v2"
+    main_input_name = "pixel_values"
+    _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
+            if module.class_embed is not None:
+                for layer in module.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.constant_(layer.bias, bias)
+
+            if module.bbox_embed is not None:
+                for layer in module.bbox_embed:
+                    nn.init.constant_(layer.layers[-1].weight, 0)
+                    nn.init.constant_(layer.layers[-1].bias, 0)
+
+        elif isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            with torch.no_grad():
+                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight.data)
+            nn.init.constant_(module.value_proj.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight.data)
+            nn.init.constant_(module.output_proj.bias.data, 0.0)
+
+        elif isinstance(module, RTDetrV2Model):
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
+            nn.init.xavier_uniform_(module.enc_score_head.weight)
+            nn.init.constant_(module.enc_score_head.bias, bias)
+
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
+            nn.init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -481,6 +551,172 @@ class RTDetrV2DecoderOutput(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
+class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
+    def __init__(self, config: RTDetrV2Config):
+        super().__init__(config)
+
+        self.dropout = config.dropout
+        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.query_pos_head = RTDetrV2MLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+
+        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        self.bbox_embed = None
+        self.class_embed = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        position_embeddings=None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        valid_ratios=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+                The query embeddings that are passed into the decoder.
+            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                of the decoder.
+            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+                in `[0, 1]`:
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
+            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of the feature maps.
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+                Ratio of valid area in each feature level.
+
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        intermediate = ()
+        intermediate_reference_points = ()
+        intermediate_logits = ()
+
+        reference_points = F.sigmoid(reference_points)
+
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/RTDetrV2_pytorch/src/zoo/RTDetrV2/RTDetrV2_decoder.py#L252
+        for idx, decoder_layer in enumerate(self.layers):
+            reference_points_input = reference_points.unsqueeze(2)
+            position_embeddings = self.query_pos_head(reference_points)
+
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                encoder_hidden_states=encoder_hidden_states,
+                reference_points=reference_points_input,
+                spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
+                level_start_index=level_start_index,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            # hack implementation for iterative bounding box refinement
+            if self.bbox_embed is not None:
+                predicted_corners = self.bbox_embed[idx](hidden_states)
+                new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
+                reference_points = new_reference_points.detach()
+
+            intermediate += (hidden_states,)
+            intermediate_reference_points += (
+                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
+            )
+
+            if self.class_embed is not None:
+                logits = self.class_embed[idx](hidden_states)
+                intermediate_logits += (logits,)
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (layer_outputs[2],)
+
+        # Keep batch_size as first dimension
+        intermediate = torch.stack(intermediate, dim=1)
+        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        if self.class_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    intermediate,
+                    intermediate_logits,
+                    intermediate_reference_points,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
+        return RTDetrV2DecoderOutput(
+            last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
+            intermediate_logits=intermediate_logits,
+            intermediate_reference_points=intermediate_reference_points,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
 
 
 @dataclass
@@ -534,84 +770,6 @@ class RTDetrV2ModelOutput(ModelOutput):
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None
-    enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-    denoising_meta_values: Optional[dict] = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Output type of [`RTDetrV2ForObjectDetection`].
-    """
-)
-class RTDetrV2ObjectDetectionOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-        scale-invariant IoU loss.
-    loss_dict (`Dict`, *optional*):
-        A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
-        Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~RTDetrV2ImageProcessor.post_process_object_detection`] to retrieve the
-        unnormalized (absolute) bounding boxes.
-    auxiliary_outputs (`list[Dict]`, *optional*):
-        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-        `pred_boxes`) for each decoder layer.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
-        Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked initial reference points (initial reference points of each layer of the decoder).
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the encoder.
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the encoder.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    denoising_meta_values (`dict`):
-        Extra dictionary for the denoising related values
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_logits: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
-    initial_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    init_reference_points: Optional[tuple[torch.FloatTensor]] = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -1078,13 +1236,6 @@ class RTDetrV2HybridEncoder(nn.Module):
         )
 
 
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
 def get_contrastive_denoising_training_group(
     targets,
     num_classes,
@@ -1188,16 +1339,16 @@ def get_contrastive_denoising_training_group(
     input_query_class = class_embed(input_query_class)
 
     target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    attn_mask = torch.full([target_size, target_size], 0, dtype=torch.float, device=device)
     # match query cannot see the reconstruction
-    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = -torch.inf
 
     # reconstructions cannot see each other
     for i in range(num_groups_denoising_queries):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
-        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = -torch.inf
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = -torch.inf
 
     denoising_meta_values = {
         "dn_positive_idx": denoise_positive_idx,
@@ -1206,235 +1357,6 @@ def get_contrastive_denoising_training_group(
     }
 
     return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
-
-
-def _get_clones(partial_module, N):
-    return nn.ModuleList([partial_module() for i in range(N)])
-
-
-@auto_docstring
-class RTDetrV2PreTrainedModel(PreTrainedModel):
-    config: RTDetrV2Config
-    base_model_prefix = "rt_detr_v2"
-    main_input_name = "pixel_values"
-    _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    nn.init.xavier_uniform_(layer.weight)
-                    nn.init.constant_(layer.bias, bias)
-
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    nn.init.constant_(layer.layers[-1].weight, 0)
-                    nn.init.constant_(layer.layers[-1].bias, 0)
-
-        elif isinstance(module, RTDetrV2MultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
-            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-            grid_init = (
-                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
-            )
-            for i in range(module.n_points):
-                grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
-
-        elif isinstance(module, RTDetrV2Model):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-            bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
-
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
-        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module.weight_embedding.weight)
-        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
-
-
-class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
-    def __init__(self, config: RTDetrV2Config):
-        super().__init__(config)
-
-        self.dropout = config.dropout
-        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RTDetrV2MLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
-
-        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
-        self.bbox_embed = None
-        self.class_embed = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings=None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        intermediate = ()
-        intermediate_reference_points = ()
-        intermediate_logits = ()
-
-        reference_points = F.sigmoid(reference_points)
-
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/RTDetrV2_pytorch/src/zoo/RTDetrV2/RTDetrV2_decoder.py#L252
-        for idx, decoder_layer in enumerate(self.layers):
-            reference_points_input = reference_points.unsqueeze(2)
-            position_embeddings = self.query_pos_head(reference_points)
-
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                encoder_hidden_states=encoder_hidden_states,
-                reference_points=reference_points_input,
-                spatial_shapes=spatial_shapes,
-                spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
-                encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
-            )
-
-            hidden_states = layer_outputs[0]
-
-            # hack implementation for iterative bounding box refinement
-            if self.bbox_embed is not None:
-                predicted_corners = self.bbox_embed[idx](hidden_states)
-                new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
-                reference_points = new_reference_points.detach()
-
-            intermediate += (hidden_states,)
-            intermediate_reference_points += (
-                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
-            )
-
-            if self.class_embed is not None:
-                logits = self.class_embed[idx](hidden_states)
-                intermediate_logits += (logits,)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
-        # Keep batch_size as first dimension
-        intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
-        if self.class_embed is not None:
-            intermediate_logits = torch.stack(intermediate_logits, dim=1)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_logits,
-                    intermediate_reference_points,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return RTDetrV2DecoderOutput(
-            last_hidden_state=hidden_states,
-            intermediate_hidden_states=intermediate,
-            intermediate_logits=intermediate_logits,
-            intermediate_reference_points=intermediate_reference_points,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-        )
 
 
 @auto_docstring(
@@ -1517,9 +1439,6 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -1802,6 +1721,84 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         for i, layer in enumerate(self.layers):
             x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`RTDetrV2ForObjectDetection`].
+    """
+)
+class RTDetrV2ObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~RTDetrV2ImageProcessor.post_process_object_detection`] to retrieve the
+        unnormalized (absolute) bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked initial reference points (initial reference points of each layer of the decoder).
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[dict] = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: Optional[list[dict]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[tuple[torch.FloatTensor]] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    denoising_meta_values: Optional[dict] = None
 
 
 @auto_docstring(

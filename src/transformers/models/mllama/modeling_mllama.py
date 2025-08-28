@@ -1229,7 +1229,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         hidden_states = inputs_embeds
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1298,12 +1298,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring
@@ -1571,7 +1565,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

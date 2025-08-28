@@ -26,7 +26,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import (
     ClassifierFreeGuidanceLogitsProcessor,
     GenerationConfig,
@@ -521,14 +521,14 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                 "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -600,9 +600,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -681,9 +678,6 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     # Ignore copy
@@ -1373,9 +1367,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # get the text encoder to compute the conditioning hidden-states for generation
         return self.get_text_encoder()
 
-    def get_decoder(self):
-        return self.decoder
-
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()
 
@@ -1501,7 +1492,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {text_encoder_pretrained_model_name_or_path} as a text_encoder model "
-                        "from a decoder model. Cross-attention and casual mask are disabled."
+                        "from a decoder model. Cross-attention and causal mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -1528,7 +1519,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {audio_encoder_pretrained_model_name_or_path} as an audio_encoder model "
-                        "from a decoder model. Cross-attention and casual mask are disabled."
+                        "from a decoder model. Cross-attention and causal mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
