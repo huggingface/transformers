@@ -52,7 +52,7 @@ class ParakeetEncoderModelTester:
         num_attention_heads=4,
         intermediate_size=256,
         hidden_act="silu",
-        dropout_positions=0.1,
+        dropout=0,  # so gradient checkpointing doesn't fail
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=32,
@@ -73,7 +73,7 @@ class ParakeetEncoderModelTester:
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.dropout_positions = dropout_positions
+        self.dropout = dropout
         self.conv_kernel_size = conv_kernel_size
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
@@ -100,7 +100,11 @@ class ParakeetEncoderModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            dropout_positions=self.dropout_positions,
+            dropout=self.dropout,
+            dropout_positions=self.dropout,
+            layerdrop=self.dropout,
+            activation_dropout=self.dropout,
+            attention_dropout=self.dropout,
             conv_kernel_size=self.conv_kernel_size,
             subsampling_factor=self.subsampling_factor,
             subsampling_conv_channels=self.subsampling_conv_channels,
@@ -178,6 +182,10 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ParakeetEncoder does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Flash not yet supported in Parakeet models")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
@@ -266,11 +274,15 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(reason="Flash not yet supported in Parakeet models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     # Original function assumes (vision+text model)
     # Below is modified from `tests/models/granite_speech/test_modeling_granite_speech.py` and removes language model
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
-        # overwrite because Granite Speech is audio+text model (not vision+text)
+        # overwrite because Parakeet is audio+text model (not vision+text)
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
