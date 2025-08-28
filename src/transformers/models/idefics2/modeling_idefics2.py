@@ -502,17 +502,13 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
             The attention mask for the patches.
         """
 
-        batch_size = pixel_values.size(0)
+        batch_size, _, height, width = pixel_values.shape
         if patch_attention_mask is None:
-            patch_size = self.config.patch_size
+            num_patches_height = height // self.config.patch_size
+            num_patches_width = width // self.config.patch_size
             patch_attention_mask = torch.ones(
-                (
-                    batch_size,
-                    pixel_values.size(2) // patch_size,
-                    pixel_values.size(3) // patch_size,
-                )
+                (batch_size, num_patches_height, num_patches_width), dtype=torch.bool, device=pixel_values.device
             )
-            patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
 
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
