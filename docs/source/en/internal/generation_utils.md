@@ -198,6 +198,9 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] StopStringCriteria
     - __call__
 
+[[autodoc]] StopStringTextMatchCriteria
+    - __call__
+
 [[autodoc]] EosTokenCriteria
     - __call__
 

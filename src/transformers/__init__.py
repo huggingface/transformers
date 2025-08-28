@@ -445,6 +445,7 @@ else:
             "StoppingCriteria",
             "StoppingCriteriaList",
             "StopStringCriteria",
+            "StopStringTextMatchCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
             "SynthIDTextWatermarkDetector",
@@ -706,6 +707,7 @@ if TYPE_CHECKING:
     from .generation import StoppingCriteria as StoppingCriteria
     from .generation import StoppingCriteriaList as StoppingCriteriaList
     from .generation import StopStringCriteria as StopStringCriteria
+    from .generation import StopStringTextMatchCriteria as StopStringTextMatchCriteria
     from .generation import SuppressTokensAtBeginLogitsProcessor as SuppressTokensAtBeginLogitsProcessor
     from .generation import SuppressTokensLogitsProcessor as SuppressTokensLogitsProcessor
     from .generation import SynthIDTextWatermarkDetector as SynthIDTextWatermarkDetector
