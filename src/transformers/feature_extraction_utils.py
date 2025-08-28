@@ -27,9 +27,9 @@ import numpy as np
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
-    cached_file,
     copy_func,
     download_url,
     is_flax_available,
@@ -44,6 +44,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.hub import cached_files
 
 
 if TYPE_CHECKING:
@@ -505,9 +506,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_feature_extractor_file = cached_file(
+                resolved_feature_extractor_files = cached_files(
                     pretrained_model_name_or_path,
-                    feature_extractor_file,
+                    filenames=[feature_extractor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -517,7 +518,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
+                    _raise_exceptions_for_missing_entries=False,
                 )
+                resolved_feature_extractor_file = resolved_feature_extractor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -536,6 +539,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
+            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

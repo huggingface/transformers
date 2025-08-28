@@ -516,6 +516,8 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         else:
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
 
+        del moe_hidden_states
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
@@ -652,7 +654,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

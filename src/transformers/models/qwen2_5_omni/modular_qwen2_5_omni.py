@@ -2061,7 +2061,7 @@ class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
 # Removes the value error as a workaround.
-class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
+class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
     def __init__(self, config: Qwen2_5OmniConfig, layer_idx: Optional[int] = None):
         nn.Module.__init__(self)
         self.config = config

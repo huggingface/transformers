@@ -387,7 +387,7 @@ class Glm4VisionMlp(Qwen2_5_VLMLP):
 
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        Qwen2_5_VisionPatchEmbed.__init__()
+        nn.Module.__init__(self)
         self.patch_size = config.patch_size
         self.temporal_patch_size = config.temporal_patch_size
         self.in_channels = config.in_channels
@@ -507,7 +507,7 @@ class Glm4vVisionEmbeddings(nn.Module):
 
 class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.attention_dropout = config.attention_dropout
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -515,7 +515,7 @@ class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
 
 class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__()
+        super().__init__(config)
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
@@ -873,7 +873,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

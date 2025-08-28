@@ -1585,7 +1585,7 @@ class ModelTesterMixin:
                         head_dim = model.config.hidden_size // model.config.num_attention_heads
 
                         cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = DynamicCache()
+                        empty_pkv = DynamicCache(config=model.config)
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -4391,7 +4391,6 @@ class ModelTesterMixin:
                 next_token_logits_from_generate = generation_out.logits[-1]
 
                 # acceptable numerical instability
-                # print(next_token_logits_from_generate, next_token_logits)
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(next_token_logits_from_generate, next_token_logits, rtol=tol, atol=tol)
 

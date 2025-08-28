@@ -1850,7 +1850,7 @@ class GenerationTesterMixin:
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
-                model.generate(past_key_valyes=DynamicCache(), **generation_kwargs, **inputs_dict)
+                model.generate(past_key_valyes=DynamicCache(config=model.config), **generation_kwargs, **inputs_dict)
 
             # setting incorrect cache_config args should raise an Error, i.e. nbits=60 does not make sense
             generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
@@ -3918,7 +3918,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 5. When we pass a cache, we discard data related to already seen tokens in some tensors. We are now also
         # forced to pass a correctly prepared `cache_positions` to slice the data accordingly.
         init_input_ids = input_ids[:, :2]
-        dynamic_cache = DynamicCache()
+        dynamic_cache = DynamicCache(config=config)
         dynamic_cache = model(init_input_ids, past_key_values=dynamic_cache).past_key_values
         with self.assertRaises(AttributeError):  # past_key_values + no cache_position -> exception
             model_inputs = model.prepare_inputs_for_generation(input_ids, past_key_values=dynamic_cache)
@@ -3951,7 +3951,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # a) must use the cache b) must expect `input_ids` after the prompt is processed
         init_inputs_embeds = model.get_input_embeddings()(init_input_ids)
         init_cache_positions = torch.arange(init_input_ids.shape[-1], dtype=torch.long).to(torch_device)
-        empty_cache = DynamicCache()
+        empty_cache = DynamicCache(config=config)
 
         # Prompt processing
         model_inputs = model.prepare_inputs_for_generation(
