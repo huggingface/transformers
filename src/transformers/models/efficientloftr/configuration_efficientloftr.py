@@ -68,8 +68,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        embedding_size (`List`, *optional*, defaults to [15, 20]):
-            The size (height, width) of the embedding for the position embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         partial_rotary_factor (`float`, *optional*, defaults to 4.0):
@@ -130,7 +128,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        embedding_size: Optional[list[int]] = None,
         rope_theta: float = 10000.0,
         partial_rotary_factor: float = 4.0,
         rope_scaling: Optional[dict] = None,
@@ -163,7 +160,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         if self.hidden_size != self.out_features[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.stage_out_channels}"
+                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.out_features[-1]}"
             )
 
         self.activation_function = activation_function
@@ -187,7 +184,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.fine_matching_regress_temperature = fine_matching_regress_temperature
 
         self.num_key_value_heads = num_attention_heads
-        self.embedding_size = embedding_size if embedding_size is not None else [15, 20]
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling if rope_scaling is not None else {"rope_type": "default"}
 

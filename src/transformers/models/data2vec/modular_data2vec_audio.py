@@ -112,9 +112,9 @@ class Data2VecAudioPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-class Data2VecAudioFeatureEncoder(Wav2Vec2FeatureEncoder, nn.Module):
+class Data2VecAudioFeatureEncoder(Wav2Vec2FeatureEncoder):
     def __init__(self, config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.conv_layers = nn.ModuleList(
             [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         )
@@ -183,7 +183,7 @@ Data2VecAudioBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: Data2VecAudioConfig):
-        Data2VecAudioPreTrainedModel.__init__(config)
+        Data2VecAudioPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = Data2VecAudioFeatureEncoder(config)
         self.feature_projection = Data2VecAudioFeatureProjection(config)
@@ -215,7 +215,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
 
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def __init__(self, config):
-        Data2VecAudioPreTrainedModel.__init__(config)
+        Data2VecAudioPreTrainedModel.__init__(self, config)
 
         self.data2vec_audio = Data2VecAudioModel(config)
         self.dropout = nn.Dropout(config.final_dropout)

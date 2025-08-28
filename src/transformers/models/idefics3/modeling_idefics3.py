@@ -151,8 +151,8 @@ class Idefics3VisionEmbeddings(nn.Module):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=position_ids.dtype)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=position_ids.dtype)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
 
             fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
             fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
@@ -783,7 +783,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
@@ -927,7 +927,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

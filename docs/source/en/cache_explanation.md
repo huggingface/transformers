@@ -15,6 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 
 # Caching
+
 Imagine you're having a conversation with someone, and instead of remembering what they previously said, they have to start from scratch every time you respond. This would be slow and inefficient, right?
 
 You can extend this analogy to transformer models. Autoregressive model generation can be slow because it makes a prediction one token at a time. Each new prediction is dependent on all the previous context.
@@ -104,10 +105,10 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infe
 device = f"{infer_device()}:0"
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 messages = [{"role": "user", "content": "Hello, what's your name."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
@@ -138,7 +139,7 @@ The cache position tracks where to insert new tokens in the attention cache. It 
 Cache position is used internally for two purposes:
 
 1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
-2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, like [`StaticCache`], that pre-allocates a specific cache length.
+2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, that pre-allocates a specific cache length.
 
 The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
 
@@ -150,7 +151,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infe
 device = f"{infer_device()}:0"
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [{"role": "user", "content": "You are a helpful assistant."}]
@@ -176,7 +177,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
 # `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache

@@ -411,7 +411,7 @@ def write_model(
 
         print("Loading the checkpoint in a PerceptionLM model.")
         model = PerceptionLMForConditionalGeneration.from_pretrained(
-            tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            tmp_model_path, dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
         # if not tie_word_embeddings:
         #     if output_weight is None:
@@ -420,7 +420,7 @@ def write_model(
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
-        model.config.torch_dtype = torch.bfloat16
+        model.config.dtype = torch.bfloat16
 
         print("Saving in the Transformers format.")
         if push_to_hub:

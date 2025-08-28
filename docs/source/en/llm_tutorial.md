@@ -56,7 +56,7 @@ Tokenize your input, and set the [`~PreTrainedTokenizer.padding_side`] parameter
 
 ```py
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_side="left")
-model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to(model.device)
 ```
 
 Pass the inputs to [`~GenerationMixin.generate`] to generate tokens, and [`~PreTrainedTokenizer.batch_decode`] the generated tokens back to text.
@@ -164,7 +164,7 @@ The section below covers some common issues you may encounter during text genera
 [`~GenerationMixin.generate`] returns up to 20 tokens by default unless otherwise specified in a models [`GenerationConfig`]. It is highly recommended to manually set the number of generated tokens with the [`max_new_tokens`] parameter to control the output length. [Decoder-only](https://hf.co/learn/nlp-course/chapter1/6?fw=pt) models returns the initial prompt along with the generated tokens.
 
 ```py
-model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to(model.device)
 ```
 
 <hfoptions id="output-length">
@@ -195,7 +195,7 @@ The default decoding strategy in [`~GenerationMixin.generate`] is *greedy search
 For example, enable a [multinomial sampling](./generation_strategies#multinomial-sampling) strategy to generate more diverse outputs. Refer to the [Generation strategy](./generation_strategies) guide for more decoding strategies.
 
 ```py
-model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to(model.device)
 ```
 
 <hfoptions id="decoding">
@@ -227,7 +227,7 @@ Inputs need to be padded if they don't have the same length. But LLMs aren't tra
 ```py
 model_inputs = tokenizer(
     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-).to("cuda")
+).to(model.device)
 generated_ids = model.generate(**model_inputs)
 tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 33333333333'
@@ -241,7 +241,7 @@ tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_s
 tokenizer.pad_token = tokenizer.eos_token
 model_inputs = tokenizer(
     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-).to("cuda")
+).to(model.device)
 generated_ids = model.generate(**model_inputs)
 tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 3, 4, 5, 6,'
@@ -270,7 +270,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```py
 prompt = """How many cats does it take to change a light bulb? Reply as a pirate."""
-model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 input_length = model_inputs.input_ids.shape[1]
 generated_ids = model.generate(**model_inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
@@ -288,7 +288,7 @@ messages = [
     },
     {"role": "user", "content": "How many cats does it take to change a light bulb?"},
 ]
-model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
+model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 input_length = model_inputs.shape[1]
 generated_ids = model.generate(model_inputs, do_sample=True, max_new_tokens=50)
 print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])

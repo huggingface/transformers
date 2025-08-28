@@ -16,6 +16,7 @@
 import requests
 from PIL import Image
 
+from ..masking_utils import create_causal_mask
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
@@ -166,7 +167,7 @@ class AttentionMaskVisualizer:
                 self.config = config
 
         self.model = _ModelWrapper(config, model_name)
-        self.model.to(config.torch_dtype)
+        self.model.to(config.dtype)
         self.repo_id = model_name
         self.config = config
 
@@ -207,13 +208,23 @@ class AttentionMaskVisualizer:
 
         model.config._attn_implementation = "eager"
         model.train()
-        attention_mask = ~model._update_causal_mask(
+
+        batch_size, seq_length = attention_mask.shape
+        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        cache_position = torch.arange(seq_length)
+
+        causal_mask = create_causal_mask(
+            config=model.config,
+            input_embeds=input_embeds,
             attention_mask=attention_mask,
-            input_tensor=attention_mask.to(self.model.dtype),
-            cache_position=torch.arange(attention_mask.shape[1]),
+            cache_position=cache_position,
             past_key_values=None,
-            **kwargs,
-        ).bool()
+        )
+
+        if causal_mask is not None:
+            attention_mask = ~causal_mask.bool()
+        else:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length
@@ -225,7 +236,7 @@ class AttentionMaskVisualizer:
                 len(top_bottom_border)
             )
             + "    "
-            + side_border
+            + side_border,
         )
         print(f"{top_bottom_border}")
         f_string = generate_attention_matrix_from_mask(

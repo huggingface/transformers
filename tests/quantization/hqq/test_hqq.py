@@ -42,7 +42,7 @@ class HQQLLMRunner:
     def __init__(self, model_id, quant_config, compute_dtype, device, cache_dir=None):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=compute_dtype,
+            dtype=compute_dtype,
             device_map=device,
             quantization_config=quant_config,
             cache_dir=cache_dir,
@@ -228,7 +228,7 @@ class HQQTestBias(unittest.TestCase):
             backend_empty_cache(torch_device)
 
             model_loaded = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, torch_dtype=torch.float16, device_map=torch_device
+                tmpdirname, dtype=torch.float16, device_map=torch_device
             )
 
             with torch.no_grad():
@@ -271,7 +271,7 @@ class HQQSerializationTest(unittest.TestCase):
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
             "quant_model",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map=torch_device,
         )
 

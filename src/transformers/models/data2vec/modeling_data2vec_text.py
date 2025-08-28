@@ -485,7 +485,7 @@ class Data2VecTextEncoder(nn.Module):
                 use_cache = False
 
         if use_cache and self.config.is_decoder and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if use_cache and self.config.is_decoder and isinstance(past_key_values, tuple):
             logger.warning_once(

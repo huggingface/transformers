@@ -96,7 +96,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout this
-            [paper](https://arxiv.org/pdf/2305.13245.pdf). If not specified, will default to `num_attention_heads`.
+            [paper](https://huggingface.co/papers/2305.13245). If not specified, will default to `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
@@ -1480,7 +1480,9 @@ class Gemma3nAudioConformerBlock(nn.Module):
 
 
 class Gemma3nAudioEncoder(PreTrainedModel):
-    """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
+    """
+    An audio encoder based on the [Universal Speech Model](https://huggingface.co/papers/2303.01037) architecture.
+    """
 
     config: Gemma3nAudioConfig
 
@@ -1741,7 +1743,7 @@ def apply_rotary_pos_emb(
 
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         del self.attn_logit_softcapping
         del self.scaling
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
@@ -1926,7 +1928,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
     def _init_weights(self, module):
-        Gemma2PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
@@ -2061,7 +2063,7 @@ class Gemma3nTextModel(Gemma3TextModel):
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -2238,7 +2240,7 @@ class Gemma3nModel(PaliGemmaModel):
     _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: Gemma3nConfig):
-        super().__init__()
+        super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)

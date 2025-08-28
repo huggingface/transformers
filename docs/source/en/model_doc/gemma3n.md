@@ -57,7 +57,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3n-e4b",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -74,7 +74,7 @@ from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
 model = Gemma3nForConditionalGeneration.from_pretrained(
     "google/gemma-3n-e4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -103,7 +103,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -202,5 +202,5 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
 [laurel]: https://huggingface.co/papers/2411.07501
 [matformer]: https://huggingface.co/papers/2310.07707
-[spark-transformer]: https://arxiv.org/abs/2506.06644
+[spark-transformer]: https://huggingface.co/papers/2506.06644
 [usm]: https://huggingface.co/papers/2303.01037
