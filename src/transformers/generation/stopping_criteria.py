@@ -116,7 +116,7 @@ class StopStringCriteria(StoppingCriteria):
     <Tip>
 
     [`StopStringTextMatchCriteria`] and this class have equivalent functionality. This class is compatible with
-    `torch.compile`, but its considerably slower than [`StopStringTextMatchCriteria`] when not compiled.
+    `torch.compile`, but it's considerably slower than [`StopStringTextMatchCriteria`] when not compiled.
 
     </Tip>
 
@@ -466,7 +466,7 @@ class StopStringTextMatchCriteria(StoppingCriteria):
     <Tip>
 
     [`StopStringCriteria`] and this class have equivalent functionality. This class is faster than
-    [`StopStringCriteria`], but it is not compatible with `torch.compile`.
+    [`StopStringCriteria`], but it isn't compatible with `torch.compile`.
 
     </Tip>
 
