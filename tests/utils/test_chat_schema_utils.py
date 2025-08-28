@@ -172,6 +172,7 @@ cohere_schema = {
 }
 
 gpt_oss_schema = {
+    # TODO Doesn't recover thinking blocks yet
     "type": "object",
     "properties": {
         "tools": {
