@@ -1359,9 +1359,6 @@ class Gemma3nTextAttention(nn.Module):
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
-            if self.is_kv_shared_layer and len(past_key_values) > self.layer_idx:
-                # We are in the first shared layer after cache initialization, let's remove unused layers
-                del past_key_values.layers[self.layer_idx : len(past_key_values)]
             if self.store_full_length_kv:
                 if not hasattr(past_key_values, "shared_layers"):
                     past_key_values.shared_layers = {}
