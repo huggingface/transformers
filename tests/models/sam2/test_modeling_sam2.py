@@ -32,7 +32,6 @@ from transformers import (
 from transformers.testing_utils import (
     backend_empty_cache,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -276,7 +275,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -560,7 +558,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
 
     # Override as Sam2Model has different sub-modules
-    @require_torch_sdpa
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -613,7 +611,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -630,11 +628,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -716,7 +714,6 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = Sam2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
 

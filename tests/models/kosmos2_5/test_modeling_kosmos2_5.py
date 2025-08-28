@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -549,7 +548,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     # TODO: ydshieh
-    @require_torch_sdpa
+
     @require_torch_gpu
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")
@@ -584,14 +583,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         "KOSMOS-2.5 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten",
     )
     def test_generate_from_inputs_embeds(self):
-        pass
-
-    # TODO: ydshieh
-    @pytest.mark.generate
-    @unittest.skip(
-        "Kosmos2_5ForConditionalGeneration returns `vision_model_output` which is currently not working with `stack_model_outputs`",
-    )
-    def test_beam_search_low_memory(self):
         pass
 
     @pytest.mark.generate
@@ -684,7 +675,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "ydshieh/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -721,7 +712,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         dtype = torch.bfloat16
         repo = "ydshieh/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -764,7 +755,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation="flash_attention_2",
         )
         processor = AutoProcessor.from_pretrained(repo)

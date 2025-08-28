@@ -67,7 +67,7 @@ We can see that 0s have been added on the right of the first sentence to make it
 [[101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]]
 ```
 
-This can then be converted into a tensor in PyTorch or TensorFlow. The attention mask is a binary tensor indicating the
+This can then be converted into a tensor in PyTorch. The attention mask is a binary tensor indicating the
 position of the padded indices so that the model does not attend to them. For the [`BertTokenizer`], `1` indicates a
 value that should be attended to, while `0` indicates a padded value. This attention mask is in the dictionary returned
 by the tokenizer under the key "attention_mask":
@@ -114,7 +114,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 
 ### DataParallel (DP)
 
-Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
+Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
 
 Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
@@ -295,7 +295,7 @@ These labels are different according to the model head, for example:
   `class_labels` and `boxes` key where each value of the batch corresponds to the expected label and number of bounding boxes of each individual image.
 - For automatic speech recognition models, ([`Wav2Vec2ForCTC`]), the model expects a tensor of dimension `(batch_size,
   target_length)` with each value corresponding to the expected label of each individual token.
-  
+
 <Tip>
 
 Each model's labels may be different, so be sure to always check the documentation of each model for more information
@@ -346,8 +346,8 @@ For more details, see [Pipelines for inference](https://huggingface.co/docs/tran
 
 ### PipelineParallel (PP)
 
-Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or 
-several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline 
+Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or
+several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline
 and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
 
 ### pixel values
@@ -379,7 +379,7 @@ The task of preparing raw data into a format that can be easily consumed by mach
 A model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods involve a
 self-supervised objective, which can be reading the text and trying to predict the next word (see [causal language
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
-modeling](#masked-language-modeling-mlm)). 
+modeling](#masked-language-modeling-mlm)).
 
 Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
@@ -403,9 +403,9 @@ A measurement in hertz of the number of samples (the audio signal) taken per sec
 
 Each element of the input finds out which other elements of the input they should attend to.
 
-### self-supervised learning 
+### self-supervised learning
 
-A category of machine learning techniques in which a model creates its own learning objective from unlabeled data. It differs from [unsupervised learning](#unsupervised-learning) and [supervised learning](#supervised-learning) in that the learning process is supervised, but not explicitly from the user. 
+A category of machine learning techniques in which a model creates its own learning objective from unlabeled data. It differs from [unsupervised learning](#unsupervised-learning) and [supervised learning](#supervised-learning) in that the learning process is supervised, but not explicitly from the user.
 
 One example of self-supervised learning is [masked language modeling](#masked-language-modeling-mlm), where a model is passed sentences with a proportion of its tokens removed and learns to predict the missing tokens.
 
@@ -436,9 +436,9 @@ A form of model training that directly uses labeled data to correct and instruct
 
 ### Tensor Parallelism (TP)
 
-Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of 
-having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets 
-processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. 
+Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of
+having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets
+processed separately and in parallel on different GPUs and the results are synced at the end of the processing step.
 This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
 Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
 
@@ -516,7 +516,7 @@ A form of model training in which data provided to the model is not labeled. Uns
 
 ### Zero Redundancy Optimizer (ZeRO)
 
-Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp), 
-except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
-to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
+Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp),
+except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need
+to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
 Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).

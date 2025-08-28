@@ -186,7 +186,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
-        torch_dtype = torch.float16
+        dtype = torch.float16
 
         # too large to fit into A10
         config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
@@ -197,7 +197,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             config=config,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             device_map="auto",
         )
         return model

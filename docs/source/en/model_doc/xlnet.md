@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -95,21 +94,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
 
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
-
-<frameworkcontent>
-<pt>
-
 ## XLNetModel
 
 [[autodoc]] XLNetModel
@@ -144,39 +128,3 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] XLNetForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLNetModel
-
-[[autodoc]] TFXLNetModel
-    - call
-
-## TFXLNetLMHeadModel
-
-[[autodoc]] TFXLNetLMHeadModel
-    - call
-
-## TFXLNetForSequenceClassification
-
-[[autodoc]] TFXLNetForSequenceClassification
-    - call
-
-## TFXLNetForMultipleChoice
-
-[[autodoc]] TFXLNetForMultipleChoice
-    - call
-
-## TFXLNetForTokenClassification
-
-[[autodoc]] TFXLNetForTokenClassification
-    - call
-
-## TFXLNetForQuestionAnsweringSimple
-
-[[autodoc]] TFXLNetForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>
