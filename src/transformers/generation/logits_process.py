@@ -3368,7 +3368,7 @@ class ConfigurableLogitsProcessorList(LogitsProcessorList):
                 raise ValueError("Each processor configuration must be a dictionary")
             processors.append(LogitProcessorRegistry.create_processor(proc_config))
 
-    return cls(processors)
+        return cls(processors)
 
     def to_config(self) -> list[dict[str, Any]]:
         """Convert LogitsProcessorList to configuration format."""
