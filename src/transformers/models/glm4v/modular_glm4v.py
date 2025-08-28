@@ -387,7 +387,7 @@ class Glm4VisionMlp(Qwen2_5_VLMLP):
 
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        Qwen2_5_VisionPatchEmbed.__init__()
+        nn.Module.__init__(self)
         self.patch_size = config.patch_size
         self.temporal_patch_size = config.temporal_patch_size
         self.in_channels = config.in_channels
@@ -507,7 +507,7 @@ class Glm4vVisionEmbeddings(nn.Module):
 
 class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.attention_dropout = config.attention_dropout
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -515,7 +515,7 @@ class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
 
 class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__()
+        super().__init__(config)
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
@@ -873,7 +873,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1510,6 +1510,7 @@ class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -1591,11 +1592,14 @@ class Glm4vProcessor(Qwen2_VLProcessor):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs.pop("timestamps")
+            # If user has not requested video metadata, pop it
+            if "return_metadata" not in kwargs:
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
-            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -1620,14 +1624,19 @@ class Glm4vProcessor(Qwen2_VLProcessor):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    if hasattr(timestamps, "tolist"):
-                        timestamps_list = timestamps.tolist()[0]
-                    else:
-                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    metadata = video_metadata[i]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+                    timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list)):
-                        unique_timestamps.append(timestamps_list[idx])
+                    for idx in range(0, len(timestamps)):
+                        unique_timestamps.append(timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
@@ -1635,7 +1644,7 @@ class Glm4vProcessor(Qwen2_VLProcessor):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)

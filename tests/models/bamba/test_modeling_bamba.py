@@ -537,6 +537,9 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @unittest.skip(
+        "NotImplementedError: seq_idx support requires fast path support. Please install mamba_ssm and causal_conv1d"
+    )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

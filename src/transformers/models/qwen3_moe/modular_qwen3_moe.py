@@ -123,9 +123,9 @@ class Qwen3MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
+class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
-        nn.Module().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)

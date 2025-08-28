@@ -345,18 +345,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(
         reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
     )
@@ -595,19 +583,15 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_strings = Expectations(
+        expected_generated_text = Expectations(
             {
-                (None, None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',  # fmt: skip
-                ("cuda", (8, 0)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',  # fmt: skip
-                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model, specifically a neural network model, which is designed to learn and',  # fmt: skip
-                ("rocm", None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',  # fmt: skip
+                (None, None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
+                ("cuda", (8, 0)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
+                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model, specifically a neural network model, which is designed to learn and',
+                ("rocm", (9, 4)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
+                ("rocm", None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
             }
-        )  # fmt: skip
-
-        expected_generated_text = expected_generated_strings.get_expectation()
-
-        print(f"Generated text: {generated_texts[0]}")
-
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
