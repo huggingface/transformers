@@ -312,10 +312,11 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 class ParakeetForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
-    def setUp(self):
-        self.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
-        self.dtype = torch.float32
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+    @classmethod
+    def setUp(cls):
+        cls.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
+        cls.dtype = torch.float32
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -325,7 +326,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
         if cls._dataset is None:
             cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            cls._dataset = cls._dataset.cast_column("audio", Audio(sampling_rate=16000))
+            cls._dataset = cls._dataset.cast_column(
+                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+            )
 
     def _load_datasamples(self, num_samples):
         self._load_dataset()
@@ -351,7 +354,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(samples)
+        inputs = self.processor(
+            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, return_tensors="pt", padding=True
+        )
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
@@ -377,7 +382,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(samples)
+        inputs = self.processor(
+            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, return_tensors="pt", padding=True
+        )
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)

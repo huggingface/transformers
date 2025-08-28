@@ -20,7 +20,6 @@ import json
 import os
 import re
 from typing import Optional
-from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -90,7 +89,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         # Create reverse mapping
         self.ids_to_tokens = {v: k for k, v in self.vocab.items()}
-        # Set blank token ID 
+        # Set blank token ID
         if blank_token_id is None:
             self.blank_token_id = len(self.vocab)
         else:
@@ -98,7 +97,9 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             # check no other token has this ID in the main vocab
             for k, v in self.vocab.items():
                 if v == self.blank_token_id:
-                    raise ValueError(f"blank_token_id {self.blank_token_id} conflicts with existing token '{k}' in vocab")
+                    raise ValueError(
+                        f"blank_token_id {self.blank_token_id} conflicts with existing token '{k}' in vocab"
+                    )
 
         self.do_lower_case = do_lower_case
 
@@ -139,9 +140,9 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         # Handle SentencePiece-style tokenization
         # Convert spaces to word boundary markers
-        words = text.split(' ')
+        words = text.split(" ")
         tokens = []
-        
+
         for i, word in enumerate(words):
             if word:  # Skip empty words from consecutive spaces
                 # First word gets ▁ prefix, continuing characters are separate
@@ -159,7 +160,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
                         if i > 0:  # Not the first word
                             word_tokens[0] = f"▁{word_tokens[0]}"
                         tokens.extend(word_tokens)
-        
+
         return tokens
 
     def _convert_token_to_id(self, token: str) -> int:
@@ -167,30 +168,30 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         # Check main vocabulary first
         if token in self.vocab:
             return self.vocab[token]
-            
+
         # Check added tokens (managed by parent class)
-        if hasattr(self, 'added_tokens_encoder') and token in self.added_tokens_encoder:
+        if hasattr(self, "added_tokens_encoder") and token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
-            
+
         # Return unknown token ID for unrecognized tokens
         return self.vocab.get(self.unk_token, 0)
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
         index = int(index)
-        
+
         # Check main vocabulary first
         if index in self.ids_to_tokens:
             return self.ids_to_tokens[index]
-            
+
         # Check added tokens (managed by parent class)
-        if hasattr(self, 'added_tokens_decoder') and index in self.added_tokens_decoder:
+        if hasattr(self, "added_tokens_decoder") and index in self.added_tokens_decoder:
             return str(self.added_tokens_decoder[index])
-            
+
         # For blank token, return a special marker that will be filtered later
         if index == self.blank_token_id:
             return "<BLANK>"  # Special marker for blank tokens
-            
+
         # Return unknown token for unrecognized IDs
         return self.unk_token
 
@@ -198,21 +199,22 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         """
         Converts a sequence of tokens (string) into a single string.
 
-        For CTC tokenizers, this handles SentencePiece-style token merging.
-        
         Args:
             tokens: List of token strings to convert
         """
 
         # Filter None, blank tokens, pad_token, and unk_token
         filtered_tokens = list(
-            filter(lambda token: (
-                token is not None 
-                and token != "<BLANK>"  # Filter blank token markers
-                and token != "<blank>"  # Filter blank special tokens
-                and token != self.pad_token 
-                and token != self.unk_token
-            ), tokens)
+            filter(
+                lambda token: (
+                    token is not None
+                    and token != "<BLANK>"  # Filter blank token markers
+                    and token != "<blank>"  # Filter blank special tokens
+                    and token != self.pad_token
+                    and token != self.unk_token
+                ),
+                tokens,
+            )
         )
 
         # Join tokens and handle SentencePiece-style subwords

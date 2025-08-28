@@ -660,7 +660,9 @@ def create_hf_model(
 
     model.load_state_dict(updated_state_dict, strict=False)
     if matched_params != len(model_state_dict):
-        raise ValueError(f"Missing parameters when copying! {matched_params}/{len(model_state_dict)} parameters were copied.")
+        raise ValueError(
+            f"Missing parameters when copying! {matched_params}/{len(model_state_dict)} parameters were copied."
+        )
     else:
         logger.info(f"Loaded {matched_params}/{len(model_state_dict)} model parameters")
     if shape_mismatches > 0:

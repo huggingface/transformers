@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""PyTorch Parakeet model."""
 
 import math
 from dataclasses import dataclass
@@ -25,12 +26,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
+from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..whisper.processing_whisper import ParakeetProcessor
 from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
-from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
-from ..llama.modeling_llama import eager_attention_forward, LlamaAttention
 
 
 class ParakeetProcessor(ParakeetProcessor):
@@ -65,7 +66,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
-        
+
         # Pre-allocate PE buffer
         dtype = torch.float32
         max_length = self.max_position_embeddings
@@ -85,7 +86,9 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
         if seq_length > self.max_position_embeddings:
-            raise ValueError(f"Sequence length {seq_length} exceeds max_position_embeddings {self.max_position_embeddings}")
+            raise ValueError(
+                f"Sequence length {seq_length} exceeds max_position_embeddings {self.max_position_embeddings}"
+            )
 
         # dynamic slicing fine since self.pe is preallocated to maximum size
         start_pos = self.center_pos - seq_length
@@ -93,6 +96,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         position_embeddings = self.pe[:, start_pos:end_pos].to(device=hidden_states.device, dtype=hidden_states.dtype)
 
         return position_embeddings
+
 
 # Similar to `..fastspeech2_conformer.modeling_fastspeech2_conformer.FastSpeech2ConformerMultiLayeredConv1d`
 # But uses Linear layers instead of Conv1d for efficiency
@@ -209,18 +213,22 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
 
         # define layers
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=self.padding))
+        self.layers.append(
+            nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=self.padding)
+        )
         self.layers.append(nn.ReLU())
         for i in range(self.num_layers - 1):
             # depthwise conv
-            self.layers.append(nn.Conv2d(
-                self.channels,
-                self.channels,
-                kernel_size=self.kernel_size,
-                stride=self.stride,
-                padding=self.padding,
-                groups=self.channels,
-            ))
+            self.layers.append(
+                nn.Conv2d(
+                    self.channels,
+                    self.channels,
+                    kernel_size=self.kernel_size,
+                    stride=self.stride,
+                    padding=self.padding,
+                    groups=self.channels,
+                )
+            )
             # pointwise conv
             self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
             # activation
@@ -309,6 +317,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetConfig
     base_model_prefix = "model"
@@ -366,7 +375,17 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-# TODO: @eustlb very likely custom intro to add fast conformer encoder in auto docstring
+@auto_docstring(
+    custom_intro="""
+    The Parakeet Encoder model is similar to `FastSpeech2ConformerEncoder`, namely they both consist of multi-head
+    attention blocks with Shaw-style relative positional encoding (https://huggingface.co/papers/1803.02155).
+
+    Main differences:
+    - Parakeet introduces a subsampling layer.
+    - Using Linear layers instead of Conv1d for the feed forward layers in the individual Encoder blocks
+    - Implementation differences in the multi-head attention component.
+    """
+)
 class ParakeetEncoder(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__(config)
@@ -387,6 +406,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     @check_model_inputs
     @can_return_tuple
     def forward(
@@ -408,20 +428,19 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
 
             # TODO: @eustlb, which mask utils to do the same?
+            # @ebezzam could use `create_causal_mask` but more complicated
+            # as `and_mask_function` requires callable mask function
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
-
-            # # TODO leads to mismatch in token IDs for batch integration test
-            # batch_size, seq_len = attention_mask.shape[0], attention_mask.shape[1]
-            # cache_position = torch.arange(seq_len, device=hidden_states.device)
             # attention_mask = create_causal_mask(
             #     self.config,
             #     hidden_states,
             #     attention_mask,
-            #     cache_position=cache_position,
+            #     cache_position=torch.arange(attention_mask.shape[1], device=hidden_states.device),
             #     past_key_values=None,
             #     position_ids=None,
+            #     # and_mask_function=None,
             # )
             # # ensure boolean mask because of `~attention_mask` in later processing
             # if attention_mask is not None and attention_mask.dtype != torch.bool:
@@ -475,6 +494,11 @@ class ParakeetGenerateOutput(ModelOutput):
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Parakeet Encoder with a Connectionist Temporal Classification (CTC) head for decoding text.
+    """
+)
 class ParakeetForCTC(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetConfig):
         super().__init__(config)
@@ -484,6 +508,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,

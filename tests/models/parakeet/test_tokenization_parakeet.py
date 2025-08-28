@@ -24,7 +24,7 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "bezzam/parakeet-ctc-1.1b-hf"
     tokenizer_class = ParakeetCTCTokenizer
     test_rust_tokenizer = False
-    test_seq2seq = False    # Fails due to no pad token
+    test_seq2seq = False  # Fails due to no pad token
 
     @classmethod
     def setUpClass(cls):
