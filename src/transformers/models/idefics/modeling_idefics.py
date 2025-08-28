@@ -1077,7 +1077,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        print(self.config._attn_implementation, attention_mask[0, 0, :32, :32])
 
         hidden_states = inputs_embeds
 
