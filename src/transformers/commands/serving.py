@@ -520,6 +520,8 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Validate unexpected keys -- Pydantic doesn't validate extra keys in the request.
         input_keys = set(request.keys())
+        if "request_id" in input_keys:
+            input_keys.remove("request_id")
         possible_keys = schema.__mutable_keys__
         unexpected_keys = input_keys - possible_keys
         if unexpected_keys:
