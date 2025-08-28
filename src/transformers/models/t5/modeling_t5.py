@@ -493,6 +493,7 @@ class T5Attention(nn.Module):
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -501,7 +502,6 @@ class T5Attention(nn.Module):
             else:
                 curr_past_key_value = past_key_values.self_attention_cache
         else:
-            is_updated = False
             curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
