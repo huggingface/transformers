@@ -34,11 +34,17 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig
 from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin, merge_input_ids_with_audio_features
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 class HiggsAudioRotaryEmbedding(nn.Module):

@@ -21,12 +21,19 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from ..auto import AutoConfig
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_flex_attn_available,
+    logging,
+)
+from ..auto import AutoConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -36,6 +43,12 @@ from ..llama.modeling_llama import (
 )
 from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin, merge_input_ids_with_audio_features
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -960,7 +973,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         # Apply the LLM component
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
-
 
         hidden_states = inputs_embeds
 
