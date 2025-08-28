@@ -41,6 +41,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -315,6 +316,7 @@ class BigBirdSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -322,7 +324,7 @@ class BigBirdSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -336,10 +338,10 @@ class BigBirdSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-        if is_cross_attention and past_key_value is not None and past_key_value.get_seq_length(self.layer_idx) > 0:
+        if is_cross_attention and past_key_values is not None and past_key_values.get_seq_length(self.layer_idx) > 0:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.layers[self.layer_idx].keys
-            value_layer = past_key_value.layers[self.layer_idx].values
+            key_layer = past_key_values.layers[self.layer_idx].keys
+            value_layer = past_key_values.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
@@ -352,9 +354,9 @@ class BigBirdSelfAttention(nn.Module):
                 .transpose(1, 2)
             )
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                key_layer, value_layer = past_key_value.update(
+                key_layer, value_layer = past_key_values.update(
                     key_layer,
                     value_layer,
                     self.layer_idx,
@@ -1338,6 +1340,7 @@ class BigBirdAttention(nn.Module):
         if not self.training:
             self.self.eval()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1345,7 +1348,7 @@ class BigBirdAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
         # block_sparse config
         band_mask=None,
@@ -1369,7 +1372,7 @@ class BigBirdAttention(nn.Module):
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -1447,6 +1450,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value, layer_idx=layer_idx)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1458,7 +1462,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -1469,7 +1473,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             band_mask=band_mask,
             from_mask=from_mask,
@@ -1493,7 +1497,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -1564,14 +1568,14 @@ class BigBirdEncoder(nn.Module):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         for i, layer_module in enumerate(self.layer):
@@ -1603,9 +1607,6 @@ class BigBirdEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(

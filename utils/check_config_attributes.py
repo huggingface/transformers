@@ -69,6 +69,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
+    # used to compute `frame_rate`
+    "XcodecConfig": ["sample_rate", "audio_channels"],
     # used to compute the property `self.layers_block_type`
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
@@ -221,6 +223,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "MMGroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "RTDetrConfig": [
         "eos_coefficient",
         "focal_loss_alpha",
@@ -337,6 +347,8 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsConfig": True,
         "IdeficsVisionConfig": True,
         "IdeficsPerceiverConfig": True,
+        # TODO: @Arthur/Joao (`hidden_act` unused)
+        "GptOssConfig": True,
     }
 )
 

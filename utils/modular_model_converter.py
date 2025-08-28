@@ -15,14 +15,15 @@
 import argparse
 import glob
 import importlib
+import multiprocessing as mp
 import os
 import re
+import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from typing import Optional, Union
 
 import libcst as cst
-from check_copies import run_ruff
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
@@ -169,16 +170,6 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 )
 
 
-def SUPER_CALL_NODE(func_name):
-    return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
-
-
-def is_call_to_super(node, func_name):
-    return m.matches(
-        node, m.SimpleStatementLine(body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))])
-    )
-
-
 def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
@@ -200,71 +191,67 @@ def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[st
     return None
 
 
-# Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
-class ReplaceMethodCallTransformer(cst.CSTTransformer):
-    def __init__(self, all_bases: set[str]):
-        self.all_bases = all_bases
+class ReplaceParentClassCallTransformer(cst.CSTTransformer):
+    """
+    This Transformer is used to replace all calls of the form `module.Class.func(...)` by a call of the form
+    `super().func(...)`.
+    """
 
-    def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
-        # Handle ClassB.call_to_method or module.classB.call_to_method
-        if (
-            m.matches(original_node.value, m.Name() | m.Attribute())
-            and get_full_attribute_name(original_node.value) in self.all_bases
-            and m.matches(original_node.attr, m.Name())
-        ):
-            # Replace with super().call_to_method
-            return updated_node.with_changes(
-                value=cst.Call(cst.Name("super")),
-            )
-        # Handle ClassB().call_to_method or module.ClassB().call_to_method
-        elif (
-            m.matches(original_node.value, m.Call())
-            and m.matches(original_node.value.func, m.Name() | m.Attribute())
-            and get_full_attribute_name(original_node.value.func) in self.all_bases
-            and m.matches(original_node.attr, m.Name())
-        ):
-            # Replace with super().call_to_method
-            return updated_node.with_changes(value=cst.Call(cst.Name("super")))
-        return updated_node
+    def __init__(self, new_bases: list[str]):
+        self.new_bases = new_bases
 
-    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
-        # Check if the function being called is of the form ClassB().func_a or ClassB.func_a
-        if m.matches(original_node.func, m.Attribute()) and (
-            # Match ClassB().func_a(...) or module
-            (
-                m.matches(original_node.func.value, m.Call())
-                and m.matches(original_node.func.value.func, m.Name() | m.Attribute())
-                and get_full_attribute_name(original_node.func.value.func) in self.all_bases
-            )
-            or
-            # Match ClassB.func_a(...)
-            (
-                m.matches(original_node.func.value, m.Name() | m.Attribute())
-                and get_full_attribute_name(original_node.func.value) in self.all_bases
-            )
-        ):
-            # Check if the first argument is 'self', and remove it
-            if len(original_node.args) > 0 and m.matches(original_node.args[0].value, m.Name("self")):
-                # Create the new argument list without 'self'
-                new_args = updated_node.args[1:]
-            else:
-                new_args = updated_node.args
+    def is_call_to_parent_class(self, node: cst.SimpleStatementLine):
+        """Check whether `node` corresponds to a call to a parent class function, such as `module.Parent.func_name(...)`"""
+        return m.matches(node, m.Call(func=m.Attribute(value=m.Name() | m.Attribute())))
 
-            return updated_node.with_changes(args=new_args)
+    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.Call:
+        """Replace a call of the form `module.Class.func(...)` by a call of the form `super().func(...)`
+        if the `Class` being called is one of the bases."""
+        if self.is_call_to_parent_class(updated_node):
+            full_parent_class_name = get_full_attribute_name(updated_node.func.value)
+            # Replace only if it's a base, or a few special rules
+            if (
+                full_parent_class_name in self.new_bases
+                or (full_parent_class_name == "nn.Module" and "GradientCheckpointingLayer" in self.new_bases)
+                or (
+                    full_parent_class_name == "PreTrainedModel"
+                    and any("PreTrainedModel" in base for base in self.new_bases)
+                )
+            ):
+                # Replace `full_parent_class_name.func(...)` with `super().func(...)`
+                attribute_node = updated_node.func.with_changes(value=cst.Call(func=cst.Name("super")))
+                # Check if the first argument is 'self', and remove it
+                new_args = (
+                    updated_node.args[1:]
+                    if len(updated_node.args) > 0 and m.matches(updated_node.args[0].value, m.Name("self"))
+                    else updated_node.args
+                )
+                return updated_node.with_changes(func=attribute_node, args=new_args)
         return updated_node
 
 
-class SuperTransformer(cst.CSTTransformer):
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+class ReplaceSuperCallTransformer(cst.CSTTransformer):
+    """
+    This Transformer is used to unravel all calls to `super().func(...)` in class methods by the explicit parent's
+    code. It will also in turn replace all calls of the form `module.Class.func(...)` by a call of the form
+    `super().func(...)`. Those calls are used to explicitly skip the unravelling of code, but we should still follow
+    python's standards and use `super().func(...)` instead of `Parent.func(self, ...)`.
+    """
 
-    def __init__(self, python_module: cst.Module, original_modeling_methods, modular_methods, all_bases=None):
+    def __init__(
+        self,
+        python_module: cst.Module,
+        original_modeling_methods: dict[str, cst.FunctionDef],
+        modular_methods: dict[str, cst.FunctionDef],
+        new_bases: list[cst.Arg],
+    ):
         self.python_module = python_module
         self.original_modeling_methods = original_modeling_methods
         self.modular_methods = modular_methods
         self.all_assign_target = {}
         self.deleted_targets = {}  # child node can delete some arguments
-        self.all_bases = all_bases or []
-        self.transformer = ReplaceMethodCallTransformer(set(self.all_bases))
+        new_bases = [get_full_attribute_name(base.value) for base in new_bases]
+        self.parent_class_call_transformer = ReplaceParentClassCallTransformer(new_bases)
 
     def update_body(self, existing_body, new_statements):
         """
@@ -342,32 +329,28 @@ class SuperTransformer(cst.CSTTransformer):
                 break
         return new_body
 
-    def replace_super_calls(self, node: cst.BaseSuite, func_name: str) -> cst.BaseSuite:
-        """Updates the body of the input `node`'s `func_name` function by replacing calls
-        to super().func_name() with the source code of the parent class' `func_name`.
-        It keeps everything that is defined before `super().func_name()`.
-        """
-        new_body = []
-        modular_node_body = node.body
-
-        for i, expr in enumerate(modular_node_body):
-            if is_call_to_super(expr, func_name):
-                original_modeling_method_body = self.original_modeling_methods[func_name].body.body
-                new_body.extend(self.update_body(original_modeling_method_body, modular_node_body[i + 1 :]))
-                new_body = self._fix_init_location(new_body)
-                return node.with_changes(body=new_body)
-            else:
-                expr = expr.visit(self.transformer)
-            if not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])):
-                new_body.append(expr)
-
-        return node.with_changes(body=new_body)
+    def is_call_to_super(self, node: cst.BaseStatement, func_name: str):
+        """Check whether `node` corresponds to a call to `super().func_name(...)`"""
+        super_call_node = m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
+        return m.matches(node, m.SimpleStatementLine(body=[m.Return(super_call_node) | m.Expr(super_call_node)]))
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        name = updated_node.name.value
-        if name in self.modular_methods:
-            new_body = self.replace_super_calls(updated_node.body, name)
-            return updated_node.with_changes(body=new_body, params=updated_node.params)
+        func_name = updated_node.name.value
+        self.should_check_statements = False
+        if func_name in self.modular_methods:
+            actual_body = updated_node.body.body  # first body is an `IndentedBlock` wrapper
+            new_body = []
+            for i, base_statement_node in enumerate(actual_body):
+                if self.is_call_to_super(base_statement_node, func_name):
+                    original_modeling_method_body = self.original_modeling_methods[func_name].body.body
+                    new_body.extend(self.update_body(original_modeling_method_body, actual_body[i + 1 :]))
+                    new_body = self._fix_init_location(new_body)
+                    # Break here as all future statement were already accounted for in `update_body`
+                    break
+                # If not a call to super, this will replace all calls of the form `module.Class.func(...)` by a
+                # call of the form `super().func(...)
+                new_body.append(base_statement_node.visit(self.parent_class_call_transformer))
+            return updated_node.with_changes(body=updated_node.body.with_changes(body=new_body))
         return updated_node
 
 
@@ -1058,9 +1041,8 @@ def replace_class_node(
     # Replace the calls to `super()` of the redefined modular methods with the unrolled code
     result_node = original_modeling_node.with_changes(body=cst.IndentedBlock(body=new_class_body))
     temp_module = cst.Module(body=[result_node])
-    new_module = MetadataWrapper(temp_module)
-    new_replacement_class = new_module.visit(
-        SuperTransformer(temp_module, original_modeling_methods, modular_methods, all_bases)
+    new_replacement_class = temp_module.visit(
+        ReplaceSuperCallTransformer(temp_module, original_modeling_methods, modular_methods, new_class_bases)
     )
     new_class_body = new_replacement_class.body[0].body  # get the indented block
 
@@ -1086,13 +1068,15 @@ TYPE_TO_FILE_TYPE = {
 }
 
 
-def find_file_type(class_name: str) -> str:
+def find_file_type(class_name: str, model_name: str) -> str:
     """Based on a class name, find the file type corresponding to the class.
     If the class name is `LlamaConfig` it will return `configuration`.
     The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
     """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
-    match = re.search(rf"({match_pattern})$", class_name)
+    # We remove the model name to avoid ambiguity, e.g. for `Sam2VideoProcessor`,
+    # removing `Sam2Video` ensures we match `Processor` instead of `VideoProcessor`.
+    match = re.search(rf"({match_pattern})$", class_name.replace(get_cased_name(model_name), ""))
     if match:
         file_type = TYPE_TO_FILE_TYPE[match.group(1)]
     else:
@@ -1175,7 +1159,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     return usual_import_nodes + protected_import_nodes
 
 
-def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
+def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
     """Split the `__all__` assignment found in the modular between each corresponding files."""
     all_all_per_file = {}
     assign_node = node.body[0]
@@ -1186,7 +1170,7 @@ def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
             if isinstance(element.value, cst.SimpleString):
                 # Remove quotes and add the string to the elements list
                 class_name = element.value.value
-                file = find_file_type(element.value.evaluated_value)
+                file = find_file_type(element.value.evaluated_value, model_name)
                 all_all_to_add[file] += [class_name]
         for file, new_alls in all_all_to_add.items():
             new_node = assign_node.with_changes(
@@ -1224,7 +1208,8 @@ class ModularFileMapper(ModuleMapper):
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(
-                    rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement
+                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*",
+                    import_statement,
                 )
                 if _import:
                     source = _import.group(1)
@@ -1275,7 +1260,7 @@ class ModularFileMapper(ModuleMapper):
                 assigned_variable = node.body[0].targets[0].target.value
                 # __all__ is treated differently and not added to general assignments
                 if assigned_variable == "__all__":
-                    self.all_all_to_add = split_all_assignment(node)
+                    self.all_all_to_add = split_all_assignment(node, self.model_name)
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
@@ -1531,7 +1516,7 @@ def check_dependencies_and_create_import_node(
     corrected_dependencies = new_dependencies.copy()
     new_imports = {}
     for class_name in class_dependencies:
-        class_file_type = find_file_type(class_name)
+        class_file_type = find_file_type(class_name, new_name)
         # In this case, we need to remove it from the dependencies and create a new import instead
         if class_file_type != file_type:
             corrected_dependencies.remove(class_name)
@@ -1554,7 +1539,7 @@ def get_class_node_and_dependencies(
     ]
     super_class = model_specific_bases[0] if len(model_specific_bases) == 1 else None
 
-    file_type = find_file_type(class_name)
+    file_type = find_file_type(class_name, modular_mapper.model_name)
     file_to_update = files[file_type]
     model_name = modular_mapper.model_name
 
@@ -1582,6 +1567,11 @@ def get_class_node_and_dependencies(
         new_node_dependencies, new_imports = check_dependencies_and_create_import_node(
             file_type, new_node_dependencies, mapper, model_name
         )
+
+        # Remove all classes explicitly defined in modular from the dependencies. Otherwise, if a class is referenced
+        # before its new modular definition, it may be wrongly imported from elsewhere as a dependency if it matches
+        # another class from a modeling file after renaming, even though it would be added after anyway (leading to duplicates)
+        new_node_dependencies -= set(modular_mapper.classes.keys())
 
         # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
@@ -1676,7 +1666,18 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     return files
 
 
-def convert_modular_file(modular_file):
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
+
+
+def convert_modular_file(modular_file: str) -> dict[str, str]:
+    """Convert a `modular_file` into all the different model-specific files it depicts."""
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
     if pattern is not None:
@@ -1700,34 +1701,30 @@ def convert_modular_file(modular_file):
                 )
                 ruffed_code = run_ruff(header + module.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
-                output[file] = [formatted_code, ruffed_code]
+                output[file] = formatted_code
         return output
     else:
         print(f"modular pattern not found in {modular_file}, exiting")
         return {}
 
 
-def save_modeling_file(modular_file, converted_file):
-    for file_type in converted_file:
+def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
+    """Save all the `converted_files` from the `modular_file`."""
+    for file_type in converted_files:
         file_name_prefix = file_type.split("*")[0]
         file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
             ".py", f"{file_name_suffix}.py"
         )
-        non_comment_lines = len(
-            [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
-        )
-        if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
-            with open(new_file_name, "w", encoding="utf-8") as f:
-                f.write(converted_file[file_type][0])
-        else:
-            non_comment_lines = len(
-                [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
-            )
-            if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
-                logger.warning("The modeling code contains errors, it's written without formatting")
-                with open(new_file_name, "w", encoding="utf-8") as f:
-                    f.write(converted_file[file_type][1])
+        with open(new_file_name, "w", encoding="utf-8") as f:
+            f.write(converted_files[file_type])
+
+
+def run_converter(modular_file: str):
+    """Convert a modular file, and save resulting files."""
+    print(f"Converting {modular_file} to a single model single file format")
+    converted_files = convert_modular_file(modular_file)
+    save_modeling_files(modular_file, converted_files)
 
 
 if __name__ == "__main__":
@@ -1747,9 +1744,17 @@ if __name__ == "__main__":
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
+    parser.add_argument(
+        "--num_workers",
+        "-w",
+        default=-1,
+        type=int,
+        help="The number of workers to use. Default is -1, which means the number of CPU cores.",
+    )
     args = parser.parse_args()
     # Both arg represent the same data, but as positional and optional
     files_to_parse = args.files if len(args.files) > 0 else args.files_to_parse
+    num_workers = mp.cpu_count() if args.num_workers == -1 else args.num_workers
 
     if files_to_parse == ["all"]:
         files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
@@ -1767,12 +1772,17 @@ if __name__ == "__main__":
                     raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
                 files_to_parse[i] = full_path
 
-    priority_list, _ = find_priority_list(files_to_parse)
-    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
-    assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
+    # This finds the correct order in which we should convert the modular files, so that a model relying on another one
+    # is necessarily converted after its dependencies
+    ordered_files, _ = find_priority_list(files_to_parse)
+    if sum(len(level_files) for level_files in ordered_files) != len(files_to_parse):
+        raise ValueError(
+            "Some files will not be converted because they do not appear in the dependency graph."
+            "This usually means that at least one modular file does not import any model-specific class"
+        )
 
-    for file_name in priority_list:
-        print(f"Converting {file_name} to a single model single file format")
-        module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
-        converted_files = convert_modular_file(file_name)
-        converter = save_modeling_file(file_name, converted_files)
+    for dependency_level_files in ordered_files:
+        # Process files with diff
+        workers = min(num_workers, len(dependency_level_files))
+        with mp.Pool(workers) as pool:
+            pool.map(run_converter, dependency_level_files)

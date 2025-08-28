@@ -216,7 +216,7 @@ class GPTJAttention(nn.Module):
             embed_positions = self._get_embed_positions(position_ids)
 
         repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -302,7 +302,7 @@ class GPTJFlashAttention2(GPTJAttention):
             embed_positions = self._get_embed_positions(position_ids)
 
         repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -661,7 +661,7 @@ class GPTJModel(GPTJPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:

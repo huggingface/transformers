@@ -688,34 +688,34 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -723,16 +723,16 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
@@ -779,9 +779,9 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.8221, -4.7679, -6.0063],
-                [-5.2994, -9.5009, -6.1697],
-                [-5.3103, -3.8005, -6.2972],
+                [-3.8098, -4.7725, -5.9945],
+                [-5.2975, -9.4991, -6.1654],
+                [-5.3502, -3.9532, -6.3631],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
@@ -803,14 +803,14 @@ class DFineModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor([0.9616, 0.9541, 0.9541, 0.8551], device=torch_device)
+        expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
         expected_labels = [15, 65, 15, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [1.3358e01, 5.4123e01, 3.1726e02, 4.7222e02],
-                [4.0274e01, 7.2972e01, 1.7620e02, 1.1777e02],
-                [3.4270e02, 2.3427e01, 6.3998e02, 3.7476e02],
-                [5.7796e-01, 1.1773e00, 6.3933e02, 4.7486e02],
+                [1.3186e01, 5.4130e01, 3.1727e02, 4.7212e02],
+                [4.0275e01, 7.2975e01, 1.7620e02, 1.1777e02],
+                [3.4276e02, 2.3428e01, 6.3998e02, 3.7477e02],
+                [5.8418e-01, 1.1794e00, 6.3933e02, 4.7486e02],
             ],
             device=torch_device,
         )

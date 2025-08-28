@@ -79,7 +79,7 @@ class InternVLVisionRMSNorm(LlamaRMSNorm):
 
 class InternVLVisionAttention(JanusVisionAttention):
     def __init__(self, config: InternVLVisionConfig):
-        super().__init__()
+        super().__init__(config)
         del self.num_key_value_groups
 
         # Needed for flash attention
@@ -544,6 +544,7 @@ class InternVLModel(LlavaModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -660,7 +661,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "OpenGVLab/InternVL3-1B-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [

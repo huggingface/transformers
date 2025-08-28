@@ -636,7 +636,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = model_class(config, torch_dtype=torch.bfloat16)
+        model = model_class(config, dtype=torch.bfloat16)
         model.to(torch_device)
         model.eval()
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -678,9 +678,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-9.6644, -4.3434, -5.8707],
-                [-9.7035, -3.8503, -5.0721],
-                [-10.5633, -5.3387, -7.5119],
+                [-9.6645, -4.3449, -5.8705],
+                [-9.7035, -3.8504, -5.0724],
+                [-10.5634, -5.3379, -7.5116],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
@@ -703,7 +703,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.7999, 0.7895, 0.6332, 0.4719, 0.4382]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.4960, 52.8387, 318.2565, 470.7831]).to(torch_device)
+        expected_slice_boxes = torch.tensor([16.5028, 52.8391, 318.2544, 470.7841]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
@@ -729,15 +729,15 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-6.7112, -4.3216, -6.3781],
-                [-8.9035, -6.1738, -6.7249],
-                [-6.9314, -4.4736, -6.2303],
+                [-6.7108, -4.3213, -6.3777],
+                [-8.9014, -6.1799, -6.7240],
+                [-6.9315, -4.4735, -6.2298],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.2582, 0.5499, 0.4683],
-                [0.7652, 0.9084, 0.4884],
+                [0.2583, 0.5499, 0.4683],
+                [0.7652, 0.9068, 0.4882],
                 [0.5490, 0.2763, 0.0564],
             ]
         ).to(torch_device)

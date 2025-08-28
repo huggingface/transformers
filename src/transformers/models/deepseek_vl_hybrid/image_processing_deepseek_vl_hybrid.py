@@ -34,7 +34,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -104,7 +104,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(
         self,
@@ -151,17 +151,18 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         if image_mean is None:
             self.background_color = (127, 127, 127)
         else:
-            self.background_color = tuple([int(x * 255) for x in image_mean])
+            self.background_color = tuple(int(x * 255) for x in image_mean)
 
         if high_res_image_mean is None:
-            self.background_color = (127, 127, 127)
+            self.high_res_background_color = (127, 127, 127)
         else:
-            self.background_color = tuple([int(x * 255) for x in high_res_image_mean])
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     def resize(
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
+        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -173,6 +174,10 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
+            size (`dict[str, int]` or `int`):
+                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -191,6 +196,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -222,7 +228,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
+            background_color=background_color,
             input_data_format=input_data_format,
         )
         return image
@@ -321,7 +327,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         high_res_size = high_res_size if high_res_size is not None else self.high_res_size
         high_res_size_dict = get_size_dict(high_res_size)
 
-        images = make_list_of_images(images)
+        images = self.fetch_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -361,16 +368,20 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             # high_res_image: resize (high) -> rescale -> normalize (high)
             # low_res_image:  resize (high) -> rescale -> resize (low) -> normalize (low)
             high_res_image = image
-
             if do_resize:
                 high_res_image = self.resize(
                     image=high_res_image,
                     size=high_res_size_dict,
+                    background_color=self.high_res_background_color,
                     resample=high_res_resample,
                     input_data_format=input_data_format,
                 )
                 image = self.resize(
-                    image=high_res_image, size=size_dict, resample=resample, input_data_format=input_data_format
+                    image=high_res_image,
+                    size=size_dict,
+                    background_color=self.background_color,
+                    resample=resample,
+                    input_data_format=input_data_format,
                 )
 
             if do_rescale:
@@ -474,10 +485,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 result[:, start : start + width, :] = image
 
         return result
-
-    def postprocess(self):
-        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
-        raise AttributeError("Not needed for DeepseekVLHybrid")
 
 
 __all__ = ["DeepseekVLHybridImageProcessor"]

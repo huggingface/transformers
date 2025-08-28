@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.7.1'
+ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 # Disable kernel mapping for now until all tests pass
@@ -32,7 +32,10 @@ RUN python3 -m pip uninstall -y flax jax
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
-RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
+
+RUN python3 -m pip install --no-cache-dir pytesseract
+
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
@@ -41,6 +44,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
+# For kernels
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
@@ -51,14 +56,13 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
+# After using A10 as CI runner, let's run FA2 tests
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+
+# TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
 # (`deformable_detr`, `rwkv`, `mra`)
 RUN python3 -m pip uninstall -y ninja
-
-# For `dinat` model
-# The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
-RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein

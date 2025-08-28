@@ -61,6 +61,9 @@ from typing import Optional, Union
 
 from git import Repo
 
+# List here the models not to be filtered by `filter_tests`.
+from important_files import IMPORTANT_MODELS
+
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
@@ -70,34 +73,6 @@ PATH_TO_TESTS = PATH_TO_REPO / "tests"
 # The value is just a heuristic to determine if we `guess` all models are impacted.
 # This variable has effect only if `filter_models=False`.
 NUM_MODELS_TO_TRIGGER_FULL_CI = 30
-
-# List here the models to always test.
-IMPORTANT_MODELS = [
-    "auto",
-    "bert",
-    "gpt2",
-    "t5",
-    "modernbert",
-    "vit,clip",
-    "detr",
-    "table_transformer",
-    "got_ocr2",
-    "whisper",
-    "wav2vec2",
-    "qwen2_audio",
-    "speech_t5",
-    "csm",
-    "llama",
-    "gemma3",
-    "qwen2",
-    "mistral3",
-    "qwen2_5_vl",
-    "llava",
-    "smolvlm",
-    "internvl",
-    "gemma3n",
-    "qwen2_5_omni",
-]
 
 
 @contextmanager

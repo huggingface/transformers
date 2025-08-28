@@ -84,7 +84,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `torch_dtype` parameter. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `dtype` parameter. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -96,7 +96,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
     device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -134,7 +134,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter.. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `dtype` parameter.. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -146,7 +146,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
     device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -218,7 +218,7 @@ Now load your model with the custom `device_map` and `quantization_config`.
 ```py
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -242,7 +242,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -263,7 +263,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -300,10 +300,10 @@ nf4_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", quantization_config=nf4_config)
+model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", quantization_config=nf4_config)
 ```
 
-For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `torch_dtype` values.
+For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `dtype` values.
 
 ### Nested quantization
 
@@ -317,7 +317,7 @@ double_quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", torch_dtype="auto", quantization_config=double_quant_config)
+model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", dtype="auto", quantization_config=double_quant_config)
 ```
 
 ## Dequantizing bitsandbytes models

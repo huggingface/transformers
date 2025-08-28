@@ -32,6 +32,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -95,7 +96,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout this
-            [paper](https://arxiv.org/pdf/2305.13245.pdf). If not specified, will default to `num_attention_heads`.
+            [paper](https://huggingface.co/papers/2305.13245). If not specified, will default to `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
@@ -1263,7 +1264,9 @@ class Gemma3nAudioSSCPConvBlock(nn.Module):
         # Input audio_encodings is [B, C_in, T_in, F_in] (e.g., C_in=1)
         # manual_padding is (pad_F_left, pad_F_right, pad_T_top, pad_T_bottom)
         # F.pad applies to last two dims: F_in then T_in
-        audio_encodings_padded = F.pad(audio_encodings, self.manual_padding, mode="constant", value=0.0)
+        audio_encodings_padded = F.pad(audio_encodings, self.manual_padding, mode="constant", value=0.0).to(
+            self.conv.weight.dtype
+        )
         # Expected padded shape for F_in, k_w=3, pad_F=(1,1) -> F_padded = F_in+2
         # Expected padded shape for T_in, k_h=3, pad_T=(0,2) -> T_padded = T_in+2
         audio_encodings_conv = self.conv(audio_encodings_padded)
@@ -1473,7 +1476,9 @@ class Gemma3nAudioConformerBlock(nn.Module):
 
 
 class Gemma3nAudioEncoder(PreTrainedModel):
-    """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
+    """
+    An audio encoder based on the [Universal Speech Model](https://huggingface.co/papers/2303.01037) architecture.
+    """
 
     config: Gemma3nAudioConfig
 
@@ -1734,7 +1739,7 @@ def apply_rotary_pos_emb(
 
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         del self.attn_logit_softcapping
         del self.scaling
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
@@ -1749,12 +1754,13 @@ class Gemma3nTextAttention(Gemma3Attention):
             else None
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -1768,9 +1774,9 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
+        if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_values is not None:
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
-            layer = past_key_value.layers[self.kv_shared_layer_index]
+            layer = past_key_values.layers[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             indices = cache_position.to(layer.keys.device)
             # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
@@ -1793,7 +1799,7 @@ class Gemma3nTextAttention(Gemma3Attention):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
                 "sin": sin,
@@ -1801,7 +1807,7 @@ class Gemma3nTextAttention(Gemma3Attention):
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1839,6 +1845,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1847,7 +1854,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         per_layer_input: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1870,7 +1877,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -1915,7 +1922,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
     def _init_weights(self, module):
-        Gemma2PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
@@ -2050,7 +2057,7 @@ class Gemma3nTextModel(Gemma3TextModel):
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -2121,7 +2128,7 @@ class Gemma3nTextModel(Gemma3TextModel):
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -2227,7 +2234,7 @@ class Gemma3nModel(PaliGemmaModel):
     _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: Gemma3nConfig):
-        super().__init__()
+        super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)
@@ -2261,10 +2268,10 @@ class Gemma3nModel(PaliGemmaModel):
 
     def get_placeholder_mask(
         self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor,
-        audio_features: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        audio_features: Optional[torch.FloatTensor] = None,
     ):
         """
         Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is

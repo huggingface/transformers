@@ -50,14 +50,14 @@ from ...utils import (
 
 if is_torch_available():
     import torch
-    from torch.nn import functional as F_t
+    from torch.nn import functional as F
 
-if is_torchvision_available() and is_torchvision_v2_available():
+if is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
-    from torchvision.transforms.v2 import functional as F
+    from torchvision.transforms.v2 import functional as F_t
 elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
-    from torchvision.transforms import functional as F
+    from torchvision.transforms import functional as F_t
 
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -109,7 +109,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         pad_width = output_width - input_width
         pad_height = output_height - input_height
         padding = (0, 0, pad_width, pad_height)
-        return F.pad(images, padding)
+        return F_t.pad(images, padding)
 
     def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
         """
@@ -123,7 +123,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return (newh, neww)
 
     def resize(
-        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["F.InterpolationMode"], **kwargs
+        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["F_t.InterpolationMode"], **kwargs
     ) -> "torch.Tensor":
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -136,7 +136,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
             interpolation:
-                `F.InterpolationMode` filter to use when resizing the image e.g. `F.InterpolationMode.BICUBIC`.
+                `F_t.InterpolationMode` filter to use when resizing the image e.g. `F_t.InterpolationMode.BICUBIC`.
 
         Returns:
             `torch.Tensor`: The resized image.
@@ -186,10 +186,18 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         kwargs["pad_size"] = pad_size
         kwargs["mask_size"] = mask_size
         kwargs["mask_pad_size"] = mask_pad_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -244,7 +252,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT
+                    if is_torchvision_v2_available()
+                    else F_t.InterpolationMode.NEAREST,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                     "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
                 }
@@ -261,7 +271,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["F_t.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -476,9 +486,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            interpolated_mask = F_t.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F_t.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
