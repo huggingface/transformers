@@ -1568,6 +1568,11 @@ def get_class_node_and_dependencies(
             file_type, new_node_dependencies, mapper, model_name
         )
 
+        # Remove all classes explicitly defined in modular from the dependencies. Otherwise, if a class is referenced
+        # before its new modular definition, it may be wrongly imported from elsewhere as a dependency if it matches
+        # another class from a modeling file after renaming, even though it would be added after anyway (leading to duplicates)
+        new_node_dependencies -= set(modular_mapper.classes.keys())
+
         # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
             dependency_mapping=mapper.class_dependency_mapping,
