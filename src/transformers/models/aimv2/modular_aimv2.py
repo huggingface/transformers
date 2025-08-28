@@ -24,12 +24,10 @@ from torch import nn
 
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-)
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
@@ -362,7 +360,7 @@ class Aimv2Attention(SiglipAttention):
 
 
 class Aimv2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Aimv2VisionConfig):
+    def __init__(self, config: Union[Aimv2VisionConfig, Aimv2TextConfig]):
         super().__init__()
         self.attention = Aimv2Attention(config)
         self.ffn = Aimv2MLP(config)
@@ -373,8 +371,7 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         norm_hidden_states = self.rms_norm1(hidden_states)
         attn_output, attn_weights = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask)
 
@@ -383,7 +380,7 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
         mlp_output = self.ffn(norm_hidden_states)
 
         hidden_states = hidden_states + mlp_output
-        return (hidden_states, attn_weights) if output_attentions else (hidden_states, None)
+        return hidden_states, attn_weights
 
 
 class Aimv2Encoder(SiglipEncoder):
@@ -443,6 +440,9 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "attentions": Aimv2Attention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -479,14 +479,14 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
@@ -508,20 +508,16 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         hidden_states = self.embeddings(pixel_values)
 
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states, output_hidden_states=output_hidden_states
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
         pooler_output = self.head(last_hidden_state) if self.use_head else None
@@ -530,7 +526,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -540,6 +535,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     """
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
+    config: Aimv2TextConfig
     main_input_name = "input_ids"
 
     def __init__(self, config: Aimv2TextConfig):
@@ -559,19 +555,17 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         hidden_states = self.embeddings(input_ids)
         batch_size, seq_len, _ = hidden_states.shape
@@ -588,14 +582,13 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
                 past_key_values=None,
             )
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
         # Get pooled output
@@ -641,8 +634,7 @@ class Aimv2Model(CLIPModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Aimv2Output:
         r"""
         Examples:
@@ -667,22 +659,10 @@ class Aimv2Model(CLIPModel):
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values, **kwargs)
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            input_ids=input_ids, attention_mask=attention_mask, **kwargs
         )
 
         image_embeds = vision_outputs.pooler_output
