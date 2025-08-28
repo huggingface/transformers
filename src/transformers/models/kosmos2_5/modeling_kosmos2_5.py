@@ -1730,13 +1730,13 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
-        >>> repo = "ydshieh/kosmos-2.5"
+        >>> repo = "microsoft/kosmos-2.5"
         >>> device = "cuda:0"
         >>> dtype = torch.bfloat16 # torch.float16
         >>> model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
         >>> processor = AutoProcessor.from_pretrained(repo)
 
-        >>> url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        >>> url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
