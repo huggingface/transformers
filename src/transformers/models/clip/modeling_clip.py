@@ -19,7 +19,6 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -574,6 +573,7 @@ class CLIPEncoder(nn.Module):
             attentions=all_attentions,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The text model from CLIP without any head or projection on top.
@@ -599,7 +599,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
         # For attention mask, it differs between `flash_attention_2` and other attention implementations
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        
+
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
