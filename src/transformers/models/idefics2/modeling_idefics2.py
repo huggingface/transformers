@@ -370,7 +370,6 @@ class Idefics2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipEncoder with Siglip->Idefics2
 class Idefics2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
