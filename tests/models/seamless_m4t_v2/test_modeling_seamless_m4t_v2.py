@@ -225,6 +225,9 @@ class SeamlessM4Tv2ModelTester:
             right_max_position_embeddings=self.right_max_position_embeddings,
             speech_encoder_chunk_size=self.speech_encoder_chunk_size,
             speech_encoder_left_chunk_num=self.speech_encoder_left_chunk_num,
+            encoder_layerdrop=self.encoder_layerdrop,
+            speech_encoder_layerdrop=self.speech_encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
