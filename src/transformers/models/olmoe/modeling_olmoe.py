@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -209,7 +209,7 @@ class OlmoeAttention(nn.Module):
         )
         self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.k_norm = OlmoeRMSNorm(
-            (self.head_dim) * config.num_key_value_heads, eps=config.rms_norm_eps
+            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
         )
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -240,13 +240,14 @@ class OlmoeAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -447,8 +448,7 @@ class OlmoeModel(OlmoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask 
-        causal_mask = mask_function(
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,

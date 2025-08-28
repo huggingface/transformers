@@ -28,19 +28,20 @@ from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_olmoe import OlmoeConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaRotaryEmbedding, LlamaMLP, eager_attention_forward
-from ..gemma2.modeling_gemma2 import Gemma2MLP
+from ..gemma.modeling_gemma import GemmaMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralForCausalLM
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 logger = logging.get_logger(__name__)
 
 
 class OlmoeRMSNorm(LlamaRMSNorm):
-    pass
+    def __init__(self, hidden_size, eps=1e-5):
+        super().__init__(hidden_size, eps)
 
 class OlmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
-class OlmoeMLP(LlamaMLP):
+class OlmoeMLP(GemmaMLP):
     pass
 
 class OlmoeAttention(LlamaAttention):
@@ -78,6 +79,11 @@ class OlmoeAttention(LlamaAttention):
         value_states = value_states.view(*hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -237,6 +243,75 @@ class OlmoeModel(MixtralModel):
         self.norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OlmoeRotaryEmbedding(config=config)
 
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 class OlmoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
