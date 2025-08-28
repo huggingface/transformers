@@ -24,7 +24,6 @@ import torch
 import json
 from typing import Dict, List, Union, Any, Optional
 
-from .logits_processor_base import LogitsProcessor, LogitsProcessorList
 from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
@@ -3245,7 +3244,8 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 class LogitProcessorRegistry:
-    """Registry for LogitProcessor classes to enable configuration-based instantiation."""
+    """Registry for LogitProcessor classes to enable configuration-based instantiation
+    with external classes."""
     
     _registry = {}
     

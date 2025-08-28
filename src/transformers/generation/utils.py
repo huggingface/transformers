@@ -1330,6 +1330,21 @@ class GenerationMixin(ContinuousMixin):
             processors.append(LogitNormalization())
         return processors
 
+    def get_logit_processors(self):
+        """Get LogitsProcessorList from configuration."""
+        if self.logit_processors is None:
+            return None
+        
+        # Import here to avoid circular imports
+        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
+        
+        # If it's already a processor list, return it
+        if isinstance(self.logit_processors, LogitsProcessorList):
+            return self.logit_processors
+        
+        # Otherwise, create from config
+        return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
+
     def _get_stopping_criteria(
         self,
         generation_config: GenerationConfig,

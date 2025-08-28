@@ -60,7 +60,7 @@ ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMP
 
 if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
-    
+
 class GenerationMode(ExplicitEnum):
     """
     Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
@@ -1042,21 +1042,6 @@ class GenerationConfig(PushToHubMixin):
             config = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
-
-    def get_logit_processors(self):
-        """Get LogitsProcessorList from configuration."""
-        if self.logit_processors is None:
-            return None
-        
-        # Import here to avoid circular imports
-        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
-        
-        # If it's already a processor list, return it
-        if isinstance(self.logit_processors, LogitsProcessorList):
-            return self.logit_processors
-        
-        # Otherwise, create from config
-        return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
     
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
