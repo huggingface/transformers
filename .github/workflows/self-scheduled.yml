@@ -515,7 +515,7 @@ jobs:
       run_quantization_torch_gpu,
       run_extract_warnings
     ]
-    if: ${{ always() }}
+    if: always() && !cancelled()
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
