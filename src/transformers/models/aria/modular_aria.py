@@ -49,6 +49,8 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
+    repeat_kv,
+    eager_attention_forward,
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import (
@@ -337,40 +339,6 @@ class AriaProjectorMLP(nn.Module):
         return hidden_states
 
 
-def repeat_kv(hidden_states: "torch.Tensor", n_rep: int) -> "torch.Tensor":
-    """
-    Repeat key/value states for GQA/MQA. Input: (batch, num_key_value_heads, seqlen, head_dim)
-    Output: (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-def aria_cross_attention_forward(
-    module: "AriaCrossAttention",
-    query: "torch.Tensor",
-    key: "torch.Tensor",
-    value: "torch.Tensor",
-    attention_mask: "Optional[torch.Tensor]",
-    scaling: float,
-    dropout: float = 0.0,
-):
-    # query: (batch, num_heads, tgt_len, head_dim)
-    # key/value: (batch, num_kv_heads, src_len, head_dim)
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    # (batch, num_heads, tgt_len, src_len)
-    attn_weights = query @ key_states.transpose(-2, -1) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = attn_weights @ value_states
-    return attn_output, attn_weights
-
 class AriaCrossAttention(nn.Module):
     """
     Aria Cross-Attention module (refactored to explicit projections, GQA/MQA, no nn.MultiheadAttention).
@@ -395,20 +363,19 @@ class AriaCrossAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
-    def forward(self, key_value_states, hidden_states, attn_mask=None):
-        # hidden_states: (batch, tgt_len, hidden_size)
-        # key_value_states: (batch, src_len, hidden_size)
-        bsz, tgt_len, _ = hidden_states.shape
-        src_len = key_value_states.shape[1]
+    def forward(self, key_value_states, hidden_states, attention_mask=None, **kwargs: Unpack[TransformersKwargs]):
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query = self.q_proj(self.layer_norm(hidden_states)).view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query = self.q_proj(self.layer_norm(hidden_states)).view(*hidden_shape).transpose(1, 2)
         key_value_states = self.layer_norm_kv(key_value_states)
-        key = self.k_proj(key_value_states).view(bsz, src_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value = self.v_proj(key_value_states).view(bsz, src_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        key = self.k_proj(key_value_states).view(*hidden_shape).transpose(1, 2)
+        value = self.v_proj(key_value_states).view(*hidden_shape).transpose(1, 2)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # query: (bsz, num_heads, tgt_len, head_dim)
-        # key/value: (bsz, num_kv_heads, src_len, head_dim)
-        attn_output, _ = aria_cross_attention_forward(
+        attn_output, attn_weights = attention_interface(
             self,
             query,
             key,
@@ -417,10 +384,9 @@ class AriaCrossAttention(nn.Module):
             scaling=self.scaling,
             dropout=self.dropout_p,
         )
-        # attn_output: (bsz, num_heads, tgt_len, head_dim)
-        attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, tgt_len, self.num_heads * self.head_dim)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output
+        return attn_output, attn_weights
 
 
 class AriaProjector(nn.Module):
