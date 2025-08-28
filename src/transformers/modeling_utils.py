@@ -2554,17 +2554,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if not is_flash_attn_2_available():
-            if is_kernels_available():
-                logger.warning_once(
-                    "You don't have flash_attn installed, we will default to use `kernels-community/flash-attn`!"
-                )
-                try:
-                    from kernels import get_kernel
-
-                    get_kernel("kernels-community/flash-attn")
-                    return True
-                except Exception:
-                    pass
             preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
@@ -2803,18 +2792,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        use_kernels_flash = attn_implementation == "flash_attention_2" and not is_flash_attn_2_available()
-        if use_kernels_flash:
+        applicable_attn_implementation = attn_implementation
+        # If FA not installed, do not fail but use kernels instead
+        if (
+            applicable_attn_implementation == "flash_attention_2"
+            and self._supports_flash_attn
+            and not is_flash_attn_2_available()
+            and is_kernels_available()
+        ):
             applicable_attn_implementation = "kernels-community/flash-attn"
         if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
             # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            actual_attn_name = attn_implementation
-            if "|" in attn_implementation:
-                attention_wrapper, actual_attn_name = attn_implementation.split("|")
+            actual_attn_name = applicable_attn_implementation
+            if "|" in applicable_attn_implementation:
+                attention_wrapper, actual_attn_name = applicable_attn_implementation.split("|")
                 # `transformers` has wrapper for sdpa, paged, flash, flex etc.
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
@@ -2838,27 +2832,37 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
+                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
                 )
+                # log that we used kernel fallback
+                if attn_implementation == "flash_attention_2":
+                    logger.warning_once(
+                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
+                        "library instead!"
+                    )
             except Exception as e:
+                if attn_implementation == "flash_attention_2":
+                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 try:
                     self._sdpa_can_dispatch(is_init_check)
-                    attn_implementation = "sdpa"
+                    applicable_attn_implementation = "sdpa"
                 except (ValueError, ImportError) as e:
-                    attn_implementation = "eager"
+                    applicable_attn_implementation = "eager"
         else:
-            attn_implementation = self.get_correct_attn_implementation(attn_implementation, is_init_check)
+            applicable_attn_implementation = self.get_correct_attn_implementation(
+                applicable_attn_implementation, is_init_check
+            )
             # preload flash attention here to allow compile with fullgraph
-            if attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(attn_implementation)
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
 
-        return attn_implementation
+        return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
