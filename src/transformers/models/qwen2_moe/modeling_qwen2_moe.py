@@ -245,8 +245,7 @@ class Qwen2MoeAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        if self.sliding_window is not None:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -279,6 +278,7 @@ class Qwen2MoeNaiveMoe(nn.ModuleList):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
+        self.norm_topk_prob = config.norm_topk_prob
         for _ in range(self.num_experts):
             self += [Qwen2MoeMLP(config, config.moe_intermediate_size)]
 
@@ -286,7 +286,8 @@ class Qwen2MoeNaiveMoe(nn.ModuleList):
     def forward(self, hidden_states, routing_weights):
         routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
         final_hidden_states = torch.zeros_like(hidden_states, device=hidden_states.device)
