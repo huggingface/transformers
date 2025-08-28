@@ -574,10 +574,20 @@ class CLIPEncoder(nn.Module):
             attentions=all_attentions,
         )
 
+@auto_docstring(
+    custom_intro="""
+    The text model from CLIP without any head or projection on top.
+    """
+)
+class CLIPTextModel(CLIPPreTrainedModel):
+    config: CLIPTextConfig
+    base_model_prefix = "text_model"
 
-class CLIPTextTransformer(nn.Module):
+    _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
+    _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
+
     def __init__(self, config: CLIPTextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
@@ -589,7 +599,16 @@ class CLIPTextTransformer(nn.Module):
 
         # For attention mask, it differs between `flash_attention_2` and other attention implementations
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        
+        self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.embeddings.token_embedding = value
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -599,6 +618,22 @@ class CLIPTextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CLIPTextModel
+
+        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -666,65 +701,17 @@ class CLIPTextTransformer(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The text model from CLIP without any head or projection on top.
+    The vision model from CLIP without any head or projection on top.
     """
 )
-class CLIPTextModel(CLIPPreTrainedModel):
-    config: CLIPTextConfig
+class CLIPVisionModel(CLIPPreTrainedModel):
+    config: CLIPVisionConfig
+    base_model_prefix = "vision_model"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["CLIPEncoderLayer"]
 
-    _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
-    _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
-
-    def __init__(self, config: CLIPTextConfig):
-        super().__init__(config)
-        self.text_model = CLIPTextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, CLIPTextModel
-
-        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-
-class CLIPVisionTransformer(nn.Module):
     def __init__(self, config: CLIPVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 
@@ -733,6 +720,12 @@ class CLIPVisionTransformer(nn.Module):
         self.encoder = CLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.patch_embedding
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -741,6 +734,27 @@ class CLIPVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, CLIPVisionModel
+
+        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -767,63 +781,6 @@ class CLIPVisionTransformer(nn.Module):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from CLIP without any head or projection on top.
-    """
-)
-class CLIPVisionModel(CLIPPreTrainedModel):
-    config: CLIPVisionConfig
-    main_input_name = "pixel_values"
-    _no_split_modules = ["CLIPEncoderLayer"]
-
-    def __init__(self, config: CLIPVisionConfig):
-        super().__init__(config)
-        self.vision_model = CLIPVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLIPVisionModel
-
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -855,11 +812,8 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = CLIPTextModel._from_config(text_config)
-        self.text_model = text_model.text_model
-
-        vision_model = CLIPVisionModel._from_config(vision_config)
-        self.vision_model = vision_model.vision_model
+        self.text_model = CLIPTextModel._from_config(text_config)
+        self.vision_model = CLIPVisionModel._from_config(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1059,9 +1013,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
 
-        text_model = CLIPTextModel._from_config(config)
-        self.text_model = text_model.text_model
-
+        self.text_model = CLIPTextModel._from_config(config)
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -1124,9 +1076,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        vision_model = CLIPVisionModel._from_config(config)
-        self.vision_model = vision_model.vision_model
-
+        self.vision_model = CLIPVisionModel._from_config(config)
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -1194,8 +1144,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        vision_model = CLIPVisionModel._from_config(config.vision_config)
-        self.vision_model = vision_model.vision_model
+        self.vision_model = CLIPVisionModel._from_config(config.vision_config)
 
         # Classifier head
         self.classifier = (
@@ -1240,28 +1189,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         return ImageClassifierOutput(
             loss=loss,
