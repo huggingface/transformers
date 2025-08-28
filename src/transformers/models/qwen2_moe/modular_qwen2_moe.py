@@ -37,8 +37,7 @@ from ...modeling_layers import (
 )
 
 from .configuration_qwen2_moe import Qwen2MoeConfig
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAttention
-from ..cohere.modeling_cohere import rotate_half, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAttention, rotate_half, apply_rotary_pos_emb
 from ..gemma.modeling_gemma import GemmaMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, MixtralForCausalLM, MixtralDecoderLayer, MixtralNaiveMoe
 
