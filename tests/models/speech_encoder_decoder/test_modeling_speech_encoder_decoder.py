@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -454,7 +455,7 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
+    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         inputs_dict = self.prepare_config_and_inputs()
         encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]

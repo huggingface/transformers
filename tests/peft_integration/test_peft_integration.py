@@ -25,7 +25,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    BitsAndBytesConfig,
     OPTForCausalLM,
     Trainer,
     TrainingArguments,
@@ -77,12 +76,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
         return is_peft_loaded
 
-    def _get_bnb_4bit_config(self):
-        return BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4")
-
-    def _get_bnb_8bit_config(self):
-        return BitsAndBytesConfig(load_in_8bit=True)
-
     def test_peft_from_pretrained(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained`.
@@ -115,7 +108,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 state_dict = peft_model.get_adapter_state_dict()
 
-                for key in state_dict:
+                for key in state_dict.keys():
                     self.assertTrue("lora" in key)
 
     def test_peft_save_pretrained(self):
@@ -242,7 +235,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(_has_modules_to_save_wrapper)
                 state_dict = model.get_adapter_state_dict()
 
-                self.assertTrue("lm_head.weight" in state_dict)
+                self.assertTrue("lm_head.weight" in state_dict.keys())
 
                 logits = model(dummy_input).logits
                 loss = logits.mean()
@@ -438,10 +431,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                bnb_config = self._get_bnb_8bit_config()
-                peft_model = transformers_class.from_pretrained(
-                    model_id, device_map="auto", quantization_config=bnb_config
-                )
+                peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
@@ -459,10 +449,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         # 4bit
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                bnb_config = self._get_bnb_4bit_config()
-                peft_model = transformers_class.from_pretrained(
-                    model_id, device_map="auto", quantization_config=bnb_config
-                )
+                peft_model = transformers_class.from_pretrained(model_id, load_in_4bit=True, device_map="auto")
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
@@ -478,10 +465,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         # 8-bit
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                bnb_config = self._get_bnb_8bit_config()
-                peft_model = transformers_class.from_pretrained(
-                    model_id, device_map="auto", quantization_config=bnb_config
-                )
+                peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
@@ -505,10 +489,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         # 4bit
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                bnb_config = self._get_bnb_4bit_config()
-                peft_model = transformers_class.from_pretrained(
-                    model_id, device_map="auto", quantization_config=bnb_config
-                )
+                peft_model = transformers_class.from_pretrained(model_id, load_in_4bit=True, device_map="auto")
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
@@ -524,10 +505,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         # 8-bit
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                bnb_config = self._get_bnb_8bit_config()
-                peft_model = transformers_class.from_pretrained(
-                    model_id, device_map="auto", quantization_config=bnb_config
-                )
+                peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
@@ -553,7 +531,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             peft_params = list(peft_pipe.model.parameters())
             base_params = list(base_pipe.model.parameters())
             self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
-            _ = peft_pipe("Hello", max_new_tokens=20)
+            _ = peft_pipe("Hello")
 
     def test_peft_add_adapter_with_state_dict(self):
         """
@@ -757,7 +735,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.load_adapter(tmpdirname, is_trainable=True)
 
                     for name, module in model.named_modules():
-                        if list(module.children()):
+                        if len(list(module.children())):
                             # only check leaf modules
                             continue
 
@@ -880,4 +858,4 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             )
 
             # Generate text to verify pipeline works
-            _ = lora_generator(text, max_new_tokens=20)
+            _ = lora_generator(text)

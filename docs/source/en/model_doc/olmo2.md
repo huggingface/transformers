@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-31 and added to Hugging Face Transformers on 2024-11-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -43,7 +42,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-2-0425-1B",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device=0,
 )
     
@@ -64,7 +63,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -105,7 +104,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
     quantization_config=torchao_config,
-    dtype=torch.bfloat16,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

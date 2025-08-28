@@ -39,7 +39,7 @@ class SummarizationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         summarizer = SummarizationPipeline(
             model=model,
@@ -47,7 +47,7 @@ class SummarizationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             max_new_tokens=20,
         )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]

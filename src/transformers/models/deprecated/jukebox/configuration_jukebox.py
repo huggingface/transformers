@@ -298,7 +298,6 @@ class JukeboxPriorConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.act_fn = act_fn
         self.alignment_head = alignment_head
         self.alignment_layer = alignment_layer
@@ -346,7 +345,9 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs):
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs
+    ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -445,7 +446,6 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length
@@ -470,7 +470,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)

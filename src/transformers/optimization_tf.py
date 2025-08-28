@@ -14,6 +14,7 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
+import re
 from typing import Callable, Optional, Union
 
 import tensorflow as tf
@@ -295,12 +296,12 @@ class AdamWeightDecay(Adam):
 
         if self._include_in_weight_decay:
             for r in self._include_in_weight_decay:
-                if r in param_name:
+                if re.search(r, param_name) is not None:
                     return True
 
         if self._exclude_from_weight_decay:
             for r in self._exclude_from_weight_decay:
-                if r in param_name:
+                if re.search(r, param_name) is not None:
                     return False
         return True
 

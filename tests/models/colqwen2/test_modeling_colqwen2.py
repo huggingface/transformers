@@ -17,7 +17,6 @@
 import unittest
 from typing import ClassVar
 
-import pytest
 import torch
 from datasets import load_dataset
 
@@ -278,7 +277,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Pass because ColQwen2 requires `attention_mask is not None`")
-    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -301,7 +299,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             load_in_8bit=True,
         ).eval()
 

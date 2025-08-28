@@ -253,14 +253,6 @@ class ConditionalDetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
 
 class ConditionalDetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")

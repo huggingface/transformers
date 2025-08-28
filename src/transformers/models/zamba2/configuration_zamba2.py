@@ -125,7 +125,6 @@ class Zamba2Config(PretrainedConfig):
     ```"""
 
     model_type = "zamba2"
-    attribute_map = {"head_dim": "attention_head_dim"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

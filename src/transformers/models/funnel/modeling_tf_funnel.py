@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1103,7 +1104,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: tuple[tf.Tensor] | None = None
     attentions: tuple[tf.Tensor] | None = None
 
@@ -1223,11 +1224,11 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFBaseModelOutput:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1279,11 +1280,11 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFBaseModelOutput:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1335,31 +1336,27 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> tuple[tf.Tensor] | TFFunnelForPreTrainingOutput:
+    ) -> Union[tuple[tf.Tensor], TFFunnelForPreTrainingOutput]:
         r"""
-                        Returns:
+        Returns:
 
-                        Examples:
+        Examples:
 
-                        ```python
-                        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
-                        >>> import torch
-        from ...utils.deprecation import deprecate_kwarg
-        from ...utils.deprecation import deprecate_kwarg
-        from ...utils.deprecation import deprecate_kwarg
-                from ...utils.deprecation import deprecate_kwarg
+        ```python
+        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
+        >>> import torch
 
-                        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
-                        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
+        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
-                        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-                        >>> logits = model(inputs).logits
-                        ```"""
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> logits = model(inputs).logits
+        ```"""
         discriminator_hidden_states = self.funnel(
             input_ids,
             attention_mask,
@@ -1429,12 +1426,12 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFMaskedLMOutput:
+    ) -> Union[tuple[tf.Tensor], TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1512,12 +1509,12 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFSequenceClassifierOutput:
+    ) -> Union[tuple[tf.Tensor], TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1601,12 +1598,12 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFMultipleChoiceModelOutput:
+    ) -> Union[tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1708,12 +1705,12 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFTokenClassifierOutput:
+    ) -> Union[tuple[tf.Tensor], TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1796,13 +1793,13 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | TFQuestionAnsweringModelOutput:
+    ) -> Union[tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

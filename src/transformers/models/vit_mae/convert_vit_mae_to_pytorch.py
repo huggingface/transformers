@@ -67,7 +67,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy():
+    for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:

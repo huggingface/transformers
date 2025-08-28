@@ -227,7 +227,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False  # broken by output recording refactor
+    fx_compatible = True
 
     test_pruning = False
     test_resize_embeddings = False

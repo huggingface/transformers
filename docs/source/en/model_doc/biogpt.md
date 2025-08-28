@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-10-19 and added to Hugging Face Transformers on 2022-12-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -44,7 +43,7 @@ from transformers import pipeline
 generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
@@ -61,7 +60,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/biogpt",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -105,7 +104,7 @@ tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/BioGPT-Large", 
     quantization_config=bnb_config,
-    dtype=torch.bfloat16,
+    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 

@@ -260,6 +260,11 @@ class BeitSelfAttention(nn.Module):
         if self.has_relative_position_bias:
             self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
 
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -269,22 +274,11 @@ class BeitSelfAttention(nn.Module):
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -351,22 +345,10 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
                 resolution=resolution,
             )
 
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         attn_bias = None
         if self.has_relative_position_bias:
@@ -722,7 +704,7 @@ class BeitEncoder(nn.Module):
 
 @auto_docstring
 class BeitPreTrainedModel(PreTrainedModel):
-    config: BeitConfig
+    config_class = BeitConfig
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -887,9 +869,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return None
 
     @auto_docstring
     def forward(

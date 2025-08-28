@@ -123,6 +123,11 @@ class LayoutLMv2SelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def compute_qkv(self, hidden_states):
         if self.fast_qkv:
             qkv = self.qkv_linear(hidden_states)
@@ -149,13 +154,12 @@ class LayoutLMv2SelfAttention(nn.Module):
         rel_pos=None,
         rel_2d_pos=None,
     ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query, key, value = self.compute_qkv(hidden_states)
+        q, k, v = self.compute_qkv(hidden_states)
 
         # (B, L, H*D) -> (B, H, L, D)
-        query_layer = query.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = key.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = value.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = self.transpose_for_scores(q)
+        key_layer = self.transpose_for_scores(k)
+        value_layer = self.transpose_for_scores(v)
 
         query_layer = query_layer / math.sqrt(self.attention_head_size)
         # [BSZ, NAT, L, L]
@@ -468,7 +472,7 @@ class LayoutLMv2Encoder(nn.Module):
 
 @auto_docstring
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
-    config: LayoutLMv2Config
+    config_class = LayoutLMv2Config
     base_model_prefix = "layoutlmv2"
 
     def _init_weights(self, module):
@@ -749,8 +753,9 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-        >>> image = dataset["test"][0]["image"]
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
 
         >>> encoding = processor(image, return_tensors="pt")
 
@@ -938,7 +943,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True)
+        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True, trust_remote_code=True)
         >>> data = next(iter(dataset))
         >>> image = data["image"].convert("RGB")
 
@@ -1140,7 +1145,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> datasets = load_dataset("nielsr/funsd", split="test")
+        >>> datasets = load_dataset("nielsr/funsd", split="test", trust_remote_code=True)
         >>> labels = datasets.features["ner_tags"].feature.names
         >>> id2label = {v: k for v, k in enumerate(labels)}
 
@@ -1297,8 +1302,9 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
         >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-        >>> image = dataset["test"][0]["image"]
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
         >>> question = "When is coffee break?"
         >>> encoding = processor(image, question, return_tensors="pt")
 

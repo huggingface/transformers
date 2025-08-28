@@ -32,11 +32,6 @@ logger = logging.get_logger(__name__)
             Additional dictionary of keyword arguments passed along to the tokenizer.""",
 )
 class FillMaskPipeline(Pipeline):
-    _load_processor = False
-    _load_image_processor = False
-    _load_feature_extractor = False
-    _load_tokenizer = True
-
     """
     Masked language modeling prediction pipeline using any `ModelWithLMHead`. See the [masked language modeling
     examples](../task_summary#masked-language-modeling) for more information.
@@ -197,7 +192,7 @@ class FillMaskPipeline(Pipeline):
             vocab = {}
         target_ids = []
         for target in targets:
-            id_ = vocab.get(target)
+            id_ = vocab.get(target, None)
             if id_ is None:
                 input_ids = self.tokenizer(
                     target,

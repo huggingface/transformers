@@ -46,6 +46,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
+    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -63,6 +64,7 @@ if is_vision_available():
 
 
 class SiglipModelTesterMixin(ModelTesterMixin):
+    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -255,6 +257,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
@@ -425,9 +428,9 @@ class SiglipModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return SiglipConfig(
-            text_config=self.text_model_tester.get_config().to_dict(),
-            vision_config=self.vision_model_tester.get_config().to_dict(),
+        return SiglipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -550,8 +553,8 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -607,7 +610,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
+            if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -616,11 +619,11 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)

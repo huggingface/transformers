@@ -100,7 +100,9 @@ class SuperGlueConfig(PretrainedConfig):
         self.matching_threshold = matching_threshold
 
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
+            keypoint_detector_config["model_type"] = (
+                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
+            )
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
                 **keypoint_detector_config
             )
@@ -113,10 +115,6 @@ class SuperGlueConfig(PretrainedConfig):
         self.is_decoder = False
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return {"keypoint_detector_config": type(self.keypoint_detector_config)}
 
 
 __all__ = ["SuperGlueConfig"]

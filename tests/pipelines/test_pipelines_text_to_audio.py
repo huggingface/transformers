@@ -254,7 +254,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         model_test_kwargs = {}
         if model.can_generate():  # not all models in this pipeline can generate and, therefore, take `generate` kwargs
@@ -266,7 +266,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             **model_test_kwargs,
         )
 

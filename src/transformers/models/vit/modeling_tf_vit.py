@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import collections.abc
 import math
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -513,7 +514,7 @@ class TFViTEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -582,12 +583,12 @@ class TFViTMainLayer(keras.layers.Layer):
         self,
         pixel_values: TFModelInputType | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        interpolate_pos_encoding: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -755,12 +756,12 @@ class TFViTModel(TFViTPreTrainedModel):
         self,
         pixel_values: TFModelInputType | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        interpolate_pos_encoding: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         outputs = self.vit(
             pixel_values=pixel_values,
             head_mask=head_mask,
@@ -853,13 +854,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         self,
         pixel_values: TFModelInputType | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        interpolate_pos_encoding: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

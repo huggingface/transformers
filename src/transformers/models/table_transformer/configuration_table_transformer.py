@@ -253,14 +253,6 @@ class TableTransformerConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
 
 # Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
 class TableTransformerOnnxConfig(OnnxConfig):

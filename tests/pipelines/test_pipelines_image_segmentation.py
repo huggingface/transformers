@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
+    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -105,7 +106,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         image_segmenter = ImageSegmentationPipeline(
             model=model,
@@ -113,7 +114,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
         )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -200,6 +201,11 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         for single_output in outputs:
             for output_element in single_output:
                 compare_pipeline_output_to_hub_spec(output_element, ImageSegmentationOutputElement)
+
+    @require_tf
+    @unittest.skip(reason="Image segmentation not implemented in TF")
+    def test_small_model_tf(self):
+        pass
 
     @require_torch
     def test_small_model_pt_no_panoptic(self):
@@ -595,9 +601,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        image = ds[0]["image"].convert("RGB")
-        outputs = image_segmenter(image, threshold=threshold)
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+        file = image[0]["file"]
+        outputs = image_segmenter(file, threshold=threshold)
 
         # Shortening by hashing
         for o in outputs:
@@ -649,9 +655,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_oneformer(self):
         image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        image = ds[0]["image"].convert("RGB")
-        outputs = image_segmenter(image, threshold=0.99)
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+        file = image[0]["file"]
+        outputs = image_segmenter(file, threshold=0.99)
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -673,7 +679,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(image, threshold=0.99, subtask="instance")
+        outputs = image_segmenter(file, threshold=0.99, subtask="instance")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -695,7 +701,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(image, subtask="semantic")
+        outputs = image_segmenter(file, subtask="semantic")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])

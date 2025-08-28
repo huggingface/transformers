@@ -371,11 +371,7 @@ class OwlViTModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return OwlViTConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            projection_dim=64,
-        )
+        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = OwlViTModel(config).to(torch_device).eval()
@@ -519,8 +515,8 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -587,11 +583,7 @@ class OwlViTForObjectDetectionTester:
         return config, pixel_values, input_ids, attention_mask
 
     def get_config(self):
-        return OwlViTConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            projection_dim=64,
-        )
+        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
         model = OwlViTForObjectDetection(config).to(torch_device).eval()
@@ -731,8 +723,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -1022,7 +1014,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlvit-base-patch32"
-        model = OwlViTForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
+        model = OwlViTForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 

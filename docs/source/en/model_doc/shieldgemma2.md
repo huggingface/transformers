@@ -14,7 +14,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20.*
 
 # ShieldGemma 2
 
@@ -33,7 +32,7 @@ This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins)
 ## Usage Example
 
 - ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
-- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
+- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom defintion.
 - ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
 
 ### Classification against Built-in Policies

@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -41,7 +40,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -97,7 +95,9 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
 
                 name_items[0] = f"bert/encoder/layer_{layer_name_items[2]}"
 
-            name = "/".join([_TRIVIA_QA_MAPPING.get(x, x) for x in name_items])[:-2]  # remove last :0 in variable
+            name = "/".join([_TRIVIA_QA_MAPPING[x] if x in _TRIVIA_QA_MAPPING else x for x in name_items])[
+                :-2
+            ]  # remove last :0 in variable
 
             if "self/attention/output" in name:
                 name = name.replace("self/attention/output", "output")
@@ -296,7 +296,7 @@ class BigBirdEmbeddings(nn.Module):
 
 
 class BigBirdSelfAttention(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -314,9 +314,12 @@ class BigBirdSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.is_decoder = config.is_decoder
-        self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def forward(
         self,
         hidden_states,
@@ -324,43 +327,45 @@ class BigBirdSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        past_key_value=None,
         output_attentions=False,
-        cache_position=None,
     ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
 
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-        if is_cross_attention and past_key_values is not None and past_key_values.get_seq_length(self.layer_idx) > 0:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_values.layers[self.layer_idx].keys
-            value_layer = past_key_values.layers[self.layer_idx].values
-        else:
-            key_layer = (
-                self.key(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
-            value_layer = (
-                self.value(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
 
-            if past_key_values is not None:
-                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                key_layer, value_layer = past_key_values.update(
-                    key_layer,
-                    value_layer,
-                    self.layer_idx,
-                )
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -387,7 +392,11 @@ class BigBirdSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        return context_layer, attention_probs
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
 
 
 class BigBirdBlockSparseAttention(nn.Module):
@@ -414,6 +423,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def forward(
         self,
         hidden_states,
@@ -436,21 +450,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         if to_seq_length % to_block_size != 0:
             raise ValueError("Key/Value sided sequence length must be multiple of block size")
 
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
             query_layer,
@@ -476,7 +478,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         )
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
-        return context_layer, attention_probs
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        return outputs
 
     @staticmethod
     def torch_bmm_nd(inp_1, inp_2, ndim=None):
@@ -1306,7 +1310,7 @@ class BigBirdAttention(nn.Module):
         self.seed = seed
 
         if self.config.attention_type == "original_full":
-            self.self = BigBirdSelfAttention(config, layer_idx=seed)
+            self.self = BigBirdSelfAttention(config)
         elif self.config.attention_type == "block_sparse":
             self.self = BigBirdBlockSparseAttention(config, seed)
         else:
@@ -1316,7 +1320,7 @@ class BigBirdAttention(nn.Module):
 
         self.output = BigBirdSelfOutput(config)
 
-    def set_attention_type(self, value: str, layer_idx=None):
+    def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
             raise ValueError(
                 f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
@@ -1328,7 +1332,7 @@ class BigBirdAttention(nn.Module):
         self.attention_type = value
         if value == "original_full":
             # copy all weights to new full attention class
-            attn_weights = BigBirdSelfAttention(self.config, layer_idx=layer_idx)
+            attn_weights = BigBirdSelfAttention(self.config)
         else:
             # copy all weights to new sparse attention class
             attn_weights = BigBirdBlockSparseAttention(self.config, self.seed)
@@ -1340,7 +1344,6 @@ class BigBirdAttention(nn.Module):
         if not self.training:
             self.self.eval()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1348,7 +1351,7 @@ class BigBirdAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        past_key_value=None,
         output_attentions=False,
         # block_sparse config
         band_mask=None,
@@ -1356,7 +1359,6 @@ class BigBirdAttention(nn.Module):
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        cache_position=None,
     ):
         # fp16 compatibility
         if band_mask is not None:
@@ -1368,13 +1370,12 @@ class BigBirdAttention(nn.Module):
         if self.attention_type == "original_full":
             self_outputs = self.self(
                 hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
             )
         else:
             if encoder_hidden_states is not None:
@@ -1432,11 +1433,11 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BigBirdAttention(config, seed=seed)
+            self.crossattention = BigBirdAttention(config)
         self.intermediate = BigBirdIntermediate(config)
         self.output = BigBirdOutput(config)
 
-    def set_attention_type(self, value: str, layer_idx=None):
+    def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
             raise ValueError(
                 f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
@@ -1445,12 +1446,11 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if value == self.attention_type:
             return
         self.attention_type = value
-        self.attention.set_attention_type(value, layer_idx=layer_idx)
+        self.attention.set_attention_type(value)
 
         if self.add_cross_attention:
-            self.crossattention.set_attention_type(value, layer_idx=layer_idx)
+            self.crossattention.set_attention_type(value)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1462,29 +1462,35 @@ class BigBirdLayer(GradientCheckpointingLayer):
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
-        past_key_values=None,
+        past_key_value=None,
         output_attentions=False,
-        cache_position=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
+            attention_mask,
+            head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
             band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
             from_blocked_mask=blocked_encoder_mask,
             to_blocked_mask=blocked_encoder_mask,
-            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
@@ -1492,23 +1498,35 @@ class BigBirdLayer(GradientCheckpointingLayer):
                     " cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask=encoder_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                cross_attn_past_key_value,
+                output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
 
-        return (layer_output,) + outputs
+        outputs = (layer_output,) + outputs
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
+
+        return outputs
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -1536,8 +1554,8 @@ class BigBirdEncoder(nn.Module):
         if value == self.attention_type:
             return
         self.attention_type = value
-        for i, layer in enumerate(self.layer):
-            layer.set_attention_type(value, layer_idx=i)
+        for layer in self.layer:
+            layer.set_attention_type(value)
 
     def forward(
         self,
@@ -1555,7 +1573,6 @@ class BigBirdEncoder(nn.Module):
         to_mask=None,
         blocked_encoder_mask=None,
         return_dict=True,
-        cache_position=None,
     ) -> Union[BaseModelOutputWithPastAndCrossAttentions, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1568,21 +1585,14 @@ class BigBirdEncoder(nn.Module):
                 )
                 use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        next_decoder_cache = () if use_cache else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
+            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states,
@@ -1594,12 +1604,13 @@ class BigBirdEncoder(nn.Module):
                 from_mask,
                 to_mask,
                 blocked_encoder_mask,
-                past_key_values,
+                past_key_value,
                 output_attentions,
-                cache_position,
             )
 
             hidden_states = layer_outputs[0]
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -1613,7 +1624,7 @@ class BigBirdEncoder(nn.Module):
                 v
                 for v in [
                     hidden_states,
-                    past_key_values,
+                    next_decoder_cache,
                     all_hidden_states,
                     all_self_attentions,
                     all_cross_attentions,
@@ -1622,7 +1633,7 @@ class BigBirdEncoder(nn.Module):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -1708,7 +1719,7 @@ class BigBirdPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BigBirdPreTrainedModel(PreTrainedModel):
-    config: BigBirdConfig
+    config_class = BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
@@ -1857,7 +1868,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[BaseModelOutputWithPoolingAndCrossAttentions, tuple[torch.FloatTensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1884,13 +1894,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -2002,7 +2007,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
             to_mask=to_mask,
             blocked_encoder_mask=blocked_encoder_mask,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         sequence_output = encoder_outputs[0]
 
@@ -2392,7 +2396,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[CausalLMOutputWithCrossAttentions, tuple[torch.FloatTensor]]:
         r"""
@@ -2417,7 +2420,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -2445,6 +2447,15 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
+            )
+        return reordered_past
 
 
 class BigBirdClassificationHead(nn.Module):

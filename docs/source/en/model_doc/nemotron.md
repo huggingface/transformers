@@ -11,7 +11,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 
 -->
-*This model was released on 2024-02-26 and added to Hugging Face Transformers on 2024-08-06.*
 
 # Nemotron
 
@@ -57,15 +56,15 @@ The following code provides an example of how to load the Minitron-4B model and 
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = infer_device()
+device = 'cuda'
 dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, device_map=device)
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'
@@ -115,7 +114,7 @@ If you find our work helpful, please consider citing our paper:
       author={Saurav Muralidharan and Sharath Turuvekere Sreenivas and Raviraj Joshi and Marcin Chochowski and Mostofa Patwary and Mohammad Shoeybi and Bryan Catanzaro and Jan Kautz and Pavlo Molchanov},
       journal={arXiv preprint arXiv:2407.14679},
       year={2024},
-      url={https://huggingface.co/papers/2407.14679},
+      url={https://arxiv.org/abs/2407.14679},
 }
 ```
 

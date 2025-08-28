@@ -167,23 +167,17 @@ class NystromformerSelfAttention(nn.Module):
             )
         return value
 
+    def transpose_for_scores(self, layer):
+        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        layer = layer.view(*new_layer_shape)
+        return layer.permute(0, 2, 1, 3)
+
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         query_layer = query_layer / math.sqrt(math.sqrt(self.attention_head_size))
         key_layer = key_layer / math.sqrt(math.sqrt(self.attention_head_size))
@@ -443,7 +437,7 @@ class NystromformerOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class NystromformerPreTrainedModel(PreTrainedModel):
-    config: NystromformerConfig
+    config_class = NystromformerConfig
     base_model_prefix = "nystromformer"
     supports_gradient_checkpointing = True
 

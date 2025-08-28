@@ -200,7 +200,7 @@ class LayoutLMv3TextEmbeddings(nn.Module):
 
 @auto_docstring
 class LayoutLMv3PreTrainedModel(PreTrainedModel):
-    config: LayoutLMv3Config
+    config_class = LayoutLMv3Config
     base_model_prefix = "layoutlmv3"
 
     def _init_weights(self, module):
@@ -245,6 +245,11 @@ class LayoutLMv3SelfAttention(nn.Module):
         self.has_relative_attention_bias = config.has_relative_attention_bias
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def cogview_attention(self, attention_scores, alpha=32):
         """
         https://huggingface.co/papers/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
@@ -266,22 +271,11 @@ class LayoutLMv3SelfAttention(nn.Module):
         rel_pos=None,
         rel_2d_pos=None,
     ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
@@ -742,7 +736,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -957,7 +951,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1058,7 +1052,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> question = "what's his name?"
@@ -1178,7 +1172,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]

@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import random
 import warnings
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -103,7 +104,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -178,7 +179,7 @@ class TFBlenderbotAttention(keras.layers.Layer):
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: bool | None = False,
+        training: Optional[bool] = False,
     ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -329,7 +330,7 @@ class TFBlenderbotEncoderLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         layer_head_mask: tf.Tensor,
-        training: bool | None = False,
+        training: Optional[bool] = False,
     ):
         """
         Args:
@@ -424,7 +425,7 @@ class TFBlenderbotDecoderLayer(keras.layers.Layer):
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
         past_key_value: tuple[tf.Tensor] | None = None,
-        training: bool | None = False,
+        training: Optional[bool] = False,
     ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
@@ -686,7 +687,7 @@ class TFBlenderbotEncoder(keras.layers.Layer):
         config: BlenderbotConfig
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
+    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = keras.layers.Dropout(config.dropout)
@@ -858,7 +859,7 @@ class TFBlenderbotDecoder(keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
+    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -1127,7 +1128,7 @@ class TFBlenderbotMainLayer(keras.layers.Layer):
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs: tuple | TFBaseModelOutput | None = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1229,7 +1230,7 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         return self.model.decoder
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike | None, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallModel
 
@@ -1261,17 +1262,17 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         head_mask: tf.Tensor | None = None,
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        encoder_outputs: tuple | TFBaseModelOutput | None = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
         past_key_values: list[tf.Tensor] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        training: bool | None = False,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ) -> tuple[tf.Tensor] | TFSeq2SeqModelOutput:
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1384,7 +1385,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         self.bias_layer.bias.assign(value["final_logits_bias"])
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike | None, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration
 
@@ -1413,17 +1414,17 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         head_mask: tf.Tensor | None = None,
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        encoder_outputs: tuple | TFBaseModelOutput | None = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
         past_key_values: list[tf.Tensor] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> tuple[tf.Tensor] | TFSeq2SeqLMOutput:
+        training: Optional[bool] = False,
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

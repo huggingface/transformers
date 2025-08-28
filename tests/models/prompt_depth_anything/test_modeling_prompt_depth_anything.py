@@ -15,7 +15,6 @@
 
 import unittest
 
-import pytest
 import requests
 
 from transformers import Dinov2Config, PromptDepthAnythingConfig
@@ -285,7 +284,6 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
 
-    @pytest.mark.torch_export_test
     def test_export(self):
         for strict in [False, True]:
             if strict and get_torch_major_and_minor_version() == "2.7":

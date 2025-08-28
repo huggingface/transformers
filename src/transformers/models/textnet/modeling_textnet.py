@@ -218,7 +218,7 @@ class TextNetEncoder(nn.Module):
 
 @auto_docstring
 class TextNetPreTrainedModel(PreTrainedModel):
-    config: TextNetConfig
+    config_class = TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
 
@@ -368,8 +368,6 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     """
 )
 class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
-    has_attentions = False
-
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)

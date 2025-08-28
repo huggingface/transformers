@@ -248,7 +248,7 @@ class DebugUnderflowOverflow:
 
         last_frame_of_batch = False
 
-        trace_mode = self.batch_number in self.trace_batch_nums
+        trace_mode = True if self.batch_number in self.trace_batch_nums else False
         if trace_mode:
             self.reset_saved_frames()
 

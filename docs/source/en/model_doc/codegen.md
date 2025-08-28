@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-03-25 and added to Hugging Face Transformers on 2022-06-24.*
 
 # CodeGen
 

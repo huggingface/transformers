@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -764,15 +765,15 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.array | tf.Tensor | None = None,
-        position_ids: np.array | tf.Tensor | None = None,
-        head_mask: np.array | tf.Tensor | None = None,
+        attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.array, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.array, tf.Tensor]] = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         outputs = self.mpnet(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -886,12 +887,12 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
+    ) -> Union[TFMaskedLMOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1001,16 +1002,16 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.array | tf.Tensor | None = None,
-        position_ids: np.array | tf.Tensor | None = None,
-        head_mask: np.array | tf.Tensor | None = None,
+        attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.array, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.array, tf.Tensor]] = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
+    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1089,12 +1090,12 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFMultipleChoiceModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFMultipleChoiceModelOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1190,12 +1191,12 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
+    ) -> Union[TFTokenClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1271,18 +1272,18 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.array | tf.Tensor | None = None,
-        position_ids: np.array | tf.Tensor | None = None,
-        head_mask: np.array | tf.Tensor | None = None,
+        attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.array, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.array, tf.Tensor]] = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         start_positions: tf.Tensor | None = None,
         end_positions: tf.Tensor | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFQuestionAnsweringModelOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

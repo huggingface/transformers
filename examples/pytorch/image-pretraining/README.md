@@ -239,10 +239,10 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `hf`
+2. Log in with your HuggingFace account credentials using `huggingface-cli`
 
 ```bash
-$ hf auth login
+$ huggingface-cli login
 # ...follow the prompts
 ```
 

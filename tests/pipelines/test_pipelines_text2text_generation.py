@@ -42,7 +42,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         generator = Text2TextGenerationPipeline(
             model=model,
@@ -50,7 +50,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             max_new_tokens=20,
         )
         return generator, ["Something to write", "Something else"]
@@ -81,7 +81,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             generator(4)
 
     @require_torch

@@ -499,6 +499,12 @@ class TFMistralMainLayer(keras.layers.Layer):
         self.norm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
         self.config = config
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -809,6 +815,24 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         )
         self.config = config
 
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
@@ -874,7 +898,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         if past_key_values:
             input_ids = tf.expand_dims(input_ids[:, -1], -1)
 
-        position_ids = kwargs.get("position_ids")
+        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
             if past_key_values:
@@ -927,6 +951,12 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
             name="score",
         )
         self.config = config
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

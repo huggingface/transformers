@@ -270,7 +270,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 モデルをHubに送信するには、ログインしていることを確認してください。ターミナルで次のコマンドを実行します：
 
 ```bash
-hf auth login
+huggingface-cli login
 ```
 
 またはノートブックから：

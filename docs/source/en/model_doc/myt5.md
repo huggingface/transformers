@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-03-15 and added to Hugging Face Transformers on 2024-10-06.*
 
 # myt5
 

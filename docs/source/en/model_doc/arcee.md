@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-18 and added to Hugging Face Transformers on 2025-06-24.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Arcee
 
-[Arcee](https://www.arcee.ai/blog/deep-dive-afm-4-5b-the-first-arcee-foundational-model) is a decoder-only transformer model based on the Llama architecture with a key modification: it uses ReLU² (ReLU-squared) activation in the MLP blocks instead of SiLU, following recent research showing improved training efficiency with squared activations. This architecture is designed for efficient training and inference while maintaining the proven stability of the Llama design.
+Arcee is a decoder-only transformer model based on the Llama architecture with a key modification: it uses ReLU² (ReLU-squared) activation in the MLP blocks instead of SiLU, following recent research showing improved training efficiency with squared activations. This architecture is designed for efficient training and inference while maintaining the proven stability of the Llama design.
 
 The Arcee model is architecturally similar to Llama but uses `x * relu(x)` in MLP layers for improved gradient flow and is optimized for efficiency in both training and inference scenarios.
 
@@ -44,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device=0
 )
 
@@ -62,7 +61,7 @@ from transformers import AutoTokenizer, ArceeForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/AFM-4.5B")
 model = ArceeForCausalLM.from_pretrained(
     "arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
+    torch_dtype=torch.float16,
     device_map="auto"
 )
 

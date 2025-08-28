@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import collections
 from dataclasses import dataclass
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -70,7 +71,7 @@ class TFSamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor | None = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
 
@@ -104,8 +105,8 @@ class TFSamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: tf.Tensor | None = None
-    pred_masks: tf.Tensor | None = None
+    iou_scores: Optional[tf.Tensor] = None
+    pred_masks: Optional[tf.Tensor] = None
     vision_hidden_states: tuple[tf.Tensor, ...] | None = None
     vision_attentions: tuple[tf.Tensor, ...] | None = None
     mask_decoder_attentions: tuple[tf.Tensor, ...] | None = None
@@ -430,10 +431,10 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
         point_embeddings: tf.Tensor,
         image_embeddings: tf.Tensor,
         image_positional_embeddings: tf.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | TFBaseModelOutput:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, TFBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -465,7 +466,7 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
 
-        # Apply the final attention layer from the points to the image
+        # Apply the final attenion layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
@@ -612,7 +613,7 @@ class TFSamMaskDecoder(keras.layers.Layer):
         sparse_prompt_embeddings: tf.Tensor,
         dense_prompt_embeddings: tf.Tensor,
         multimask_output: bool,
-        output_attentions: bool | None = None,
+        output_attentions: Optional[bool] = None,
     ) -> tuple[tf.Tensor, tf.Tensor]:
         batch_size, num_channels, height, width = shape_list(image_embeddings)
         point_batch_size = tf.math.maximum(1, tf.shape(sparse_prompt_embeddings)[1])
@@ -856,8 +857,8 @@ class TFSamPromptEncoder(keras.layers.Layer):
 
     def call(
         self,
-        batch_size: int | None,
-        input_points: tuple[tf.Tensor, tf.Tensor] | None,
+        batch_size: Optional[int],
+        input_points: Optional[tuple[tf.Tensor, tf.Tensor]],
         input_labels: tf.Tensor | None,
         input_boxes: tf.Tensor | None,
         input_masks: tf.Tensor | None,
@@ -1118,8 +1119,8 @@ class TFSamVisionLayer(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        output_attentions: bool | None = False,
-        training: bool | None = False,
+        output_attentions: Optional[bool] = False,
+        training: Optional[bool] = False,
     ) -> tuple[tf.Tensor]:
         residual = hidden_states
 
@@ -1267,11 +1268,11 @@ class TFSamVisionEncoder(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        training: bool | None = False,
-    ) -> tuple | TFSamVisionEncoderOutput:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[tuple, TFSamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1505,9 +1506,9 @@ class TFSamModel(TFSamPreTrainedModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.

@@ -35,10 +35,11 @@ pip install transformers
 We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline. 
 
 ```python
-from transformers import pipeline, infer_device
+from transformers import pipeline
 import torch
+from accelerate.test_utils.testing import get_backend
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device = infer_device()
+device, _, _ = get_backend()
 pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)
 ```
 

@@ -16,7 +16,6 @@ import importlib.metadata
 import tempfile
 import unittest
 
-import pytest
 from packaging import version
 
 from transformers import (
@@ -28,7 +27,6 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
-    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
@@ -115,8 +113,6 @@ class BaseMixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
     # Expected values with offload
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
-    # Expected values on Intel XPU and NV A100
-    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
 
     def setUp(self):
         # Models and tokenizer
@@ -129,7 +125,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
     def tearDown(self):
@@ -651,8 +649,6 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
-        # Avoid sampling different outputs
-        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
@@ -995,7 +991,6 @@ class Bnb8bitCompile(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
 
-    @pytest.mark.torch_compile_test
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 

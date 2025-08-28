@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-import pytest
 import requests
 from packaging import version
 
@@ -264,7 +263,6 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_vision
-    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

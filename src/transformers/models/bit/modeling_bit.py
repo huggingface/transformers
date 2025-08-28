@@ -252,7 +252,7 @@ class BitEmbeddings(nn.Module):
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
-        if config.layer_type != "preactivation":
+        if not config.layer_type == "preactivation":
             self.norm = BitGroupNormActivation(config, num_channels=config.embedding_size)
         else:
             self.norm = nn.Identity()
@@ -631,7 +631,7 @@ class BitEncoder(nn.Module):
 
 @auto_docstring
 class BitPreTrainedModel(PreTrainedModel):
-    config: BitConfig
+    config_class = BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"
     _no_split_modules = ["BitEmbeddings"]
@@ -777,8 +777,6 @@ class BitForImageClassification(BitPreTrainedModel):
     """
 )
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
-    has_attentions = False
-
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)

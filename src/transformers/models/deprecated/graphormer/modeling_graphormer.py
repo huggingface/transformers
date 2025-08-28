@@ -704,7 +704,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: GraphormerConfig
+    config_class = GraphormerConfig
     base_model_prefix = "graphormer"
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"

@@ -55,19 +55,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
-        ("dia", "DiaFeatureExtractor"),
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
-        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
-        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
@@ -94,6 +91,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
+        ("stt", "KyutaiSpeechToTextFeatureExtractor"),
         ("swiftformer", "ViTFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
@@ -115,7 +113,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
-        ("xcodec", "DacFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
@@ -134,7 +131,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
+    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
@@ -184,7 +181,7 @@ def get_feature_extractor_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `hf auth login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -301,7 +298,7 @@ class AutoFeatureExtractor:
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `hf auth login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -343,7 +340,7 @@ class AutoFeatureExtractor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token") is not None:
+            if kwargs.get("token", None) is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -401,7 +398,7 @@ class AutoFeatureExtractor:
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
         )
 
     @staticmethod

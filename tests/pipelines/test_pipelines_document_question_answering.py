@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     nested_simplify,
     require_detectron2,
     require_pytesseract,
+    require_tf,
     require_torch,
     require_torch_bf16,
     require_vision,
@@ -76,7 +77,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         dqa_pipeline = DocumentQuestionAnsweringPipeline(
             model=model,
@@ -84,7 +85,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             max_new_tokens=20,
         )
 
@@ -162,7 +163,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         dqa_pipeline = pipeline(
             "document-question-answering",
             model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test",
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
         )
         image = INVOICE_URL
         question = "How many cats are there?"
@@ -422,3 +423,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
+
+    @require_tf
+    @unittest.skip(reason="Document question answering not implemented in TF")
+    def test_small_model_tf(self):
+        pass

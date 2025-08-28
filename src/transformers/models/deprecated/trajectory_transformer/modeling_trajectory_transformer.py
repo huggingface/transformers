@@ -153,7 +153,7 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: TrajectoryTransformerConfig
+    config_class = TrajectoryTransformerConfig
     load_tf_weights = load_tf_weights_in_trajectory_transformer
     base_model_prefix = "trajectory_transformer"
     main_input_name = "trajectories"

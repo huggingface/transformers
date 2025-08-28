@@ -42,7 +42,7 @@ class TranslationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
@@ -52,7 +52,7 @@ class TranslationPipelineTests(unittest.TestCase):
                 feature_extractor=feature_extractor,
                 image_processor=image_processor,
                 processor=processor,
-                dtype=dtype,
+                torch_dtype=torch_dtype,
                 src_lang=src_lang,
                 tgt_lang=tgt_lang,
                 max_new_tokens=20,
@@ -64,7 +64,7 @@ class TranslationPipelineTests(unittest.TestCase):
                 feature_extractor=feature_extractor,
                 image_processor=image_processor,
                 processor=processor,
-                dtype=dtype,
+                torch_dtype=torch_dtype,
                 max_new_tokens=20,
             )
         return translator, ["Some string", "Some other text"]

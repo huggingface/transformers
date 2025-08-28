@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-08-08.*
 
 # Qwen2Audio
 
@@ -109,7 +108,7 @@ for message in conversation:
                 )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs.input_ids = inputs.input_ids.to(model.device)
+inputs.input_ids = inputs.input_ids.to("cuda")
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
@@ -157,7 +156,7 @@ for message in conversation:
                 )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs.input_ids = inputs.input_ids.to(model.device)
+inputs.input_ids = inputs.input_ids.to("cuda")
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
@@ -212,8 +211,8 @@ for conversation in conversations:
                     )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
-inputs['input_ids'] = inputs['input_ids'].to(model.device)
-inputs.input_ids = inputs.input_ids.to(model.device)
+inputs['input_ids'] = inputs['input_ids'].to("cuda")
+inputs.input_ids = inputs.input_ids.to("cuda")
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]

@@ -22,7 +22,6 @@ protobuf
 torch
 torchvision
 torchaudio
-torchcodec
 jiwer
 librosa
 evaluate >= 0.2.0

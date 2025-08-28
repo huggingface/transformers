@@ -116,11 +116,19 @@ class DonutProcessor(ProcessorMixin):
             inputs["input_ids"] = encodings["input_ids"]
             return inputs
 
-    @property
-    def model_input_names(self):
-        image_processor_input_names = self.image_processor.model_input_names
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
 
-        return list(image_processor_input_names + ["input_ids", "labels"])
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
 
     @contextmanager
     def as_target_processor(self):
@@ -191,7 +199,7 @@ class DonutProcessor(ProcessorMixin):
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
-        if output:
+        if len(output):
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}

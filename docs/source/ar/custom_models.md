@@ -280,7 +280,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 الآن لإرسال النموذج إلى Hub، تأكد من تسجيل الدخول. إما تشغيل في المحطة الأوامر الطرفية الخاصة بك:
 
 ```bash
-hf auth login
+huggingface-cli login
 ```
 
 أو من دفتر ملاحظات:

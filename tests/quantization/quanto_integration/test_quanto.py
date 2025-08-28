@@ -152,7 +152,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             self.model_name,
             device_map=self.device_map,
             quantization_config=quantization_config,
-            dtype=torch.float32,
+            torch_dtype=torch.float32,
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -223,12 +223,10 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn(
-                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
-            )
+            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
             # TODO: replace by the following when it works
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-            #     tmpdirname, dtype=torch.float32, device_map="cpu"
+            #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )
             # self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
@@ -239,11 +237,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname)
-            self.assertIn(
-                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
-            )
+            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-            #     tmpdirname, dtype=torch.float32, device_map="cpu"
+            #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )
             # self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
@@ -251,7 +247,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         d0 = dict(model1.named_parameters())
         d1 = dict(model2.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
-        for k in d0:
+        for k in d0.keys():
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)
@@ -265,7 +261,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
-            dtype=torch.float32,
+            torch_dtype=torch.float32,
         )
         # we do not quantize the lm_head since we don't do that in transformers
         quantize(model.transformer, weights=w_mapping[self.weights])
@@ -283,7 +279,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
-            dtype=torch.float32,
+            torch_dtype=torch.float32,
         )
         # we do not quantize the lm_head since we don't do that in transformers
         quantize(model.transformer, weights=w_mapping[self.weights])
@@ -297,7 +293,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
                 device_map=self.device_map,
-                dtype=torch.float32,
+                torch_dtype=torch.float32,
             )
         self.check_same_model(model, quantized_model_from_saved)
         self.check_inference_correctness(quantized_model_from_saved, device="cuda")
@@ -392,12 +388,12 @@ class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
             self.model_name,
             device_map=self.device_map,
             quantization_config=quantization_config,
-            dtype=torch.float32,
+            torch_dtype=torch.float32,
         )
         with tempfile.TemporaryDirectory() as tmpdirname:
             quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
             self.quantized_model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, dtype=torch.float32, device_map=self.device_map
+                tmpdirname, torch_dtype=torch.float32, device_map=self.device_map
             )
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -463,7 +459,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
             "unsloth/Llama-3.2-1B-Instruct", pad_token="</s>", padding_side="left"
         )
         model = LlamaForCausalLM.from_pretrained(
-            "unsloth/Llama-3.2-1B-Instruct", device_map="sequential", dtype=torch.float16
+            "unsloth/Llama-3.2-1B-Instruct", device_map="sequential", torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 

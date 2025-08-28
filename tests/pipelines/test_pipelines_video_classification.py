@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_av,
+    require_tf,
     require_torch,
     require_torch_or_tf,
     require_vision,
@@ -54,7 +55,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         self._load_dataset()
         video_classifier = VideoClassificationPipeline(
@@ -63,7 +64,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             top_k=2,
         )
         examples = [
@@ -123,3 +124,8 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+
+    @require_tf
+    @unittest.skip
+    def test_small_model_tf(self):
+        pass

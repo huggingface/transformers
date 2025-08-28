@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -596,12 +597,12 @@ class TFRobertaPreLayerNormEncoder(keras.layers.Layer):
         encoder_hidden_states: tf.Tensor | None,
         encoder_attention_mask: tf.Tensor | None,
         past_key_values: tuple[tuple[tf.Tensor]] | None,
-        use_cache: bool | None,
+        use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPastAndCrossAttentions | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -706,13 +707,13 @@ class TFRobertaPreLayerNormMainLayer(keras.layers.Layer):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions | tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
         if not self.config.is_decoder:
             use_cache = False
 
@@ -1006,13 +1007,13 @@ class TFRobertaPreLayerNormModel(TFRobertaPreLayerNormPreTrainedModel):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        training: bool | None = False,
-    ) -> tuple | TFBaseModelOutputWithPoolingAndCrossAttentions:
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[tuple, TFBaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1164,12 +1165,12 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFMaskedLMOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1274,14 +1275,14 @@ class TFRobertaPreLayerNormForCausalLM(TFRobertaPreLayerNormPreTrainedModel, TFC
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFCausalLMOutputWithCrossAttentions | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1436,12 +1437,12 @@ class TFRobertaPreLayerNormForSequenceClassification(
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1528,12 +1529,12 @@ class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedMode
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFMultipleChoiceModelOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFMultipleChoiceModelOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1637,12 +1638,12 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFTokenClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1728,13 +1729,13 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFQuestionAnsweringModelOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

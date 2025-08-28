@@ -177,7 +177,7 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 
     # get the resolutions multiplied by the patch_size
     possible_resolutions = []
-    for value in asp_dict.values():
+    for key, value in asp_dict.items():
         for height, depth in value:
             possible_resolutions.append((height * patch_size, depth * patch_size))
 

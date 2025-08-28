@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-13 and added to Hugging Face Transformers on 2025-03-04.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -60,14 +59,14 @@ print(outputs)
 
 ```python
 # pip install 'git+https://github.com/huggingface/transformers.git@v4.49.0-Aya Vision'
-import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
 
 model_id = "CohereLabs/aya-vision-8b"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", dtype=torch.float16
+    model_id, device_map="auto", torch_dtype=torch.float16
 )
 
 # Format message with the aya-vision chat template
@@ -133,7 +132,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_tensors="pt"
-).to(model.device)
+).to("cuda")
 
 generated = model.generate(**inputs, max_new_tokens=50)
 print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
@@ -148,12 +147,12 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - The example below demonstrates inference with multiple images.
   
     ```py
-    import torch
     from transformers import AutoProcessor, AutoModelForImageTextToText
+    import torch
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
     )
     
     messages = [
@@ -178,7 +177,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
     
     inputs = processor.apply_chat_template(
         messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to(model.device)
+    ).to("cuda")
     
     gen_tokens = model.generate(
         **inputs, 
@@ -194,12 +193,12 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - The example below demonstrates inference with batched inputs.
   
     ```py
-    import torch
     from transformers import AutoProcessor, AutoModelForImageTextToText
+    import torch
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
     )
     
     batch_messages = [

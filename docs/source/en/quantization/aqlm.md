@@ -33,7 +33,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "ISTA-DASLab/Mixtral-8x7b-AQLM-2Bit-1x16-hf",
-    dtype="auto", 
+    torch_dtype="auto", 
     device_map="auto"
 )
 ```

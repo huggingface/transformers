@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_pytesseract,
+    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -74,7 +75,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         object_detector = ObjectDetectionPipeline(
             model=model,
@@ -82,7 +83,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
         )
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
@@ -126,6 +127,11 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                     },
                 )
                 compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
+
+    @require_tf
+    @unittest.skip(reason="Object detection not implemented in TF")
+    def test_small_model_tf(self):
+        pass
 
     @require_torch
     def test_small_model_pt(self):

@@ -31,7 +31,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
 
     def __call__(self, inputs: Union[str, list[str]], **kwargs):
         is_split_into_words = kwargs.get("is_split_into_words", False)
-        delimiter = kwargs.get("delimiter")
+        delimiter = kwargs.get("delimiter", None)
 
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
@@ -135,11 +135,6 @@ class TokenClassificationPipeline(ChunkPipeline):
     """
 
     default_input_names = "sequences"
-
-    _load_processor = False
-    _load_image_processor = False
-    _load_feature_extractor = False
-    _load_tokenizer = True
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -280,7 +275,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
-        truncation = self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0
+        truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
 
         word_to_chars_map = None
         is_split_into_words = preprocess_params["is_split_into_words"]
@@ -427,11 +422,9 @@ class TokenClassificationPipeline(ChunkPipeline):
             if previous_entity["start"] <= entity["start"] < previous_entity["end"]:
                 current_length = entity["end"] - entity["start"]
                 previous_length = previous_entity["end"] - previous_entity["start"]
-                if (
-                    current_length > previous_length
-                    or current_length == previous_length
-                    and entity["score"] > previous_entity["score"]
-                ):
+                if current_length > previous_length:
+                    previous_entity = entity
+                elif current_length == previous_length and entity["score"] > previous_entity["score"]:
                     previous_entity = entity
             else:
                 aggregated_entities.append(previous_entity)

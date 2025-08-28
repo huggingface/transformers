@@ -160,7 +160,7 @@ quantization_config = BitsAndBytesConfig(
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=quantization_config,
-    dtype=torch.bfloat16,
+    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 ```

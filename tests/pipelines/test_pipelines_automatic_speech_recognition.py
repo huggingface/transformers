@@ -40,6 +40,7 @@ from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
+    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
@@ -68,7 +69,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
@@ -86,7 +87,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
             **extra_kwargs,
         )
 
@@ -189,7 +190,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -210,7 +211,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -229,7 +230,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             model="openai/whisper-tiny",
             device=torch_device,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             max_new_tokens=5,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -264,7 +265,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        filename = hf_hub_download("Narsil/asr_dummy", filename="4.flac", repo_type="dataset")
+        dataset = load_dataset("Narsil/asr_dummy", streaming=True, trust_remote_code=True)
+        third_item = next(iter(dataset["test"].skip(3)))
+        filename = third_item["file"]
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -325,6 +328,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ):
             _ = speech_recognizer(filename, return_timestamps="char")
 
+    @require_tf
+    def test_small_model_tf(self):
+        self.skipTest(reason="Tensorflow not supported yet.")
+
     @require_torch
     @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
     def test_torch_small_no_tokenizer_files(self):
@@ -381,7 +388,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -427,7 +434,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             stride_length_s=1,
             return_language=True,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -482,7 +489,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         samples = [next(iter(data)) for _ in range(8)]
         audio = np.concatenate([sample["audio"]["array"] for sample in samples])
 
@@ -1118,7 +1125,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1160,7 +1169,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_distil(self):
         # Load data:
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1190,7 +1201,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_non_ass = pipe(sample, generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
         transcription_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)
@@ -1255,7 +1266,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
             device=torch_device,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             framework="pt",
         )
 

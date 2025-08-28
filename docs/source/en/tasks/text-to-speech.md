@@ -282,10 +282,10 @@ containing the corresponding speaker embedding.
 >>> import os
 >>> import torch
 >>> from speechbrain.inference.classifiers import EncoderClassifier
->>> from transformers import infer_device
+>>> from accelerate.test_utils.testing import get_backend
 
 >>> spk_model_name = "speechbrain/spkrec-xvect-voxceleb"
->>> device = infer_device()
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> speaker_model = EncoderClassifier.from_hparams(
 ...     source=spk_model_name,
 ...     run_opts={"device": device},

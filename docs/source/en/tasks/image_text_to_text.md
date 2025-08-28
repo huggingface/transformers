@@ -38,13 +38,13 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
-device = torch.device(infer_device())
+device = torch.device("cuda")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-    dtype=torch.bfloat16,
+    torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 ).to(device)
 
@@ -301,7 +301,7 @@ from transformers import AutoModelForImageTextToText, QuantoConfig
 model_id = "HuggingFaceM4/idefics2-8b"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", quantization_config=quantization_config
+    model_id, device_map="cuda", quantization_config=quantization_config
 )
 ```
 

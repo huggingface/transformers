@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import collections
 import math
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -230,7 +231,7 @@ class TFLayoutLMv3TextEmbeddings(keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor | None = None,
-        bbox: tf.Tensor | None = None,
+        bbox: Optional[tf.Tensor] = None,
         token_type_ids: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -340,7 +341,7 @@ class TFLayoutLMv3SelfAttention(keras.layers.Layer):
         x = tf.reshape(x, new_shape)
         return tf.transpose(x, perm=[0, 2, 1, 3])  # batch_size, num_heads, seq_length, attention_head_size
 
-    def cogview_attention(self, attention_scores: tf.Tensor, alpha: float | int = 32):
+    def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
         """
         https://huggingface.co/papers/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
         (PB-Relax). A replacement of the original keras.layers.Softmax(axis=-1)(attention_scores). Seems the new
@@ -362,7 +363,7 @@ class TFLayoutLMv3SelfAttention(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[tuple[tf.Tensor], tuple[tf.Tensor, tf.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -467,7 +468,7 @@ class TFLayoutLMv3Attention(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[tuple[tf.Tensor], tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
             hidden_states,
             attention_mask,
@@ -570,7 +571,7 @@ class TFLayoutLMv3Layer(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[tuple[tf.Tensor], tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -710,7 +711,12 @@ class TFLayoutLMv3Encoder(keras.layers.Layer):
         return_dict: bool = True,
         position_ids: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor] | tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    ) -> Union[
+        TFBaseModelOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -920,7 +926,7 @@ class TFLayoutLMv3MainLayer(keras.layers.Layer):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask: tf.Tensor | None) -> tf.Tensor | list[tf.Tensor | None]:
+    def get_head_mask(self, head_mask: tf.Tensor | None) -> Union[tf.Tensor, list[tf.Tensor | None]]:
         if head_mask is None:
             return [None] * self.config.num_hidden_layers
 
@@ -956,11 +962,16 @@ class TFLayoutLMv3MainLayer(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         pixel_values: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor] | tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    ) -> Union[
+        TFBaseModelOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         # This method can be called with a variety of modalities:
         # 1. text + layout
         # 2. text + layout + image
@@ -1263,11 +1274,16 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         pixel_values: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor] | tuple[tf.Tensor, tf.Tensor] | tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    ) -> Union[
+        TFBaseModelOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         Returns:
 
@@ -1280,7 +1296,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1397,19 +1413,19 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         bbox: tf.Tensor | None = None,
         pixel_values: tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> (
-        TFSequenceClassifierOutput
-        | tuple[tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
-    ):
+        training: Optional[bool] = False,
+    ) -> Union[
+        TFSequenceClassifierOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         """
         Returns:
 
@@ -1423,7 +1439,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1523,18 +1539,18 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         pixel_values: tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> (
-        TFTokenClassifierOutput
-        | tuple[tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
-    ):
+        training: Optional[bool] = False,
+    ) -> Union[
+        TFTokenClassifierOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1550,7 +1566,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1652,19 +1668,19 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         inputs_embeds: tf.Tensor | None = None,
         start_positions: tf.Tensor | None = None,
         end_positions: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         bbox: tf.Tensor | None = None,
         pixel_values: tf.Tensor | None = None,
-        return_dict: bool | None = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> (
-        TFQuestionAnsweringModelOutput
-        | tuple[tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor]
-        | tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
-    ):
+    ) -> Union[
+        TFQuestionAnsweringModelOutput,
+        tuple[tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1687,7 +1703,7 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> question = "what's his name?"

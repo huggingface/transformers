@@ -20,6 +20,7 @@ TF 2.0 Transformer XL model.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -542,9 +543,9 @@ class TFTransfoXLMainLayer(keras.layers.Layer):
         mems: list[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ):
@@ -689,7 +690,7 @@ class TFTransfoXLModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
+    last_hidden_state: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] = None
     hidden_states: tuple[tf.Tensor] | None = None
     attentions: tuple[tf.Tensor] | None = None
@@ -722,7 +723,7 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    prediction_scores: tf.Tensor | None = None
+    prediction_scores: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] = None
     hidden_states: tuple[tf.Tensor] | None = None
     attentions: tuple[tf.Tensor] | None = None
@@ -756,7 +757,7 @@ class TFTransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] = None
     hidden_states: tuple[tf.Tensor] | None = None
     attentions: tuple[tf.Tensor] | None = None
@@ -1046,12 +1047,12 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         mems: list[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> tuple | TFTransfoXLSequenceClassifierOutputWithPast:
+        training: Optional[bool] = False,
+    ) -> Union[tuple, TFTransfoXLSequenceClassifierOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,

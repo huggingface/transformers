@@ -201,7 +201,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False  # broken by output recording refactor
+    fx_compatible = True
 
     test_pruning = False
     test_resize_embeddings = False
@@ -300,7 +300,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         """
         model = IJepaModel.from_pretrained(
             "facebook/ijepa_vith14_1k",
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             device_map="auto",
         )
         image_processor = self.default_image_processor

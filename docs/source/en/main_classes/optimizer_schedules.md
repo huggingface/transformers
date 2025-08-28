@@ -23,13 +23,19 @@ The `.optimization` module provides:
 - a gradient accumulation class to accumulate the gradients of multiple batches
 
 
-## AdaFactor
+## AdaFactor (PyTorch)
 
 [[autodoc]] Adafactor
 
+## AdamWeightDecay (TensorFlow)
+
+[[autodoc]] AdamWeightDecay
+
+[[autodoc]] create_optimizer
+
 ## Schedules
 
-### Learning Rate Schedules
+### Learning Rate Schedules (PyTorch)
 
 [[autodoc]] SchedulerType
 
@@ -58,3 +64,13 @@ The `.optimization` module provides:
 [[autodoc]] get_inverse_sqrt_schedule
 
 [[autodoc]] get_wsd_schedule
+
+### Warmup (TensorFlow)
+
+[[autodoc]] WarmUp
+
+## Gradient Strategies
+
+### GradientAccumulator (TensorFlow)
+
+[[autodoc]] GradientAccumulator

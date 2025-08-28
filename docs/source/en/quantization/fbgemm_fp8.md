@@ -37,7 +37,7 @@ from transformers import FbgemmFp8Config, AutoModelForCausalLM
 quantization_config = FbgemmFp8Config()
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Meta-Llama-3-8B",
-    dtype="auto",
+    torch_dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )

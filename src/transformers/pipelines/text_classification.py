@@ -78,11 +78,6 @@ class TextClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
     """
 
-    _load_processor = False
-    _load_image_processor = False
-    _load_feature_extractor = False
-    _load_tokenizer = True
-
     return_all_scores = False
     function_to_apply = ClassificationFunction.NONE
 
@@ -194,7 +189,7 @@ class TextClassificationPipeline(Pipeline):
     def _forward(self, model_inputs):
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
         model_forward = self.model.forward if self.framework == "pt" else self.model.call
-        if "use_cache" in inspect.signature(model_forward).parameters:
+        if "use_cache" in inspect.signature(model_forward).parameters.keys():
             model_inputs["use_cache"] = False
         return self.model(**model_inputs)
 

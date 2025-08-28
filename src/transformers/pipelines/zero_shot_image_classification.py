@@ -64,11 +64,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-image-classification).
     """
 
-    _load_processor = False
-    _load_image_processor = True
-    _load_feature_extractor = False
-    _load_tokenizer = True
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -162,7 +157,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
         if self.framework == "pt":
-            inputs = inputs.to(self.dtype)
+            inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         tokenizer_default_kwargs = {"padding": True}

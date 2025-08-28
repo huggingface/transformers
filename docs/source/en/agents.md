@@ -14,9 +14,5 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Agents
-
-(deprecated)
-
 > [!WARNING]
 > Agents and tools were spun out into the standalone [smolagents](https://huggingface.co/docs/smolagents/index) library. They were removed from `transformers` in v4.52.

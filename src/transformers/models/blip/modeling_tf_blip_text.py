@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 import tensorflow as tf
 
@@ -302,7 +303,7 @@ class TFBlipTextSelfOutput(keras.layers.Layer):
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool | None = None) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: Optional[bool] = None) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -337,8 +338,8 @@ class TFBlipTextAttention(keras.layers.Layer):
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
-        output_attentions: bool | None = False,
-        training: bool | None = None,
+        output_attentions: Optional[bool] = False,
+        training: Optional[bool] = None,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -1096,8 +1097,8 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
-            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states"),
-            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask"),
+            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
+            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
             "is_decoder": True,
         }
 

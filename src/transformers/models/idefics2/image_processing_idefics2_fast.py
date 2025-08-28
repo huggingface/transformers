@@ -157,11 +157,14 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         image = F.resize(image, size=new_size, interpolation=interpolation, **kwargs)
         return image
 
-    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
+    def _prepare_images_structure(
+        self,
+        images: ImageInput,
+    ) -> ImageInput:
         """
         Prepare a nested images structure for processing.
         """
-        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+        return make_nested_list_of_images(images)
 
     def split_images(
         self,

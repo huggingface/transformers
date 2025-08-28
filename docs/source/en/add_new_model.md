@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Legacy model contribution
+# Adding a new model to Transformers
 
 > [!TIP]
 > Try adding new models with a more [modular](./modular_transformers) approach first. This makes it significantly easier to contribute a model to Transformers!

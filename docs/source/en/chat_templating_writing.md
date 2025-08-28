@@ -14,10 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Writing a chat template
+# Template writing
 
-A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templates/) template stored in the tokenizer's [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
+A chat template is a [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) template stored in the tokenizers [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax. A chat template performs the following three roles.
 
+1. Print the role enclosed in `<|` and `|>` (`<|user|>`, `<|assistant|>`, etc.).
+2. Print the message followed by an end-of-sequence (`EOS`) token.
+3. Print the assistant token if [add_generation_prompt=True](./chat_templating#add_generation_prompt) so the model generates an assistant response.
+
+An example template is shown below.
 
 ```jinja
 {%- for message in messages %}
@@ -29,76 +34,47 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 {%- endif %}
 ```
 
-If you stare at this for a while, you should realize that this is actually very like Python, albeit with some strange
-`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of 
-the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds 
-the starting header for an assistant message to the end of the conversation.
+The template can be customized to handle more complex use cases. This guide will show you how to add and edit templates and includes template writing tips.
 
-Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
-with the tokenizer whenever [`~PreTrainedTokenizer.save_pretrained`] or [`~PreTrainedTokenizer.push_to_hub`] is called. The template is saved in the `chat_template.jinja` file in the tokenizer directory. You can
-edit this file directly to change the template, which is often easier than manipulating a template string.
+## Create a template
 
-## Template writing tips
-
-The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see the template it's using. Try starting with simple models that don't call any tools or support RAG because tool-use models can have very complex templates. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/stable/templates/#synopsis) for more details about formatting and syntax.
-
-There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail. 
-
-### Writing multimodal chat templates
-
-For multimodal templates, the `chat_template` attribute is set on the **processor**, not the tokenizer. The `content` key of a message is often a list of content dicts,
-rather than just a single string. You may wish to check the type of each content item in the list, and handle it accordingly.
-
-Generally, the template should not directly access image or video data. This is normally handled by the processor after template rendering has finished. Instead,
-your template should emit a single special token like `<|image|>` or `<|video|>` when it encounters image or video content.  The processor will
-expand the single special token out into a sequence of image or video tokens later. The exact tokens to emit depends on the model you're working with. We strongly recommend loading an existing multimodal processor to see how it handles data.
-
-The example template below handles mixed image and text content.
+Create a template by writing a Jinja template and then setting it as the chat template in the tokenizer. For example, the template below adds `[ASST]` and `[/ASST]` tags to the assistant messages.
 
 ```jinja
 {%- for message in messages %}
-    {%- if loop.index0 == 0 %}
-        {{- bos_token }}
+    {%- if message['role'] == 'user' %}
+        {{- bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
+    {%- elif message['role'] == 'system' %}
+        {{- '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
     {%- endif %}
-    {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}
-    {%- if message['content'] is string %}
-        {{- message['content'] }}
-    {%- else %}
-        {%- for content in message['content'] %}
-            {%- if content['type'] == 'image' %}
-                {{- '<|image|>' }}
-            {%- elif content['type'] == 'text' %}
-                {{- content['text'] }}
-            {%- endif %}
-        {%- endfor %}
-    {%- endif %}
-    {{- '<|eot_id|>' }}
 {%- endfor %}
-{%- if add_generation_prompt %}
-    {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
-{%- endif %}
 ```
 
-This multimodal template is very similar to the more simple template above, but it checks for `content` lists,
-and iterates over them to render `<|image|>` tokens where necessary. This allows images to be inserted "into the flow"
-of user text.
+Set the template in the tokenizer, and the next time you use [`~PreTrainedTokenizerBase.apply_chat_template`], the new template is used.
 
-Not all models work this way - some may move all images to the end of the user message,
-for example. The chat template should always match the format the model was trained with.
+```py
+template = tokenizer.chat_template
+template = template.replace("SYS", "SYSTEM")  # Change the system token
+tokenizer.chat_template = template  # Set the new template
+```
+
+The template is saved in the `tokenizer_config.json` file. Upload it to the Hub with [`~PreTrainedTokenizer.push_to_hub`] so you can reuse it later and make sure everyone is using the right template for your model.
+
+```py
+tokenizer.push_to_hub("model_name")
+```
+
+## Template writing tips
+
+The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see what template it's using. Try starting with simple models that don't call any tools or support RAG. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/3.1.x/templates/#synopsis) for more details about formatting and syntax.
+
+This section curates some best practices for writing clean and efficient Jinja templates.
 
 ### Trimming whitespace
 
-Jinja prints any whitespace before or after a block of text. This can be an issue for chat templates because adding extra whitespace that was not present during model training can harm performance. To remove the whitespace, add `-` to the Jinja line syntax. This allows you to write your template with Pythonic indentation and linebreaks, without accidentally printing an indentation in the rendered output.
-
-The example template below doesn't use `-`, resulting in extra whitespace being printed in the output.
-
-```jinja
-{% for message in messages %}
-    {{ message['role'] + message['content'] }}
-{% endfor %}
-```
-
-We strongly recommend using `-` to ensure only the intended content is printed.
+Jinja prints any whitespace before or after a block of text. This can be an issue for chat templates because whitespace usage should be intentional. Add `-` to strip any whitespace before a block.
 
 ```jinja
 {%- for message in messages %}
@@ -106,20 +82,30 @@ We strongly recommend using `-` to ensure only the intended content is printed.
 {%- endfor %}
 ```
 
-### Special variables and callables
+The incorrect whitespace usage example below may introduce a newline and indentation in the output.
 
+```jinja
+{% for message in messages %}
+    {{ message['role'] + message['content'] }}
+{% endfor %}
+```
 
-The only constants in a template are the `messages` variable and the `add_generation_prompt` boolean. However, you have
-access to **any other keyword arguments that are passed** to the [`~PreTrainedTokenizerBase.apply_chat_template`] method.
+### Special variables
 
-This provides flexibility and enables support for use-cases we may not have thought of while designing the spec. The most common additional variable is `tools`, which contains a list of tools in JSON schema format. Although you can use any variable name you like, we highly recommend sticking to convention and using `tools` for this purpose. This makes templates more compatible with the standard API.
+There are five special variables available inside a template. You can pass virtually any additional arguments to [`~PreTrainedTokenizerBase.apply_chat_template`] and it will be available inside the template as a variable. However, you should try to keep the number of variables to the five below to make it easier for users to use the chat model without writing custom code to handle model-specific arguments.
 
-You also have access to any tokens contained in `tokenizer.special_tokens_map`, which often includes special tokens like `bos_token` and `eos_token`. Access these directly by name, like `{{- bos_token }}`.
+- `messages` contains the chat history as a list of message dicts.
+- `tools` contains a list of tools in JSON schema format.
+- `documents` contains a list of documents with the format `{"title": Title, "contents": "Contents"}` (designed for RAG models).
+- `add_generation_prompt` is a boolean that determines whether to add an assistant header at the end of the conversation.
+- `bos_token` and `eos_token` are special tokens extracted from a tokenizers `special_tokens_map`.
 
-There are two callable functions available to you. To call them, use `{{- function_name(argument) }}`.
+### Callable functions
+
+There are two callable functions available inside a template.
 
 - `raise_exception(msg)` raises a `TemplateException`. This is useful for debugging or warning users about incorrect template usage.
-- `strftime_now(format_str)` retrieves the current date and time in a specific format, which is often required in system messages. It is equivalent to [datetime.now().strftime(format_str)](https://docs.python.org/3/library/datetime.html#datetime.datetime.now) in Python.
+- `strftime_now(format_str)` retrieves the current date and time in a specific format which could be useful to include in system messages. It is equivalent to [datetime.now().strftime(format_str)](https://docs.python.org/3/library/datetime.html#datetime.datetime.now) in Python.
 
 ### Compatibility with non-Python Jinja
 
@@ -158,11 +144,9 @@ The following section lists elements of the standard API for writing templates f
 
 ### Tool definitions
 
-[Tools](./chat_extras) are passed as Python functions or a JSON schema. When functions are passed, a JSON schema is automatically generated and passed to the template. When a template accesses the `tools` variable, it is always a list of JSON schemas.
+Transformers chat template methods allow a user to pass tools as Python functions or a JSON schema. When functions are passed, a JSON schema is automatically generated and passed to the template. The `tools` variable in a template always takes a list of JSON schemas.
 
-Even though a template always receive tools as a JSON schema, you may need to radically change this format when rendering them to match the format a model was trained with. For example, [Command-R](./model_doc/cohere) was trained with tools defined with Python function headers. The template internally converts JSON schema types and renders the input tools as Python headers.
-
-The example below shows how a tool is defined in JSON schema format.
+The specific tokens and tool descriptions should match the ones your model was trained with. Your model doesn't need to understand the JSON schema input because your template can translate the JSON schema into your models format. For example, [Command-R](./model_doc/cohere) was trained with tools defined with Python function headers, but the Command-R tool template accepts JSON schemas. The template internally converts types and renders the input tools as Python headers.
 
 ```json
 {
@@ -188,7 +172,7 @@ The example below shows how a tool is defined in JSON schema format.
 }
 ```
 
-An example of handling tool definitions in a chat template is shown below. The specific tokens and layouts should be changed to match the ones the model was trained with.
+An example for handling tool definitions in a chat template is shown below. The specific tokens and tool descriptions should be changed to match the ones a model was trained with.
 
 ```
 {%- if tools %}
@@ -204,9 +188,7 @@ An example of handling tool definitions in a chat template is shown below. The s
 
 ### Tool calls
 
-In addition to rendering the tool definitions, you also need to render **tool calls** and **tool responses** in the template.
-
-Tool calls are generally passed in the `tool_calls` key of an `"assistant”` message. This is always a list even though most tool-calling models only support single tool calls, which means the list usually only contains a single element.
+Tool calls, if present, is a list with the `"assistant”` role. This is always a list even though most tool-calling models only support single tool calls, which means the list usually only contains a single element.
 
 ```json
 {
@@ -226,7 +208,7 @@ Tool calls are generally passed in the `tool_calls` key of an `"assistant”` me
 }
 ```
 
-A common pattern for handling tool calls is shown below. You can use this as a starting point, but make sure you template actually matches the format the model was trained with!
+A common pattern for handling tool calls is shown below.
 
 ```
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
@@ -239,7 +221,7 @@ A common pattern for handling tool calls is shown below. You can use this as a s
 
 ### Tool responses
 
-Tool responses are message dicts with the `tool` role. They are much simpler than tool calls, and usually only contain the `role`, `name` and `content` keys.
+Tool responses are a message dict with the `role`, `name` (name of the function) and `content` (result of the tool call) keys.
 
 ```json
 {
@@ -249,7 +231,7 @@ Tool responses are message dicts with the `tool` role. They are much simpler tha
 }
 ```
 
-Some templates may not even need the `name` key, in which case, you can write your template to only read the `content` key.
+Not all the keys need to be used in the tool response. For example, if a model doesn’t expect the function name to be included in the tool response, then you can just include the `role` and `content`.
 
 ```
 {%- if message['role'] == 'tool' %}
@@ -259,11 +241,11 @@ Some templates may not even need the `name` key, in which case, you can write yo
 
 ## Contribute
 
-Once a template is ready, set it to the `chat_template` attribute in the tokenizer and test it with [`~PreTrainedTokenizerBase.apply_chat_template`]. If it works as expected, then upload it to the Hub with [`~PreTrainedTokenizer.push_to_hub`].
+Add a chat template by setting the `chat_template` attribute in the tokenizer and testing it with [`~PreTrainedTokenizerBase.apply_chat_template`]. If it works as expected, then you can upload it to the Hub with with [`~PreTrainedTokenizer.push_to_hub`].
 
-Even if you're not the model owner, it is still helpful to add a template for a model with an empty or incorrect chat template. Open a [pull request](https://hf.co/docs/hub/repositories-pull-requests-discussions) on the model repository to add the template!
+Even if you're not the model owner, it is still helpful to add a template for a model with an empty chat template or a model that is using a default class template. Open a [pull request](https://hf.co/docs/hub/repositories-pull-requests-discussions) on the model repository to add the template.
 
 ```py
 tokenizer.chat_template = template
-tokenizer.push_to_hub("amazing_company/cool_model", commit_message="Add chat template", create_pr=True)
+tokenizer.push_to_hub("model_name")
 ```

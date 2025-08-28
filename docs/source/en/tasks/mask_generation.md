@@ -123,9 +123,11 @@ You can also use the model without the pipeline. To do so, initialize the model 
 the processor.
 
 ```python
-from transformers import SamModel, SamProcessor, infer_device
+from transformers import SamModel, SamProcessor
 import torch
-device = infer_device()
+from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+device, _, _ = get_backend()
 model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```
@@ -189,7 +191,7 @@ inputs = processor(
         image,
         input_boxes=[[[box]]],
         return_tensors="pt"
-    ).to(model.device)
+    ).to("cuda")
 
 with torch.no_grad():
     outputs = model(**inputs)

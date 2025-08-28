@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -200,7 +201,7 @@ class TFXLNetRelativeAttention(keras.layers.Layer):
         mems: np.ndarray | tf.Tensor | None = None,
         target_mapping: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = False,
+        output_attentions: Optional[bool] = False,
         training: bool = False,
     ):
         if g is not None:
@@ -389,7 +390,7 @@ class TFXLNetLayer(keras.layers.Layer):
         mems: np.ndarray | tf.Tensor | None = None,
         target_mapping: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = False,
+        output_attentions: Optional[bool] = False,
         training: bool = False,
     ):
         outputs = self.rel_attn(
@@ -630,10 +631,10 @@ class TFXLNetMainLayer(keras.layers.Layer):
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
     ):
         if training and use_mems is None:
@@ -862,7 +863,7 @@ class TFXLNetModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
+    last_hidden_state: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -899,7 +900,7 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -933,7 +934,7 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -967,7 +968,7 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -1003,7 +1004,7 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
+    logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -1039,8 +1040,8 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    start_logits: tf.Tensor | None = None
-    end_logits: tf.Tensor | None = None
+    start_logits: Optional[tf.Tensor] = None
+    end_logits: Optional[tf.Tensor] = None
     mems: list[tf.Tensor] | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -1188,12 +1189,12 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFXLNetModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetModelOutput, tuple[tf.Tensor]]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1296,13 +1297,13 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFXLNetLMHeadModelOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetLMHeadModelOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -1431,13 +1432,13 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFXLNetForSequenceClassificationOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetForSequenceClassificationOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1532,13 +1533,13 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         target_mapping: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFXLNetForMultipleChoiceOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetForMultipleChoiceOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1646,13 +1647,13 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFXLNetForTokenClassificationOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetForTokenClassificationOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1736,14 +1737,14 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         input_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_mems: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFXLNetForQuestionAnsweringSimpleOutput | tuple[tf.Tensor]:
+    ) -> Union[TFXLNetForQuestionAnsweringSimpleOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

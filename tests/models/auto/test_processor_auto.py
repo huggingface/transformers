@@ -26,7 +26,6 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
-    MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
@@ -266,8 +265,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
-            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
-                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -320,8 +317,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
-            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
-                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -361,8 +356,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
-            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
-                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -397,8 +390,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
-            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
-                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")

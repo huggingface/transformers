@@ -381,10 +381,8 @@ class BlipModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return BlipConfig(
-            text_config=self.text_model_tester.get_config().to_dict(),
-            vision_config=self.vision_model_tester.get_config().to_dict(),
-            projection_dim=64,
+        return BlipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -536,8 +534,8 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -666,10 +664,8 @@ class BlipTextRetrievalModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return BlipConfig(
-            text_config=self.text_model_tester.get_config().to_dict(),
-            vision_config=self.vision_model_tester.get_config().to_dict(),
-            projection_dim=64,
+        return BlipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -717,10 +713,8 @@ class BlipTextImageModelsModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return BlipConfig(
-            text_config=self.text_model_tester.get_config().to_dict(),
-            vision_config=self.vision_model_tester.get_config().to_dict(),
-            projection_dim=64,
+        return BlipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -767,10 +761,8 @@ class BlipVQAModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return BlipConfig(
-            text_config=self.text_model_tester.get_config().to_dict(),
-            vision_config=self.vision_model_tester.get_config().to_dict(),
-            projection_dim=64,
+        return BlipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -1056,8 +1048,8 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -1274,8 +1266,8 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -1365,7 +1357,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     def test_inference_image_captioning_fp16(self):
         model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base", dtype=torch.float16
+            "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
         ).to(torch_device)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()

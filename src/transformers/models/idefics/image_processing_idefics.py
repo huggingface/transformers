@@ -151,7 +151,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         if isinstance(images, list) and len(images) == 0:
             return []
 
-        images = self.fetch_images(images)
         images = make_list_of_images(images)
 
         if not valid_images(images):

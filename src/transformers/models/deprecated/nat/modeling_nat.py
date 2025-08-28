@@ -615,7 +615,7 @@ class NatPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: NatConfig
+    config_class = NatConfig
     base_model_prefix = "nat"
     main_input_name = "pixel_values"
 

@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-10 and added to Hugging Face Transformers on 2023-01-19.*
 
 # OneFormer
 
@@ -39,7 +38,7 @@ This model was contributed by [Jitesh Jain](https://huggingface.co/praeclarumjj3
 
 ## Usage tips
 
--  OneFormer requires two inputs during inference: *image* and *task token*.
+-  OneFormer requires two inputs during inference: *image* and *task token*. 
 - During training, OneFormer only uses panoptic annotations.
 - If you want to train the model in a distributed environment across multiple nodes, then one should update the
   `get_num_masks` function inside in the `OneFormerLoss` class of `modeling_oneformer.py`. When training on multiple nodes, this should be
@@ -70,14 +69,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerImageProcessor
     - preprocess
-    - post_process_semantic_segmentation
-    - post_process_instance_segmentation
-    - post_process_panoptic_segmentation
-
-## OneFormerImageProcessorFast
-
-[[autodoc]] OneFormerImageProcessorFast
-    - preprocess
+    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
@@ -95,3 +87,4 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerForUniversalSegmentation
     - forward
+    

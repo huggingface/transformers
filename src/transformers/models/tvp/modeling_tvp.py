@@ -551,11 +551,11 @@ class TvpPooler(nn.Module):
 
 @auto_docstring
 class TvpPreTrainedModel(PreTrainedModel):
-    config: TvpConfig
+    config_class = TvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module: nn.Module):
+    def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -564,23 +564,14 @@ class TvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-            if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-        elif isinstance(module, TvpModel):
-            nn.init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-        if hasattr(module, "pad_up"):
-            nn.init.normal_(module.pad_up)
-        if hasattr(module, "pad_down"):
-            nn.init.normal_(module.pad_down)
-        if hasattr(module, "pad_left"):
-            nn.init.normal_(module.pad_left)
-        if hasattr(module, "pad_right"):
-            nn.init.normal_(module.pad_right)
+
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
 
 
 class TvpFrameDownPadPrompter(nn.Module):

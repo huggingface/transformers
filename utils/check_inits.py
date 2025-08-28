@@ -257,7 +257,7 @@ def analyze_results(import_dict_objects: dict[str, list[str]], type_hint_objects
 
     errors = []
     # Find all errors.
-    for key in import_dict_objects:
+    for key in import_dict_objects.keys():
         # Duplicate imports in any half.
         duplicate_imports = find_duplicates(import_dict_objects[key])
         if duplicate_imports:

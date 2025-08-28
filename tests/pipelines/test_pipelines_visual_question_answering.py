@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_tf,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -61,12 +62,12 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        dtype="float32",
+        torch_dtype="float32",
     ):
         vqa_pipeline = pipeline(
             "visual-question-answering",
             model="hf-internal-testing/tiny-vilt-random-vqa",
-            dtype=dtype,
+            torch_dtype=torch_dtype,
         )
         examples = [
             {
@@ -127,7 +128,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         vqa_pipeline = pipeline(
             "visual-question-answering",
             model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration",
-            model_kwargs={"dtype": torch.float16},
+            model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
         self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
@@ -169,7 +170,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         vqa_pipeline = pipeline(
             "visual-question-answering",
             model="Salesforce/blip2-opt-2.7b",
-            model_kwargs={"dtype": torch.float16},
+            model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
         self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
@@ -245,3 +246,8 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
                 [{"score": ANY(float), "answer": ANY(str)}],
             ],
         )
+
+    @require_tf
+    @unittest.skip(reason="Visual question answering not implemented in TF")
+    def test_small_model_tf(self):
+        pass

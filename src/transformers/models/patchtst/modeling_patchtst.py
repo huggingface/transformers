@@ -104,9 +104,10 @@ class PatchTSTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -127,9 +128,42 @@ class PatchTSTAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -151,7 +185,7 @@ class PatchTSTAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights, past_key_value
 
 
 class PatchTSTBatchNorm(nn.Module):
@@ -551,33 +585,29 @@ class PatchTSTEncoderLayer(nn.Module):
 
 @auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
-    config: PatchTSTConfig
+    config_class = PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module: nn.Module):
+    def _init_weights(self, module):
         """
         Initialize weights
         """
         if isinstance(module, PatchTSTPositionalEncoding):
-            # get the number of patches
-            num_patches = (
-                max(self.config.context_length, self.config.patch_length) - self.config.patch_length
-            ) // self.config.patch_stride + 1
             # initialize cls_token
             if self.config.use_cls_token:
                 nn.init.normal_(module.cls_token, std=0.02)
-                num_patches += 1
             # initialize positional encoding
-            module.position_enc = module._init_pe(self.config, num_patches)
+            if self.config.positional_encoding_type == "random":
+                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, PatchTSTBatchNorm):
             module.batchnorm.bias.data.zero_()
             module.batchnorm.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear):
+        elif isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1694,7 +1724,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             scale=scale,
         )
 
-    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,
@@ -1884,7 +1913,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
                 # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
-                y_hat = tuple(item.view(-1, self.config.num_targets) for item in y_hat)
+                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
                 loss = nll(distribution, target_values)
                 # take average of the loss
                 loss = weighted_average(loss)
@@ -1904,7 +1933,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             attentions=model_output.attentions,
         )
 
-    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,

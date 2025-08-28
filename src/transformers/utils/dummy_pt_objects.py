@@ -9,6 +9,13 @@ class Cache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class CacheConfig(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DynamicCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -37,6 +44,13 @@ class HybridCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MambaCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class OffloadedCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -52,6 +66,13 @@ class OffloadedStaticCache(metaclass=DummyObject):
 
 
 class QuantizedCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QuantizedCacheConfig(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

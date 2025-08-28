@@ -199,7 +199,8 @@ def check_dummies(overwrite: bool = False):
     # Locate actual dummy modules and read their content.
     path = os.path.join(PATH_TO_TRANSFORMERS, "utils")
     dummy_file_paths = {
-        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py") for backend in dummy_files
+        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py")
+        for backend in dummy_files.keys()
     }
 
     actual_dummies = {}
@@ -211,7 +212,7 @@ def check_dummies(overwrite: bool = False):
             actual_dummies[backend] = ""
 
     # Compare actual with what they should be.
-    for backend in dummy_files:
+    for backend in dummy_files.keys():
         if dummy_files[backend] != actual_dummies[backend]:
             if overwrite:
                 print(

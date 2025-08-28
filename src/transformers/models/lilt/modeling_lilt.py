@@ -186,7 +186,7 @@ class LiltLayoutEmbeddings(nn.Module):
 
 
 class LiltSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -221,7 +221,6 @@ class LiltSelfAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.channel_shrink_ratio = config.channel_shrink_ratio
-        self.layer_idx = layer_idx
 
     def transpose_for_scores(self, x, r=1):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size // r)
@@ -339,9 +338,9 @@ class LiltSelfOutput(nn.Module):
 
 
 class LiltAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = LiltSelfAttention(config, position_embedding_type=position_embedding_type, layer_idx=layer_idx)
+        self.self = LiltSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = LiltSelfOutput(config)
         self.pruned_heads = set()
 
@@ -422,11 +421,11 @@ class LiltOutput(nn.Module):
 
 
 class LiltLayer(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = LiltAttention(config, layer_idx=layer_idx)
+        self.attention = LiltAttention(config)
         self.intermediate = LiltIntermediate(config)
         self.output = LiltOutput(config)
 
@@ -483,10 +482,10 @@ class LiltLayer(GradientCheckpointingLayer):
 
 class LiltEncoder(nn.Module):
     # Copied from transformers.models.bert.modeling_bert.BertEncoder.__init__ with Bert->Lilt
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([LiltLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([LiltLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -560,7 +559,7 @@ class LiltPooler(nn.Module):
 
 @auto_docstring
 class LiltPreTrainedModel(PreTrainedModel):
-    config: LiltConfig
+    config_class = LiltConfig
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
     _no_split_modules = []
@@ -645,7 +644,7 @@ class LiltModel(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -785,7 +784,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForSequenceClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -900,7 +899,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForTokenClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -1017,7 +1016,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForQuestionAnswering.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]

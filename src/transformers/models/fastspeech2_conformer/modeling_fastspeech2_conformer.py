@@ -959,25 +959,21 @@ class FastSpeech2ConformerLoss(nn.Module):
 
 @auto_docstring
 class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
-    config: FastSpeech2ConformerConfig
+    config_class = FastSpeech2ConformerConfig
     base_model_prefix = "fastspeech2_conformer"
 
     main_input_name = "input_ids"
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
-            if module.bias is not None:
-                module.bias.data.zero_()
+        if isinstance(module, (nn.LayerNorm)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-key, b=key)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_()
             if module.padding_idx is not None:
@@ -1335,7 +1331,7 @@ class HifiGanResidualBlock(nn.Module):
 )
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
-    config: FastSpeech2ConformerHifiGanConfig
+    config_class = FastSpeech2ConformerHifiGanConfig
     main_input_name = "spectrogram"
 
     def __init__(self, config: FastSpeech2ConformerHifiGanConfig):
@@ -1376,9 +1372,9 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _init_weights(self, module: nn.Module):
+    def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1459,7 +1455,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
     """
 )
 class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
-    config: FastSpeech2ConformerWithHifiGanConfig
+    config_class = FastSpeech2ConformerWithHifiGanConfig
 
     def __init__(self, config: FastSpeech2ConformerWithHifiGanConfig):
         super().__init__(config)

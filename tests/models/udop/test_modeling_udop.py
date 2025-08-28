@@ -16,9 +16,9 @@ import copy
 import inspect
 import unittest
 
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
-from transformers import UdopConfig, is_torch_available
+from transformers import UdopConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -40,6 +40,10 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 class UdopModelTester:
@@ -614,8 +618,12 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
     def image(self):
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
-        return ds[1]["image"]
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+
+        return image
 
     @cached_property
     def processor(self):
