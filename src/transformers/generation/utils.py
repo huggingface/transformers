@@ -1306,7 +1306,7 @@ class GenerationMixin(ContinuousMixin):
 
         # Build processors declared via configuration (list[dict] or JSON string)
         if generation_config.logit_processors is not None:
-            from transformers.generation.logits_process import (
+            from transformers.generation.logits_process import (  # noqa: I001
                 ConfigurableLogitsProcessorList,
                 LogitsProcessorList as _LPL,
             )
@@ -1335,7 +1335,7 @@ class GenerationMixin(ContinuousMixin):
         if self.logit_processors is None:
             return None
         # Import here to avoid circular imports
-        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList  # noqa: F401
+        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList  # noqa: I001
         # If it's already a processor list, return it
         if isinstance(self.logit_processors, LogitsProcessorList):
             return self.logit_processors

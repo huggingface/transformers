@@ -580,7 +580,7 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
-    from .cache_utils import Cache as Cache
+    from .cache_utils import Cache as Cache  # noqa: I001
     from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer

@@ -210,7 +210,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
+        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint  # noqa: I001
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .candidate_generator import (
             AssistedCandidateGenerator,

@@ -5,7 +5,7 @@ specify logit processing strategies via JSON / list configuration instead of
 manual ``LogitsProcessor`` instantiation.
 """
 
-import json
+import json  # noqa: I001
 
 import torch  # noqa: F401 (used in custom processor example)
 from transformers import (
