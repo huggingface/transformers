@@ -41,9 +41,6 @@ from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAtte
 from ..gemma.modeling_gemma import GemmaMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, MixtralForCausalLM, MixtralDecoderLayer, MixtralNaiveMoe
 
-
-
-
 class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
 
