@@ -367,7 +367,6 @@ class GenerationMixin(ContinuousMixin):
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).

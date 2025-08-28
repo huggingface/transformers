@@ -7,6 +7,7 @@ from ..utils import logging
 logger = logging.get_logger(__name__)
 
 
+# TODO joao, manuel: remove in v4.58.0
 class Constraint(ABC):
     r"""Abstract base class for all constraints that can be applied during generation.
     It must define how the constraint can be satisfied.
