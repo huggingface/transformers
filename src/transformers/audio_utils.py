@@ -17,6 +17,7 @@ and remove unnecessary dependencies.
 """
 
 import base64
+import importlib
 import io
 import os
 import warnings
@@ -25,6 +26,7 @@ from typing import Any, Optional, Sequence, Union
 
 import numpy as np
 import requests
+from packaging import version
 
 from .utils import (
     is_librosa_available,
@@ -46,6 +48,7 @@ if is_librosa_available():
     import soxr
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
+TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -67,8 +70,8 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     if isinstance(audio, str):
         # Try to load with `torchcodec` but do not enforce users to install it. If not found
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
-        # needed.
-        if is_torchcodec_available():
+        # needed. Do not raise any errors if not installed or versions do not match
+        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
