@@ -14,6 +14,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3n model."""
 
+import copy
+import inspect
 import tempfile
 import unittest
 
@@ -26,11 +28,13 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    Cache,
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
     Gemma3nTextConfig,
     GenerationConfig,
+    StaticCache,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -38,12 +42,14 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
     slow,
     torch_device,
 )
 from transformers.utils import is_flash_attn_2_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -432,6 +438,270 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    @pytest.mark.generate
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        """
+        Test that StaticCache can generate from inputs_embeds and calculates max_cache_length
+        correctly in `generate()`. We force the model to not stop generation until max-length is reached
+        to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
+        """
+        for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
+            if not model_class._can_compile_fullgraph:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if config.get_text_config(decoder=True).is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
+                self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+
+            input_ids = inputs_dict.pop("input_ids")
+
+            model.config.use_cache = True
+            model.config.is_decoder = True
+            batch_size = input_ids.shape[0]
+            max_new_tokens = 10
+
+            # here we force to not stop at eos and go until max-length
+            model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
+            generation_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "cache_implementation": "static",
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            text_config = model.config.get_text_config()
+            head_dim = (
+                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+            )
+            num_key_value_heads = (
+                text_config.num_attention_heads
+                if getattr(text_config, "num_key_value_heads", None) is None
+                else text_config.num_key_value_heads
+            )
+            num_hidden_layers = text_config.num_hidden_layers
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
+
+            # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
+            # -1 because the last generated token isn't yet in the cache.
+            max_length = max_new_tokens + inputs_embeds.shape[1] - 1
+            cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
+            self.assertIsInstance(outputs.past_key_values, StaticCache)
+            self.assertEqual(len(outputs.past_key_values), num_hidden_layers - text_config.num_kv_shared_layers)
+            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+
+    @pytest.mark.generate
+    def test_generate_with_static_cache(self):
+        """
+        Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
+        has the expected shapes
+        """
+        for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
+            if not model_class._can_compile_fullgraph:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+            main_input = inputs_dict[model_class.main_input_name]
+
+            if config.get_text_config(decoder=True).is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            config.is_decoder = True
+            batch_size = main_input.shape[0]
+            seq_length = self.model_tester.seq_length
+            max_new_tokens = 20
+
+            for dtype in (torch.float32, torch.float16):
+                model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
+                inputs_dict = {
+                    k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
+                    for k, v in inputs_dict.items()
+                }
+                set_model_for_less_flaky_test(model)
+
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "output_scores": True,
+                    "use_cache": True,
+                }
+
+                static_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict, cache_implementation="static"
+                )
+
+                # Check 1: The cache shapes must match the expected shapes
+                max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
+                text_config = config.text_config if hasattr(config, "text_config") else config
+                head_dim = (
+                    getattr(text_config, "head_dim", None)
+                    or text_config.hidden_size // text_config.num_attention_heads
+                )
+                num_key_value_heads = (
+                    text_config.num_attention_heads
+                    if getattr(text_config, "num_key_value_heads", None) is None
+                    else text_config.num_key_value_heads
+                )
+                num_hidden_layers = text_config.num_hidden_layers
+                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
+                self.assertTrue(
+                    len(static_cache_generation.past_key_values)
+                    == num_hidden_layers - text_config.num_kv_shared_layers
+                )
+                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+
+                # Check 2: The outputs must be similar to the case with dynamic cache
+                dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
+                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
+
+    @pytest.mark.generate
+    def test_past_key_values_format(self, custom_all_cache_shapes=None):
+        """
+        Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test, or pass the
+        expected cache shapes.
+        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # 1. If it doesn't support cache, skip the test
+            if not hasattr(config.get_text_config(), "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
+
+            model = model_class(config).to(torch_device)
+            model = model.eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            if "past_key_values" not in outputs:
+                self.skipTest(reason="This model doesn't return `past_key_values`")
+
+            # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
+            past_kv = outputs["past_key_values"]
+            is_legacy_cache = not isinstance(past_kv, Cache)
+
+            text_config = config.get_text_config()
+            num_decoder_layers = (
+                getattr(text_config, "decoder_layers", None)
+                or getattr(text_config, "num_decoder_layers", None)
+                or text_config.num_hidden_layers
+            )
+
+            if custom_all_cache_shapes is None:
+                num_query_attention_heads = getattr(
+                    text_config, "decoder_attention_heads", text_config.num_attention_heads
+                )
+                embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
+                per_head_embed_dim = embed_dim // num_query_attention_heads
+                num_key_value_heads = (
+                    text_config.num_key_value_heads
+                    if getattr(text_config, "num_key_value_heads", None) is not None
+                    else num_query_attention_heads
+                )
+                if config.is_encoder_decoder:
+                    encoder_num_attention_heads = (
+                        text_config.encoder_attention_heads
+                        if hasattr(text_config, "encoder_attention_heads")
+                        else text_config.num_attention_heads
+                    )
+                    encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
+                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
+                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
+                    # autoregressive generation, we're keeping the test general and not checking the 3rd dim
+                    default_cross_attention_shape = (
+                        batch_size,
+                        encoder_num_attention_heads,
+                        encoder_per_head_embed_dim,
+                    )
+                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+                    all_cache_shapes = [
+                        [
+                            default_self_attention_shape,
+                            default_self_attention_shape,
+                            default_cross_attention_shape,
+                            default_cross_attention_shape,
+                        ]
+                        for _ in range(num_decoder_layers)
+                    ]
+                else:
+                    batch_size, seq_length = inputs["input_ids"].shape[:2]
+                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+                    all_cache_shapes = [
+                        [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
+                    ]
+
+            else:
+                all_cache_shapes = custom_all_cache_shapes
+
+            # 3. Check cache shapes
+            # 3.1. Encoder-Decoder checks
+            if config.is_encoder_decoder:
+                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
+                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
+
+                for i in range(num_decoder_layers):
+                    if is_legacy_cache:
+                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
+
+                    # Self attention
+                    self_attention_layer_keys = (
+                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
+                    )
+                    self_attention_layer_values = (
+                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
+                    )
+                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
+
+                    # Cross attention (ignore 3rd dim, see default shape preparation)
+                    cross_attention_layer_keys = (
+                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
+                    )
+                    cross_attention_layer_values = (
+                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
+                    )
+                    cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
+                    cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
+                    self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
+                    self.assertEqual(cross_attention_layer_values.shape, all_cache_shapes[i][3])
+
+            # 3.2. Decoder-only checks
+            else:
+                num_cache_decoder_layers = len(past_kv)
+                self.assertEqual(num_cache_decoder_layers, num_decoder_layers - text_config.num_kv_shared_layers)
+
+                for i in range(num_decoder_layers - text_config.num_kv_shared_layers):
+                    if is_legacy_cache:
+                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
+
+                    # Self attention
+                    if is_legacy_cache:
+                        self_attention_layer_keys = past_kv[i][0]
+                        self_attention_layer_values = past_kv[i][1]
+                    elif getattr(past_kv, "layers", None) is None:
+                        # Cache is lot layered (i.e, Mamba derivatives)
+                        self_attention_layer_keys = past_kv.key_cache[i]
+                        self_attention_layer_values = past_kv.value_cache[i]
+                    else:
+                        self_attention_layer_keys = past_kv.layers[i].keys
+                        self_attention_layer_values = past_kv.layers[i].values
+                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
 
 class Gemma3nVision2TextModelTester:
