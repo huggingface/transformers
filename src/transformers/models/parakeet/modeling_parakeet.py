@@ -30,6 +30,7 @@ from ...utils import ModelOutput, TransformersKwargs, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
 from ..llama.modeling_llama import eager_attention_forward
+from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -82,45 +83,6 @@ class ParakeetEncoderFeedForward(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.linear2(hidden_states)
         return hidden_states
-
-
-class ParakeetEncoderConvModule(nn.Module):
-    def __init__(self, config: ParakeetEncoderConfig):
-        super().__init__()
-        self.padding = (config.conv_kernel_size - 1) // 2
-
-        self.pointwise_conv1 = nn.Conv1d(
-            config.hidden_size, config.hidden_size * 2, kernel_size=1, bias=config.use_bias
-        )
-        self.depthwise_conv = nn.Conv1d(
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=config.conv_kernel_size,
-            padding=0,
-            groups=config.hidden_size,
-            bias=config.use_bias,
-        )
-        self.batch_norm = nn.BatchNorm1d(config.hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=1, bias=config.use_bias)
-
-    def forward(self, hidden_states, attention_mask=None):
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        # Apply padding mask before convolution
-        if attention_mask is not None:
-            all_masked_rows = torch.all(~attention_mask, dim=-1)
-            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
-
-        hidden_states = nn.functional.pad(hidden_states, (self.padding, self.padding))
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.batch_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-
-        return hidden_states.transpose(1, 2)
 
 
 class ParakeetEncoderAttention(nn.Module):
@@ -291,7 +253,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
 
         self.feed_forward1 = ParakeetEncoderFeedForward(config)
         self.self_attn = ParakeetEncoderAttention(config, layer_idx)
-        self.conv = ParakeetEncoderConvModule(config)
+        self.conv = FastSpeech2ConformerConvolutionModule(config)
         self.feed_forward2 = ParakeetEncoderFeedForward(config)
 
         self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)

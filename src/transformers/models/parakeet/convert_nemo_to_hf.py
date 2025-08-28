@@ -84,6 +84,8 @@ NEMO_TO_HF_WEIGHT_MAPPING = {
     r"encoder\.layers\.(\d+)\.feed_forward2\.": r"encoder.layers.\1.feed_forward2.",
     # Conformer layers - convolution (NeMo already uses conv not conv_module)
     r"encoder\.layers\.(\d+)\.conv\.": r"encoder.layers.\1.conv.",
+    # BatchNorm to 'norm' mapping in convolution module
+    r"encoder\.layers\.(\d+)\.conv\.batch_norm\.": r"encoder.layers.\1.conv.norm.",
     # Conformer layers - layer norms (NeMo naming)
     r"encoder\.layers\.(\d+)\.norm_feed_forward1\.": r"encoder.layers.\1.norm_feed_forward1.",
     r"encoder\.layers\.(\d+)\.norm_feed_forward2\.": r"encoder.layers.\1.norm_feed_forward2.",

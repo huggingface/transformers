@@ -66,8 +66,6 @@ class ParakeetEncoderConfig(PretrainedConfig):
             The dropout ratio for the attention layers.
         max_position_embeddings (`int`, *optional*, defaults to 5000):
             The maximum sequence length that this model might ever be used with.
-        use_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the linear layers.
         scale_input (`bool`, *optional*, defaults to `True`):
             Whether to scale the input embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -113,7 +111,6 @@ class ParakeetEncoderConfig(PretrainedConfig):
         activation_dropout=0.1,
         attention_dropout=0.1,
         max_position_embeddings=5000,
-        use_bias=True,
         scale_input=True,
         initializer_range=0.02,
         **kwargs,
@@ -144,11 +141,8 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.attention_dropout = attention_dropout
         self.max_position_embeddings = max_position_embeddings
-
-        self.use_bias = use_bias
         self.scale_input = scale_input
         self.initializer_range = initializer_range
-
         self.use_bias = True
 
 
