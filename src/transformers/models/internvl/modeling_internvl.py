@@ -481,11 +481,6 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
-
 
 class InternVLMultiModalProjector(nn.Module):
     def __init__(self, config: InternVLConfig):

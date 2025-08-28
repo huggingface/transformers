@@ -1132,6 +1132,7 @@ class Blip2TextModelWithProjectionTester:
 
     def create_and_check_model(self, config, input_ids, attention_mask):
         model = Blip2TextModelWithProjection(config=config)
+        model.set_attn_implementation("eager")
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -1289,6 +1290,7 @@ class Blip2VisionModelWithProjectionTester:
     def create_and_check_model(self, config, pixel_values):
         model = Blip2VisionModelWithProjection(config=config)
         model.to(torch_device)
+        model.set_attn_implementation("eager")
         model.eval()
         with torch.no_grad():
             result = model(pixel_values, output_attentions=True, output_hidden_states=True)

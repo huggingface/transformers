@@ -489,7 +489,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
@@ -543,6 +543,11 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    _can_record_outputs = {
+        "hidden_states": Phi4MultimodalVisionEncoderLayer,
+        "attentions": Phi4MultimodalVisionAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -667,18 +672,13 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
+    @check_model_inputs
     def forward(
         self,
         pixel_values,
         patch_attention_mask: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_attention_mask = torch.ones(
@@ -709,8 +709,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -724,8 +723,6 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
