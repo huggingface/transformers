@@ -47,8 +47,10 @@ if is_librosa_available():
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
 
+if is_torchcodec_available():
+    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
+
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
-TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
