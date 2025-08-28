@@ -364,6 +364,7 @@ class GenerationTesterMixin:
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
             constraints=constraints,
+            trust_remote_code=True,
             use_cache=use_cache,
             **beam_kwargs,
             **logits_processor_kwargs,
@@ -729,6 +730,7 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 constraints=constraints,
                 beam_kwargs=beam_kwargs,
+                trust_remote_code=True,
             )
 
             if model.config.get_text_config(decoder=True).is_encoder_decoder:
@@ -753,6 +755,7 @@ class GenerationTesterMixin:
                 inputs_dict=inputs_dict,
                 constraints=constraints,
                 beam_kwargs=beam_kwargs,
+                trust_remote_code=True,
             )
 
             if model.config.get_text_config(decoder=True).is_encoder_decoder:
@@ -792,6 +795,7 @@ class GenerationTesterMixin:
                 output_hidden_states=True,
                 output_attentions=self.has_attentions,
                 return_dict_in_generate=True,
+                trust_remote_code=True,
                 use_cache=False,
             )
 
@@ -2893,6 +2897,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=1,
             max_length=30,
             remove_invalid_values=True,
+            trust_remote_code=True,
         )
 
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2932,6 +2937,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=1,
             # max_length=20,
             remove_invalid_values=True,
+            trust_remote_code=True,
         )
 
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2969,6 +2975,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_return_sequences=1,
             no_repeat_ngram_size=1,
             remove_invalid_values=True,
+            trust_remote_code=True,
         )
 
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -3040,6 +3047,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_return_sequences=1,
             no_repeat_ngram_size=1,
             remove_invalid_values=True,
+            trust_remote_code=True,
         )
 
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -3072,6 +3080,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             force_words_ids=[constraint_token_ids],
             min_length=5,
             eos_token_id=model.config.eos_token_id,
+            trust_remote_code=True,
             **model_kwargs,
         )
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -3132,6 +3141,7 @@ class GenerationIntegrationTests(unittest.TestCase):
                 num_return_sequences=1,
                 no_repeat_ngram_size=1,
                 remove_invalid_values=True,
+                trust_remote_code=True,
             )
 
         with self.assertRaises(ValueError):
@@ -3144,16 +3154,17 @@ class GenerationIntegrationTests(unittest.TestCase):
                 num_return_sequences=1,
                 no_repeat_ngram_size=1,
                 remove_invalid_values=True,
+                trust_remote_code=True,
             )
 
         with self.assertRaises(ValueError):
-            model.generate(input_ids, force_words_ids=[])
+            model.generate(input_ids, force_words_ids=[], trust_remote_code=True)
 
         with self.assertRaises(ValueError):
-            model.generate(input_ids, force_words_ids=[[-1]])
+            model.generate(input_ids, force_words_ids=[[-1]], trust_remote_code=True)
 
         with self.assertRaises(ValueError):
-            model.generate(input_ids, force_words_ids=[[[-1]]])
+            model.generate(input_ids, force_words_ids=[[[-1]]], trust_remote_code=True)
 
     def test_batched_decoder_start_id(self):
         articles = [
