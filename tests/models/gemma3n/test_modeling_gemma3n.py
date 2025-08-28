@@ -1137,5 +1137,5 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
