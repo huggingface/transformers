@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 @requires(backends=("sentencepiece",))
 class CpmTokenizer(PreTrainedTokenizer):
-    """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
+    """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     vocab_files_names = VOCAB_FILES_NAMES
 
