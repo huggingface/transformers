@@ -22,12 +22,13 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...models.backbone_utils import BackboneMixin
 from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention, BackboneOutput
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
@@ -257,5 +258,58 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
             hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
         )
 
+@auto_docstring
+class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
+    config: DINOv3ConvNextConfig
+    def __init__(self, config: DINOv3ConvNextConfig):
+        super().__init__(config)
+        super()._init_backbone(config)
 
-__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel"]
+        if not hasattr(config, "apply_layernorm"):
+            config.apply_layernorm = False
+        if not hasattr(config, "reshape_hidden_states"):
+            config.reshape_hidden_states = False
+
+        self.num_features = [config.num_channels] + list(config.hidden_sizes)
+
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, s) for s in range(config.num_stages)])
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return None
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ) -> BackboneOutput:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
+        hidden_states = pixel_values
+        all_hidden_states: List[torch.Tensor] = [hidden_states] 
+
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
+        if not output_hidden_states:
+            all_hidden_states.append(hidden_states)
+
+        # NCHW
+        feature_maps: List[torch.Tensor] = []
+        for stage, hs in zip(self.stage_names, all_hidden_states):
+            if stage in self.out_features:
+                feature_maps.append(hs)
+
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
+        )
+
+__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]
