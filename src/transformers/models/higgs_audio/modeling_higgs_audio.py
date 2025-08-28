@@ -1207,7 +1207,9 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         use_static_cache = isinstance(past_key_values, StaticCache)
 
         # Apply the LLM component
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, kwargs.get("output_attentions", False)
+        )
 
         hidden_states = inputs_embeds
 
@@ -1237,7 +1239,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids + position_id_offset)
 
         for decoder_layer in self.layers:
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 audio_attention_mask=audio_attention_mask if use_static_cache else None,
@@ -1251,8 +1253,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs
 
         hidden_states = self.norm(hidden_states)
 
