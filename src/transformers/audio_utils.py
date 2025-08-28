@@ -45,10 +45,6 @@ if is_librosa_available():
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
 
-if is_torchcodec_available():
-    from torchcodec.decoders import AudioDecoder
-
-
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
 
 
@@ -99,7 +95,9 @@ def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) ->
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["torchcodec"])
+    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
+    requires_backends(load_audio_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import AudioDecoder
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -123,7 +121,7 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["librosa"])
+    requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
