@@ -1209,7 +1209,10 @@ class PretrainedConfig(PushToHubMixin):
         return_both = decoder == encoder  # both unset or both set -> search all possible names
 
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
-        encoder_possible_text_config_names = ("text_encoder",)
+        encoder_possible_text_config_names = (
+            "text_encoder",
+            "encoder",
+        )
         if return_both:
             possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
         elif decoder:

@@ -1995,19 +1995,10 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
             else:
                 # For encoder-decoder models, we need to use separate configs for encoder and decoder
-                decoder_cache_kwargs = dynamic_cache_kwargs.copy()
-                encoder_cache_kwargs = dynamic_cache_kwargs.copy()
-
-                if "config" in dynamic_cache_kwargs:
-                    # Access the encoder/decoder sub-configs directly for models like T5Gemma
-                    if hasattr(self.config, "decoder") and hasattr(self.config, "encoder"):
-                        decoder_cache_kwargs["config"] = self.config.decoder
-                        encoder_cache_kwargs["config"] = self.config.encoder
-                    else:
-                        # Fallback to get_text_config for other encoder-decoder models
-                        decoder_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
-                        encoder_cache_kwargs["config"] = self.config.get_text_config(encoder=True)
-
+                decoder_cache_kwargs = {}
+                encoder_cache_kwargs = {}
+                decoder_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+                encoder_cache_kwargs["config"] = self.config.get_text_config(encoder=True)
                 model_kwargs[cache_name] = EncoderDecoderCache(
                     DynamicCache(**decoder_cache_kwargs), DynamicCache(**encoder_cache_kwargs)
                 )
@@ -3258,7 +3249,7 @@ class GenerationMixin(ContinuousMixin):
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = self.config.get_text_config().vocab_size
+            vocab_size = self.config.get_text_config(decoder=True).vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
