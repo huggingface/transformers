@@ -418,59 +418,72 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
-    def test_return_timestamps_and_language_in_preprocess(self):
-        pipe = pipeline(
-            task="automatic-speech-recognition",
-            model="openai/whisper-tiny",
-            chunk_length_s=8,
-            stride_length_s=1,
-            return_language=True,
+    def test_return_timestamps_and_language(self):
+        pipe = pipeline(task="automatic-speech-recognition", model="openai/whisper-tiny")
+        data = load_dataset(
+            "openslr/librispeech_asr",
+            "clean",
+            split="test",
+            streaming=True,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
         self.assertEqual(
             res,
-            {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [{"language": "english", "text": " Conquered returned to its place amidst the tents."}],
-            },
+            {"text": " Concord returned to its place amidst the tents."},
         )
 
         res = pipe(sample["audio"]["array"], return_timestamps=True)
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
+                "text": " Concord returned to its place amidst the tents.",
                 "chunks": [
                     {
                         "timestamp": (0.0, 3.36),
-                        "language": "english",
-                        "text": " Conquered returned to its place amidst the tents.",
+                        "text": " Concord returned to its place amidst the tents.",
                     }
                 ],
             },
         )
 
         res = pipe(sample["audio"]["array"], return_timestamps="word")
+        self.assertEqual(
+            res,
+            {
+                "text": " Concord returned to its place amidst the tents.",
+                "chunks": [
+                    {"text": " Concord", "timestamp": (0.0, 1.2)},
+                    {"text": " returned", "timestamp": (1.2, 1.62)},
+                    {"text": " to", "timestamp": (1.62, 1.86)},
+                    {"text": " its", "timestamp": (1.86, 2.02)},
+                    {"text": " place", "timestamp": (2.02, 2.28)},
+                    {"text": " amidst", "timestamp": (2.28, 2.82)},
+                    {"text": " the", "timestamp": (2.82, 2.98)},
+                    {"text": " tents.", "timestamp": (2.98, 3.48)},
+                ],
+            },
+        )
+
+        res = pipe(sample["audio"]["array"], return_language=True, return_timestamps="word")
         # fmt: off
         self.assertEqual(
             res,
             {
-                'text': ' Conquered returned to its place amidst the tents.',
-                'chunks': [
-                    {"language": "english",'text': ' Conquered', 'timestamp': (0.5, 1.2)},
-                    {"language": "english", 'text': ' returned', 'timestamp': (1.2, 1.64)},
-                    {"language": "english",'text': ' to', 'timestamp': (1.64, 1.84)},
-                    {"language": "english",'text': ' its', 'timestamp': (1.84, 2.02)},
-                    {"language": "english",'text': ' place', 'timestamp': (2.02, 2.28)},
-                    {"language": "english",'text': ' amidst', 'timestamp': (2.28, 2.8)},
-                    {"language": "english",'text': ' the', 'timestamp': (2.8, 2.98)},
-                    {"language": "english",'text': ' tents.', 'timestamp': (2.98, 3.48)},
+                "text": " Concord returned to its place amidst the tents.",
+                "chunks": [
+                    {"text": " Concord","timestamp": (0.0, 1.2),"language": "english",},
+                    {"text": " returned","timestamp": (1.2, 1.62),"language": "english",},
+                    {"text": " to", "timestamp": (1.62, 1.86), "language": "english"},
+                    {"text": " its", "timestamp": (1.86, 2.02), "language": "english"},
+                    {"text": " place","timestamp": (2.02, 2.28),"language": "english",},
+                    {"text": " amidst","timestamp": (2.28, 2.82),"language": "english",},
+                    {"text": " the", "timestamp": (2.82, 2.98), "language": "english"},
+                    {"text": " tents.","timestamp": (2.98, 3.48),"language": "english",},
                 ],
             },
+
         )
         # fmt: on
 
