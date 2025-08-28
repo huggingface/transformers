@@ -1585,7 +1585,7 @@ class ModelTesterMixin:
                         head_dim = model.config.hidden_size // model.config.num_attention_heads
 
                         cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = DynamicCache()
+                        empty_pkv = DynamicCache(config=model.config)
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -4313,8 +4313,10 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
-        Tests that the given attention implementation can work with packed sequences and infers the mask
-        from position ids. This test requires the model to use new attention mask API which handles packing.
+        Tests whether flash attention can continue its generation from given position ids.
+
+        NOTE: This serves as regression check as we had instances where flash attention entered the varlen
+        path here. It should now always enter the base `flash_fn`.
         """
 
         max_new_tokens = 2
@@ -4391,7 +4393,6 @@ class ModelTesterMixin:
                 next_token_logits_from_generate = generation_out.logits[-1]
 
                 # acceptable numerical instability
-                # print(next_token_logits_from_generate, next_token_logits)
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(next_token_logits_from_generate, next_token_logits, rtol=tol, atol=tol)
 

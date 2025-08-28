@@ -107,7 +107,7 @@ model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 messages = [{"role": "user", "content": "Hello, what's your name."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
