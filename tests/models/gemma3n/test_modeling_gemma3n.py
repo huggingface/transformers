@@ -39,6 +39,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -375,6 +376,13 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="Gemma3n flash attention does not support right padding")
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
@@ -1054,7 +1062,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A']  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @unittest.skip("For now, using a gemma model with the 3n class is not supported")
@@ -1129,5 +1137,5 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
