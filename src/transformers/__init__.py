@@ -653,6 +653,9 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import Constraint as Constraint
+    from .generation import ConstraintListState as ConstraintListState
+    from .generation import DisjunctiveConstraint as DisjunctiveConstraint
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria

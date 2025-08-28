@@ -177,6 +177,27 @@ class ClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Constraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConstraintListState(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DisjunctiveConstraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EncoderNoRepeatNGramLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
