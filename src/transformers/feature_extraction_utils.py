@@ -20,7 +20,7 @@ import json
 import os
 import warnings
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
 
@@ -54,6 +54,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
+
+# type hinting: specifying the type of feature extractor class that inherits from FeatureExtractionMixin
+SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="FeatureExtractionMixin")
 
 
 class BatchFeature(UserDict):
@@ -270,7 +273,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificFeatureExtractorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -278,7 +281,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> SpecificFeatureExtractorType:
         r"""
         Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature extractor, *e.g.* a
         derived class of [`SequenceFeatureExtractor`].
@@ -308,7 +311,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -402,7 +405,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )

@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_cv2,
     require_decord,
     require_torch,
+    require_torchcodec,
     require_torchvision,
     require_vision,
 )
@@ -261,11 +262,18 @@ class LoadVideoTester(unittest.TestCase):
 
     @require_decord
     @require_torchvision
+    @require_torchcodec
     @require_cv2
     def test_load_video_backend_url(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             backend="decord",
+        )
+        self.assertEqual(video.shape, (243, 360, 640, 3))
+
+        video, _ = load_video(
+            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            backend="torchcodec",
         )
         self.assertEqual(video.shape, (243, 360, 640, 3))
 
@@ -283,6 +291,7 @@ class LoadVideoTester(unittest.TestCase):
 
     @require_decord
     @require_torchvision
+    @require_torchcodec
     @require_cv2
     def test_load_video_backend_local(self):
         video_file_path = hf_hub_download(
@@ -297,6 +306,10 @@ class LoadVideoTester(unittest.TestCase):
         self.assertIsInstance(metadata, VideoMetadata)
 
         video, metadata = load_video(video_file_path, backend="torchvision")
+        self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertIsInstance(metadata, VideoMetadata)
+
+        video, metadata = load_video(video_file_path, backend="torchcodec")
         self.assertEqual(video.shape, (243, 360, 640, 3))
         self.assertIsInstance(metadata, VideoMetadata)
 

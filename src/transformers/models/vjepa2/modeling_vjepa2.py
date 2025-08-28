@@ -187,7 +187,7 @@ def rotate_queries_or_keys(x, pos):
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
     omega /= D / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
-    freq = torch.einsum("..., f -> ... f", pos, omega)  # (..., N, D/2), outer product
+    freq = pos.unsqueeze(-1) * omega  # (..., N, D/2), outer product
 
     # -- build rotation matrix and apply
     emb_sin = freq.sin()  # (..., N, D/2)
@@ -242,14 +242,6 @@ class VJEPA2RopeAttention(nn.Module):
 
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
 
     def _get_frame_pos(self, ids):
         tokens_per_frame = int(self.grid_size * self.grid_size)
@@ -309,11 +301,22 @@ class VJEPA2RopeAttention(nn.Module):
         output_attentions: bool = False,
         head_mask: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         pos_ids = self.get_position_ids(hidden_states, masks=position_mask)
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
@@ -487,6 +490,7 @@ class VJEPA2Encoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -681,6 +685,7 @@ class VJEPA2Predictor(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -976,7 +981,7 @@ class VJEPA2AttentivePooler(nn.Module):
 
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
-    config_class = VJEPA2Config
+    config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
@@ -987,7 +992,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         "VJEPA2PredictorEmbeddings",
     ]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1065,10 +1070,9 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
         context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
             The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
@@ -1172,8 +1176,6 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

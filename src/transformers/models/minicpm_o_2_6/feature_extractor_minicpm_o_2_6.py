@@ -22,7 +22,6 @@ import torch
 
 
 class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -57,8 +56,9 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         # audio placeholder not dependent on audio_parts
         for audios in audios_list:
             if audios:
-                audio_ph_list.append([self.get_audio_placeholder(tokenizer,
-                    len(a), chunk_input, chunk_length) for a in audios])
+                audio_ph_list.append(
+                    [self.get_audio_placeholder(tokenizer, len(a), chunk_input, chunk_length) for a in audios]
+                )
             else:
                 audio_ph_list.append([])
 
@@ -90,8 +90,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
                     final_merge_audio.append(audio)
                 else:
                     for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(
-                            audio[i * max_audio_inp_len: (i + 1) * max_audio_inp_len])
+                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
 
             if audios:
                 audio_inputs = super().__call__(
@@ -126,8 +125,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
 
     def get_audio_placeholder(self, tokenizer, audio_lens, chunk_input, chunk_length):
         pool_step = 2
-        feature_lens = math.ceil(
-            audio_lens / self.hop_length)
+        feature_lens = math.ceil(audio_lens / self.hop_length)
 
         feature_lens = (feature_lens - 1) // 2 + 1
         output_lens = (feature_lens - pool_step) // pool_step + 1
@@ -135,28 +133,22 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         if chunk_input:
             fbank_feat_in_chunk = int(chunk_length * 100)
             cnn_feat_in_chunk = (fbank_feat_in_chunk - 1) // 2 + 1
-            audio_embeds_in_chunk = (
-                cnn_feat_in_chunk - pool_step) // pool_step + 1
-            num_audio_chunks = (
-                output_lens + audio_embeds_in_chunk - 1) // audio_embeds_in_chunk
+            audio_embeds_in_chunk = (cnn_feat_in_chunk - pool_step) // pool_step + 1
+            num_audio_chunks = (output_lens + audio_embeds_in_chunk - 1) // audio_embeds_in_chunk
 
             place_holders = ""
             total_unk_len = 0
             for _ in range(num_audio_chunks):
-                unk_len = min(audio_embeds_in_chunk,
-                              output_lens - total_unk_len)
-                place_holders += tokenizer.audio_start + \
-                    tokenizer.unk_token * unk_len + tokenizer.audio_end
+                unk_len = min(audio_embeds_in_chunk, output_lens - total_unk_len)
+                place_holders += tokenizer.audio_start + tokenizer.unk_token * unk_len + tokenizer.audio_end
                 total_unk_len += unk_len
             audio_placeholder = place_holders
         else:
-            audio_placeholder = tokenizer.audio_start + \
-                tokenizer.unk_token * output_lens + tokenizer.audio_end
+            audio_placeholder = tokenizer.audio_start + tokenizer.unk_token * output_lens + tokenizer.audio_end
 
         return audio_placeholder
 
 
-AutoFeatureExtractor.register(
-    "MiniCPM_o_2_6FeatureExtractor", MiniCPM_o_2_6FeatureExtractor)
+AutoFeatureExtractor.register("MiniCPM_o_2_6FeatureExtractor", MiniCPM_o_2_6FeatureExtractor)
 
 __all__ = ["MiniCPM_o_2_6FeatureExtractor"]

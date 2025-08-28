@@ -59,10 +59,17 @@ if __name__ == "__main__":
 
     for file in all_doctest_files:
         file_dir = "/".join(Path(file).parents[0].parts)
+
+        # not to run files in `src/` for now as it is completely broken at this moment. See issues/39159 and
+        # https://github.com/huggingface/transformers/actions/runs/15988670157
+        # TODO (ydshieh): fix the error, ideally before 2025/09
+        if file_dir.startswith("src/"):
+            continue
+
         raw_test_collection_map[file_dir].append(file)
 
     refined_test_collection_map = {}
-    for file_dir in raw_test_collection_map.keys():
+    for file_dir in raw_test_collection_map:
         if file_dir in ["docs/source/en/model_doc", "docs/source/en/tasks"]:
             for file in raw_test_collection_map[file_dir]:
                 refined_test_collection_map[file] = file

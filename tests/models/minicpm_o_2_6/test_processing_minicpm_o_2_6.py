@@ -59,8 +59,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor_kwargs = cls.prepare_processor_dict()
-        processor = AutoProcessor.from_pretrained(
-            "openbmb/MiniCPM-o-2_6", **processor_kwargs)
+        processor = AutoProcessor.from_pretrained("openbmb/MiniCPM-o-2_6", **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
 
     @staticmethod
@@ -101,8 +100,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         """Preparing the audio input for testing"""
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
         response = requests.get(audio_url)
-        audio, _ = librosa.load(io.BytesIO(
-            response.content), sr=16000, mono=True)
+        audio, _ = librosa.load(io.BytesIO(response.content), sr=16000, mono=True)
         if batch_size == 1:
             return audio
         return [[audio]] * batch_size
@@ -131,8 +129,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         audio = self.prepare_audio_inputs()
 
         # Test with all modalities
-        inputs = processor(text=[input_text], images=[image],
-                           audios=[audio], return_tensors="pt")
+        inputs = processor(text=[input_text], images=[image], audios=[audio], return_tensors="pt")
 
         # 检查输入中包含所有模态相关的键
         self.assertIn("input_ids", inputs)
@@ -144,13 +141,11 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
 
         # 检查处理器能处理批量输入
         batch_size = 2
-        input_texts = self.prepare_text_inputs(
-            batch_size=batch_size, modality="mixed")
+        input_texts = self.prepare_text_inputs(batch_size=batch_size, modality="mixed")
         images = self.prepare_image_inputs(batch_size=batch_size)
         audios = self.prepare_audio_inputs(batch_size=batch_size)
 
-        batch_inputs = processor(
-            text=input_texts, images=images, audios=audios, return_tensors="pt")
+        batch_inputs = processor(text=input_texts, images=images, audios=audios, return_tensors="pt")
         self.assertEqual(batch_inputs["input_ids"].shape[0], batch_size)
         self.assertEqual(batch_inputs["attention_mask"].shape[0], batch_size)
 
@@ -163,19 +158,17 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello, how are you?"},
-            {"role": "assistant", "content": "I'm doing well, thank you!"}
+            {"role": "assistant", "content": "I'm doing well, thank you!"},
         ]
 
         # 测试不带标记化的应用
-        formatted_prompt = processor.tokenizer.apply_chat_template(
-            messages, tokenize=False)
+        formatted_prompt = processor.tokenizer.apply_chat_template(messages, tokenize=False)
         self.assertIsInstance(formatted_prompt, str)
         self.assertTrue("<|im_start|>" in formatted_prompt)
         self.assertTrue("<|im_end|>" in formatted_prompt)
 
         # 测试带标记化的应用
-        tokenized_prompt = processor.tokenizer.apply_chat_template(
-            messages, tokenize=True, return_tensors="pt")
+        tokenized_prompt = processor.tokenizer.apply_chat_template(messages, tokenize=True, return_tensors="pt")
         self.assertIsInstance(tokenized_prompt, torch.Tensor)
 
     @require_torch
@@ -186,13 +179,10 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         image = self.prepare_image_inputs()
 
         # 准备包含图像的消息
-        messages = [
-            {"role": "user", "content": [image, "What is in this image?"]}
-        ]
+        messages = [{"role": "user", "content": [image, "What is in this image?"]}]
 
         # 测试聊天模板应用
-        inputs = processor.apply_chat_template(
-            msgs=messages, omni_input=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(msgs=messages, omni_input=True, return_tensors="pt")
 
         # 检查输出中有图像相关的数据
         self.assertIn("input_ids", inputs)
@@ -208,10 +198,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         audio = self.prepare_audio_inputs()
 
         # 准备包含音频的消息
-        messages = [
-            {"role": "user", "content": [
-                audio, "What was said in this audio?"]}
-        ]
+        messages = [{"role": "user", "content": [audio, "What was said in this audio?"]}]
 
         # 测试聊天模板应用
         inputs = processor.apply_chat_template(
@@ -234,10 +221,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         audio = self.prepare_audio_inputs()
 
         # 准备包含多种媒体的消息
-        messages = [
-            {"role": "user", "content": [
-                image, audio, "Describe this image and audio."]}
-        ]
+        messages = [{"role": "user", "content": [image, audio, "Describe this image and audio."]}]
 
         # 测试聊天模板应用
         inputs = processor.apply_chat_template(
@@ -271,13 +255,11 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         self.assertIn("You are a helpful assistant", sys_prompt["content"][0])
 
         # 测试语音克隆提示
-        sys_prompt = processor.get_sys_prompt(
-            ref_audio=audio, mode="voice_cloning", language="en")
+        sys_prompt = processor.get_sys_prompt(ref_audio=audio, mode="voice_cloning", language="en")
         self.assertIn("Clone the voice", sys_prompt["content"][0])
 
         # 测试语音助手模式
-        sys_prompt = processor.get_sys_prompt(
-            ref_audio=audio, mode="audio_assistant", language="zh")
+        sys_prompt = processor.get_sys_prompt(ref_audio=audio, mode="audio_assistant", language="zh")
         self.assertIn("模仿输入音频中的声音特征", sys_prompt["content"][0])
 
     def test_decode(self):
@@ -295,8 +277,7 @@ class MiniCPM_o_2_6ProcessorTest(unittest.TestCase):
         self.assertIsInstance(result, str)
 
         # 测试批量输出
-        mock_output = MockOutput(torch.tensor(
-            [[1, 2, 3, 4, 0, 0], [5, 6, 7, 8, 0, 0]]))
+        mock_output = MockOutput(torch.tensor([[1, 2, 3, 4, 0, 0], [5, 6, 7, 8, 0, 0]]))
         result = processor.decode(mock_output, batched=True)
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)

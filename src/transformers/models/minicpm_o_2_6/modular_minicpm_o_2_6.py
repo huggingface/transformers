@@ -41,13 +41,34 @@ from torch.nn.utils.parametrizations import weight_norm
 
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer
+from transformers import (
+    AutoProcessor,
+    BertTokenizerFast,
+    LlamaConfig,
+    LlamaModel,
+    PreTrainedModel,
+    Qwen2ForCausalLM,
+    Qwen2PreTrainedModel,
+    TextIteratorStreamer,
+)
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from transformers.utils import ModelOutput, logging, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, replace_return_docstrings
+from transformers.utils import (
+    ModelOutput,
+    logging,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    replace_return_docstrings,
+)
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-from transformers.models.siglip.modeling_siglip import SIGLIP_START_DOCSTRING, SIGLIP_VISION_INPUTS_DOCSTRING, SiglipEncoderLayer, SiglipPreTrainedModel
+from transformers.models.siglip.modeling_siglip import (
+    SIGLIP_START_DOCSTRING,
+    SIGLIP_VISION_INPUTS_DOCSTRING,
+    SiglipEncoderLayer,
+    SiglipPreTrainedModel,
+)
 from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
 from transformers.models.whisper.modeling_whisper import WhisperConfig, WhisperEncoder, WhisperEncoderLayer
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -67,6 +88,7 @@ from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, Voice
 
 logger = logging.get_logger(__name__)
 
+
 @dataclass
 class OmniOutput(ModelOutput):
     """
@@ -83,6 +105,7 @@ class OmniOutput(ModelOutput):
         sampling_rate (Optional[int]):
             The sampling rate (Hz) of the generated audio waveform. For example, 24000 or 16000.
     """
+
     text: Optional[Union[str, List[str], Iterator]] = None
     spk_embeds: Optional[torch.FloatTensor] = None
     audio_wav: Optional[np.ndarray] = None
@@ -380,11 +403,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             vllm_embedding = self.llm.model.embed_tokens(data["input_ids"])
 
         new_vllm_embedding = vllm_embedding.clone()
-        
+
         vision_hidden_states = [
             i.type(vllm_embedding.dtype) if isinstance(i, torch.Tensor) else i for i in vision_hidden_states
         ]
-        
+
         bs = len(data["input_ids"])
         for i in range(bs):
             cur_vs_hs = vision_hidden_states[i]
@@ -486,7 +509,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         Returns:
             List[List[torch.Tensor]]: audio embeddings
         """
-        
+
         wavforms = data.get("audio_features", [])  # (bs, 80, frames) or [], multi audios need filled in advance
         audio_feature_lens_raw = data.get("audio_feature_lens", [])  # list, [[x1, x2], [y1], [z1]]
 
@@ -889,21 +912,21 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
             processor = self.processor
 
-        assert (
-            self.config.query_num == processor.image_processor.image_feature_size
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.patch_size == processor.image_processor.patch_size
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.use_image_id == processor.image_processor.use_image_id
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.slice_config.max_slice_nums == processor.image_processor.max_slice_nums
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
-        assert (
-            self.config.slice_mode == processor.image_processor.slice_mode
-        ), "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        assert self.config.query_num == processor.image_processor.image_feature_size, (
+            "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        )
+        assert self.config.patch_size == processor.image_processor.patch_size, (
+            "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        )
+        assert self.config.use_image_id == processor.image_processor.use_image_id, (
+            "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        )
+        assert self.config.slice_config.max_slice_nums == processor.image_processor.max_slice_nums, (
+            "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        )
+        assert self.config.slice_mode == processor.image_processor.slice_mode, (
+            "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
+        )
 
         prompts_lists = []
         input_images_list = []
@@ -1620,7 +1643,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     break
 
             if tts_token_lens >= (chunk_idx + 1) * self.tts.streaming_text_chunk_size:
-
                 # do prefill and generate
                 if chunk_idx == 0:
                     begin = 0
@@ -1628,7 +1650,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 else:
                     begin = chunk_idx * self.tts.streaming_text_chunk_size + tts_start_token_len
                     end = min(
-                        (chunk_idx + 1) * self.tts.streaming_text_chunk_size + tts_start_token_len, condition_length - 1
+                        (chunk_idx + 1) * self.tts.streaming_text_chunk_size + tts_start_token_len,
+                        condition_length - 1,
                     )
 
                 tts_input_ids = self.tts_processor.text_tokenizer(
@@ -1845,7 +1868,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         if prev_wav is not None:
             cur_text = gen_text_raw[prev_text_len:]
-            yield OmniOutput(text=cur_text, audio_wav=prev_wav, sampling_rate=sr)  # yield last chunk wav without smooth
+            yield OmniOutput(
+                text=cur_text, audio_wav=prev_wav, sampling_rate=sr
+            )  # yield last chunk wav without smooth
 
         if new_segment_gen and not stop:
             logger.debug(
@@ -1947,7 +1972,6 @@ class MiniCPMWhisperEncoderLayer(WhisperEncoderLayer):
 
 # Copied from from transformers.models.whisper.modeling_whisper.WhisperEncoder and add use_cache for streaming inference
 class MiniCPMWhisperEncoder(WhisperEncoder):
-
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -2118,9 +2142,9 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size()[0] == (len(self.layers)), (
+                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -3261,7 +3285,6 @@ def prepare_inputs_for_generation(
     return model_inputs
 
 
-
 def get_2d_sincos_pos_embed(embed_dim, image_size):
     """
     image_size: image_size or (image_height, image_width)
@@ -3719,9 +3742,9 @@ class MultiheadAttention(nn.MultiheadAttention):
                 # longer causal.
                 is_causal = False
 
-        assert (
-            embed_dim == embed_dim_to_check
-        ), f"was expecting embedding dimension of {embed_dim_to_check}, but got {embed_dim}"
+        assert embed_dim == embed_dim_to_check, (
+            f"was expecting embedding dimension of {embed_dim_to_check}, but got {embed_dim}"
+        )
         if isinstance(embed_dim, torch.Tensor):
             # embed_dim can be a tensor when JIT tracing
             head_dim = embed_dim.div(num_heads, rounding_mode="trunc")
@@ -3730,9 +3753,9 @@ class MultiheadAttention(nn.MultiheadAttention):
         assert head_dim * num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
         if use_separate_proj_weight:
             # allow MHA to have different embedding dimensions when separate projection weights are used
-            assert (
-                key.shape[:2] == value.shape[:2]
-            ), f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
+            assert key.shape[:2] == value.shape[:2], (
+                f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
+            )
         else:
             assert key.shape == value.shape, f"key shape {key.shape} does not match value shape {value.shape}"
 
@@ -3794,19 +3817,23 @@ class MultiheadAttention(nn.MultiheadAttention):
             k = k.view(k.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
         else:
             # TODO finish disentangling control flow so we don't do in-projections when statics are passed
-            assert (
-                static_k.size(0) == bsz * num_heads
-            ), f"expecting static_k.size(0) of {bsz * num_heads}, but got {static_k.size(0)}"
-            assert static_k.size(2) == head_dim, f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
+            assert static_k.size(0) == bsz * num_heads, (
+                f"expecting static_k.size(0) of {bsz * num_heads}, but got {static_k.size(0)}"
+            )
+            assert static_k.size(2) == head_dim, (
+                f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
+            )
             k = static_k
         if static_v is None:
             v = v.view(v.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
         else:
             # TODO finish disentangling control flow so we don't do in-projections when statics are passed
-            assert (
-                static_v.size(0) == bsz * num_heads
-            ), f"expecting static_v.size(0) of {bsz * num_heads}, but got {static_v.size(0)}"
-            assert static_v.size(2) == head_dim, f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
+            assert static_v.size(0) == bsz * num_heads, (
+                f"expecting static_v.size(0) of {bsz * num_heads}, but got {static_v.size(0)}"
+            )
+            assert static_v.size(2) == head_dim, (
+                f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
+            )
             v = static_v
 
         # add zero attention along batch dimension (now first)
@@ -3952,9 +3979,9 @@ def _mha_shape_check(
             )
             if attn_mask.dim() == 3:
                 expected_shape = (num_heads, query.shape[0], key.shape[0])
-                assert (
-                    attn_mask.shape == expected_shape
-                ), f"Expected `attn_mask` shape to be {expected_shape} but got {attn_mask.shape}"
+                assert attn_mask.shape == expected_shape, (
+                    f"Expected `attn_mask` shape to be {expected_shape} but got {attn_mask.shape}"
+                )
     else:
         raise AssertionError(
             f"query should be unbatched 2D or batched 3D tensor but received {query.dim()}-D query tensor"
@@ -3971,7 +3998,6 @@ def _canonical_mask(
     target_type: DType,
     check_other: bool = True,
 ) -> Optional[Tensor]:
-
     if mask is not None:
         _mask_dtype = mask.dtype
         _mask_is_float = torch.is_floating_point(mask)
@@ -4095,7 +4121,6 @@ def _in_projection(
     assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
     assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
     return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
-
 
 
 _CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"
@@ -4313,7 +4338,10 @@ class MiniCPMVisionEncoder(Idefics2Encoder):
         self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-@add_start_docstrings("""The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING)
+
+@add_start_docstrings(
+    """The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING
+)
 class MiniCPMVisionTransformer(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
@@ -4405,5 +4433,6 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 __all__ = ["MiniCPM_o_2_6Model", "MiniCPM_o_2_6PreTrainedModel"]

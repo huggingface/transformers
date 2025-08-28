@@ -22,7 +22,7 @@ import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 
 import tensorflow as tf
 
@@ -92,7 +92,7 @@ class TFSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[tf.Tensor] = None
+    last_hidden_state: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: tuple[tf.Tensor, ...] | None = None
@@ -127,7 +127,7 @@ class TFSwinModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[tf.Tensor] = None
+    last_hidden_state: tf.Tensor | None = None
     pooler_output: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
@@ -164,7 +164,7 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    reconstruction: Optional[tf.Tensor] = None
+    reconstruction: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: tuple[tf.Tensor, ...] | None = None
@@ -209,7 +209,7 @@ class TFSwinImageClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: Optional[tf.Tensor] = None
+    logits: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: tuple[tf.Tensor, ...] | None = None
@@ -308,7 +308,7 @@ class TFSwinEmbeddings(keras.layers.Layer):
                 self.dropout.build(None)
 
     def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[bool] = None, training: bool = False
+        self, pixel_values: tf.Tensor, bool_masked_pos: bool | None = None, training: bool = False
     ) -> tuple[tf.Tensor, tuple[int, int]]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values, training=training)
         embeddings = self.norm(embeddings, training=training)
@@ -413,7 +413,7 @@ class TFSwinPatchMerging(keras.layers.Layer):
     """
 
     def __init__(
-        self, input_resolution: tuple[int, int], dim: int, norm_layer: Optional[Callable] = None, **kwargs
+        self, input_resolution: tuple[int, int], dim: int, norm_layer: Callable | None = None, **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.input_resolution = input_resolution
@@ -439,7 +439,7 @@ class TFSwinPatchMerging(keras.layers.Layer):
         batch_size, _, num_channels = shape_list(input_feature)
 
         input_feature = tf.reshape(input_feature, (batch_size, height, width, num_channels))
-        # pad input to be disible by width and height, if needed
+        # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
         # [batch_size, height/2, width/2, num_channels]
         input_feature_0 = input_feature[:, 0::2, 0::2, :]
@@ -475,7 +475,7 @@ class TFSwinPatchMerging(keras.layers.Layer):
 class TFSwinDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True, **kwargs) -> None:
+    def __init__(self, drop_prob: float | None = None, scale_by_keep: bool = True, **kwargs) -> None:
         super().__init__(**kwargs)
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -908,7 +908,7 @@ class TFSwinStage(keras.layers.Layer):
         depth: int,
         num_heads: int,
         drop_path: list[float],
-        downsample: Optional[Callable],
+        downsample: Callable | None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -945,7 +945,7 @@ class TFSwinStage(keras.layers.Layer):
         hidden_states: tf.Tensor,
         input_dimensions: tuple[int, int],
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
         training: bool = False,
     ) -> tuple[tf.Tensor, ...]:
         height, width = input_dimensions
@@ -1015,7 +1015,7 @@ class TFSwinEncoder(keras.layers.Layer):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor, ...], TFSwinEncoderOutput]:
+    ) -> tuple[tf.Tensor, ...] | TFSwinEncoderOutput:
         all_input_dimensions = ()
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
@@ -1157,9 +1157,9 @@ class AdaptiveAveragePooling1D(keras.layers.Layer):
 
     def __init__(
         self,
-        output_size: Union[int, Iterable[int]],
+        output_size: int | Iterable[int],
         reduce_function: Callable = tf.reduce_mean,
-        data_format: Optional[str] = None,
+        data_format: str | None = None,
         **kwargs,
     ) -> None:
         self.data_format = normalize_data_format(data_format)
@@ -1225,7 +1225,7 @@ class TFSwinMainLayer(keras.layers.Layer):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def get_head_mask(self, head_mask: Optional[Any]) -> list:
+    def get_head_mask(self, head_mask: Any | None) -> list:
         if head_mask is not None:
             raise NotImplementedError
         return [None] * len(self.config.depths)
@@ -1236,11 +1236,11 @@ class TFSwinMainLayer(keras.layers.Layer):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFSwinModelOutput, tuple[tf.Tensor, ...]]:
+    ) -> TFSwinModelOutput | tuple[tf.Tensor, ...]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1332,11 +1332,11 @@ class TFSwinModel(TFSwinPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFSwinModelOutput, tuple[tf.Tensor, ...]]:
+    ) -> TFSwinModelOutput | tuple[tf.Tensor, ...]:
         r"""
         bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1449,11 +1449,11 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple, TFSwinMaskedImageModelingOutput]:
+    ) -> tuple | TFSwinMaskedImageModelingOutput:
         r"""
         bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1583,11 +1583,11 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
         pixel_values: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor, ...], TFSwinImageClassifierOutput]:
+    ) -> tuple[tf.Tensor, ...] | TFSwinImageClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

@@ -14,12 +14,13 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import check_model_inputs
 from .configuration_super import SuperConfig
 
 
@@ -48,7 +49,7 @@ class SuperRotaryEmbedding(nn.Module):
     def __init__(self, config: SuperConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -148,7 +149,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -192,15 +193,16 @@ class SuperAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -211,10 +213,10 @@ class SuperAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -247,28 +249,26 @@ class SuperDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = SuperRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SuperRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -281,41 +281,26 @@ class SuperDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
 class SuperPreTrainedModel(PreTrainedModel):
-    config_class = SuperConfig
+    config: SuperConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SuperDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, SuperRMSNorm):
-            module.weight.data.fill_(1.0)
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": SuperDecoderLayer,
+        "attentions": SuperAttention,
+    }
 
 
 @auto_docstring
@@ -336,13 +321,7 @@ class SuperModel(SuperPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

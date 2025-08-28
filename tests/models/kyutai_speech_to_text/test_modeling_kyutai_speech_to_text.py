@@ -30,14 +30,14 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_accelerate,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -339,11 +339,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                         )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+        if use_attention_mask or (not use_attention_mask and dtype == "fp32" and not output_attentions):
             self.skipTest("Test is failing, fix me :) ")
         parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
         parent_parameterized_test(self)
@@ -389,7 +388,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -526,7 +525,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self._check_similar_generate_outputs(outputs, outputs_cached)
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(
@@ -547,11 +546,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_2": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -596,7 +595,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
@@ -605,21 +604,92 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
                 model_attn = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
                 res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
                 del model_attn
                 gc.collect()
 
-                self._check_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
+                self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
+
+
+@require_torch
+@require_accelerate
+@slow
+class KyutaiSpeechToTextBf16Test(unittest.TestCase):
+    def test_bf16_fp32_conversion(self):
+        r"""
+        A test to check whether the argument `keep_in_fp32_modules` correctly does its job
+        """
+        model_checkpoint = "kyutai/stt-2.6b-en-trfs"
+        orig_import = __import__
+        accelerate_mock = unittest.mock.Mock()
+
+        # mock import of accelerate
+        def import_accelerate_mock(name, *args, **kwargs):
+            if name == "accelerate":
+                if accelerate_available:
+                    return accelerate_mock
+                else:
+                    raise ImportError
+            return orig_import(name, *args, **kwargs)
+
+        # Load without using `accelerate`
+        with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
+            accelerate_available = False
+
+            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_checkpoint, dtype=torch.float16)
+            self.assertTrue(model.codec_model.dtype == torch.float32)
+            self.assertTrue(model.model.dtype == torch.float16)
+            self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
+
+            # Load without in bf16
+            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_checkpoint, dtype=torch.bfloat16)
+            self.assertTrue(model.codec_model.dtype == torch.float32)
+            self.assertTrue(model.model.dtype == torch.bfloat16)
+            self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
+
+        # Load using `accelerate` in bf16
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint, dtype=torch.bfloat16, device_map="auto"
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.bfloat16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
+
+        # Load using `accelerate` in bf16
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint,
+            dtype=torch.bfloat16,
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.bfloat16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
+
+        # Load without using `accelerate`
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint,
+            dtype=torch.float16,
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.float16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
+
+        # Load using `accelerate`
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint, dtype=torch.float16, device_map="auto"
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.float16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
 
 
 class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCase):
     _dataset = None
 
     def setUp(self):
-        self.model_checkpoint = "kyutai/stt-2.6b-en"
+        self.model_checkpoint = "kyutai/stt-2.6b-en-trfs"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -637,7 +707,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
     def _load_datasamples(self, num_samples):
         self._load_dataset()
         ds = self._dataset
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     @slow
@@ -701,4 +771,11 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         ])
         # fmt: on
 
-        torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        # See https://github.com/huggingface/transformers/pull/39416
+        EXPECTED_TOKENS_2 = torch.clone(EXPECTED_TOKENS)
+        EXPECTED_TOKENS_2[2, 159:162] = torch.tensor([3, 0, 269])
+
+        try:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        except AssertionError:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS_2)

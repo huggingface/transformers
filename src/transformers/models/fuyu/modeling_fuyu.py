@@ -20,12 +20,12 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_fuyu import FuyuConfig
 
 
@@ -34,11 +34,11 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
-    config_class = FuyuConfig
+    config: FuyuConfig
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
@@ -54,9 +54,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -150,6 +147,30 @@ class FuyuModel(FuyuPreTrainedModel):
         ]
         return patch_embeddings
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @auto_docstring
     def forward(
         self,
@@ -158,7 +179,7 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -190,15 +211,9 @@ class FuyuModel(FuyuPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_is or inputs_embeds")
 
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
-
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
@@ -206,14 +221,14 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            if image_patches is not None and past_key_values is None:
-                patch_embeddings = self.get_image_features(image_patches)
-                patch_embeddings = torch.cat(patch_embeddings, dim=0)
 
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
+        if image_patches is not None:
+            patch_embeddings = self.get_image_features(image_patches)
+            patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -255,12 +270,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -276,7 +285,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -370,6 +379,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         image_patches=None,
         image_patches_indices=None,
+        cache_position=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -381,23 +391,16 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
+            cache_position=cache_position,
             **kwargs,
         )
 
-        if past_key_values is not None:
+        if cache_position[0] != 0:
+            # set image_patches and image_patches_indices to `None` for decoding stage
             model_inputs["image_patches_indices"] = None
             model_inputs["image_patches"] = None
 
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

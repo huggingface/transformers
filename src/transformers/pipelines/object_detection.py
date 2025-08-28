@@ -48,6 +48,11 @@ class ObjectDetectionPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=object-detection).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -117,7 +122,7 @@ class ObjectDetectionPipeline(Pipeline):
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size

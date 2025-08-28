@@ -29,7 +29,9 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import OutputRecorder
 from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -41,6 +43,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRMSNorm,
+    MixtralSparseMoeBlock,
 )
 
 
@@ -215,16 +218,14 @@ class MiniMaxCache(DynamicCache):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
-                self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
+                self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
@@ -278,12 +279,13 @@ class MiniMaxLightningAttention(nn.Module):
 
         return query_decay, key_decay, diagonal_decay
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -301,8 +303,8 @@ class MiniMaxLightningAttention(nn.Module):
 
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
-        if past_key_value is not None:
-            attn_weights_inter = past_key_value.get_linear_cache(self.layer_idx)
+        if past_key_values is not None:
+            attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
 
         if attn_weights_inter is None:
             attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
@@ -371,13 +373,17 @@ class MiniMaxLightningAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         # update cache
-        if past_key_value is not None:
-            past_key_value.set_linear_cache(self.layer_idx, attn_weights_inter)
+        if past_key_values is not None:
+            past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
 
 
 class MiniMaxAttention(MixtralAttention):
+    pass
+
+
+class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
 
@@ -399,13 +405,14 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
             self.attn_alpha_factor = config.full_attn_alpha_factor
             self.attn_beta_factor = config.full_attn_beta_factor
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
@@ -420,7 +427,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
                 with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -441,12 +448,12 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -457,24 +464,19 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         # Fully Connected
         hidden_states = self.post_attention_layernorm(hidden_states)
         residual = hidden_states
-        hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+        hidden_states, _ = self.block_sparse_moe(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if output_router_logits:
-            outputs += (router_logits,)
-
-        return outputs
+        return hidden_states
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
-    _supports_cache_class = True  # Note: only supports MiniMaxCache
-    _supports_static_cache = False
-    _supports_quantized_cache = False
+    _can_compile_fullgraph = False
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
+        "hidden_states": MiniMaxDecoderLayer,
+        "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
+    }
 
 
 class MiniMaxModel(MixtralModel):
@@ -483,33 +485,15 @@ class MiniMaxModel(MixtralModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[MiniMaxCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = MiniMaxCache()
@@ -536,6 +520,7 @@ class MiniMaxModel(MixtralModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -543,54 +528,29 @@ class MiniMaxModel(MixtralModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_router_logits = () if output_router_logits else None
-
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
             if decoder_layer.layer_type == "full_attention":
                 input_attention_mask = causal_mask
             else:
                 # lightning attention uses original attention_mask, and uses it only for the first step
                 input_attention_mask = attention_mask
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=input_attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
-                output_attentions=output_attentions,
-                output_router_logits=output_router_logits,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-            if output_router_logits:
-                all_router_logits += (layer_outputs[-1],)
-
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            router_logits=all_router_logits,
         )
 
 

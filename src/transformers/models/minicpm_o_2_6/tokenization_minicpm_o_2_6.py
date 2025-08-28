@@ -15,6 +15,7 @@
 
 from transformers import Qwen2Tokenizer
 
+
 class MiniCPM_o_2_6Tokenizer(Qwen2Tokenizer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

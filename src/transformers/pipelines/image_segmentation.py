@@ -60,6 +60,11 @@ class ImageSegmentationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = None  # Oneformer uses it but no-one else does
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -156,7 +161,7 @@ class ImageSegmentationPipeline(Pipeline):
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
             if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+                inputs = inputs.to(self.dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
@@ -166,7 +171,7 @@ class ImageSegmentationPipeline(Pipeline):
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
             if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+                inputs = inputs.to(self.dtype)
         inputs["target_size"] = target_size
         return inputs
 

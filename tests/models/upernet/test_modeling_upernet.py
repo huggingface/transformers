@@ -15,7 +15,7 @@
 
 import unittest
 
-from huggingface_hub import hf_hub_download
+from datasets import load_dataset
 
 from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import (
@@ -41,8 +41,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoImageProcessor
 
 
@@ -158,7 +156,7 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
@@ -277,11 +275,8 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of ADE20k
 def prepare_img():
-    filepath = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
-    )
-    image = Image.open(filepath).convert("RGB")
-    return image
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return ds[0]["image"].convert("RGB")
 
 
 @require_torch

@@ -33,11 +33,18 @@ python ../utils/split_model_tests.py --num_splits 64
 """
 
 import argparse
+import ast
 import os
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--models",
+        type=str,
+        default="",
+        help="the list of pre-computed model names.",
+    )
     parser.add_argument(
         "--num_splits",
         type=int,
@@ -53,6 +60,10 @@ if __name__ == "__main__":
     d1.remove("models")
     d = d2 + d1
 
+    if args.models != "":
+        model_tests = ast.literal_eval(args.models)
+        d = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
+
     num_jobs = len(d)
     num_jobs_per_splits = num_jobs // args.num_splits
 
@@ -62,4 +73,5 @@ if __name__ == "__main__":
         start = end
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         model_splits.append(d[start:end])
+
     print(model_splits)

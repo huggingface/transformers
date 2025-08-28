@@ -46,6 +46,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_umt5 import UMT5Config
 
 
@@ -257,11 +258,12 @@ class UMT5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
@@ -274,26 +276,29 @@ class UMT5Attention(nn.Module):
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_values.cross_attention_cache
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_values.self_attention_cache
+        else:
+            curr_past_key_value = past_key_values
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
             key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
@@ -301,13 +306,13 @@ class UMT5Attention(nn.Module):
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
 
         # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-        real_seq_length = seq_length + past_key_value.get_seq_length() if past_key_value is not None else seq_length
+        real_seq_length = seq_length + past_key_values.get_seq_length() if past_key_values is not None else seq_length
         key_length = key_states.shape[-2]
         if not self.has_relative_attention_bias:
             position_bias = torch.zeros(
@@ -346,7 +351,7 @@ class UMT5Attention(nn.Module):
         attn_output = attn_output.view(batch_size, seq_length, -1)
 
         attn_output = self.o(attn_output)
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class UMT5LayerSelfAttention(nn.Module):
@@ -356,12 +361,13 @@ class UMT5LayerSelfAttention(nn.Module):
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -369,7 +375,7 @@ class UMT5LayerSelfAttention(nn.Module):
             normed_hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
@@ -384,13 +390,14 @@ class UMT5LayerCrossAttention(nn.Module):
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         encoder_hidden_states=None,
         attention_mask=None,
         layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -399,7 +406,7 @@ class UMT5LayerCrossAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
@@ -418,6 +425,7 @@ class UMT5Block(GradientCheckpointingLayer):
 
         self.layer.append(UMT5LayerFF(config))
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -426,16 +434,16 @@ class UMT5Block(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         layer_head_mask=None,
         cross_attn_layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
     ):
-        hidden_states, self_attn_weights, past_key_value = self.layer[0](
+        hidden_states, self_attn_weights = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
         )
 
@@ -449,12 +457,12 @@ class UMT5Block(GradientCheckpointingLayer):
         cross_attn_weights = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            hidden_states, cross_attn_weights, past_key_value = self.layer[1](
+            hidden_states, cross_attn_weights = self.layer[1](
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
             )
             # clamp inf values to enable fp16 training
@@ -472,10 +480,7 @@ class UMT5Block(GradientCheckpointingLayer):
             clamp_value = torch.where(torch.isinf(hidden_states).any(), max_dtype - 1000, max_dtype)
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (
-            hidden_states,
-            past_key_value,
-        )
+        outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -504,11 +509,11 @@ class UMT5ClassificationHead(nn.Module):
 
 @auto_docstring
 class UMT5PreTrainedModel(PreTrainedModel):
-    config_class = UMT5Config
+    config: UMT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
 
@@ -630,9 +635,6 @@ class UMT5Stack(UMT5PreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
@@ -692,22 +694,12 @@ class UMT5Stack(UMT5PreTrainedModel):
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
         # initialize past_key_values
-        return_legacy_cache = False
-        return_self_attention_cache = False
-        if self.is_decoder and (use_cache or past_key_values is not None):
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-            elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        if self.is_decoder:
+            if use_cache and past_key_values is None:
+                if self.config.is_encoder_decoder:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -729,7 +721,9 @@ class UMT5Stack(UMT5PreTrainedModel):
                 attention_mask,
                 inputs_embeds,
                 cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
                 output_attentions,
             )
         elif attention_mask is not None:
@@ -773,7 +767,7 @@ class UMT5Stack(UMT5PreTrainedModel):
                 encoder_attention_mask=encoder_extended_attention_mask,
                 layer_head_mask=layer_head_mask,
                 cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -781,13 +775,10 @@ class UMT5Stack(UMT5PreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[1]
-
             if output_attentions:
-                all_attentions += (layer_outputs[2],)
+                all_attentions += (layer_outputs[1],)
                 if self.is_decoder:
-                    all_cross_attentions += (layer_outputs[3],)
+                    all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -796,18 +787,12 @@ class UMT5Stack(UMT5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
-                    next_cache,
+                    past_key_values,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -816,7 +801,7 @@ class UMT5Stack(UMT5PreTrainedModel):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
@@ -968,7 +953,7 @@ class UMT5Model(UMT5PreTrainedModel):
     ```"""
 
     model_type = "umt5"
-    config_class = UMT5Config
+    config: UMT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -978,12 +963,12 @@ class UMT5Model(UMT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config, self.shared)
 
@@ -1010,10 +995,6 @@ class UMT5Model(UMT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    # Copied from transformers.models.t5.modeling_t5.T5Model.get_decoder
-    def get_decoder(self):
-        return self.decoder
-
     # Copied from transformers.models.t5.modeling_t5.T5Model._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
@@ -1034,7 +1015,7 @@ class UMT5Model(UMT5PreTrainedModel):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1193,12 +1174,12 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config, self.shared)
 
@@ -1223,21 +1204,9 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
     def get_encoder(self):
         return self.encoder
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_decoder
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(
@@ -1250,7 +1219,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1404,15 +1373,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.prepare_decoder_input_ids_from_labels
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring
@@ -1783,12 +1743,12 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config, self.shared)
 
@@ -1817,10 +1777,6 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
     def get_encoder(self):
         return self.encoder
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_decoder
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(

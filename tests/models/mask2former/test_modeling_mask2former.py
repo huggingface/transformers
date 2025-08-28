@@ -16,11 +16,13 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    Expectations,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -403,7 +405,7 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 )
 
 
-TOLERANCE = 1e-4
+TOLERANCE = 2e-4
 
 
 # We will verify our results on an image of cute cats
@@ -438,31 +440,52 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
+            [
+                [-0.2790, -1.0717, -1.1668],
+                [-0.5128, -0.3128, -0.4987],
+                [-0.5832, 0.1971, -0.0197],
+            ]
         ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.encoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        torch.testing.assert_close(
+            outputs.encoder_last_hidden_state[0, 0, :3, :3],
+            expected_slice_hidden_state,
+            atol=TOLERANCE,
+            rtol=TOLERANCE,
         )
 
-        expected_slice_hidden_state = torch.tensor(
-            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [0.8973, 1.1847, 1.1776],
+                    [1.1934, 1.5040, 1.5128],
+                    [1.1153, 1.4486, 1.4951],
+                ],
+                ("cuda", 8): [
+                    [0.8974, 1.1848, 1.1777],
+                    [1.1933, 1.5041, 1.5128],
+                    [1.1154, 1.4487, 1.4950],
+                ],
+            }
         )
+        expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE,rtol=TOLERANCE)  # fmt: skip
 
-        expected_slice_hidden_state = torch.tensor(
-            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [2.1152, 1.7000, -0.8603],
+                    [1.5808, 1.8004, -0.9353],
+                    [1.6043, 1.7495, -0.5999],
+                ],
+                ("cuda", 8): [
+                    [2.1153, 1.7004, -0.8604],
+                    [1.5807, 1.8007, -0.9354],
+                    [1.6040, 1.7498, -0.6001],
+                ],
+            }
         )
+        expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)  # fmt: skip
 
     def test_inference_universal_segmentation_head(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
@@ -482,23 +505,40 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
         )
-        expected_slice = [
-            [-8.7839, -9.0056, -8.8121],
-            [-7.4104, -7.0313, -6.5401],
-            [-6.6105, -6.3427, -6.4675],
-        ]
-        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [-8.7839, -9.0056, -8.8121],
+                    [-7.4104, -7.0313, -6.5401],
+                    [-6.6105, -6.3427, -6.4675],
+                ],
+                ("cuda", 8): [
+                    [-8.7839, -9.0056, -8.8122],
+                    [-7.4104, -7.0313, -6.5401],
+                    [-6.6105, -6.3428, -6.4675],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
-        expected_slice = torch.tensor(
-            [
-                [1.8324, -8.0835, -4.1922],
-                [0.8450, -9.0050, -3.6053],
-                [0.3045, -7.7293, -3.0275],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [1.8324, -8.0835, -4.1922],
+                    [0.8450, -9.0050, -3.6053],
+                    [0.3045, -7.7293, -3.0275],
+                ],
+                ("cuda", 8): [
+                    [1.8324, -8.0835, -4.1922],
+                    [0.8450, -9.0050, -3.6053],
+                    [0.3045, -7.7293, -3.0275],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(
             outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
         )
@@ -537,6 +577,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

@@ -13,12 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-01-17.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
@@ -43,7 +45,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen2-1.5B-Instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -64,7 +66,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -80,7 +82,7 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(
     model_inputs.input_ids,
@@ -104,7 +106,7 @@ print(response)
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat Qwen/Qwen2-7B-Instruct --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+transformers chat Qwen/Qwen2-7B-Instruct --dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -129,13 +131,13 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-7B",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"
 )
 
-inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda")
+inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
@@ -157,6 +159,11 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## Qwen2TokenizerFast
 
 [[autodoc]] Qwen2TokenizerFast
+
+## Qwen2RMSNorm
+
+[[autodoc]] Qwen2RMSNorm
+    - forward
 
 ## Qwen2Model
 

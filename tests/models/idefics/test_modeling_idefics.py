@@ -315,13 +315,6 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
-    def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-    ):
-        pass
-
 
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -351,7 +344,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         pass
 
@@ -611,6 +604,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
 
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
@@ -626,7 +625,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         pass
 
@@ -845,18 +844,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         """
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):
         pass
@@ -897,6 +884,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
     )
     def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
 

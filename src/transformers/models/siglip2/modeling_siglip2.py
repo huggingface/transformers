@@ -35,11 +35,8 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -266,7 +263,7 @@ class Siglip2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -282,13 +279,7 @@ class Siglip2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -303,9 +294,6 @@ class Siglip2Attention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -514,46 +502,6 @@ class Siglip2VisionTransformer(nn.Module):
         )
 
 
-class Siglip2TextEmbeddings(nn.Module):
-    def __init__(self, config: Siglip2TextConfig):
-        super().__init__()
-        embed_dim = config.hidden_size
-
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ) -> torch.Tensor:
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-        max_position_embedding = self.position_embedding.weight.shape[0]
-
-        if seq_length > max_position_embedding:
-            raise ValueError(
-                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
-                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
-            )
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
-
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embedding(input_ids)
-
-        position_embeddings = self.position_embedding(position_ids)
-        embeddings = inputs_embeds + position_embeddings
-
-        return embeddings
-
-
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -649,83 +597,19 @@ def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
-class Siglip2TextTransformer(nn.Module):
-    def __init__(self, config: Siglip2TextConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-        self.embeddings = Siglip2TextEmbeddings(config)
-        self.encoder = Siglip2Encoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-        self.head = nn.Linear(embed_dim, config.projection_size)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if input_ids is None:
-            raise ValueError("You have to specify input_ids")
-
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
-        # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        # Assuming "sticky" EOS tokenization, last token is always EOS.
-        pooled_output = last_hidden_state[:, -1, :]
-        pooled_output = self.head(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 @auto_docstring
 class Siglip2PreTrainedModel(PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
     base_model_prefix = "siglip2"
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
         "Siglip2TextEmbeddings",
-        "Siglip2EncoderLayer",
         "Siglip2VisionEmbeddings",
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -777,13 +661,118 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+class Siglip2TextEmbeddings(nn.Module):
+    def __init__(self, config: Siglip2TextConfig):
+        super().__init__()
+        embed_dim = config.hidden_size
+
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        position_embeddings = self.position_embedding(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+
+        return embeddings
+
+
+class Siglip2TextTransformer(nn.Module):
+    def __init__(self, config: Siglip2TextConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+        self.embeddings = Siglip2TextEmbeddings(config)
+        self.encoder = Siglip2Encoder(config)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        self.head = nn.Linear(embed_dim, config.projection_size)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> BaseModelOutputWithPooling:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        if input_ids is None:
+            raise ValueError("You have to specify input_ids")
+
+        input_shape = input_ids.size()
+        input_ids = input_ids.view(-1, input_shape[-1])
+
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
+
+        # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
+        # expand attention_mask
+        uses_flash_attention = "flash" in self.config._attn_implementation
+        if uses_flash_attention:
+            attention_mask = None
+        elif attention_mask is not None and not uses_flash_attention:
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.final_layer_norm(last_hidden_state)
+
+        # The model uses the last token's hidden state, which may be padding.
+        pooled_output = last_hidden_state[:, -1, :]
+        pooled_output = self.head(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
 @auto_docstring(
     custom_intro="""
     The text model from Siglip2 without any head or projection on top.
     """
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
-    config_class = Siglip2TextConfig
+    config: Siglip2TextConfig
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -870,7 +859,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class Siglip2VisionModel(Siglip2PreTrainedModel):
-    config_class = Siglip2VisionConfig
+    config: Siglip2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Siglip2VisionConfig):
@@ -930,7 +919,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
 
 @auto_docstring
 class Siglip2Model(Siglip2PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
 
     def __init__(self, config: Siglip2Config):
         super().__init__(config)

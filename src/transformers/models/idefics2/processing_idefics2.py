@@ -26,7 +26,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
@@ -181,8 +180,6 @@ class Idefics2Processor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,
@@ -264,26 +261,6 @@ class Idefics2Processor(ProcessorMixin):
             inputs.update(image_inputs)
 
         return BatchFeature(inputs, tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["Idefics2Processor"]

@@ -289,7 +289,6 @@ class Multimodal2VisionEncoder(nn.Module):
         self.layers = nn.ModuleList([Multimodal2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -455,7 +454,6 @@ class Multimodal2VisionTransformer(nn.Module):
         self.encoder = Multimodal2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -495,11 +493,11 @@ class Multimodal2VisionTransformer(nn.Module):
 
 @auto_docstring
 class Multimodal2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Multimodal2Config
+    config: Multimodal2Config
     base_model_prefix = "multimodal2_vision"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -514,7 +512,7 @@ MULTIMODAL2_VISION_START_DOCSTRING = "doc"
 
 @add_start_docstrings("New doc", MULTIMODAL2_VISION_START_DOCSTRING)
 class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
-    config_class = Multimodal2VisionConfig
+    config: Multimodal2VisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["Multimodal2VisionEncoderLayer"]
 

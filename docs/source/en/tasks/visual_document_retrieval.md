@@ -51,7 +51,9 @@ Let's load the model and the tokenizer.
 
 ```python
 import torch
-from transformers import ColPaliForRetrieval, ColPaliProcessor
+from transformers import ColPaliForRetrieval, ColPaliProcessor, infer_device
+
+device = infer_device()
 
 model_name = "vidore/colpali-v1.2-hf"
 
@@ -59,25 +61,25 @@ processor = ColPaliProcessor.from_pretrained(model_name)
 
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="cuda",
+    dtype=torch.bfloat16,
+    device_map="auto",
 ).eval()
 ```
 
 Pass the text query to the processor and return the indexed text embeddings from the model. For image-to-text search, replace the `text` parameter in [`ColPaliProcessor`] with the `images` parameter to pass images.
 
 ```python
-inputs = processor(text="a document about Mars expedition").to("cuda")
+inputs = processor(text="a document about Mars expedition").to(model.device)
 with torch.no_grad():
   text_embeds = model(**inputs, return_tensors="pt").embeddings
 ```
 
 Index the images offline, and during inference, return the query text embeddings to get its closest image embeddings.
 
-Store the image and image embeddings by writing them to the dataset with [`~datasets.Dataset.map`] as shown below. Add an `embeddings` column that contains the indexed embeddings. ColPali embeddings take up a lot of storage, so remove them from the GPU and store them in the CPU as NumPy vectors.
+Store the image and image embeddings by writing them to the dataset with [`~datasets.Dataset.map`] as shown below. Add an `embeddings` column that contains the indexed embeddings. ColPali embeddings take up a lot of storage, so remove them from the accelerator and store them in the CPU as NumPy vectors.
 
 ```python
-ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to("cuda"), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
+ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to(devide), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
 ```
 
 For online inference, create a function to search the image embeddings in batches and retrieve the k-most relevant images. The function below returns the indices in the dataset and their scores for a given indexed dataset, text embeddings, number of top results, and the batch size.
@@ -112,7 +114,7 @@ Generate the text embeddings and pass them to the function above to return the d
 
 ```python
 with torch.no_grad():
-  text_embeds = model(**processor(text="a document about Mars expedition").to("cuda"), return_tensors="pt").embeddings
+  text_embeds = model(**processor(text="a document about Mars expedition").to(model.device), return_tensors="pt").embeddings
 indices, scores = find_top_k_indices_batched(ds_with_embeddings, text_embeds, processor, k=3, batch_size=4)
 print(indices, scores)
 ```

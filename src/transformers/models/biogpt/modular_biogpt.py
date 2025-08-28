@@ -23,12 +23,11 @@ import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -38,11 +37,12 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
+    TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     logger,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..bart.modeling_bart import (
     BartAttention,
     BartDecoderLayer,
@@ -98,17 +98,18 @@ class BioGptDecoderLayer(BartDecoderLayer):
         del self.encoder_attn
         del self.encoder_attn_layer_norm
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -117,7 +118,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(encoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -133,15 +134,15 @@ class BioGptDecoderLayer(BartDecoderLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, past_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             position_ids=position_ids,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -161,38 +162,19 @@ class BioGptDecoderLayer(BartDecoderLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         return outputs
 
 
 @auto_docstring
 class BioGptPreTrainedModel(PreTrainedModel):
-    config_class = BioGptConfig
+    config: BioGptConfig
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    _can_compile_fullgraph = True
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
@@ -351,12 +333,6 @@ class BioGptModel(BioGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -371,7 +347,7 @@ class BioGptModel(BioGptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -404,15 +380,15 @@ class BioGptModel(BioGptPreTrainedModel):
                 use_cache = False
 
         # initialize past_key_values
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+                "You should pass an instance of `DynamicCache` instead, e.g. "
+                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -426,11 +402,7 @@ class BioGptModel(BioGptPreTrainedModel):
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
-        self_attn_cache = (
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values
-        )
+        self_attn_cache = past_key_values
 
         causal_mask = self._update_causal_mask(
             attention_mask,
@@ -461,7 +433,6 @@ class BioGptModel(BioGptPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = None
-        next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -476,18 +447,15 @@ class BioGptModel(BioGptPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 position_ids=position_ids,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -498,26 +466,19 @@ class BioGptModel(BioGptPreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -558,7 +519,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -607,15 +568,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring

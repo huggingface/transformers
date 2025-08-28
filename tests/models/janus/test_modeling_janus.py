@@ -20,6 +20,7 @@ import unittest
 from functools import reduce
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -89,7 +90,7 @@ class JanusVisionText2TextModelTester:
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
-            "num_image_tokens": 4,
+            "num_image_tokens": 16,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -153,6 +154,7 @@ class JanusVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             vq_config=self.get_vq_config(),
+            image_token_id=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):
@@ -199,50 +201,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=JanusConfig, has_text_modality=False)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # Overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -337,7 +295,8 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
     @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
 

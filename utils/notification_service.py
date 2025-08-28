@@ -24,6 +24,7 @@ import time
 from typing import Any, Optional, Union
 
 import requests
+from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
@@ -74,18 +75,30 @@ def handle_test_results(test_results):
 
     failed = 0
     success = 0
+    errors = 0
+    skipped = 0
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
-    time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    # It could be `'71.60s', '(0:01:11)', '====\n'` or `'in', '35.01s', '================\n'`.
+    # Let always select the one with `s`.
+    time_spent = expressions[-1]
+    if "=" in time_spent:
+        time_spent = expressions[-2]
+    if "(" in time_spent:
+        time_spent = expressions[-3]
 
     for i, expression in enumerate(expressions):
         if "failed" in expression:
             failed += int(expressions[i - 1])
+        if "errors" in expression:
+            errors += int(expressions[i - 1])
         if "passed" in expression:
             success += int(expressions[i - 1])
+        if "skipped" in expression:
+            skipped += int(expressions[i - 1])
 
-    return failed, success, time_spent
+    return failed, errors, success, skipped, time_spent
 
 
 def handle_stacktraces(test_results):
@@ -186,18 +199,12 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
-        total_secs = 0
 
-        for time in time_spent:
-            time_parts = time.split(":")
-
-            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-            if len(time_parts) == 1:
-                time_parts = [0, 0, time_parts[0]]
-
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-            total_secs += hours * 3600 + minutes * 60 + seconds
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend(r["time_spent"])
+        total_secs = sum(time_spent)
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -662,7 +669,7 @@ class Message:
                         "text": {
                             "type": "mrkdwn",
                             # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
-                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to this run*\n\n(compared to{' Nvidia CI ' if is_scheduled_ci_run else ' '}run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
@@ -671,6 +678,21 @@ class Message:
                         },
                     }
                     blocks.append(block)
+
+        if diff_file_url is not None:
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check test result diff file"},
+                    "url": diff_file_url,
+                },
+            }
+            blocks.append(block)
 
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
@@ -1037,7 +1059,7 @@ if __name__ == "__main__":
     runner_not_available = False
     runner_failed = False
     # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
-    setup_failed = False if setup_status in ["skipped", "success"] else True
+    setup_failed = setup_status not in ["skipped", "success"]
 
     org = "huggingface"
     repo = "transformers"
@@ -1050,18 +1072,14 @@ if __name__ == "__main__":
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
     # Add Commit/PR title with a link for push CI
-    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
-    ci_title_push = os.environ.get("CI_TITLE_PUSH")
-    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
-    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
-
+    ci_title = os.environ.get("CI_TITLE", "")
     ci_sha = os.environ.get("CI_SHA")
 
     ci_url = None
     if ci_sha:
         ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
 
-    if ci_title is not None:
+    if ci_title:
         if ci_url is None:
             raise ValueError(
                 "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
@@ -1090,9 +1108,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author} | Merged by: GH_{merged_by}"
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
@@ -1172,8 +1190,10 @@ if __name__ == "__main__":
     matrix_job_results = {
         matrix_name: {
             "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in test_categories},
+            "errors": 0,
             "success": 0,
-            "time_spent": "",
+            "skipped": 0,
+            "time_spent": [],
             "failures": {},
             "job_link": {},
         }
@@ -1183,7 +1203,7 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    for matrix_name in matrix_job_results.keys():
+    for matrix_name in matrix_job_results:
         for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
@@ -1197,9 +1217,11 @@ if __name__ == "__main__":
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
                 matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
-                failed, success, time_spent = handle_test_results(artifact["stats"])
+                failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
                 matrix_job_results[matrix_name]["success"] += success
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["errors"] += errors
+                matrix_job_results[matrix_name]["skipped"] += skipped
+                matrix_job_results[matrix_name]["time_spent"].append(float(time_spent[:-1]))
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -1301,16 +1323,18 @@ if __name__ == "__main__":
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "errors": 0,
             "success": 0,
-            "time_spent": "",
+            "skipped": 0,
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
         }
-        for key in additional_files.keys()
+        for key in additional_files
     }
 
-    for key in additional_results.keys():
+    for key in additional_results:
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True
@@ -1327,10 +1351,12 @@ if __name__ == "__main__":
             artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
-            failed, success, time_spent = handle_test_results(artifact["stats"])
+            failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
             additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
-            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+            additional_results[key]["errors"] += errors
+            additional_results[key]["skipped"] += skipped
+            additional_results[key]["time_spent"].append(float(time_spent[:-1]))
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True
@@ -1367,8 +1393,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
@@ -1376,13 +1402,13 @@ if __name__ == "__main__":
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
     # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
     #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
-    if is_amd_daily_ci_workflow:
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
         with open(event_payload_path) as fp:
             event_payload = json.load(fp)
-            # The event that triggers the `workflow_run` event.
+            # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
@@ -1410,7 +1436,17 @@ if __name__ == "__main__":
     if len(matrix_job_results) > 0:
         target_results = matrix_job_results
     else:
-        target_results = additional_results[job_to_test_map[job_name]]
+        default_result = {
+            "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "success": 0,
+            "time_spent": [],
+            "error": False,
+            "failures": {},
+            "job_link": {},
+        }
+
+        key = job_to_test_map.get(job_name)
+        target_results = additional_results.get(key, default_result) if key is not None else default_result
 
     # Make the format uniform between `model_results` and `additional_results[XXX]`
     if "failures" in target_results:
@@ -1460,13 +1496,14 @@ if __name__ == "__main__":
     prev_ci_artifacts = (None, None)
     other_ci_artifacts = []
 
+    output_dir = os.path.join(os.getcwd(), "previous_reports")
+    os.makedirs(output_dir, exist_ok=True)
+
     for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
         if target_workflow_run_id is None or target_workflow_run_id == "":
             continue
         else:
             artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names,
                 output_dir=output_dir,
@@ -1477,6 +1514,44 @@ if __name__ == "__main__":
                 prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
+
+    # Only for AMD at this moment.
+    # TODO: put this into a method
+    diff_file_url = None
+    if is_amd_daily_ci_workflow:
+        if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
+            ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=None,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=prev_workflow_run_id,
+            )
+
+            current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])  # fmt: skip
+
+            current_artifacts_set = {}
+            for d in current_artifacts:
+                current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
+
+            prev_artifacts_set = {}
+            for d in prev_artifacts:
+                prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
+
+            report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
+
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+                fp.write(report)
+
+            # upload
+            commit_info = api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
+                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
+                repo_id=report_repo_id,
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:

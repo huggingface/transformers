@@ -246,7 +246,7 @@ class ResNetEncoder(nn.Module):
 
 @auto_docstring
 class ResNetPreTrainedModel(PreTrainedModel):
-    config_class = ResNetConfig
+    config: ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
@@ -382,6 +382,8 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     """
 )
 class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)

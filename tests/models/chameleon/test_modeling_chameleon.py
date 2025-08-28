@@ -270,7 +270,7 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
-        attention_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
 
         config = self.get_config()
@@ -325,6 +325,14 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
     def test_model_is_small(self):
         pass
 
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -354,49 +362,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
 
 @require_torch
@@ -459,7 +424,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
                 ("xpu", 3): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night',
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
                     'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
                 ],
                 ("cuda", 7): [

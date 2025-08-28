@@ -106,7 +106,7 @@ class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
     pass
 
 
-class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
+class RTDetrImageProcessorFast(DetrImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -123,12 +123,12 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
-        do_convert_annotations = kwargs.get("do_convert_annotations", None)
-        do_normalize = kwargs.get("do_normalize", None)
+        do_convert_annotations = kwargs.get("do_convert_annotations")
+        do_normalize = kwargs.get("do_normalize")
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        BaseImageProcessorFast.__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
     def preprocess(
         self,
@@ -137,7 +137,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, annotations, masks_path, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
 
     def prepare_annotation(
         self,
