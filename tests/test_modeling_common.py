@@ -4788,7 +4788,9 @@ class ModelTesterMixin:
             # (we assume easy shapes here where we get to the requested head dim at least)
             if hasattr(config, "rope_scaling") and len(config.rope_scaling.get("mrope_section", None)) > 0:
                 scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
-                config.rope_scaling["mrope_section"] = [section * scaling_factor for section in config.rope_scaling["mrope_section"]]
+                config.rope_scaling["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                ]
 
         # Update config values
         update_config_headdim(config, requested_dim)
