@@ -23,9 +23,6 @@ import numpy as np
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     convert_to_rgb,
-    normalize,
-    rescale,
-    resize,
     to_channel_dimension_format,
 )
 from ...image_utils import (
