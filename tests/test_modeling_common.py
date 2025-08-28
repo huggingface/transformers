@@ -4739,6 +4739,7 @@ class ModelTesterMixin:
         (There are many more examples especially now that the `kernels` library is
         supported)
         """
+        config = copy.deepcopy(config)
 
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
