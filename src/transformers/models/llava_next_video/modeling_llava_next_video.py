@@ -484,7 +484,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features: torch.FloatTensor = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:

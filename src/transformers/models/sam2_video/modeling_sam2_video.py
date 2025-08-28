@@ -1892,7 +1892,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box

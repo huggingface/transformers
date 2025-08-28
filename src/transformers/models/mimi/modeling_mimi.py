@@ -314,10 +314,10 @@ class MimiConv1d(nn.Module):
         input_length = input_length + padding_left + padding_right
 
         # conv
-        output_lenght = (
+        output_length = (
             input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
         ) // self.conv.stride[0] + 1
-        return output_lenght
+        return output_length
 
     def forward(self, hidden_states, padding_cache=None):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)

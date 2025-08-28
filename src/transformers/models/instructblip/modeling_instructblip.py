@@ -1197,7 +1197,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1472,7 +1472,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
