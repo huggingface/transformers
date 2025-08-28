@@ -37,10 +37,11 @@ from ...modeling_layers import (
 )
 
 from .configuration_qwen2_moe import Qwen2MoeConfig
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAttention
+from ..cohere.modeling_cohere import rotate_half, apply_rotary_pos_emb
 from ..gemma.modeling_gemma import GemmaMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, MixtralForCausalLM, MixtralDecoderLayer, MixtralNaiveMoe
-from ..cohere2.modeling_cohere2 import Cohere2Attention
+
 
 
 
@@ -51,13 +52,70 @@ class Qwen2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 class Qwen2MoeMLP(GemmaMLP):
-    pass
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-class Qwen2MoeAttention(Cohere2Attention):
-    pass
+class Qwen2MoeAttention(LlamaAttention):
+    def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-class Qwen2MoeNaiveMoe(MixtralNaiveMoe):
-    pass
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
+        )
+    
+
+class Qwen2MoeNaiveMoe(nn.ModuleList):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.norm_topk_prob = config.norm_topk_prob # FIXME: remove this once I check all qwen2 don't use this
+        for _ in range(self.num_experts):
+            self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
+
+    def forward(self, hidden_states, routing_weights):
+        routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        final_hidden_states = torch.zeros_like(hidden_states, device=hidden_states.device)
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_layer = self[expert_idx]
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
@@ -99,6 +157,7 @@ class Qwen2MoeDecoderLayer(MixtralDecoderLayer):
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
+        del self.block_sparse_moe
 
     def forward(
         self,
@@ -160,6 +219,7 @@ class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
+        self.num_experts = config.num_experts
         self.model = Qwen2MoeModel(config)
 
 
