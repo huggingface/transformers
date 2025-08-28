@@ -588,8 +588,6 @@ class ProcessorMixin(PushToHubMixin):
             # Don't save attributes like `tokenizer`, `image processor` etc. in processor config if `legacy=True`
             attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
 
-        output["processor_class"] = self.__class__.__name__
-
         if "tokenizer" in output:
             del output["tokenizer"]
         if "qformer_tokenizer" in output:
@@ -600,6 +598,7 @@ class ProcessorMixin(PushToHubMixin):
             del output["chat_template"]
 
         # Serialize attributes as a dict
+        print(output.keys(), attrs_to_save)
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
@@ -620,6 +619,8 @@ class ProcessorMixin(PushToHubMixin):
             }
             # Update or overwrite, what do audio tokenizers expect when loading?
             output["audio_tokenizer"] = audio_tokenizer_dict
+
+        output["processor_class"] = self.__class__.__name__
 
         return output
 
