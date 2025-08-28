@@ -79,7 +79,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.embed_dim = 5
         cls.seq_length = 5
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, modality: Optional[str] = None):
+    def prepare_text_inputs(self, batch_size: Optional[int] = None, **kwargs):
         labels = ["a cat", "remote control"]
         labels_longer = ["a person", "a car", "a dog", "a cat"]
 
@@ -257,20 +257,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDino
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     def test_text_preprocessing_equivalence(self):
         processor = GroundingDinoProcessor.from_pretrained(self.tmpdirname)

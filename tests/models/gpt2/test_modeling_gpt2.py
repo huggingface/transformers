@@ -837,6 +837,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_gpt2(self):
         article = (
@@ -848,7 +849,14 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
         input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = gpt2_model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
 
         generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
@@ -879,7 +887,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         """
         Overwriting the common test as the test is flaky on tiny models
         """
-        model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
+        model = GPT2LMHeadModel.from_pretrained("gpt2", dtype=torch.float16).to(0)
 
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -894,7 +902,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_native = tokenizer.batch_decode(output_native)
 
         model = GPT2LMHeadModel.from_pretrained(
-            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", dtype=torch.float16
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)

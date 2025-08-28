@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@ import io
 import re
 
 import torch
+import yaml
 
 from transformers import (
-    EncodecFeatureExtractor,
+    AutoConfig,
+    DacFeatureExtractor,
     XcodecConfig,
     XcodecModel,
     logging,
@@ -178,15 +180,50 @@ def convert_old_keys_to_new_keys(original_state_dict: dict[str, torch.Tensor]) -
     return converted_checkpoint
 
 
+# for reference, see original implementation: https://github.com/zhenye234/xcodec/blob/main/models/soundstream_semantic.py#L24
 @torch.no_grad()
-def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, push_to_hub=None):
-    if config_path is not None:
-        config = XcodecConfig.from_pretrained(config_path)
-    else:
-        config = XcodecConfig()
+def convert_checkpoint(checkpoint_path, config_path, pytorch_dump_folder_path=None, push_to_hub=None):
+    # load config yaml file
+    with open(config_path, "r") as f:
+        model_config = yaml.safe_load(f)
 
-    with torch.device("meta"):
-        model = XcodecModel(config)
+    # extra relevant parameters
+    ratios = model_config["generator"]["config"]["ratios"]
+    target_bandwidths = model_config["generator"]["config"]["target_bandwidths"]
+    sample_rate = model_config["generator"]["config"]["sample_rate"]
+    acoustic_model_config = {
+        "encoder_hidden_size": 64,
+        "decoder_hidden_size": 1024,
+        # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+        # (not sure if intentional by Xcodec but we keep it)
+        "downsampling_ratios": ratios,
+        "upsampling_ratios": ratios,
+        "sampling_rate": sample_rate,
+        "hidden_size": model_config["generator"]["config"]["D"],
+    }
+    semantic_model = model_config["generator"]["config"]["semantic_techer"]
+    if semantic_model == "hubert_base":
+        semantic_model_config = AutoConfig.from_pretrained("facebook/hubert-base-ls960")
+    elif semantic_model == "wavlm_base_plus":
+        semantic_model_config = AutoConfig.from_pretrained("microsoft/wavlm-base-plus")
+    elif semantic_model == "hubert_base_general":
+        semantic_model_config = AutoConfig.from_pretrained("ZhenYe234/hubert_base_general_audio")
+    else:
+        raise ValueError(f"Unknown semantic model: {semantic_model}")
+
+    config = XcodecConfig(
+        target_bandwidths=target_bandwidths,
+        acoustic_model_config=acoustic_model_config,
+        semantic_model_config=semantic_model_config,
+        sample_rate=sample_rate,
+        codebook_size=model_config["generator"]["config"]["bins"],
+    )
+
+    # create model
+    if not torch.cuda.is_available():
+        raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
+    torch_device = "cuda"
+    model = XcodecModel(config).to(torch_device)
 
     logger.info("Loading original checkpoint ...")
 
@@ -208,12 +245,15 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
         raise ValueError(f"missing keys found: {missing_keys}")
 
     model.remove_weight_norm()
+    if pytorch_dump_folder_path is not None:
+        model.save_pretrained(pytorch_dump_folder_path)
 
-    model.save_pretrained(pytorch_dump_folder_path)
-
-    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sample_rate)
-
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    feature_extractor = DacFeatureExtractor(
+        sampling_rate=config.sample_rate,
+        hop_length=config.acoustic_model_config.hop_length,
+    )
+    if pytorch_dump_folder_path is not None:
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing to the hub...")
@@ -221,13 +261,76 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
         model.push_to_hub(push_to_hub)
 
 
+"""
+Models checkpoints can be downloaded from here:
+https://github.com/zhenye234/xcodec?tab=readme-ov-file#available-models
+
+1) `xcodec_hubert_librispeech`:
+```
+# Download config and checkpoint files
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/config_hubert.yaml -P /raid/eric/xcodec_original
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/xcodec_speech_hubert_librispeech.pth -P /raid/eric/xcodec_original
+# Run conversion:
+python src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py \
+    --checkpoint_path /raid/eric/xcodec_original/xcodec_speech_hubert_librispeech.pth \
+    --config_path /raid/eric/xcodec_original/config_hubert.yaml \
+    --push_to_hub hf-audio/xcodec-hubert-librispeech
+```
+
+2) `xcodec_hubert_general_audio`:
+```
+# Download config and checkpoint files
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/config_hubert_general.yaml -P /raid/eric/xcodec_original
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/xcodec_hubert_general_audio.pth -P /raid/eric/xcodec_original
+# Run conversion:
+python src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py \
+    --checkpoint_path /raid/eric/xcodec_original/xcodec_hubert_general_audio.pth \
+    --config_path /raid/eric/xcodec_original/config_hubert_general.yaml \
+    --push_to_hub hf-audio/xcodec-hubert-general
+```
+
+3) `xcodec_hubert_general_audio_more_data` (more balanced dataset):
+```
+# Download config and checkpoint files
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/config_hubert_general.yaml -P /raid/eric/xcodec_original
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/xcodec_hubert_general_audio_v2.pth -P /raid/eric/xcodec_original
+# Run conversion:
+python src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py \
+    --checkpoint_path /raid/eric/xcodec_original/xcodec_hubert_general_audio_v2.pth \
+    --config_path /raid/eric/xcodec_original/config_hubert_general.yaml \
+    --push_to_hub hf-audio/xcodec-hubert-general-balanced
+```
+
+4) `xcodec_wavlm_mls`:
+```
+# Download config and checkpoint files
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/config_wavlm.yaml -P /raid/eric/xcodec_original
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/xcodec_speech_wavlm_mls.pth -P /raid/eric/xcodec_original
+# Run conversion:
+python src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py \
+    --checkpoint_path /raid/eric/xcodec_original/xcodec_speech_wavlm_mls.pth \
+    --config_path /raid/eric/xcodec_original/config_wavlm.yaml \
+    --push_to_hub hf-audio/xcodec-wavlm-mls
+```
+
+5) `xcodec_wavlm_more_data`:
+```
+# Download config and checkpoint files
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/config_wavlm.yaml -P /raid/eric/xcodec_original
+wget https://huggingface.co/ZhenYe234/xcodec/resolve/main/xcodec_speech_wavlm_more_data.pth -P /raid/eric/xcodec_original
+# Run conversion:
+python src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py \
+    --checkpoint_path /raid/eric/xcodec_original/xcodec_speech_wavlm_more_data.pth \
+    --config_path /raid/eric/xcodec_original/config_wavlm.yaml \
+    --push_to_hub hf-audio/xcodec-wavlm-more-data
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--config_path", required=True, default=None, type=str, help="Path to hf config.yaml of model to convert"
     )
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
@@ -235,7 +338,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     convert_checkpoint(
         args.checkpoint_path,
-        args.pytorch_dump_folder_path,
         args.config_path,
+        args.pytorch_dump_folder_path,
         args.push_to_hub,
     )

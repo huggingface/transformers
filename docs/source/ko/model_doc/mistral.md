@@ -58,7 +58,7 @@ rendered properly in your Markdown viewer.
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
@@ -80,7 +80,7 @@ rendered properly in your Markdown viewer.
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -107,12 +107,12 @@ pip install -U flash-attn --no-build-isolation
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
@@ -162,7 +162,7 @@ pip install -U flash-attn --no-build-isolation
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]

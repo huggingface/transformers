@@ -162,7 +162,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
         if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         tokenizer_default_kwargs = {"padding": True}

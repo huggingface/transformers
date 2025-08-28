@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
    task="fill-mask",
    model="weiweishi/roc-bert-base-zh",
-   torch_dtype=torch.float16,
+   dtype=torch.float16,
    device=0
 )
 pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
@@ -62,10 +62,10 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
    "weiweishi/roc-bert-base-zh",
-   torch_dtype=torch.float16,
+   dtype=torch.float16,
    device_map="auto",
 )
-inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
+inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
    outputs = model(**inputs)
