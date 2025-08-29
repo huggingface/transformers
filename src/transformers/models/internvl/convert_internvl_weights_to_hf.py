@@ -18,6 +18,7 @@ import re
 from typing import Literal, Optional
 
 import torch
+from accelerate import init_empty_weights
 from einops import rearrange
 
 from transformers import (
@@ -26,21 +27,19 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     GotOcr2ImageProcessorFast,
-    Phi4MultimodalImageProcessorFast,
     InternVLConfig,
     InternVLForConditionalGeneration,
     InternVLProcessor,
     InternVLVideoProcessor,
     InternVLVisionConfig,
     LlamaConfig,
+    Phi4MultimodalImageProcessorFast,
     Qwen2Config,
     Qwen3Config,
     Qwen3MoeConfig,
 )
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
-from transformers.models.internvl3_5 import InternVL3_5ImageProcessor
 
-from accelerate import init_empty_weights
 
 LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL2_5-1B-MPO": "qwen2",
@@ -448,7 +447,6 @@ def write_model(
     # Load the correct image processor based on model type
     if "InternVL3_5" in input_base_path:
         image_processor = Phi4MultimodalImageProcessorFast.from_pretrained(model_path)
-        # image_processor = InternVL3_5ImageProcessor.from_pretrained(model_path)
     else:
         image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)

@@ -114,7 +114,6 @@ else:
             ("imagegpt", ("ImageGPTImageProcessor", None)),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor", None)),
-            ("internvl3_5", ("InternVL3_5ImageProcessor", None)),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("kosmos-2.5", ("Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorFast")),
