@@ -883,18 +883,14 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
             )
         num_local_experts = mod.num_experts // ep_size
-        if (
-            not torch.cuda.is_available()
-            and not (hasattr(torch, "xpu") and torch.xpu.is_available)
-            and num_local_experts == 1
-        ):
-            raise ValueError(
-                "As masking filled by -1, CPU currently don't support 1 expert per rank, will enable it soon."
-            )
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
-        router_indices = torch.fmod(router_indices, num_local_experts)
+        # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(
             router_indices == -1, num_local_experts
         )  # masking class for one hot
