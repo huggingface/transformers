@@ -2219,7 +2219,7 @@ def get_cache_usable_length(past_key_value: Cache, new_seq_length: int, layer_id
     previous_seq_length = past_key_value.get_seq_length(layer_idx)
     if max_length is not None and previous_seq_length + new_seq_length > max_length:
         return max_length - new_seq_length
-    return p
+    return previous_seq_length
 
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperAttention and support past_key_value
