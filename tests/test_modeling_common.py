@@ -3518,7 +3518,7 @@ class ModelTesterMixin:
                     dummy_input = dummy_input.to(torch.bfloat16)
                 first_inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
                 if "pixel_values" in inputs_dict:
-                    first_inputs["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
                     first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 

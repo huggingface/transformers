@@ -621,6 +621,7 @@ class MetaClip2TextModelOutput(ModelOutput):
 class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     config: MetaClip2TextConfig
 
+    _supports_flash_attn = False
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2TextConfig):
