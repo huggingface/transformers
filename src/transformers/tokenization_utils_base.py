@@ -65,8 +65,8 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.chat_template_utils import render_jinja_template
 from .utils.chat_parsing_utils import recursive_parse
+from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -1661,11 +1661,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # TODO Make a test comparing the indices we get from this to the ones we get from % generation % tags
             for chat in rendered_chat:
                 parsed_chat = recursive_parse(chat, chat_schema, offset=0)
-                assistant_messages = [message['content'] for message in parsed_chat.get("messages", [])
-                                      if message["role"] == "assistant"]
-                generation_indices.append(
-                    [(message.start, message.end) for message in assistant_messages]
-                )
+                assistant_messages = [
+                    message["content"] for message in parsed_chat.get("messages", []) if message["role"] == "assistant"
+                ]
+                generation_indices.append([(message.start, message.end) for message in assistant_messages])
 
         if not is_batched:
             rendered_chat = rendered_chat[0]

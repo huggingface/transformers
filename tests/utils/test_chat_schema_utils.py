@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.utils.chat_parsing_utils import recursive_parse, location_content
+from transformers.utils.chat_parsing_utils import location_content, recursive_parse
 from transformers.utils.chat_template_utils import get_json_schema
 
 
@@ -236,6 +236,7 @@ gpt_oss_schema = {
     },
 }
 
+
 def remove_offsets(obj):
     if isinstance(obj, dict):
         return {k: remove_offsets(v) for k, v in obj.items()}
@@ -246,9 +247,10 @@ def remove_offsets(obj):
     else:
         return obj
 
+
 def validate_offsets(obj, formatted_chat):
     if isinstance(obj, dict):
-        for k, v in obj.items():
+        for v in obj.values():
             validate_offsets(v, formatted_chat)
     elif isinstance(obj, list):
         for v in obj:
@@ -257,6 +259,7 @@ def validate_offsets(obj, formatted_chat):
         # TODO Might need int/float/bool comparison here, may not get a perfect string match
         if obj.content != formatted_chat[obj.start : obj.end]:
             raise ValueError(f"Offsets for content '{obj.content}' are incorrect: {obj.start}, {obj.end}")
+
 
 class ChatSchemaParserTest(unittest.TestCase):
     def setUp(self):
@@ -427,6 +430,13 @@ class ChatSchemaParserTest(unittest.TestCase):
             {"role": "user", "content": "I'd like to see if you can mask some indices!"},
             {"role": "assistant", "content": "Sure! Hopefully this response is masked correctly."},
         ]
-        formatted_chat = tokenizer.apply_chat_template(chat, tokenize=True, return_assistant_tokens_mask=True, chat_schema=gpt_oss_schema, return_dict=True)
-        assistant_tokens = [token for token, mask in zip(formatted_chat['input_ids'], formatted_chat['assistant_masks']) if mask]
-        self.assertEqual(tokenizer.decode(assistant_tokens), "Hi there! How can I help you today?Sure! Hopefully this response is masked correctly.")
+        formatted_chat = tokenizer.apply_chat_template(
+            chat, tokenize=True, return_assistant_tokens_mask=True, chat_schema=gpt_oss_schema, return_dict=True
+        )
+        assistant_tokens = [
+            token for token, mask in zip(formatted_chat["input_ids"], formatted_chat["assistant_masks"]) if mask
+        ]
+        self.assertEqual(
+            tokenizer.decode(assistant_tokens),
+            "Hi there! How can I help you today?Sure! Hopefully this response is masked correctly.",
+        )

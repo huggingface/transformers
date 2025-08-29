@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: F401
 
 from .chat_template_utils import _parse_type_hint, parse_google_format_docstring
 
+
 offset_content = namedtuple("offset_content", ["content", "offset"])
 location_content = namedtuple("location_content", ["content", "start", "end"])
 
-def _parse_re_match(node_match, offset, require_groups: List[str] | None = None):
+
+def _parse_re_match(node_match, offset, require_groups: list[str] | None = None):
     if require_groups:
         if not node_match.groupdict():
             raise ValueError(f"Regex has no named groups, but require_groups was set to {require_groups}")
@@ -21,8 +23,10 @@ def _parse_re_match(node_match, offset, require_groups: List[str] | None = None)
     # If the regex has named groups, return a dict of those groups
     if node_match.groupdict():
         if offset is not None:
-            return {group: offset_content(content, node_match.start(group) + offset)
-                    for group, content in node_match.groupdict().items()}
+            return {
+                group: offset_content(content, node_match.start(group) + offset)
+                for group, content in node_match.groupdict().items()
+            }
         else:
             return node_match.groupdict()
     # If the regex has unnamed groups, it MUST only have one, and we return that group
@@ -41,8 +45,12 @@ def _parse_re_match(node_match, offset, require_groups: List[str] | None = None)
             return node_match.group(0)
 
 
-
-def recursive_parse(node_content: str | list | dict | offset_content, node_schema: dict, scope_vars: dict | None = None, offset: int | None = None):
+def recursive_parse(
+    node_content: str | list | dict | offset_content,
+    node_schema: dict,
+    scope_vars: dict | None = None,
+    offset: int | None = None,
+):
     """
     This function takes content and a JSON schema node which includes
     regex extractors, and recursively parses the content according to the schema. It uses recursion to handle
@@ -93,10 +101,7 @@ def recursive_parse(node_content: str | list | dict | offset_content, node_schem
             #      make a safer parser before merging
             node_content = _parse_type_hint(eval(node_content))
         elif parser == "python_function":
-            if "x-parser-args" in node_schema:
-                parser_args = node_schema["x-parser-args"]
-            else:
-                parser_args = {}
+            parser_args = node_schema.get("x-parser-args", {})
             node_content = _extract_args_and_docstring_from_function_text(node_content, **parser_args)
         else:
             raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
@@ -206,7 +211,9 @@ def recursive_parse(node_content: str | list | dict | offset_content, node_schem
                         value = value.content
                     else:
                         value_offset = offset
-                    parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"], scope_vars, offset=value_offset)
+                    parsed_schema[key] = recursive_parse(
+                        value, node_schema["additionalProperties"], scope_vars, offset=value_offset
+                    )
         return parsed_schema
     elif node_type == "array":
         if not node_content:
