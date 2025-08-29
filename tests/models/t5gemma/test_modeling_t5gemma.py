@@ -1693,3 +1693,6 @@ class TestAsymmetricT5Gemma(unittest.TestCase):
     def test_defaulting_to_symmetry(self):
         model = self.build_model_and_check_forward_pass(num_hidden_layers=2, encoder_num_hidden_layers=2)
         assert len(model.decoder.layers) == len(model.encoder.layers) == 2
+
+
+# TODO: add integration tests (and compare vs 1st commit)
