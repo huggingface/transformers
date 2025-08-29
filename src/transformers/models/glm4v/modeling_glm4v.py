@@ -1505,6 +1505,23 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+
+        # Preserve rope_deltas for CFG and multi-pass generation
+        if hasattr(outputs, "rope_deltas") and outputs.rope_deltas is not None:
+            model_kwargs["rope_deltas"] = outputs.rope_deltas
+
+        return model_kwargs
+
     def _get_image_nums_and_video_nums(
         self,
         input_ids: Optional[torch.LongTensor],
