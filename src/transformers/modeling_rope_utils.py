@@ -510,8 +510,6 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
     # pre-yarn or the post-yarn context length?
     # BC: we assume it is the pre-yarn context length.
     else:
-        print("we are here somehow")
-        print(original_max_position_embeddings)
         logger.warning_once(
             "config.rope_scaling['original_max_position_embeddings'], the pre-yarn context length, is unset. We will "
             "**assume** config.max_position_embeddings holds the pre-yarn context length. Some use cases may expect "
