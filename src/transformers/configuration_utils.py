@@ -1188,11 +1188,7 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(
-        self,
-        decoder: Optional[bool] = None,
-        encoder: Optional[bool] = None,
-    ) -> "PretrainedConfig":
+    def get_text_config(self, decoder: Optional[bool] = None, encoder: Optional[bool] = None) -> "PretrainedConfig":
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
         `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
