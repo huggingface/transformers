@@ -434,9 +434,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
         common = {
             "num_beams": 4,
-            "num_beam_groups": 2,
             "num_return_sequences": 4,
-            "diversity_penalty": 1.0,
             "max_new_tokens": 20,
             "early_stopping": True,
         }

@@ -273,16 +273,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support constrained beam search.")
     def test_constrained_beam_search_generate(self):
         pass
