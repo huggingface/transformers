@@ -776,13 +776,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         past_key_values: Optional[tuple[torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        r"""
-        image_hidden_states (<fill_type>):
-            <fill_docstring>
-        image_attention_mask (<fill_type>):
-            <fill_docstring>
-        cross_attention_gate (<fill_type>):
-            <fill_docstring>
+        """
+        Args:
+            image_hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`
+            image_attention_mask (`torch.FloatTensor`, *optional*): image attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            cross_attention_gate (`torch.FloatTensor`, *optional*):
+                gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
         """
         if image_hidden_states is None:
             raise ValueError(
@@ -806,6 +807,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.cross_attn(
             hidden_states=hidden_states,
             key_value_states=image_hidden_states,
+            attention_mask=image_attention_mask,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
