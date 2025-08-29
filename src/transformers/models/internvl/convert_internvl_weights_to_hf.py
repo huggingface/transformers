@@ -39,6 +39,7 @@ from transformers import (
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
 from transformers.models.internvl3_5 import InternVL3_5ImageProcessor
 
+from accelerate import init_empty_weights
 
 LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL2_5-1B-MPO": "qwen2",
@@ -55,14 +56,14 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3-14B": "qwen2",
     "OpenGVLab/InternVL3-38B": "qwen2",
     "OpenGVLab/InternVL3-78B": "qwen2",
-    "OpenGVLab/InternVL3_5-1B": "qwen3", # works
-    "OpenGVLab/InternVL3_5-2B": "qwen3", # TODO check
-    "OpenGVLab/InternVL3_5-4B": "qwen3", # TODO check
-    "OpenGVLab/InternVL3_5-8B": "qwen3", # TODO check
-    "OpenGVLab/InternVL3_5-14B": "qwen3", # TODO check
-    "OpenGVLab/InternVL3_5-30B": "qwen3", # TODO check
+    "OpenGVLab/InternVL3_5-1B": "qwen3",  # works
+    "OpenGVLab/InternVL3_5-2B": "qwen3",  # TODO check
+    "OpenGVLab/InternVL3_5-4B": "qwen3",  # TODO check
+    "OpenGVLab/InternVL3_5-8B": "qwen3",  # TODO check
+    "OpenGVLab/InternVL3_5-14B": "qwen3",  # TODO check
+    "OpenGVLab/InternVL3_5-30B": "qwen3",  # TODO check
     "OpenGVLab/InternVL3_5-241B-A28B": "qwen3_moe",
-    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss", #conversion works, generation effy
+    "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss",  # conversion works, generation effy
 }
 
 UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
@@ -151,12 +152,14 @@ chat_template = (
 CONTEXT_LENGTH = 8192
 
 
-def handle_specialized_architecture_weights(key: str, new_key: str, weight: torch.Tensor, lm_type: str, state_dict: dict) -> bool:
+def handle_specialized_architecture_weights(
+    key: str, new_key: str, weight: torch.Tensor, lm_type: str, state_dict: dict
+) -> bool:
     """
     Handle weight conversion for specialized architectures (Qwen3, Qwen3Moe, GptOss).
     Returns True if the weight was handled, False if it should be processed normally.
     """
-    
+
     if lm_type == "qwen3":
         # Qwen3 dense model with attention sinks
         if "self_attn.sinks" in key:
@@ -168,7 +171,7 @@ def handle_specialized_architecture_weights(key: str, new_key: str, weight: torc
             print(f"Warning: Found MoE components in dense Qwen3 model: {key}")
             return True
         return False
-    
+
     elif lm_type == "qwen3_moe":
         # Qwen3Moe with standard MoE structure
         if "self_attn.sinks" in key:
@@ -184,7 +187,7 @@ def handle_specialized_architecture_weights(key: str, new_key: str, weight: torc
             state_dict[new_key] = weight
             return True
         return False
-    
+
     elif lm_type == "gpt_oss":
         # GptOss with custom MoE structure
         if "self_attn.sinks" in key:
@@ -212,7 +215,7 @@ def handle_specialized_architecture_weights(key: str, new_key: str, weight: torc
             state_dict[new_key] = weight
             return True
         return False
-    
+
     return False
 
 
@@ -302,7 +305,7 @@ def load_original_state_dict(input_base_path):
 
 
 def get_internvl_config(input_base_path):
-    base_config = AutoModel.from_pretrained(input_base_path, trust_remote_code=True).config
+    base_config = AutoConfig.from_pretrained(input_base_path, trust_remote_code=True)
     llm_config = base_config.llm_config.to_dict()
     vision_config = base_config.vision_config.to_dict()
     vision_config["use_absolute_position_embeddings"] = True
@@ -327,7 +330,11 @@ def get_internvl_config(input_base_path):
     # Force use_cache to True
     llm_config["use_cache"] = True
     # Force correct eos_token_id for InternVL3 and InternVL3.5
-    if ("InternVL3" in input_base_path or "InternVL3_5" in input_base_path) and lm_type in ("qwen2", "qwen3", "qwen3_moe"):
+    if ("InternVL3" in input_base_path or "InternVL3_5" in input_base_path) and lm_type in (
+        "qwen2",
+        "qwen3",
+        "qwen3_moe",
+    ):
         llm_config["eos_token_id"] = 151645
     elif lm_type == "gpt_oss":
         llm_config["eos_token_id"] = 200002
@@ -418,12 +425,14 @@ def write_model(
         else:
             state_dict[new_key] = state_dict_old[key]
 
-
     del state_dict_old
     gc.collect()
 
     print("Loading the checkpoint in a InternVLForConditionalGeneration model.")
-    model = InternVLForConditionalGeneration(config)
+    with init_empty_weights():
+        model = InternVLForConditionalGeneration(config)
+    print(model.config)
+    print("Moving state dict to model.")
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model = model.to(torch.bfloat16)
     print("model dtype:", model.dtype)
@@ -542,7 +551,9 @@ def write_tokenizer(
         tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
 
 
-def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None, path: Optional[str] = None):
+def write_image_processor(
+    save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None, path: Optional[str] = None
+):
     # Use InternVL3.5 image processor for InternVL3.5 models, otherwise use GotOcr2ImageProcessorFast
     if path and "InternVL3_5" in path:
         image_processor = InternVL3_5ImageProcessor(

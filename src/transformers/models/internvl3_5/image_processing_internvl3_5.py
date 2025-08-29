@@ -15,8 +15,7 @@
 
 """Image processor class for InternVL3.5."""
 
-import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -38,6 +37,7 @@ from ...utils import (
 
 if is_vision_available():
     from PIL import Image
+
     from ...image_utils import PILImageResampling
 
 if is_torch_available():
@@ -121,8 +121,8 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     def find_closest_aspect_ratio(
-        self, aspect_ratio: float, target_ratios: List[Tuple[int, int]], width: int, height: int, image_size: int
-    ) -> Tuple[int, int]:
+        self, aspect_ratio: float, target_ratios: list[tuple[int, int]], width: int, height: int, image_size: int
+    ) -> tuple[int, int]:
         """
         Find the closest aspect ratio to the target among the available ratios.
 
@@ -157,7 +157,7 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
         max_num: int = 12,
         image_size: int = 448,
         use_thumbnail: bool = True,
-    ) -> List[Union[np.ndarray, "torch.Tensor", Image.Image]]:
+    ) -> list[Union[np.ndarray, "torch.Tensor", Image.Image]]:
         """
         Dynamically preprocess an image into patches based on its aspect ratio.
 
@@ -219,19 +219,26 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
             resized_img = image.resize((target_width, target_height), Image.Resampling.BICUBIC)
         elif is_torch_available() and isinstance(image, torch.Tensor):
             import torch.nn.functional as F
+
             # Ensure CHW format for resize
             if image.ndim == 3 and image.shape[-1] in [1, 3]:  # HWC to CHW
                 image = image.permute(2, 0, 1)
             resized_img = F.interpolate(
-                image.unsqueeze(0), size=(target_height, target_width), mode='bicubic', align_corners=False
+                image.unsqueeze(0), size=(target_height, target_width), mode="bicubic", align_corners=False
             ).squeeze(0)
         else:  # numpy array
             # Convert to PIL for resizing
             if image.ndim == 3 and image.shape[0] in [1, 3]:  # CHW to HWC
-                image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8) if image.max() <= 1.0 else image.transpose(1, 2, 0).astype(np.uint8))
+                image_pil = Image.fromarray(
+                    (image.transpose(1, 2, 0) * 255).astype(np.uint8)
+                    if image.max() <= 1.0
+                    else image.transpose(1, 2, 0).astype(np.uint8)
+                )
             else:  # Already HWC
-                image_pil = Image.fromarray((image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8))
-            
+                image_pil = Image.fromarray(
+                    (image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8)
+                )
+
             resized_img = image_pil.resize((target_width, target_height), Image.Resampling.BICUBIC)
 
         # Split into patches
@@ -254,7 +261,7 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
                 end_row = (row + 1) * image_size
                 start_col = col * image_size
                 end_col = (col + 1) * image_size
-                
+
                 if isinstance(resized_img, torch.Tensor):
                     split_img = resized_img[:, start_row:end_row, start_col:end_col]
                 else:  # PIL was used for numpy
@@ -263,28 +270,35 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
                 processed_images.append(split_img)
 
         assert len(processed_images) == blocks
-        
+
         # Add thumbnail if requested and we have multiple patches
         if use_thumbnail and len(processed_images) > 1:
             if is_pil:
                 thumbnail_img = image.resize((image_size, image_size), Image.Resampling.BICUBIC)
             elif is_torch_available() and isinstance(image, torch.Tensor):
                 import torch.nn.functional as F
+
                 if image.ndim == 3 and image.shape[-1] in [1, 3]:  # HWC to CHW
                     image = image.permute(2, 0, 1)
                 thumbnail_img = F.interpolate(
-                    image.unsqueeze(0), size=(image_size, image_size), mode='bicubic', align_corners=False
+                    image.unsqueeze(0), size=(image_size, image_size), mode="bicubic", align_corners=False
                 ).squeeze(0)
             else:
                 # Convert to PIL for thumbnail
                 if image.ndim == 3 and image.shape[0] in [1, 3]:  # CHW to HWC
-                    image_pil = Image.fromarray((image.transpose(1, 2, 0) * 255).astype(np.uint8) if image.max() <= 1.0 else image.transpose(1, 2, 0).astype(np.uint8))
+                    image_pil = Image.fromarray(
+                        (image.transpose(1, 2, 0) * 255).astype(np.uint8)
+                        if image.max() <= 1.0
+                        else image.transpose(1, 2, 0).astype(np.uint8)
+                    )
                 else:  # Already HWC
-                    image_pil = Image.fromarray((image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8))
+                    image_pil = Image.fromarray(
+                        (image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8)
+                    )
                 thumbnail_img = image_pil.resize((image_size, image_size), Image.Resampling.BICUBIC)
-            
+
             processed_images.append(thumbnail_img)
-        
+
         return processed_images
 
     def get_number_of_image_patches(self, height: int, width: int, processor_kwargs: dict) -> int:
@@ -316,9 +330,7 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
         )
         target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
-        target_aspect_ratio = self.find_closest_aspect_ratio(
-            aspect_ratio, target_ratios, width, height, image_size
-        )
+        target_aspect_ratio = self.find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size)
 
         patches = target_aspect_ratio[0] * target_aspect_ratio[1]
         # Add 1 for thumbnail if multiple patches
@@ -336,7 +348,7 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List[Union[np.ndarray, "torch.Tensor", Image.Image]],
+        images: list[Union[np.ndarray, "torch.Tensor", Image.Image]],
         size: SizeDict,
         interpolation: Optional["PILImageResampling"],
         max_patches: int,
@@ -346,8 +358,8 @@ class InternVL3_5ImageProcessor(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
