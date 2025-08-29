@@ -44,7 +44,7 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.utils import is_torchao_available
+from .utils import is_torchao_available
 
 
 if is_torchao_available():
@@ -75,14 +75,8 @@ from .integrations.tensor_parallel import (
 from .loss.loss_utils import LOSS_MAPPING
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .modeling_flash_attention_utils import lazy_import_flash_attention
-from .pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
+from .pytorch_utils import (
     id_tensor_storage,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
 )
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -2801,44 +2795,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
         ):
             applicable_attn_implementation = "kernels-community/flash-attn"
-        if applicable_attn_implementation is not None and re.match(
-            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation
-        ):
-            if not is_kernels_available():
-                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-            attention_wrapper = None
-            # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            actual_attn_name = applicable_attn_implementation
-            if "|" in applicable_attn_implementation:
-                attention_wrapper, actual_attn_name = applicable_attn_implementation.split("|")
-                # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-                attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
-            # Extract repo_id and kernel_name from the string
-            if ":" in actual_attn_name:
-                repo_id, kernel_name = actual_attn_name.split(":")
-                kernel_name = kernel_name.strip()
-            else:
-                repo_id = actual_attn_name
-                kernel_name = None
-            repo_id = repo_id.strip()
-            # extract the rev after the @ if it exists
-            repo_id, _, rev = repo_id.partition("@")
-            repo_id = repo_id.strip()
-            rev = rev.strip() if rev else None
+        if is_kernel(applicable_attn_implementation):
             try:
-                kernel = get_kernel(repo_id, revision=rev)
-                if hasattr(kernel, "flash_attn_varlen_func"):
-                    if attention_wrapper is None:
-                        attention_wrapper = flash_attention_forward
-                    kernel_function = partial(attention_wrapper, implementation=kernel)
-                    lazy_import_flash_attention(kernel)
-                elif kernel_name is not None:
-                    kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
-                )
-                # log that we used kernel fallback
+                load_and_register_kernel(applicable_attn_implementation)
+                # log that we used kernel fallback if successful
                 if attn_implementation == "flash_attention_2":
                     logger.warning_once(
                         "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
@@ -2848,8 +2808,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if attn_implementation == "flash_attention_2":
                     self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
                 logger.warning_once(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
-                    "default attention implementation instead (sdpa if available, eager otherwise)."
+                    f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
+                    f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 try:
                     self._sdpa_can_dispatch(is_init_check)
@@ -6295,6 +6255,59 @@ def get_disk_only_shard_files(device_map, weight_map):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+def is_kernel(attn_implementation: Optional[str]) -> bool:
+    """Check whether `attn_implementation` matches a kernel pattern from the hub."""
+    return (
+        attn_implementation is not None
+        and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
+    )
+
+
+def load_and_register_kernel(attn_implementation: str) -> None:
+    """Load and register the kernel associated to `attn_implementation`."""
+    if not is_kernel(attn_implementation):
+        return
+    if not is_kernels_available():
+        raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
+
+    attention_wrapper = None
+    # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
+    actual_attn_name = attn_implementation
+    if "|" in attn_implementation:
+        attention_wrapper, actual_attn_name = attn_implementation.split("|")
+        # `transformers` has wrapper for sdpa, paged, flash, flex etc.
+        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
+    # Extract repo_id and kernel_name from the string
+    if ":" in actual_attn_name:
+        repo_id, kernel_name = actual_attn_name.split(":")
+        kernel_name = kernel_name.strip()
+    else:
+        repo_id = actual_attn_name
+        kernel_name = None
+    repo_id = repo_id.strip()
+    # extract the rev after the @ if it exists
+    repo_id, _, rev = repo_id.partition("@")
+    repo_id = repo_id.strip()
+    rev = rev.strip() if rev else None
+
+    # Load the kernel from hub
+    try:
+        kernel = get_kernel(repo_id, revision=rev)
+    except Exception as e:
+        raise ValueError(f"An error occured while trying to load from '{repo_id}': {e}.")
+    # correctly wrap the kernel
+    if hasattr(kernel, "flash_attn_varlen_func"):
+        if attention_wrapper is None:
+            attention_wrapper = flash_attention_forward
+        kernel_function = partial(attention_wrapper, implementation=kernel)
+        lazy_import_flash_attention(kernel)
+    elif kernel_name is not None:
+        kernel_function = getattr(kernel, kernel_name)
+    # Register the kernel as a valid attention
+    ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
+    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
 
 class AttentionInterface(GeneralInterface):
