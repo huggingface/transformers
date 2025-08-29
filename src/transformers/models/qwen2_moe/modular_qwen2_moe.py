@@ -19,33 +19,34 @@
 # limitations under the License.
 """PyTorch Qwen2MoE model."""
 
-import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
-
 from torch import nn
 
+from ...activations import ACT2FN
 from ...generation import GenerationMixin
-
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
-
-from .configuration_qwen2_moe import Qwen2MoeConfig
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAttention, rotate_half, apply_rotary_pos_emb
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
 from ..gemma.modeling_gemma import GemmaMLP
-from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, MixtralForCausalLM, MixtralDecoderLayer, MixtralNaiveMoe
+from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaRotaryEmbedding
+from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, MixtralPreTrainedModel
+from .configuration_qwen2_moe import Qwen2MoeConfig
+
 
 class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
 
+
 class Qwen2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
 
 class Qwen2MoeMLP(GemmaMLP):
     def __init__(self, config, intermediate_size=None):
@@ -58,38 +59,31 @@ class Qwen2MoeMLP(GemmaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
+
 class Qwen2MoeAttention(LlamaAttention):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
-        )
-    
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
 
 class Qwen2MoeNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob # FIXME: remove this once I check all qwen2 don't use this
+        self.norm_topk_prob = config.norm_topk_prob  # FIXME: remove this once I check all qwen2 don't use this
         for _ in range(self.num_experts):
             self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def forward(self, hidden_states, routing_weights):
         routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob: # ONLY DIFF WITH MIXTRAL FOR NOW
+        if self.norm_topk_prob:  # ONLY DIFF WITH MIXTRAL FOR NOW
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -113,6 +107,7 @@ class Qwen2MoeNaiveMoe(nn.ModuleList):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
+
 class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -133,7 +128,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, router_logits).reshape(batch_size, sequence_length, hidden_dim)
+        final_hidden_states = self.experts(hidden_states, router_logits).reshape(
+            batch_size, sequence_length, hidden_dim
+        )
 
         shared_expert_output = self.shared_expert(hidden_states)
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states)) * shared_expert_output
@@ -184,12 +181,11 @@ class Qwen2MoeDecoderLayer(MixtralDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states= self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         if isinstance(hidden_states, tuple):
             hidden_states = hidden_states[0]
         hidden_states = residual + hidden_states
         return hidden_states
-
 
 
 @auto_docstring

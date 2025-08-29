@@ -17,17 +17,12 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -35,7 +30,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP,Qwen2MoeSparseMoeBlock 
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
@@ -63,6 +58,7 @@ class Qwen3MoeRMSNorm(LlamaRMSNorm):
 
 class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
     pass
+
 
 class Qwen3MoeModel(MixtralModel):
     pass

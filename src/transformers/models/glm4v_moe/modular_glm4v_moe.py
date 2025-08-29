@@ -17,7 +17,6 @@ from typing import Callable, Optional
 import torch
 import torch.nn as nn
 
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -25,12 +24,12 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeTopkRouter,
@@ -431,7 +430,6 @@ class Glm4vMoeTextMoE(nn.Module):
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
-
 
 
 class Glm4vMoeTextMLP(Glm4MoeMLP):

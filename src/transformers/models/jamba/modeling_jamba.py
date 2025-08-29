@@ -881,7 +881,7 @@ class JambaNaiveMoe(nn.ModuleList):
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        
+
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states
 
@@ -916,8 +916,10 @@ class JambaSparseMoeBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.router(hidden_states)
-        
-        final_hidden_states = self.experts(hidden_states.reshape(batch_size, sequence_length, hidden_dim), router_logits)
+
+        final_hidden_states = self.experts(
+            hidden_states.reshape(batch_size, sequence_length, hidden_dim), router_logits
+        )
         return final_hidden_states, router_logits
 
 

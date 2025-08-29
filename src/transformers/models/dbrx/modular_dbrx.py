@@ -14,41 +14,38 @@
 # limitations under the License.
 """Modular components for DBRX model."""
 
-import math
-from typing import Any, Optional, Union, Callable
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from ...utils.deprecation import deprecate_kwarg
-
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...utils.deprecation import deprecate_kwarg
-from ..llama.modeling_llama import LlamaRotaryEmbedding, eager_attention_forward, apply_rotary_pos_emb, LlamaPreTrainedModel
+from ..llama.modeling_llama import (
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from .configuration_dbrx import DbrxConfig
 
 
 class DbrxRotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
 
 class DbrxAttention(nn.Module):
     """Modular DBRX attention component that can be reused across different model architectures."""
@@ -80,7 +77,7 @@ class DbrxAttention(nn.Module):
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-            
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -137,11 +134,9 @@ class DbrxAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
+
 class DbrxRouter(nn.Module):
-    def __init__(
-        self,
-       config 
-    ):
+    def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
@@ -155,6 +150,7 @@ class DbrxRouter(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         weights = self.layer(hidden_states)
         return weights
+
 
 class DbrxExpertGLU(nn.Module):
     def __init__(self, config):
@@ -189,7 +185,6 @@ class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
         self.ffn_hidden_size = config.ffn_hidden_size
         self.top_k = config.moe_top_k
         self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
-
 
     def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
@@ -230,6 +225,7 @@ class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
 
 class DbrxFFN(nn.Module):
     """Modular DBRX MLP/FFN component with MoE support."""
+
     def __init__(self, config, **kwargs):
         super().__init__()
         self.router = DbrxRouter(config.ffn_config)
@@ -239,7 +235,6 @@ class DbrxFFN(nn.Module):
         top_weights = self.router(hidden_states)
         output = self.experts(hidden_states, top_weights)
         return output, top_weights
-
 
 
 class DbrxNormAttentionNorm(nn.Module):
@@ -320,6 +315,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         hidden_states = nn.functional.dropout(hidden_states, p=self.resid_pdrop, training=self.training)
         hidden_states = resid_states + hidden_states
         return hidden_states
+
 
 class DbrxPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["DbrxBlock"]
@@ -413,7 +409,6 @@ class DbrxModel(DbrxPreTrainedModel):
         )
 
 
-
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -428,7 +423,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         self.num_experts = config.ffn_config.moe_num_experts
         self.num_experts_per_tok = config.ffn_config.moe_top_k
         self.post_init()
-    
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -514,5 +509,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
 
 __all__ = ["DbrxForCausalLM", "DbrxModel", "DbrxPreTrainedModel"]

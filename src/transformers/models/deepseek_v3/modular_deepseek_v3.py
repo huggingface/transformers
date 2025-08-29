@@ -6,8 +6,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification
@@ -26,6 +24,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
     rotate_half,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
@@ -168,6 +167,7 @@ class DeepseekV3NaiveMoe(nn.ModuleList):
         # thus the moe module is itelsf an IsolatedParallel module
         # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
+
 
 class DeepseekV3MoE(nn.Module):
     """

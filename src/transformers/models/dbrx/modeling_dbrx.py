@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import Any, Callable, Optional, Union
 
 import torch
@@ -36,6 +37,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from .configuration_dbrx import DbrxConfig
 
 

@@ -11,26 +11,34 @@
 # limitations under the License.
 """PyTorch OLMoE model."""
 
-import math
-from typing import Optional, Union, Callable
+from typing import Callable, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...cache_utils import Cache, DynamicCache, StaticCache
+
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...modeling_outputs import MoeModelOutputWithPast, OutputRecorder
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from .configuration_olmoe import OlmoeConfig
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaRotaryEmbedding, LlamaMLP, eager_attention_forward
+from ...utils.generic import check_model_inputs
 from ..gemma.modeling_gemma import GemmaMLP
-from ..mixtral.modeling_mixtral import MixtralModel, MixtralForCausalLM
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
+from .configuration_olmoe import OlmoeConfig
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -38,11 +46,14 @@ class OlmoeRMSNorm(LlamaRMSNorm):
     def __init__(self, hidden_size, eps=1e-5):
         super().__init__(hidden_size, eps)
 
+
 class OlmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
+
 class OlmoeMLP(GemmaMLP):
     pass
+
 
 class OlmoeAttention(LlamaAttention):
     def __init__(self, config: OlmoeConfig, layer_idx: Optional[int] = None):
@@ -106,8 +117,6 @@ class OlmoeAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-
-
 class OlmoeNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
@@ -149,6 +158,7 @@ class OlmoeNaiveMoe(nn.ModuleList):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
+
 class OlmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -162,7 +172,9 @@ class OlmoeSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, router_logits).reshape(batch_size, sequence_length, hidden_dim)
+        final_hidden_states = self.experts(hidden_states, router_logits).reshape(
+            batch_size, sequence_length, hidden_dim
+        )
         return final_hidden_states, router_logits
 
 
@@ -231,6 +243,7 @@ class OlmoePreTrainedModel(PreTrainedModel):
     }
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
+
 
 @auto_docstring
 class OlmoeModel(MixtralModel):
@@ -312,6 +325,7 @@ class OlmoeModel(MixtralModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
 
 class OlmoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]

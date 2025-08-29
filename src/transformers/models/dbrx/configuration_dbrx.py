@@ -48,14 +48,12 @@ class DbrxAttentionConfig(PretrainedConfig):
         attn_pdrop: float = 0.0,
         clip_qkv: Optional[float] = None,
         kv_n_heads: int = 1,
-        
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.attn_pdrop = attn_pdrop
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
-
 
 
 class DbrxFFNConfig(PretrainedConfig):
