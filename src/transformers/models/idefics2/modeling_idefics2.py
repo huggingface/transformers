@@ -379,7 +379,6 @@ class Idefics2Encoder(nn.Module):
         self.gradient_checkpointing = False
 
     # Ignore copy
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -472,6 +471,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         self,
         pixel_values,
         patch_attention_mask: Optional[torch.BoolTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
@@ -503,9 +503,11 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=patch_attention_mask,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
 
         return BaseModelOutput(last_hidden_state=last_hidden_state)
 
@@ -573,9 +575,8 @@ class Idefics2PerceiverAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Runs Perceiver Self-Attention, with special (context, latents) appended along the `seq` dimension!
 
@@ -608,13 +609,7 @@ class Idefics2PerceiverAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -625,15 +620,13 @@ class Idefics2PerceiverAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim)
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_values
+        return attn_output, attn_weights
 
 
 class Idefics2PerceiverLayer(nn.Module):
@@ -663,10 +656,8 @@ class Idefics2PerceiverLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
         """
         Args:
             latents (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -686,10 +677,11 @@ class Idefics2PerceiverLayer(nn.Module):
         latents = self.input_latents_norm(latents)
         context = self.input_context_norm(context)
 
-        latents, self_attn_weights, present_key_value = self.self_attn(
+        latents, _ = self.self_attn(
             latents=latents,
             context=context,
             attention_mask=attention_mask,
+            **kwargs,
         )
         latents = residual + latents
         residual = latents
@@ -698,15 +690,7 @@ class Idefics2PerceiverLayer(nn.Module):
         latents = self.mlp(latents)
         latents = residual + latents
 
-        outputs = (latents,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+        return latents
 
 
 @auto_docstring(
@@ -742,6 +726,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         self,
         context: torch.Tensor,
         attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         context (`torch.FloatTensor` of shape `(batch, seq_len, embed_dim)`):
@@ -762,17 +747,13 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
 
         compressed_context = latents
         for perceiver_layer in self.layers:
-            layer_outputs = perceiver_layer(
+            compressed_context = perceiver_layer(
                 compressed_context,
                 context,
                 attention_mask=attention_mask,
                 position_ids=None,
-                past_key_values=None,
-                output_attentions=False,
-                use_cache=False,
+                **kwargs,
             )
-
-            compressed_context = layer_outputs[0]
 
         compressed_context = self.norm(compressed_context)
 
@@ -952,10 +933,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
         image_hidden_states: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Idefics2BaseModelOutputWithPast]:
         r"""
@@ -964,12 +942,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection and perceiver resampling.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             logger.warning_once(
@@ -984,10 +956,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1012,16 +980,14 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 image_hidden_states=image_hidden_states,
             )
 
+        kwargs["return_dict"] = True
         outputs = self.text_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
