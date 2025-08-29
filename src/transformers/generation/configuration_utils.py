@@ -39,11 +39,19 @@ from ..utils import (
 
 if TYPE_CHECKING:  # noqa: D401 - type checking imports only
     from ..modeling_utils import PreTrainedModel
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+    from .logits_process import (
+        SynthIDTextWatermarkLogitsProcessor,
+        WatermarkLogitsProcessor,
+    )
 
 
 logger = logging.get_logger(__name__)
-METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
+METADATA_FIELDS = (
+    "_from_model_config",
+    "_commit_hash",
+    "_original_object_hash",
+    "transformers_version",
+)
 STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
 DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
@@ -54,12 +62,20 @@ DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
     "offloaded_hybrid",
     "offloaded_hybrid_chunked",
 )
-ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
-ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
+ALL_STATIC_CACHE_IMPLEMENTATIONS = (
+    STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
+)
+ALL_CACHE_IMPLEMENTATIONS = (
+    ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
+)
 
 
 if is_torch_available():
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+    from .logits_process import (
+        SynthIDTextWatermarkLogitsProcessor,
+        WatermarkLogitsProcessor,
+    )
+
 
 class GenerationMode(ExplicitEnum):
     """
@@ -360,7 +376,12 @@ class GenerationConfig(PushToHubMixin):
             need to use this flag.
     """
 
-    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+    extra_output_flags = (
+        "output_attentions",
+        "output_hidden_states",
+        "output_scores",
+        "output_logits",
+    )
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -405,7 +426,9 @@ class GenerationConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
+        self.exponential_decay_length_penalty = kwargs.pop(
+            "exponential_decay_length_penalty", None
+        )
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
@@ -434,14 +457,20 @@ class GenerationConfig(PushToHubMixin):
         self.eos_token_id = kwargs.pop("eos_token_id", None)
 
         # Generation parameters exclusive to encoder-decoder models
-        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
+        self.encoder_no_repeat_ngram_size = kwargs.pop(
+            "encoder_no_repeat_ngram_size", 0
+        )
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
         self.is_assistant = False
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 20)
-        self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "constant")
-        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
+        self.num_assistant_tokens_schedule = kwargs.pop(
+            "num_assistant_tokens_schedule", "constant"
+        )
+        self.assistant_confidence_threshold = kwargs.pop(
+            "assistant_confidence_threshold", 0.4
+        )
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
@@ -488,14 +517,20 @@ class GenerationConfig(PushToHubMixin):
         if not isinstance(other, GenerationConfig):
             return False
 
-        self_without_metadata = self.to_json_string(use_diff=False, ignore_metadata=True)
-        other_without_metadata = other.to_json_string(use_diff=False, ignore_metadata=True)
+        self_without_metadata = self.to_json_string(
+            use_diff=False, ignore_metadata=True
+        )
+        other_without_metadata = other.to_json_string(
+            use_diff=False, ignore_metadata=True
+        )
         return self_without_metadata == other_without_metadata
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
-    def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
+    def get_generation_mode(
+        self, assistant_model: Optional["PreTrainedModel"] = None
+    ) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
 
@@ -560,12 +595,6 @@ class GenerationConfig(PushToHubMixin):
                 )
         return generation_mode
 
-
-
-
-
-
-
     def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
@@ -582,9 +611,13 @@ class GenerationConfig(PushToHubMixin):
         # 1. Validation of individual attributes
         # 1.1. Decoding attributes
         if self.early_stopping not in {True, False, "never"}:
-            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+            raise ValueError(
+                f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}."
+            )
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
-            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+            raise ValueError(
+                f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -592,25 +625,37 @@ class GenerationConfig(PushToHubMixin):
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
         # 1.2. Cache attributes
-        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+        if (
+            self.cache_implementation is not None
+            and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS
+        ):
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{ALL_CACHE_IMPLEMENTATIONS}"
             )
         # 1.3. Performance attributes
-        if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
+        if self.compile_config is not None and not isinstance(
+            self.compile_config, CompileConfig
+        ):
             raise ValueError(
                 f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an "
                 "instance of `CompileConfig`."
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
+            if not (
+                isinstance(
+                    self.watermarking_config,
+                    (WatermarkingConfig, SynthIDTextWatermarkingConfig),
+                )
+            ):
                 minor_issues["watermarking_config"] = (
                     "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
                     "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
                 )
-                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+                self.watermarking_config = WatermarkingConfig.from_dict(
+                    self.watermarking_config
+                )
             self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
@@ -625,15 +670,21 @@ class GenerationConfig(PushToHubMixin):
                     flag_name="temperature", flag_value=self.temperature
                 )
             if self.top_p is not None and self.top_p != 1.0:
-                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
+                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(
+                    flag_name="top_p", flag_value=self.top_p
+                )
             if self.min_p is not None:
-                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
+                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(
+                    flag_name="min_p", flag_value=self.min_p
+                )
             if self.typical_p is not None and self.typical_p != 1.0:
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
             if self.top_k is not None and self.top_k != 50:
-                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
+                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(
+                    flag_name="top_k", flag_value=self.top_k
+                )
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
@@ -654,12 +705,16 @@ class GenerationConfig(PushToHubMixin):
                     flag_name="early_stopping", flag_value=self.early_stopping
                 )
             if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                minor_issues["num_beam_groups"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                minor_issues["num_beam_groups"] = (
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                    )
                 )
             if self.diversity_penalty is not None and self.diversity_penalty != 0.0:
-                minor_issues["diversity_penalty"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="diversity_penalty", flag_value=self.diversity_penalty
+                minor_issues["diversity_penalty"] = (
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="diversity_penalty", flag_value=self.diversity_penalty
+                    )
                 )
             if self.length_penalty is not None and self.length_penalty != 1.0:
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
@@ -681,7 +736,9 @@ class GenerationConfig(PushToHubMixin):
                 )
                 if self.do_sample is True:
                     raise ValueError(
-                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
+                        constrained_wrong_parameter_msg.format(
+                            flag_name="do_sample", flag_value=self.do_sample
+                        )
                     )
                 if self.num_beam_groups is not None and self.num_beam_groups != 1:
                     raise ValueError(
@@ -696,9 +753,14 @@ class GenerationConfig(PushToHubMixin):
                     "this generation mode, "
                 )
                 if self.do_sample is True:
-                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
+                    raise ValueError(
+                        group_error_prefix + "`do_sample` must be set to `False`"
+                    )
                 if self.num_beams % self.num_beam_groups != 0:
-                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
+                    raise ValueError(
+                        group_error_prefix
+                        + "`num_beams` should be divisible by `num_beam_groups`"
+                    )
                 if self.diversity_penalty == 0.0:
                     raise ValueError(
                         group_error_prefix
@@ -728,7 +790,11 @@ class GenerationConfig(PushToHubMixin):
                 "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
                 "have no effect."
             )
-            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+            for arg_name in (
+                "cache_implementation",
+                "cache_config",
+                "return_legacy_cache",
+            ):
                 if getattr(self, arg_name) is not None:
                     minor_issues[arg_name] = no_cache_warning.format(
                         cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)
@@ -778,11 +844,11 @@ class GenerationConfig(PushToHubMixin):
                 raise ValueError("GenerationConfig is invalid: \n" + info_message)
             else:
                 attributes_with_issues = list(minor_issues.keys())
-                warning_message = (
-                    f"The following generation flags are not valid and may be ignored: {attributes_with_issues}."
-                )
+                warning_message = f"The following generation flags are not valid and may be ignored: {attributes_with_issues}."
                 if logging.get_verbosity() >= logging.WARNING:
-                    warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
+                    warning_message += (
+                        " Set `TRANSFORMERS_VERBOSITY=info` for more details."
+                    )
                 logger.warning_once(warning_message)
                 logger.info_once(info_message)
 
@@ -816,7 +882,9 @@ class GenerationConfig(PushToHubMixin):
         try:
             self.validate(strict=True)
         except ValueError as exc:
-            raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
+            raise ValueError(
+                str(exc) + "\n\nFix these issues to save the configuration."
+            )
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
@@ -832,10 +900,14 @@ class GenerationConfig(PushToHubMixin):
                 )
             kwargs["token"] = use_auth_token
 
-        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
+        config_file_name = (
+            config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
+        )
 
         if os.path.isfile(save_directory):
-            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+            raise AssertionError(
+                f"Provided path ({save_directory}) should be a directory, not a file"
+            )
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -954,7 +1026,9 @@ class GenerationConfig(PushToHubMixin):
         >>> unused_kwargs
         {'foo': False}
         ```"""
-        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
+        config_file_name = (
+            config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
+        )
 
         resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
@@ -1027,20 +1101,28 @@ class GenerationConfig(PushToHubMixin):
             config_dict = cls._dict_from_json_file(resolved_config_file)
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
+            raise OSError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
+            )
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
+            logger.info(
+                f"loading configuration file {configuration_file} from cache at {resolved_config_file}"
+            )
 
         if kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            config._original_object_hash = hash(
+                config
+            )  # Hash to detect whether the instance was modified
             return config, unused_kwargs
         else:
             config = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            config._original_object_hash = hash(
+                config
+            )  # Hash to detect whether the instance was modified
             return config
 
     @classmethod
@@ -1112,7 +1194,11 @@ class GenerationConfig(PushToHubMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
+            if (
+                key not in default_config_dict
+                or key == "transformers_version"
+                or value != default_config_dict[key]
+            ):
                 serializable_config_dict[key] = value
 
         self.dict_dtype_to_str(serializable_config_dict)
@@ -1135,7 +1221,7 @@ class GenerationConfig(PushToHubMixin):
         if "compile_config" in output:
             del output["compile_config"]
 
-    # Leave logit_processors structure (list or JSON string) as-is for transparency
+        # Leave logit_processors structure (list or JSON string) as-is for transparency
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1143,7 +1229,9 @@ class GenerationConfig(PushToHubMixin):
         self.dict_dtype_to_str(output)
         return output
 
-    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
+    def to_json_string(
+        self, use_diff: bool = True, ignore_metadata: bool = False
+    ) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -1168,7 +1256,10 @@ class GenerationConfig(PushToHubMixin):
 
         def convert_keys_to_string(obj):
             if isinstance(obj, dict):
-                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+                return {
+                    str(key): convert_keys_to_string(value)
+                    for key, value in obj.items()
+                }
             elif isinstance(obj, list):
                 return [convert_keys_to_string(item) for item in obj]
             else:
@@ -1176,7 +1267,9 @@ class GenerationConfig(PushToHubMixin):
 
         def convert_dataclass_to_dict(obj):
             if isinstance(obj, dict):
-                return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
+                return {
+                    key: convert_dataclass_to_dict(value) for key, value in obj.items()
+                }
             elif is_dataclass(obj):
                 return obj.to_dict()
             else:
@@ -1187,7 +1280,9 @@ class GenerationConfig(PushToHubMixin):
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(
+        self, json_file_path: Union[str, os.PathLike], use_diff: bool = True
+    ):
         """
         Save this instance to a JSON file.
 
@@ -1218,9 +1313,13 @@ class GenerationConfig(PushToHubMixin):
         config_dict.pop("_from_model_config", None)
 
         # Removes all `None` from the model config dict -- this lets the generation config defaults to take hold
-        config_dict = {key: value for key, value in config_dict.items() if value is not None}
+        config_dict = {
+            key: value for key, value in config_dict.items() if value is not None
+        }
 
-        generation_config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
+        generation_config = cls.from_dict(
+            config_dict, return_unused_kwargs=False, _from_model_config=True
+        )
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config (which in turn is defined from the outer attributes of model config).
@@ -1229,7 +1328,9 @@ class GenerationConfig(PushToHubMixin):
             default_generation_config = GenerationConfig()
             decoder_config_dict = decoder_config.to_dict()
             for attr in generation_config.to_dict():
-                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                is_unset = getattr(generation_config, attr) == getattr(
+                    default_generation_config, attr
+                )
                 if attr in decoder_config_dict and is_unset:
                     setattr(generation_config, attr, decoder_config_dict[attr])
 
@@ -1267,7 +1368,9 @@ class GenerationConfig(PushToHubMixin):
         self.validate()
 
         # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        unused_kwargs = {
+            key: value for key, value in kwargs.items() if key not in to_remove
+        }
         return unused_kwargs
 
 
@@ -1420,7 +1523,9 @@ class WatermarkingConfig(BaseWatermarkingConfig):
                 ),
             )
 
-    def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+    def construct_processor(
+        self, vocab_size: int, device
+    ) -> "WatermarkLogitsProcessor":
         return WatermarkLogitsProcessor(
             vocab_size=vocab_size,
             device=device,
@@ -1509,7 +1614,9 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
                 ),
             )
 
-    def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+    def construct_processor(
+        self, vocab_size: int, device
+    ) -> "WatermarkLogitsProcessor":
         return SynthIDTextWatermarkLogitsProcessor(
             ngram_len=self.ngram_len,
             keys=self.keys,
@@ -1571,4 +1678,10 @@ class CompileConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
-        return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
+        return copy.deepcopy(
+            {
+                key: value
+                for key, value in self.__dict__.items()
+                if key != "_compile_all_devices"
+            }
+        )

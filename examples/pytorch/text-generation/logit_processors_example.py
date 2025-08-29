@@ -27,14 +27,12 @@ def example_basic_usage():
     logit_config = [
         {"type": "TemperatureLogitsWarper", "temperature": 0.8},
         {"type": "TopKLogitsWarper", "top_k": 50},
-        {"type": "RepetitionPenaltyLogitsProcessor", "penalty": 1.2}
+        {"type": "RepetitionPenaltyLogitsProcessor", "penalty": 1.2},
     ]
 
     # Create GenerationConfig with logit processors
     generation_config = GenerationConfig(
-        max_length=100,
-        do_sample=True,
-        logit_processors=logit_config
+        max_length=100, do_sample=True, logit_processors=logit_config
     )
 
     # Generate text
@@ -52,15 +50,15 @@ def example_json_string_config():
     model = AutoModelForCausalLM.from_pretrained("gpt2")
 
     # Define as JSON string (useful for config files)
-    logit_config_json = json.dumps([
-        {"type": "TemperatureLogitsWarper", "temperature": 0.9},
-        {"type": "TopPLogitsWarper", "top_p": 0.95}
-    ])
+    logit_config_json = json.dumps(
+        [
+            {"type": "TemperatureLogitsWarper", "temperature": 0.9},
+            {"type": "TopPLogitsWarper", "top_p": 0.95},
+        ]
+    )
 
     generation_config = GenerationConfig(
-        max_length=50,
-        do_sample=True,
-        logit_processors=logit_config_json
+        max_length=50, do_sample=True, logit_processors=logit_config_json
     )
 
     input_ids = tokenizer.encode("Once upon a time", return_tensors="pt")
@@ -78,11 +76,13 @@ def example_custom_processor():
         """Custom processor that bans specific words."""
 
         def __init__(self, banned_words, tokenizer_vocab):
-            self.banned_token_ids = [tokenizer_vocab[w] for w in banned_words if w in tokenizer_vocab]
+            self.banned_token_ids = [
+                tokenizer_vocab[w] for w in banned_words if w in tokenizer_vocab
+            ]
 
         def __call__(self, input_ids, scores):  # type: ignore
             for token_id in self.banned_token_ids:
-                scores[:, token_id] = float('-inf')
+                scores[:, token_id] = float("-inf")
             return scores
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -94,14 +94,12 @@ def example_custom_processor():
         {
             "type": "WordBanLogitsProcessor",
             "banned_words": ["bad", "terrible"],
-            "tokenizer_vocab": tokenizer.get_vocab()
-        }
+            "tokenizer_vocab": tokenizer.get_vocab(),
+        },
     ]
 
     generation_config = GenerationConfig(
-        max_length=50,
-        do_sample=True,
-        logit_processors=logit_config
+        max_length=50, do_sample=True, logit_processors=logit_config
     )
 
     input_ids = tokenizer.encode("The weather today is", return_tensors="pt")
@@ -121,8 +119,8 @@ def example_config_file():
         "logit_processors": [
             {"type": "TemperatureLogitsWarper", "temperature": 0.7},
             {"type": "TopKLogitsWarper", "top_k": 40},
-            {"type": "NoRepeatNGramLogitsProcessor", "ngram_size": 3}
-        ]
+            {"type": "NoRepeatNGramLogitsProcessor", "ngram_size": 3},
+        ],
     }
 
     with open("generation_config.json", "w") as f:
