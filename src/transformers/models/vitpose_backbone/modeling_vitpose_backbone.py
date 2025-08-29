@@ -251,6 +251,7 @@ class VitPoseNaiveMoe(nn.ModuleList):
 
         return expert_hidden_state
 
+
 class VitPoseBackboneMoeMLP(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()

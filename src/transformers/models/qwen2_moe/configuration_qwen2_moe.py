@@ -238,7 +238,10 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % 2) and i < self.max_window_layers and use_sliding_window else "full_attention" for i in range(self.num_hidden_layers)
+                "sliding_attention"
+                if bool((i + 1) % 2) and i < self.max_window_layers and use_sliding_window
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
         super().__init__(
