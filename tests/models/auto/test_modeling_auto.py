@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import os
 import sys
 import tempfile
 import unittest
@@ -24,6 +25,7 @@ from huggingface_hub import Repository
 
 import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers.dynamic_module_utils import get_class_from_dynamic_module
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
@@ -579,3 +581,73 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+
+    def test_get_class_from_dynamic_module_multiple_dots(self):
+        """
+        Test that get_class_from_dynamic_module correctly handles both single and multiple dots in class references.
+        Tests both flat and nested module structures.
+        """
+        import shutil
+
+        from huggingface_hub import constants
+
+        # Create mock modules for both scenarios
+        nested_module_content = """
+class NestedModel:
+    def __init__(self):
+        self.name = "nested_model"
+    """
+
+        flat_module_content = """
+class FlatModel:
+    def __init__(self):
+        self.name = "flat_model"
+    """
+
+        # Create a temporary directory within the module cache
+        cache_dir = os.path.join(constants.HF_HOME, "modules", "transformers_modules")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        test_dir = os.path.join(cache_dir, "test_module_imports")
+        try:
+            # Create nested directory structure
+            os.makedirs(os.path.join(test_dir, "modeling", "nested"), exist_ok=True)
+
+            # Create the nested module file
+            nested_path = os.path.join(test_dir, "modeling", "nested", "model.py")
+            with open(nested_path, "w") as f:
+                f.write(nested_module_content)
+
+            # Create the flat module file
+            flat_path = os.path.join(test_dir, "modeling.py")
+            with open(flat_path, "w") as f:
+                f.write(flat_module_content)
+
+            # Test case 1: Multiple dots (nested structure)
+            nested_class = get_class_from_dynamic_module(
+                class_reference="modeling.nested.model.NestedModel",
+                pretrained_model_name_or_path=test_dir,
+                local_files_only=True,
+            )
+
+            # Verify nested class
+            self.assertIsNotNone(nested_class)
+            self.assertEqual(nested_class.__name__, "NestedModel")
+            nested_instance = nested_class()
+            self.assertEqual(nested_instance.name, "nested_model")
+
+            # Test case 2: Single dot (flat structure)
+            flat_class = get_class_from_dynamic_module(
+                class_reference="modeling.FlatModel", pretrained_model_name_or_path=test_dir, local_files_only=True
+            )
+
+            # Verify flat class
+            self.assertIsNotNone(flat_class)
+            self.assertEqual(flat_class.__name__, "FlatModel")
+            flat_instance = flat_class()
+            self.assertEqual(flat_instance.name, "flat_model")
+
+        finally:
+            # Clean up
+            if os.path.exists(test_dir):
+                shutil.rmtree(test_dir)
