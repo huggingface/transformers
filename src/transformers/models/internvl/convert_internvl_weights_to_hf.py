@@ -558,7 +558,7 @@ def write_image_processor(
 ):
     # Use InternVL3.5 image processor for InternVL3.5 models, otherwise use GotOcr2ImageProcessorFast
     if path and "InternVL3_5" in path:
-        image_processor = InternVL3_5ImageProcessor(
+        image_processor = Phi4MultimodalImageProcessorFast(
             do_resize=True,
             size={"height": 448, "width": 448},
             do_rescale=True,
@@ -567,10 +567,8 @@ def write_image_processor(
             image_mean=[0.485, 0.456, 0.406],
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
-            max_patches=12,
-            min_patches=1,
-            patch_size=448,
-            crop_to_patches=True,
+            patch_size=14,
+            dynamic_hd=12,
         )
     else:
         image_processor = GotOcr2ImageProcessorFast(
