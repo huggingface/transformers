@@ -156,9 +156,11 @@ class MinistralConfig(PretrainedConfig):
         self.layer_types = layer_types
 
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention" if self.sliding_window is not None else "full_attention"
-            ] * num_hidden_layers
+            base_pattern = ["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]
+            assert num_hidden_layers % len(base_pattern) == 0, (
+                "num_hidden_layers must be a multiple of the base pattern length"
+            )
+            self.layer_types = base_pattern * (num_hidden_layers // len(base_pattern))
 
 
 __all__ = ["MinistralConfig"]

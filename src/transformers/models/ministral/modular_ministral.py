@@ -1,5 +1,14 @@
+from typing import Optional
+
+import torch
 from torch import nn
 
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
 from ..mistral.configuration_mistral import MistralConfig
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
@@ -143,9 +152,11 @@ class MinistralConfig(MistralConfig):
         self.layer_types = layer_types
 
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention" if self.sliding_window is not None else "full_attention"
-            ] * num_hidden_layers
+            base_pattern = ["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]
+            assert num_hidden_layers % len(base_pattern) == 0, (
+                "num_hidden_layers must be a multiple of the base pattern length"
+            )
+            self.layer_types = base_pattern * (num_hidden_layers // len(base_pattern))
 
 
 class MinistralMLP(Qwen2MLP):
@@ -178,7 +189,80 @@ class MinistralRotaryEmbedding(Qwen2RotaryEmbedding):
 
 
 class MinistralModel(Qwen2Model):
-    pass
+    def __init__(self, config: MinistralConfig):
+        super().__init__(config)
+        del self.has_sliding_layers
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
 
 
 class MinistralForCausalLM(Qwen2ForCausalLM):
