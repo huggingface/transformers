@@ -242,327 +242,6 @@ def revert_delay_pattern(data):
     return torch.cat(out_l, dim=0)
 
 
-class HiggsAudioSampleProcessor:
-    """Sample processor for Higgs-Audio model.
-
-    Args:
-        round_to (int): The round-to value.
-        pad_left (bool): Whether to pad left.
-        return_audio_in_tokens (bool): Whether to return audio-in tokens.
-        use_delay_pattern (bool): Whether to use delay pattern.
-        disable_audio_codes_transform (bool): Whether to add bos and eos tokens to audio codes.
-        chunk_size_seconds (int): The chunk size in seconds.
-        add_new_bos_eos_for_long_chunk (bool): Whether to add new bos and eos tokens for long chunks.
-        mask_audio_out_token_label (bool): Whether to always mask the label associated with <|AUDIO_OUT|> token. Since we will always have `<|AUDIO_OUT|>` after `<|audio_bos|>`, we can safely mask <|AUDIO_OUT|>.
-
-    """
-
-    def __init__(
-        self,
-        round_to=1,
-        pad_left=False,
-        return_audio_in_tokens=True,
-        use_delay_pattern=True,
-        disable_audio_codes_transform=False,
-        chunk_size_seconds=30,  # Maximum duration for each chunk
-        add_new_bos_eos_for_long_chunk=True,
-        mask_audio_out_token_label=True,
-    ):
-        self.round_to = round_to
-        self.pad_left = pad_left
-        self.return_audio_in_tokens = return_audio_in_tokens
-        self.use_delay_pattern = use_delay_pattern
-        self.chunk_size_seconds = chunk_size_seconds
-        self.disable_audio_codes_transform = disable_audio_codes_transform
-        self.add_new_bos_eos_for_long_chunk = add_new_bos_eos_for_long_chunk
-        self.mask_audio_out_token_label = mask_audio_out_token_label
-
-    def _process_and_duplicate_audio_tokens(
-        self,
-        input_ids: "torch.Tensor",
-        audio_idx: int,
-        wv: "torch.Tensor",
-        chunk_size_samples: int,
-        labels: Optional["torch.Tensor"] = None,
-    ) -> tuple["torch.Tensor", "torch.Tensor", int]:
-        """Process long audio and duplicate corresponding audio tokens.
-
-        Args:
-            input_ids: Input token ids
-            audio_idx: Index of the audio token in the sequence
-            wv: Audio waveform
-            chunk_size_samples: Number of samples per chunk
-            labels: Optional label ids to be duplicated alongside input ids
-
-        Returns:
-            Tuple of:
-                - New input ids with duplicated audio tokens
-                - New label ids (if labels were provided) or None
-                - Number of chunks created
-        """
-        # Calculate number of chunks needed
-        total_samples = len(wv)
-        num_chunks = math.ceil(total_samples / chunk_size_samples)
-
-        if num_chunks <= 1:
-            return input_ids, labels, 1
-
-        # Get the three tokens: <|audio_bos|><|AUDIO|><|audio_eos|>
-        audio_token_seq = input_ids[audio_idx - 1 : audio_idx + 2]
-        # Duplicate sequence for each chunk
-        duplicated_sequence = audio_token_seq.repeat(num_chunks)
-
-        # Create new input_ids with duplicated tokens
-        new_input_ids = torch.cat([input_ids[: audio_idx - 1], duplicated_sequence, input_ids[audio_idx + 2 :]])
-
-        # If labels are provided, duplicate them as well
-        new_labels = None
-        if labels is not None:
-            label_seq = labels[audio_idx - 1 : audio_idx + 2]
-            duplicated_labels = label_seq.repeat(num_chunks)
-            new_labels = torch.cat([labels[: audio_idx - 1], duplicated_labels, labels[audio_idx + 2 :]])
-
-        return new_input_ids, new_labels, num_chunks
-
-    def __call__(
-        self,
-        batch: list[HiggsAudioChatSample],
-        audio_in_token="<|AUDIO|>",
-        audio_out_token="<|AUDIO_OUT|>",
-        audio_in_token_idx=128015,
-        audio_out_token_idx=128016,
-        audio_stream_bos_id=1024,
-        audio_stream_eos_id=1025,
-        pad_token_id=128001,
-        audio_num_codebooks=8,
-        audio_codebook_size=1024,
-    ):
-        """Collate the input data with support for long audio processing."""
-
-        label_ids = None
-        label_audio_ids = None
-        if all(ele.label_ids is None for ele in batch):
-            return_labels = False
-        else:
-            return_labels = True
-
-        processed_batch = batch
-
-        # Get the max sequence length based on processed batch
-        max_seq_length = _ceil_to_nearest(max([len(sample.input_ids) for sample in processed_batch]), self.round_to)
-
-        # Get the ids for audio-in and audio-out for each batch
-        audio_in_ids_l = []
-        audio_out_ids_l = []
-        audio_in_label_ids_l = None
-        audio_out_label_ids_l = None
-
-        if return_labels:
-            audio_out_no_train_flag = []  # Whether the audio-out data should be trained on or not.
-
-        # Process the audio inputs and outputs
-        for i in range(len(processed_batch)):
-            audio_in_mask = processed_batch[i].input_ids == audio_in_token_idx
-            audio_out_mask = processed_batch[i].input_ids == audio_out_token_idx
-            audio_ids = torch.ones_like(processed_batch[i].input_ids)
-            audio_ids[audio_in_mask ^ audio_out_mask] = torch.cumsum(audio_ids[audio_in_mask ^ audio_out_mask], 0) - 1
-            audio_in_ids = audio_ids[audio_in_mask]
-            audio_out_ids = audio_ids[audio_out_mask]
-
-            if return_labels:
-                audio_out_no_train_flag.append(processed_batch[i].label_ids[audio_out_mask] < 0)
-                if self.mask_audio_out_token_label:
-                    processed_batch[i].label_ids[audio_out_mask] = -100
-
-            # Process audio inputs
-            if self.return_audio_in_tokens:
-                audio_in_ids_l.extend(
-                    [processed_batch[i].get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_in_ids]
-                )
-                if processed_batch[i].audio_label_ids_concat is not None:
-                    if audio_in_label_ids_l is None:
-                        audio_in_label_ids_l = []
-                    audio_in_label_ids_l.extend(
-                        [
-                            processed_batch[i].get_audio_codes_labels(idx)[:audio_num_codebooks, :]
-                            for idx in audio_in_ids
-                        ]
-                    )
-
-            audio_out_ids_l.extend(
-                [processed_batch[i].get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
-            )
-
-            if processed_batch[i].audio_label_ids_concat is not None:
-                if audio_out_label_ids_l is None:
-                    audio_out_label_ids_l = []
-                audio_out_label_ids_l.extend(
-                    [processed_batch[i].get_audio_codes_labels(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
-                )
-
-        if return_labels:
-            audio_out_no_train_flag = torch.cat(audio_out_no_train_flag, dim=0)
-
-        # Process audio input tokens
-        if len(audio_in_ids_l) > 0:
-            # Append audio-stream-bos and eos tokens
-            new_audio_in_ids_l = []
-            for ele in audio_in_ids_l:
-                if self.disable_audio_codes_transform:
-                    # Do not add audio-stream-bos or eos tokens.
-                    # This may indicate that the sample comes from ConstantLengthDatasetWithBuffer.
-                    audio_codes = ele
-                else:
-                    audio_codes = torch.cat(
-                        [
-                            torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
-                            ele,
-                            torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                        ],
-                        dim=1,
-                    )
-                    if self.use_delay_pattern:
-                        audio_codes = build_delay_pattern_mask(
-                            audio_codes.unsqueeze(0),
-                            bos_token_id=audio_stream_bos_id,
-                            pad_token_id=audio_stream_eos_id,
-                        )[0].squeeze(0)
-                new_audio_in_ids_l.append(audio_codes)
-            audio_in_ids = torch.cat(new_audio_in_ids_l, dim=1).long()
-            audio_in_ids_start = torch.cumsum(
-                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_in_ids_l[:-1]]), dim=0
-            )
-        else:
-            audio_in_ids = torch.zeros((0, 0), dtype=torch.long)
-            audio_in_ids_start = torch.zeros(0, dtype=torch.long)
-
-        # Process audio output tokens
-        if len(audio_out_ids_l) > 0:
-            new_audio_out_ids_l = []
-            label_audio_ids_l = []
-            for idx, ele in enumerate(audio_out_ids_l):
-                if self.disable_audio_codes_transform:
-                    # Do not add audio-stream-bos or eos tokens.
-                    # This may indicate that the sample comes from ConstantLengthDatasetWithBuffer.
-                    audio_codes = ele
-                    if return_labels:
-                        label_audio_ids = audio_out_label_ids_l[idx]
-                else:
-                    audio_codes = torch.cat(
-                        [
-                            torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
-                            ele,
-                            torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                        ],
-                        dim=1,
-                    )
-                    if return_labels:
-                        label_audio_ids = torch.cat(
-                            [
-                                torch.full((ele.shape[0], 1), -100, dtype=torch.long),
-                                ele,
-                                torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                            ],
-                            dim=1,
-                        )
-                    if self.use_delay_pattern:
-                        audio_codes = build_delay_pattern_mask(
-                            audio_codes.unsqueeze(0),
-                            bos_token_id=audio_stream_bos_id,
-                            pad_token_id=audio_stream_eos_id,
-                        )[0].squeeze(0)
-                        if return_labels:
-                            label_audio_ids = build_delay_pattern_mask(
-                                label_audio_ids.unsqueeze(0),
-                                bos_token_id=-100,
-                                pad_token_id=-100,
-                            )[0].squeeze(0)
-                new_audio_out_ids_l.append(audio_codes)
-
-                if return_labels:
-                    if audio_out_no_train_flag[idx]:
-                        label_audio_ids[:] = -100
-                    label_audio_ids_l.append(label_audio_ids)
-
-            audio_out_ids = torch.cat(new_audio_out_ids_l, dim=1).long()
-            if return_labels:
-                label_audio_ids = torch.cat(label_audio_ids_l, dim=1).long()
-            audio_out_ids_start = torch.cumsum(
-                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_out_ids_l[:-1]]), dim=0
-            )
-        else:
-            audio_out_ids = torch.zeros((0, 0), dtype=torch.long)
-            audio_out_ids_start = torch.zeros(0, dtype=torch.long)
-            if return_labels:
-                label_audio_ids = torch.zeros((0, 0), dtype=torch.long)
-
-        # Handle padding for input ids and attention mask
-        if self.pad_left:
-            input_ids = torch.stack(
-                [
-                    F.pad(ele.input_ids, (max_seq_length - len(ele.input_ids), 0), value=pad_token_id)
-                    for ele in processed_batch
-                ]
-            )
-            if return_labels:
-                label_ids = torch.stack(
-                    [
-                        F.pad(ele.label_ids, (max_seq_length - len(ele.label_ids), 0), value=-100)
-                        for ele in processed_batch
-                    ]
-                )
-            attention_mask = torch.stack(
-                [
-                    F.pad(torch.ones_like(ele.input_ids), (max_seq_length - len(ele.input_ids), 0), value=0)
-                    for ele in processed_batch
-                ]
-            )
-        else:
-            input_ids = torch.stack(
-                [
-                    F.pad(ele.input_ids, (0, max_seq_length - len(ele.input_ids)), value=pad_token_id)
-                    for ele in processed_batch
-                ]
-            )
-            if return_labels:
-                label_ids = torch.stack(
-                    [
-                        F.pad(ele.label_ids, (0, max_seq_length - len(ele.label_ids)), value=-100)
-                        for ele in processed_batch
-                    ]
-                )
-            attention_mask = torch.stack(
-                [
-                    F.pad(torch.ones_like(ele.input_ids), (0, max_seq_length - len(ele.input_ids)), value=0)
-                    for ele in processed_batch
-                ]
-            )
-
-        if not self.return_audio_in_tokens:
-            audio_in_ids = None
-            audio_in_ids_start = None
-
-        # Apply audio_num_codebooks limit if specified
-        if audio_num_codebooks is not None:
-            if audio_in_ids is not None:
-                audio_in_ids = audio_in_ids[:audio_num_codebooks]
-            if audio_out_ids is not None:
-                audio_out_ids = audio_out_ids[:audio_num_codebooks]
-            if label_audio_ids is not None:
-                label_audio_ids = label_audio_ids[:audio_num_codebooks]
-
-        return HiggsAudioBatchInput(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            audio_out_ids=audio_out_ids,
-            audio_out_ids_start=audio_out_ids_start,
-            audio_in_ids=audio_in_ids,
-            audio_in_ids_start=audio_in_ids_start,
-            label_ids=label_ids,
-            label_audio_ids=label_audio_ids,
-        )
-
-
 class HiggsAudioProcessor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
@@ -600,12 +279,6 @@ class HiggsAudioProcessor(ProcessorMixin):
             tokenizer,
             audio_tokenizer=audio_tokenizer,
             chat_template=chat_template,
-        )
-
-        self.processor = HiggsAudioSampleProcessor(
-            return_audio_in_tokens=False,
-            use_delay_pattern=True,
-            round_to=1,
         )
 
     def __call__(
@@ -687,14 +360,11 @@ class HiggsAudioProcessor(ProcessorMixin):
                 else:
                     processed_audio = np.array(audio_data)
 
-                # Generate audio tokens if tokenizer available
-                if hasattr(self, "audio_tokenizer"):
-                    input_values = self.feature_extractor(processed_audio)
-                    print(input_values)
-                    input_values = torch.tensor(input_values["input_values"][0], device=self.audio_tokenizer.device).unsqueeze(0)
-                    print(input_values.shape)
-                    audio_ids = self.audio_tokenizer.encode(input_values)
-                    audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
+                # Generate audio tokens
+                input_values = self.feature_extractor(processed_audio)
+                input_values = torch.tensor(input_values["input_values"][0], device=self.audio_tokenizer.device).unsqueeze(0)
+                audio_ids = self.audio_tokenizer.encode(input_values)
+                audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
 
         # Create samples
         samples = []
@@ -729,22 +399,256 @@ class HiggsAudioProcessor(ProcessorMixin):
             samples.append(sample)
 
         # Use collator to process the sample
-        batch_data = self.processor(
+        batch_data = self.process_sample(
             samples,
-            audio_in_token=audio_kwargs["audio_in_token"],
-            audio_out_token=audio_kwargs["audio_out_token"],
             audio_in_token_idx=audio_kwargs["audio_in_token_idx"],
             audio_out_token_idx=audio_kwargs["audio_out_token_idx"],
             audio_stream_bos_id=audio_kwargs["audio_stream_bos_id"],
             audio_stream_eos_id=audio_kwargs["audio_stream_eos_id"],
             pad_token_id=text_kwargs["pad_token_id"],
             audio_num_codebooks=audio_kwargs["audio_num_codebooks"],
-            audio_codebook_size=audio_kwargs["audio_codebook_size"],
         )
         inputs = asdict(batch_data) if hasattr(batch_data, "__dict__") else batch_data._asdict()
         inputs = {k: v for k, v in inputs.items() if v is not None}
 
         return BatchFeature(data=inputs, tensor_type=return_tensors)
+
+    @staticmethod
+    def process_sample(
+        batch: list[HiggsAudioChatSample],
+        audio_in_token_idx=128015,
+        audio_out_token_idx=128016,
+        audio_stream_bos_id=1024,
+        audio_stream_eos_id=1025,
+        pad_token_id=128001,
+        audio_num_codebooks=8,
+        pad_left=False,
+        round_to=1,
+        return_audio_in_tokens=False,
+        mask_audio_out_token_label=True,
+        disable_audio_codes_transform=False,
+    ):
+        """Collate the input data with support for long audio processing."""
+
+        label_ids = None
+        label_audio_ids = None
+        if all(ele.label_ids is None for ele in batch):
+            return_labels = False
+        else:
+            return_labels = True
+
+        processed_batch = batch
+
+        # Get the max sequence length based on processed batch
+        max_seq_length = _ceil_to_nearest(max([len(sample.input_ids) for sample in processed_batch]), round_to)
+
+        # Get the ids for audio-in and audio-out for each batch
+        audio_in_ids_l = []
+        audio_out_ids_l = []
+        audio_in_label_ids_l = None
+        audio_out_label_ids_l = None
+
+        if return_labels:
+            audio_out_no_train_flag = []  # Whether the audio-out data should be trained on or not.
+
+        # Process the audio inputs and outputs
+        for i in range(len(processed_batch)):
+            audio_in_mask = processed_batch[i].input_ids == audio_in_token_idx
+            audio_out_mask = processed_batch[i].input_ids == audio_out_token_idx
+            audio_ids = torch.ones_like(processed_batch[i].input_ids)
+            audio_ids[audio_in_mask ^ audio_out_mask] = torch.cumsum(audio_ids[audio_in_mask ^ audio_out_mask], 0) - 1
+            audio_in_ids = audio_ids[audio_in_mask]
+            audio_out_ids = audio_ids[audio_out_mask]
+
+            if return_labels:
+                audio_out_no_train_flag.append(processed_batch[i].label_ids[audio_out_mask] < 0)
+                if mask_audio_out_token_label:
+                    processed_batch[i].label_ids[audio_out_mask] = -100
+
+            # Process audio inputs
+            if return_audio_in_tokens:
+                audio_in_ids_l.extend(
+                    [processed_batch[i].get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_in_ids]
+                )
+                if processed_batch[i].audio_label_ids_concat is not None:
+                    if audio_in_label_ids_l is None:
+                        audio_in_label_ids_l = []
+                    audio_in_label_ids_l.extend(
+                        [
+                            processed_batch[i].get_audio_codes_labels(idx)[:audio_num_codebooks, :]
+                            for idx in audio_in_ids
+                        ]
+                    )
+
+            audio_out_ids_l.extend(
+                [processed_batch[i].get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
+            )
+
+            if processed_batch[i].audio_label_ids_concat is not None:
+                if audio_out_label_ids_l is None:
+                    audio_out_label_ids_l = []
+                audio_out_label_ids_l.extend(
+                    [processed_batch[i].get_audio_codes_labels(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
+                )
+
+        if return_labels:
+            audio_out_no_train_flag = torch.cat(audio_out_no_train_flag, dim=0)
+
+        # Process audio input tokens
+        if len(audio_in_ids_l) > 0:
+            # Append audio-stream-bos and eos tokens
+            new_audio_in_ids_l = []
+            for ele in audio_in_ids_l:
+                if disable_audio_codes_transform:
+                    # Do not add audio-stream-bos or eos tokens.
+                    audio_codes = ele
+                else:
+                    audio_codes = torch.cat(
+                        [
+                            torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
+                            ele,
+                            torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
+                        ],
+                        dim=1,
+                    )
+                    audio_codes = build_delay_pattern_mask(
+                        audio_codes.unsqueeze(0),
+                        bos_token_id=audio_stream_bos_id,
+                        pad_token_id=audio_stream_eos_id,
+                    )[0].squeeze(0)
+                new_audio_in_ids_l.append(audio_codes)
+            audio_in_ids = torch.cat(new_audio_in_ids_l, dim=1).long()
+            audio_in_ids_start = torch.cumsum(
+                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_in_ids_l[:-1]]), dim=0
+            )
+        else:
+            audio_in_ids = torch.zeros((0, 0), dtype=torch.long)
+            audio_in_ids_start = torch.zeros(0, dtype=torch.long)
+
+        # Process audio output tokens
+        if len(audio_out_ids_l) > 0:
+            new_audio_out_ids_l = []
+            label_audio_ids_l = []
+            for idx, ele in enumerate(audio_out_ids_l):
+                if disable_audio_codes_transform:
+                    # Do not add audio-stream-bos or eos tokens.
+                    audio_codes = ele
+                    if return_labels:
+                        label_audio_ids = audio_out_label_ids_l[idx]
+                else:
+                    audio_codes = torch.cat(
+                        [
+                            torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
+                            ele,
+                            torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
+                        ],
+                        dim=1,
+                    )
+                    if return_labels:
+                        label_audio_ids = torch.cat(
+                            [
+                                torch.full((ele.shape[0], 1), -100, dtype=torch.long),
+                                ele,
+                                torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
+                            ],
+                            dim=1,
+                        )
+
+                    audio_codes = build_delay_pattern_mask(
+                        audio_codes.unsqueeze(0),
+                        bos_token_id=audio_stream_bos_id,
+                        pad_token_id=audio_stream_eos_id,
+                    )[0].squeeze(0)
+                    if return_labels:
+                        label_audio_ids = build_delay_pattern_mask(
+                            label_audio_ids.unsqueeze(0),
+                            bos_token_id=-100,
+                            pad_token_id=-100,
+                        )[0].squeeze(0)
+                new_audio_out_ids_l.append(audio_codes)
+
+                if return_labels:
+                    if audio_out_no_train_flag[idx]:
+                        label_audio_ids[:] = -100
+                    label_audio_ids_l.append(label_audio_ids)
+
+            audio_out_ids = torch.cat(new_audio_out_ids_l, dim=1).long()
+            if return_labels:
+                label_audio_ids = torch.cat(label_audio_ids_l, dim=1).long()
+            audio_out_ids_start = torch.cumsum(
+                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_out_ids_l[:-1]]), dim=0
+            )
+        else:
+            audio_out_ids = torch.zeros((0, 0), dtype=torch.long)
+            audio_out_ids_start = torch.zeros(0, dtype=torch.long)
+            if return_labels:
+                label_audio_ids = torch.zeros((0, 0), dtype=torch.long)
+
+        # Handle padding for input ids and attention mask
+        if pad_left:
+            input_ids = torch.stack(
+                [
+                    F.pad(ele.input_ids, (max_seq_length - len(ele.input_ids), 0), value=pad_token_id)
+                    for ele in processed_batch
+                ]
+            )
+            if return_labels:
+                label_ids = torch.stack(
+                    [
+                        F.pad(ele.label_ids, (max_seq_length - len(ele.label_ids), 0), value=-100)
+                        for ele in processed_batch
+                    ]
+                )
+            attention_mask = torch.stack(
+                [
+                    F.pad(torch.ones_like(ele.input_ids), (max_seq_length - len(ele.input_ids), 0), value=0)
+                    for ele in processed_batch
+                ]
+            )
+        else:
+            input_ids = torch.stack(
+                [
+                    F.pad(ele.input_ids, (0, max_seq_length - len(ele.input_ids)), value=pad_token_id)
+                    for ele in processed_batch
+                ]
+            )
+            if return_labels:
+                label_ids = torch.stack(
+                    [
+                        F.pad(ele.label_ids, (0, max_seq_length - len(ele.label_ids)), value=-100)
+                        for ele in processed_batch
+                    ]
+                )
+            attention_mask = torch.stack(
+                [
+                    F.pad(torch.ones_like(ele.input_ids), (0, max_seq_length - len(ele.input_ids)), value=0)
+                    for ele in processed_batch
+                ]
+            )
+
+        if not return_audio_in_tokens:
+            audio_in_ids = None
+            audio_in_ids_start = None
+
+        # Apply audio_num_codebooks limit if specified
+        if audio_num_codebooks is not None:
+            if audio_in_ids is not None:
+                audio_in_ids = audio_in_ids[:audio_num_codebooks]
+            if audio_out_ids is not None:
+                audio_out_ids = audio_out_ids[:audio_num_codebooks]
+            if label_audio_ids is not None:
+                label_audio_ids = label_audio_ids[:audio_num_codebooks]
+
+        return HiggsAudioBatchInput(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            audio_out_ids=audio_out_ids,
+            audio_out_ids_start=audio_out_ids_start,
+            audio_in_ids=audio_in_ids,
+            audio_in_ids_start=audio_in_ids_start,
+            label_ids=label_ids,
+            label_audio_ids=label_audio_ids,
+        )
 
     def batch_decode(
         self,
