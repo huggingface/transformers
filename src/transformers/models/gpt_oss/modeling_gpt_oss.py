@@ -99,7 +99,7 @@ class GptOssExperts(nn.Module):
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
                 # masking is also a class for one hot
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts+1)
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts + 1)
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence length to get which experts
                 # are hit this time around
