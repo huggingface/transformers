@@ -234,6 +234,7 @@ class VitPoseNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
+        self.part_features = config.part_features
 
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         part_features = config.part_features
