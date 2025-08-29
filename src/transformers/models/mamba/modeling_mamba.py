@@ -73,6 +73,7 @@ class MambaCache:
     Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, MambaForCausalLM, MambaCache
 
         >>> model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
@@ -81,9 +82,10 @@ class MambaCache:
         >>> inputs = tokenizer(text="My name is Mamba", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values
+        >>> cache_params = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
+        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs.cache_params
         MambaCache()
         ```
     """
