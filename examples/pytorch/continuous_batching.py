@@ -29,33 +29,26 @@ MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 
 
 def generate_simple(
-    attn_implementation: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
-) -> list[str]:
-    attn_implementation = {
+    attn_implem: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
+) -> dict[str, str]:
+    attn_implem = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
         "flash_paged": "flash_attention_2",
-    }[attn_implementation]
+    }[attn_implem]
 
-    model = (
-        AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            torch_dtype=torch.bfloat16,
-            attn_implementation=attn_implementation,
-        )
-        .cuda()
-        .eval()
-    )
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_implem)
+    model = model.cuda().eval()
 
-    decoded_outputs = []
+    decoded_outputs = {}
     for input_ids in simple_batch_inputs:
+        key = ";".join(map(str, input_ids))
         input_ids = torch.tensor([input_ids]).to("cuda")
-        attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
+        # attention_mask = torch.ones_like(input_ids)
+        outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
         generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        decoded_outputs.append(decoded_output)
-
+        decoded_outputs[key] = decoded_output
     return decoded_outputs
 
 
@@ -117,7 +110,8 @@ def batch_generate(
     data = []
     for i, request in enumerate(batch_outputs):
         input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=True)
-        data.append({"input": input_text})
+        key = ";".join(map(str, batch_outputs[request].prompt_ids))
+        data.append({"input": input_text, "key": key})
 
         # Try to decode the output
         try:
@@ -142,9 +136,11 @@ def batch_generate(
 
         # Compare with classic generate if asked
         if expected_outputs is not None:
-            matches = output_text == expected_outputs[i]
-            data[-1]["ref"] = expected_outputs[i]
+            expected_output = expected_outputs.pop(key)
+            matches = output_text == expected_output
+            data[-1]["ref"] = expected_output
             data[-1]["matches"] = matches
+            data[-1].pop("key")
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
     # Compute stats and maybe print them
