@@ -494,9 +494,13 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
     # length, with `config.max_position_embeddings` corresponding to their post-yarn context length.
     # However, for BC purposes, we allow the former to be unset.
     original_max_position_embeddings = config.rope_scaling.get("original_max_position_embeddings")
+    print(original_max_position_embeddings)
     if original_max_position_embeddings is not None:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         implicit_factor = config.max_position_embeddings / original_max_position_embeddings
+        print(implicit_factor)
+        print(factor)
+        print(implicit_factor==factor)
         if implicit_factor != factor:
             logger.warning_once(
                 f"The explicitly set RoPE scaling factor (config.rope_scaling['factor'] = {factor}) does not match "
@@ -510,6 +514,8 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
     # pre-yarn or the post-yarn context length?
     # BC: we assume it is the pre-yarn context length.
     else:
+        print("we are here somehow")
+        print(original_max_position_embeddings)
         logger.warning_once(
             "config.rope_scaling['original_max_position_embeddings'], the pre-yarn context length, is unset. We will "
             "**assume** config.max_position_embeddings holds the pre-yarn context length. Some use cases may expect "
