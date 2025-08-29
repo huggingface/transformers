@@ -290,16 +290,16 @@ class Ernie4_5_MoeStatics(nn.Module):
 class Ernie4_5_MoeNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.top_k = config.moe_k
+        self.num_experts = config.moe_num_experts
+        self.norm_min = config.moe_norm_min
         for _ in range(self.num_experts):
-            self += [Ernie4_5_MoeMLP(config, config.moe_intermediate_size)]
+            self += [Ernie4_5_MoeMLP(config)]
 
-    def forward(self, hidden_states, e_score_correction_bias, device_type):
-        # router_logits: (batch * sequence_length, n_experts)
+    def forward(self, hidden_states, routing_weights, routing_bias, device_type):
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            routing_weights = F.softmax(hidden_states, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(routing_weights + e_score_correction_bias, self.top_k, dim=-1)
+            routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(routing_weights + routing_bias, self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
@@ -307,10 +307,12 @@ class Ernie4_5_MoeNaiveMoe(nn.ModuleList):
             routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = torch.zeros_like(hidden_states, device=hidden_states.device)
+
         # One hot encode the selected experts to create an expert mask
         # this will be used to easily index which expert is going to be sollicitated
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
+        # Loop over all available experts in the model and perform the computation on each expert
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             expert_layer = self[expert_idx]
@@ -344,6 +346,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
 
@@ -353,7 +356,6 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
         self.experts = Ernie4_5_MoeNaiveMoe(config)
-        self.norm_min = config.moe_norm_min
 
         # (optional) shared experts for all forwards
         self.shared_experts = None
@@ -364,8 +366,8 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
+        batch_size, sequence_length, _ = hidden_states.shape
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
 
         # (Optional) shared experts
         if self.shared_experts is not None:
@@ -381,14 +383,17 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             router_logits = self.gate(hidden_states.float())
 
         final_hidden_states = self.experts(
-            hidden_states, self.moe_statics.e_score_correction_bias.squeeze(), device_type
+            hidden_states,
+            routing_weights=router_logits,
+            routing_bias=self.moe_statics.e_score_correction_bias.squeeze(),
+            device_type=device_type,
         )
 
         # Add (optional) shared experts to the result
         if self.shared_experts is not None:
             final_hidden_states = final_hidden_states + shared_output
 
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
         return final_hidden_states, router_logits
 
 
