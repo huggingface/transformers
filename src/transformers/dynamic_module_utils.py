@@ -428,10 +428,10 @@ def get_cached_module_file(
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
-            if not (submodule_path / f"{module_needed}.py").exists():
+            if not ((submodule_path / module_file).parent / f"{module_needed}.py").exists():
                 get_cached_module_file(
                     pretrained_model_name_or_path,
-                    f"{module_needed}.py",
+                    f"{Path(module_file).parent / module_needed}.py",
                     cache_dir=cache_dir,
                     force_download=force_download,
                     resume_download=resume_download,
