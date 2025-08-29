@@ -30,11 +30,11 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import check_model_inputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..whisper.processing_whisper import ParakeetProcessor
+from ..wav2vec2.processing_wav2vec2 import Wav2Vec2Processor
 from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
 
 
-class ParakeetProcessor(ParakeetProcessor):
+class ParakeetProcessor(Wav2Vec2Processor):
     feature_extractor_class = "ParakeetFeatureExtractor"
     tokenizer_class = "ParakeetCTCTokenizer"
 
@@ -52,10 +52,7 @@ class ParakeetProcessor(ParakeetProcessor):
         group_tokens = kwargs.pop("group_tokens", True)
         return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
 
-    def get_prompt_ids(self):
-        raise AttributeError("Not needed for Parakeet")
-
-    def get_decoder_prompt_ids(self):
+    def pad(self):
         raise AttributeError("Not needed for Parakeet")
 
 
@@ -328,7 +325,6 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    # TODO: @eustlb, check if this works
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -427,7 +423,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         if attention_mask is not None:
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
 
-            # TODO: @eustlb, which mask utils to do the same?
+            # NOTE: @eustlb, which mask utils to do the same?
             # @ebezzam could use `create_causal_mask` but more complicated
             # as `and_mask_function` requires callable mask function
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)

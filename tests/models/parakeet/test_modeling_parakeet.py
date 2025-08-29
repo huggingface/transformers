@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -278,11 +278,9 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # Original function assumes (vision+text model)
-    # Below is modified from `tests/models/granite_speech/test_modeling_granite_speech.py` and removes language model
-    @require_torch_sdpa
+    # Original function assumes vision+text model, so overwrite since Parakeet is audio+text
+    # Below is modified from `tests/models/granite_speech/test_modeling_granite_speech.py`
     def test_sdpa_can_dispatch_composite_models(self):
-        # overwrite because Parakeet is audio+text model (not vision+text)
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 

@@ -6,16 +6,16 @@
 
 ## Overview
 
-ParakeetCTC is a complete speech recognition model that combines a FastConformer encoder with a CTC (Connectionist Temporal Classification) decoder for automatic speech recognition. It is part of the **Parakeet** family of models from NVIDIA NeMo that use the FastConformer architecture as their encoder foundation.
+ParakeetCTC is a complete speech recognition model that combines a [Fast Conformer](https://docs.nvidia.com/nemo-framework/user-guide/latest/nemotoolkit/asr/models.html#fast-conformer) encoder with a CTC (Connectionist Temporal Classification) decoder for automatic speech recognition. It is part of the **Parakeet** family of models from NVIDIA NeMo that use the FastConformer architecture as their encoder foundation.
 
 The ParakeetCTC model consists of two main components:
 
-1. **FastConformer Encoder**: A linearly scalable Conformer architecture that processes mel-spectrogram features and reduces sequence length through subsampling (see [`FastConformerModel`] for encoder details).
+1. **Fast Conformer Encoder**: A linearly scalable Conformer architecture that processes mel-spectrogram features and reduces sequence length through subsampling. This is more efficient version of the Conformer Encoder found in [FastSpeech2Conformer](./fastspeech2_conformer.md) (see [`ParakeetEncoder`] for the encoder implementation and details).
 
 2. **CTC Decoder**: Simple but effective decoder consisting of:
-   - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility)
-   - CTC loss computation for training
-   - Greedy CTC decoding for inference
+   - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
+   - CTC loss computation for training.
+   - Greedy CTC decoding for inference.
 
 ParakeetCTC achieves state-of-the-art accuracy while being computationally efficient, making it suitable for both research and production deployments. The model supports various vocabulary sizes and can handle character-level, subword, or word-level tokenization.
 
@@ -125,11 +125,11 @@ print("Transcription (batch):", texts)
 
 ## Model Architecture
 
-ParakeetCTC follows an encoder-decoder architecture specifically designed for CTC-based speech recognition:
+`ParakeetForCTC` follows an encoder-decoder architecture specifically designed for CTC-based speech recognition:
 
 ### Components
 
-1. **FastConformer Encoder**: Processes mel-spectrogram features using:
+1. **Fast Conformer Encoder**: Processes mel-spectrogram features using:
    - Subsampling layer (8x downsampling with convolutional layers)
    - Multiple Conformer blocks with attention and convolution modules
    - Relative positional encoding for better sequence modeling
@@ -154,8 +154,8 @@ ParakeetCTC follows an encoder-decoder architecture specifically designed for CT
 
 ## Usage Tips
 
-- `ParakeetForCTC` is specifically designed for speech recognition tasks using CTC. For other speech tasks, consider the base [`FastConformerModel`] with custom decoders.
-- The model expects mel-spectrogram features as input. Use [`FastConformerFeatureExtractor`] for proper preprocessing.
+- `ParakeetForCTC` is specifically designed for speech recognition tasks using CTC. For other speech tasks, consider the base [`ParakeetEncoder`] with custom decoders.
+- The model expects mel-spectrogram features as input. Use [`ParakeetFeatureExtractor`] for proper preprocessing.
 - For best results, ensure your audio is sampled at 16kHz as expected by the feature extractor.
 - The `model.generate()` method performs CTC decoding internally and returns already-decoded token sequences. Simply use `tokenizer.decode()` to convert these to text.
 - The model automatically handles sequence length computation and attention masking for batched inputs.

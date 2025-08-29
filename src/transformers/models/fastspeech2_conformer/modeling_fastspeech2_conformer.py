@@ -483,7 +483,7 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
         channels = config.hidden_size
         # kernel_size should be an odd number for 'SAME' padding
         if module_config is None:
-            # `ParakeetEncoderConfig` in src/transformers/models/parakeet/configuration_parakeet.py
+            # e.g. using `ParakeetEncoderConfig` in src/transformers/models/parakeet/configuration_parakeet.py
             kernel_size = config.conv_kernel_size
             self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
         else:
@@ -521,13 +521,11 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
         if attention_mask is not None:
             all_masked_rows = torch.all(~attention_mask, dim=-1)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
-            # hidden_states = nn.functional.pad(hidden_states, (self.padding, self.padding))
 
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.norm(hidden_states)
         hidden_states = self.activation(hidden_states)
-        # hidden_states = hidden_states * torch.sigmoid(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
 
         return hidden_states.transpose(1, 2)

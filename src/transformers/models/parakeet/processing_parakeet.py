@@ -18,23 +18,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
+from contextlib import contextmanager
+from typing import Optional, Union
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+from .feature_extraction_parakeet import ParakeetFeatureExtractor
+from .tokenization_parakeet import ParakeetCTCTokenizer
+
+
+class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class ParakeetProcessor(ProcessorMixin):
     r"""
-    Constructs a Parakeet processor which wraps a Parakeet feature extractor and a Parakeet tokenizer into a single
+    Constructs a Parakeet processor which wraps a Parakeet feature extractor and a Parakeet CTC tokenizer into a single
     processor.
 
-    [`ParakeetProcessor`] offers all the functionalities of [`ParakeetFeatureExtractor`] and [`ParakeetTokenizer`]. See
-    the [`~ParakeetProcessor.__call__`] and [`~ParakeetProcessor.decode`] for more information.
+    [`ParakeetProcessor`] offers all the functionalities of [`ParakeetFeatureExtractor`] and [`PreTrainedTokenizer`].
+    See the docstring of [`~ParakeetProcessor.__call__`] and [`~ParakeetProcessor.decode`] for more information.
 
     Args:
         feature_extractor (`ParakeetFeatureExtractor`):
             An instance of [`ParakeetFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`ParakeetTokenizer`):
-            An instance of [`ParakeetTokenizer`]. The tokenizer is a required input.
+        tokenizer ([`PreTrainedTokenizer`]):
+            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
     feature_extractor_class = "ParakeetFeatureExtractor"
@@ -45,54 +55,105 @@ class ParakeetProcessor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-    def __call__(self, *args, **kwargs):
-        """
-        Forwards the `audio` argument to ParakeetFeatureExtractor's [`~ParakeetFeatureExtractor.__call__`] and the `text`
-        argument to [`~ParakeetTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        try:
+            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        except (OSError, ValueError):
+            warnings.warn(
+                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
+                " include a `tokenizer_class` attribute is deprecated and will be "
+                "removed in v5. Please add `'tokenizer_class': 'ParakeetCTCTokenizer'`"
+                " attribute to either your `config.json` or `tokenizer_config.json` "
+                "file to suppress this warning: ",
+                FutureWarning,
+            )
 
-        audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
+            feature_extractor = ParakeetFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = ParakeetCTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+    def __call__(
+        self,
+        audio: AudioInput = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[ParakeetProcessorKwargs],
+    ):
+        """
+        This method forwards all arguments to [`ParakeetFeatureExtractor.__call__`] and/or
+        [`PreTrainedTokenizer.__call__`] depending on the input modality and returns their outputs. If both modalities are passed, [`ParakeetFeatureExtractor.__call__`] and [`PreTrainedTokenizer.__call__`] are called.
+
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                An audio input is passed to [`ParakeetFeatureExtractor.__call__`].
+            text (`str`, `List[str]`, *optional*):
+                A text input is passed to [`PreTrainedTokenizer.__call__`].
+
+
+        Returns:
+            This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
+        """
+        if "raw_speech" in kwargs:
+            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            audio = kwargs.pop("raw_speech")
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
+        output_kwargs = self._merge_kwargs(
+            ParakeetProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(
+                audio,
+                **output_kwargs["audio_kwargs"],
+                **output_kwargs["text_kwargs"],
+                **output_kwargs["common_kwargs"],
+            )
+
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs
-
         elif audio is None:
             return encodings
         else:
             inputs["labels"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
+    @property
+    def model_input_names(self):
+        # The processor doesn't return text ids and the model seems to not need them
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
+
+    @contextmanager
+    def as_target_processor(self):
         """
-        This method forwards all its arguments to ParakeetTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
+        Parakeet.
         """
-        # Default to grouping tokens for CTC duplicate removal
-        group_tokens = kwargs.pop("group_tokens", True)
-        return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
+        warnings.warn(
+            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
+            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
+            "your audio inputs, or in a separate call."
+        )
+        self._in_target_context_manager = True
+        self.current_processor = self.tokenizer
+        yield
+        self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False
 
     def decode(self, token_ids, **kwargs):
-        """
-        This method forwards all its arguments to ParakeetTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
         if token_ids.shape[0] != 1:
             raise ValueError(
                 f"Expecting a single output to be decoded but received {token_ids.shape[0]} samples instead."
@@ -100,6 +161,11 @@ class ParakeetProcessor(ProcessorMixin):
         # Default to grouping tokens for CTC duplicate removal
         group_tokens = kwargs.pop("group_tokens", True)
         return self.tokenizer.decode(token_ids[0], group_tokens=group_tokens, **kwargs)
+
+    def batch_decode(self, *args, **kwargs):
+        # Default to grouping tokens for CTC duplicate removal
+        group_tokens = kwargs.pop("group_tokens", True)
+        return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
 
 
 __all__ = ["ParakeetProcessor"]

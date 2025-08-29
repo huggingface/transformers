@@ -233,8 +233,7 @@ class ParakeetConfig(PretrainedConfig):
         self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
-        # TODO: @eustlb
-        self.use_bias = True
+        self.use_bias = self.encoder_config.use_bias
         self.initializer_range = self.encoder_config.initializer_range
 
     @classmethod

@@ -32,6 +32,7 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
 
@@ -103,7 +104,7 @@ class ParakeetEncoderConvolutionModule(nn.Module):
         channels = config.hidden_size
         # kernel_size should be an odd number for 'SAME' padding
         if module_config is None:
-            # `ParakeetEncoderEncoderConfig` in src/transformers/models/parakeet_encoder/configuration_parakeet_encoder.py
+            # e.g. using `ParakeetEncoderEncoderConfig` in src/transformers/models/parakeet_encoder/configuration_parakeet_encoder.py
             kernel_size = config.conv_kernel_size
             self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
         else:
@@ -141,13 +142,11 @@ class ParakeetEncoderConvolutionModule(nn.Module):
         if attention_mask is not None:
             all_masked_rows = torch.all(~attention_mask, dim=-1)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
-            # hidden_states = nn.functional.pad(hidden_states, (self.padding, self.padding))
 
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.norm(hidden_states)
         hidden_states = self.activation(hidden_states)
-        # hidden_states = hidden_states * torch.sigmoid(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
 
         return hidden_states.transpose(1, 2)
@@ -223,6 +222,7 @@ class ParakeetEncoderAttention(nn.Module):
         # global positional bias
         self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -422,7 +422,6 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    # TODO: @eustlb, check if this works
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -521,7 +520,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         if attention_mask is not None:
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
 
-            # TODO: @eustlb, which mask utils to do the same?
+            # NOTE: @eustlb, which mask utils to do the same?
             # @ebezzam could use `create_causal_mask` but more complicated
             # as `and_mask_function` requires callable mask function
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
