@@ -16,6 +16,7 @@
 import inspect
 import json
 import random
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Union
@@ -34,6 +35,10 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import is_torch_available, is_vision_available
+
+
+sys.path.append(".")
+from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 global_rng = random.Random()
@@ -58,6 +63,10 @@ MODALITY_INPUT_DATA = {
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     ],
 }
+
+
+for modality, urls in MODALITY_INPUT_DATA.items():
+    MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
 
 
 def prepare_image_inputs():
