@@ -2209,11 +2209,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         self.config = config
 
-        # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
-        # setting it recursively)
-        self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
+        # Check the attention implementation is supported, or set it if not yet set
+        requested_attention = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        if requested_attention != self.config._attn_implementation:
+            self.set_attn_implementation(requested_attention)
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
