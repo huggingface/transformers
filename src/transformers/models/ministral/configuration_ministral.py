@@ -6,6 +6,10 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class MinistralConfig(PretrainedConfig):
@@ -153,14 +157,17 @@ class MinistralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+
+        if "layer_types" in kwargs:
+            logger.warning_once(
+                "Detected Ministral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
+            )
         self.layer_types = layer_types
 
         if self.layer_types is None:
-            base_pattern = ["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"]
-            assert num_hidden_layers % len(base_pattern) == 0, (
-                "num_hidden_layers must be a multiple of the base pattern length"
-            )
-            self.layer_types = base_pattern * (num_hidden_layers // len(base_pattern))
+            self.layer_types = [
+                "sliding_attention" if self.sliding_window is not None else "full_attention"
+            ] * num_hidden_layers
 
 
 __all__ = ["MinistralConfig"]
