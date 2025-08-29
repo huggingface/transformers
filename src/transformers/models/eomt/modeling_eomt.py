@@ -994,7 +994,6 @@ class EomtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": EomtLayer,
         "attentions": EomtAttention,
