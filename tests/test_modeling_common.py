@@ -3517,76 +3517,71 @@ class ModelTesterMixin:
                 )
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
+                if torch.is_floating_point(dummy_input):
                     dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    if padding_side == "left":
-                        dummy_attention_mask[:, 1:] = 1
-                        dummy_attention_mask[:, :1] = 0
-                    else:
-                        dummy_attention_mask[:, :-1] = 1
-                        dummy_attention_mask[:, -1:] = 0
-
+                inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
+                if "pixel_values" in inputs_dict:
+                    inputs["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, output_hidden_states=True)
+                    inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                # First run without attention mask
+                outputs = model(**inputs)
+                # Switch to FA
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(**inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
                     outputs_fa.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )
-
                 torch.testing.assert_close(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
                 # Set back to eager
                 model.set_attn_implementation("eager")
 
+                # Create attention mask with padding
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, 0] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1] = 0
+
+                # Add attention mask to inputs
+                inputs["attention_mask"] = dummy_attention_mask
                 if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
+                    inputs["decoder_attention_mask"] = dummy_attention_mask
 
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
+                # Second run with attention mask and padding
+                outputs = model(**inputs)
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(**inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
                     outputs_fa.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )
@@ -3595,7 +3590,7 @@ class ModelTesterMixin:
                     torch.testing.assert_close(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
                     # Check it can run in training mode
                     model.train()
-                    _ = model(dummy_input, **other_inputs)
+                    _ = model(**inputs)
                 else:
                     torch.testing.assert_close(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
