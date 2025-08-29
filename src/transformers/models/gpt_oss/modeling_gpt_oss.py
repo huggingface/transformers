@@ -106,6 +106,8 @@ class GptOssExperts(nn.Module):
             for expert_idx in expert_hit[:]:
                 # expert_idx only have 1 element, so we can use scale for fast indexing
                 expert_idx = expert_idx[0]
+                if expert_idx == -1:
+                    continue
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
