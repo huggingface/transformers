@@ -650,9 +650,9 @@ class InformerDecoder(TimeSeriesTransformerDecoder):
         self.post_init()
 
 
-class InformerModel(TimeSeriesTransformerModel, nn.Module):
+class InformerModel(TimeSeriesTransformerModel):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(config)
@@ -800,9 +800,9 @@ class InformerModel(TimeSeriesTransformerModel, nn.Module):
         super().forward(**super_kwargs)
 
 
-class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
+class InformerForPrediction(TimeSeriesTransformerForPrediction):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.model = InformerModel(config)
         if config.distribution_output == "student_t":

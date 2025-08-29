@@ -209,7 +209,7 @@ class Gemma2RMSNorm(GemmaRMSNorm):
 
 class Gemma2MLP(GemmaMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.act_fn = ACT2FN[config.hidden_activation]
 
 
