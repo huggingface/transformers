@@ -299,8 +299,6 @@ class BltSelfAttention(nn.Module):
         cache_position=None,
         **kwargs,
     ):
-        if hidden_states.dim() == 2:
-            hidden_states = hidden_states.unsqueeze(0)
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)

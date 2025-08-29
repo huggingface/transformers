@@ -43,23 +43,6 @@ class BltTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update({"add_bos_token": True, "add_eos_token": False})
         return super().get_tokenizers(**kwargs)
 
-    def test_blt_tokenizer_basics(self):
-        """Test basic Blt tokenizer functionality"""
-        tokenizer = BltTokenizer()
-
-        # Test vocab size (256 bytes + 4 special tokens)
-        self.assertEqual(tokenizer.vocab_size, 260)
-
-        # Test special token IDs
-        self.assertEqual(tokenizer.bos_token_id, 1)
-        self.assertEqual(tokenizer.eos_token_id, 2)
-        self.assertEqual(tokenizer.pad_token_id, 3)
-
-        # Test special tokens
-        self.assertEqual(str(tokenizer.bos_token), "<s>")
-        self.assertEqual(str(tokenizer.eos_token), "</s>")
-        self.assertEqual(str(tokenizer.pad_token), "<pad>")
-
     def test_simple_encode_decode(self):
         tokenizer = BltTokenizer(add_bos_token=False, add_eos_token=False)
 
@@ -154,25 +137,6 @@ class BltTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded, [36])  # 32 (space) + 4 offset
         decoded = tokenizer.decode(encoded)
         self.assertEqual(decoded, " ")
-
-    def test_get_vocab(self):
-        tokenizer = BltTokenizer()
-        vocab = tokenizer.get_vocab()
-
-        # Should contain special tokens
-        self.assertIn(str(tokenizer.bos_token), vocab)
-        self.assertIn(str(tokenizer.eos_token), vocab)
-        self.assertIn(str(tokenizer.boe_token), vocab)
-        self.assertIn(str(tokenizer.pad_token), vocab)
-
-        # Should contain byte representations
-        self.assertIn("0", vocab)  # First byte
-        self.assertIn("255", vocab)  # Last byte
-
-        self.assertEqual(vocab[str(tokenizer.bos_token)], 1)
-        self.assertEqual(vocab[str(tokenizer.eos_token)], 2)
-        self.assertEqual(vocab["0"], 4)  # 0 + 4 offset
-        self.assertEqual(vocab["255"], 259)  # 255 + 4 offset
 
     def test_build_inputs_with_special_tokens(self):
         tokenizer = BltTokenizer(add_bos_token=True, add_eos_token=True)

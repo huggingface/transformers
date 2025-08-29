@@ -80,24 +80,15 @@ class BltTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.byte_vocab_size = 256  # byte units (0-255)
-        
+
         boe_token = AddedToken(boe_token, lstrip=False, rstrip=False) if isinstance(boe_token, str) else boe_token
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        
+
         self._added_tokens_decoder = {0: boe_token, 1: bos_token, 2: eos_token, 3: pad_token}
         self.offset = len(self._added_tokens_decoder)
         self._utf_vocab_size = 2**8  # utf is 8 bits
-
-        self.encoder = {}
-
-        # Add byte tokens (0-255) to encoder with offset
-        for i in range(self.byte_vocab_size):
-            self.encoder[str(i)] = i + self.offset
-
-        # Create decoder as reverse of encoder
-        self.decoder = {v: k for k, v in self.encoder.items()}
 
         super().__init__(
             bos_token=bos_token,
@@ -121,20 +112,36 @@ class BltTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         """Returns vocab as a dict"""
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
-        return self.encoder.get(token, self.added_tokens_encoder.get(token, self.unk_token_id))
+        if token in self.added_tokens_encoder:
+            return self.added_tokens_encoder[token]
+
+        # For byte tokens, convert string representation to integer and add offset
+        try:
+            byte_val = int(token)
+            if 0 <= byte_val <= 255:
+                return byte_val + self.offset
+        except ValueError:
+            pass
+
+        return self.unk_token_id
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        # Check added tokens first (they might override special token IDs)
         for token, token_id in self.added_tokens_encoder.items():
             if token_id == index:
                 return token
 
-        return self.decoder.get(index, str(self.unk_token))
+        # For byte tokens, subtract offset and convert to string
+        if self.offset <= index < self.vocab_size:
+            return str(index - self.offset)
+
+        return str(self.unk_token)
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens to a single string."""
