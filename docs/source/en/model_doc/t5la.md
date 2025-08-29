@@ -45,10 +45,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] T5LaConfig
 
-## T5LaOnnxConfig
-
-[[autodoc]] T5LaOnnxConfig
-
 ## T5LaForConditionalGeneration
 
 [[autodoc]] T5LaForConditionalGeneration

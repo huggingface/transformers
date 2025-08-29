@@ -22,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...utils import auto_docstring
-from ..t5.configuration_t5 import T5Config, T5OnnxConfig
+from ..t5.configuration_t5 import T5Config
 from ..t5.modeling_t5 import (
     T5Attention,
     T5Block,
@@ -159,10 +159,6 @@ class T5LaConfig(T5Config):
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
-
-
-class T5LaOnnxConfig(T5OnnxConfig):
-    pass
 
 
 class T5LaLayerNorm(T5LayerNorm):
@@ -571,7 +567,6 @@ class T5LaForConditionalGeneration(T5ForConditionalGeneration):
 
 __all__ = [
     "T5LaConfig",
-    "T5LaOnnxConfig",
     "T5LaForConditionalGeneration",
     "T5LaPreTrainedModel",
     "load_tf_weights_in_t5la",
