@@ -16,6 +16,7 @@ class LlavaConfig(PretrainedConfig):
         llm_cfg=None,
         sound_tower_cfg=None,
         sound_mm_projector_cfg=None,
+        model_dtype=None,
         hidden_size=None,
         media_tokens=None,
         ignore_index=None,
@@ -27,6 +28,7 @@ class LlavaConfig(PretrainedConfig):
         self.llm_cfg = llm_cfg
         self.sound_tower_cfg = sound_tower_cfg
         self.sound_mm_projector_cfg = sound_mm_projector_cfg
+        self.model_dtype = model_dtype
         self.hidden_size = hidden_size
         self.media_tokens = media_tokens
         self.ignore_index = ignore_index
