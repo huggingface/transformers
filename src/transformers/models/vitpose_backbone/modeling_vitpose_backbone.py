@@ -242,15 +242,14 @@ class VitPoseNaiveMoe(nn.ModuleList):
         for _ in range(self.num_experts):
             self += [nn.Linear(hidden_features, part_features)]
 
-    def forward(self, hidden_state, shared_hidden_state, indices):
+    def forward(self, hidden_state, indices):
         expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])
         for i in range(self.num_experts):
             selected_index = indices == i
             current_hidden_state = self[i](hidden_state) * selected_index
             expert_hidden_state = expert_hidden_state + current_hidden_state
 
-        hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
-        return hidden_state
+        return expert_hidden_state
 
 class VitPoseBackboneMoeMLP(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
@@ -275,7 +274,10 @@ class VitPoseBackboneMoeMLP(nn.Module):
         hidden_state = self.act(hidden_state)
         shared_hidden_state = self.fc2(hidden_state)
         indices = indices.view(-1, 1, 1)
-        hidden_state = self.experts(hidden_state, shared_hidden_state, indices)
+
+        expert_hidden_state = self.experts(hidden_state, shared_hidden_state, indices)
+        hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
+
         return hidden_state
 
 
