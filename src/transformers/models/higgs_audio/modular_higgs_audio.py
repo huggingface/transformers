@@ -33,6 +33,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
+from ...utils.generic import check_model_inputs
 from ..auto import AutoConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -190,14 +191,14 @@ class HiggsAudioDualFFNFastDecoderLayer(nn.Module):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
         """
-        residual = hidden_states
-        target_length = hidden_states.shape[1]
-        use_static_cache = isinstance(past_key_value, StaticCache)
-
         # If we are decoding an audio token and the layer is marked as fast-forward,
         # we can skip it.
         if is_decoding_audio_token:
             return hidden_states
+
+        residual = hidden_states
+        target_length = hidden_states.shape[1]
+        use_static_cache = isinstance(past_key_value, StaticCache)
 
         has_audio_out = audio_out_mask is not None and audio_out_mask.shape[0] > 0
 
@@ -865,6 +866,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         return causal_mask
 
+    @check_model_inputs
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1021,8 +1023,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        next_cache = past_key_values if use_cache else None
-
         return HiggsAudioModelOutputWithPast(
             expanded_input_ids=input_ids,
             expanded_labels=labels,
@@ -1030,7 +1030,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             audio_in_discrete_codes_mask=audio_in_discrete_codes_mask,
             audio_out_mask=audio_out_mask,
             attention_mask=attention_mask,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             last_hidden_states=hidden_states,
         )
 
@@ -1207,8 +1207,6 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         elif loss is not None and audio_loss is not None:
             llm_loss = loss - audio_loss
 
-        next_cache = past_key_values if use_cache else None
-
         return HiggsAudioOutputWithPast(
             loss=loss,
             llm_loss=llm_loss,
@@ -1222,7 +1220,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             audio_in_discrete_codes_mask=audio_in_discrete_codes_mask,
             audio_out_mask=audio_out_mask,
             attention_mask=attention_mask,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             last_hidden_states=last_hidden_states,
             hidden_states=hidden_states,
             attentions=attentions,

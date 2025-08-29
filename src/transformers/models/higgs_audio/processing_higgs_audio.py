@@ -61,24 +61,33 @@ class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
 
 @dataclass
 class HiggsAudioChatSample:
-    input_ids: "torch.LongTensor"  # Shape (seq_len,): The input text tokens.
-    label_ids: "torch.LongTensor"  # Shape (seq_len,): The label ids.
-    audio_ids_concat: (
-        "torch.LongTensor"  # Shape (num_codebooks, audio_seq_len): The audio tokens that are concatenated.
-    )
-    # Here `audio_seq_len` is the length of the concatenated audio tokens.`
-    audio_ids_start: "torch.LongTensor"  # Shape (num_audios,): The start index of each audio token in the concatenated audio tokens.
-    audio_waveforms_concat: (
-        "torch.Tensor"  # Shape (total_wv_length,): The concatenated audio waveforms for audio-in features.
-    )
-    audio_waveforms_start: "torch.LongTensor"  # Shape (num_audios,): The start index of each audio waveform in the concatenated audio waveforms.
-    audio_sample_rate: "torch.Tensor"  # Shape (num_audios,): The sampling rate of the audio waveforms.
-    audio_speaker_indices: (
-        "torch.LongTensor"  # Shape (num_audios,) -1 means unknown speaker: The speaker indices for each audio.
-    )
-    audio_label_ids_concat: Optional["torch.LongTensor"] = (
-        None  # Shape (num_codebooks, audio_seq_len): The audio tokens that are concatenated.
-    )
+    # Shape (seq_len,): The input text tokens.
+    input_ids: "torch.LongTensor"
+
+    # Shape (seq_len,): The label ids.
+    label_ids: "torch.LongTensor"
+
+    # Shape (num_codebooks, audio_seq_len): The audio tokens that are concatenated.
+    audio_ids_concat: "torch.LongTensor"
+
+    # Here `audio_seq_len` is the length of the concatenated audio tokens.
+    # Shape (num_audios,): The start index of each audio token in the concatenated audio tokens.
+    audio_ids_start: "torch.LongTensor"
+
+    # Shape (total_wv_length,): The concatenated audio waveforms for audio-in features.
+    audio_waveforms_concat: "torch.Tensor"
+
+    # Shape (num_audios,): The start index of each audio waveform in the concatenated audio waveforms.
+    audio_waveforms_start: "torch.LongTensor"
+
+    # Shape (num_audios,): The sampling rate of the audio waveforms.
+    audio_sample_rate: "torch.Tensor"
+
+    # Shape (num_audios,) -1 means unknown speaker: The speaker indices for each audio.
+    audio_speaker_indices: "torch.LongTensor"
+
+    # Shape (num_codebooks, audio_seq_len): The audio tokens that are concatenated.
+    audio_label_ids_concat: Optional["torch.LongTensor"] = None
 
     def get_audio_codes(self, idx):
         code_start = self.audio_ids_start[idx]
@@ -112,17 +121,34 @@ class HiggsAudioChatSample:
 
 @dataclass
 class HiggsAudioBatchInput:
-    input_ids: "torch.LongTensor"  # shape (bsz, seq_len).
-    attention_mask: "torch.Tensor"  # shape (bsz, seq_len).
-    audio_out_ids: Optional["torch.LongTensor"]  # shape (num_codebooks, audio_out_total_length)
-    audio_out_ids_start: Optional["torch.LongTensor"]  # shape (num_audio_out,)
-    # Currently, we concatenante audio segments along dim 0 to handle variadic audio segment length.
-    # For example,
-    #  audio_out_ids_start = [0, 2, 4, 8]; and the first two audio segments come from the same sample in a batch, and other two come from different samples.
-    audio_in_ids: Optional["torch.LongTensor"]  # shape (num_codebooks, audio_in_total_length)
-    audio_in_ids_start: Optional["torch.LongTensor"]  # shape (num_audio_in,)
-    label_ids: Optional["torch.LongTensor"]  # shape (bsz, seq_len)
-    label_audio_ids: Optional["torch.LongTensor"]  # shape (num_codebooks, audio_out_total_length)
+    # shape (bsz, seq_len).
+    input_ids: "torch.LongTensor"
+
+    # shape (bsz, seq_len).
+    attention_mask: "torch.Tensor"
+
+    # shape (num_codebooks, audio_out_total_length).
+    audio_out_ids: Optional["torch.LongTensor"]
+
+    # shape (num_audio_out,)
+    audio_out_ids_start: Optional["torch.LongTensor"]
+
+    # Currently, we concatenate audio segments along dim 0 to handle variadic audio segment length.
+    # For example:
+    #   audio_out_ids_start = [0, 2, 4, 8]
+    # The first two audio segments come from the same sample in a batch,
+    # and the other two come from different samples.
+    # shape (num_codebooks, audio_in_total_length).
+    audio_in_ids: Optional["torch.LongTensor"]
+
+    # shape (num_audio_in,)
+    audio_in_ids_start: Optional["torch.LongTensor"]
+
+    # shape (bsz, seq_len).
+    label_ids: Optional["torch.LongTensor"]
+
+    # shape (num_codebooks, audio_out_total_length).
+    label_audio_ids: Optional["torch.LongTensor"]
 
 
 @dataclass

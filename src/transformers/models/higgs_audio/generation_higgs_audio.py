@@ -587,7 +587,9 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        assert input_ids.shape[0] == 1, "Only support batch_size=1 in _sample()"
+        if input_ids.shape[0] != 1:
+            raise ValueError("Only support batch_size=1 in _sample()")
+
         audio_out_bos_token_id = generation_config.audio_out_bos_token_id
 
         # torch generator for sampling
@@ -843,25 +845,20 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             ...
 
         """
-        assert input_ids.shape[0] == 1, (
-            "Currently HiggsAudioModel.generate() only supports batch_size=1. See the implementation of "
-        )
+        if input_ids.shape[0] != 1:
+            raise ValueError(
+                "Currently HiggsAudioModel.generate() only supports batch_size=1. See the implementation of "
+            )
         generation_config, kwargs = self._prepare_generation_config(kwargs.pop("generation_config", None), **kwargs)
         if audio_out_bos_token_id is not None:
             generation_config.audio_out_bos_token_id = audio_out_bos_token_id
         else:
-            try:
-                generation_config.audio_out_bos_token_id = self.config.audio_out_bos_token_id
-            except AttributeError:
-                generation_config.audio_out_bos_token_id = None
+            generation_config.audio_out_bos_token_id = getattr(self.config, "audio_out_bos_token_id", None)
 
         if audio_eos_token_id is not None:
             generation_config.audio_eos_token_id = audio_eos_token_id
         else:
-            try:
-                generation_config.audio_eos_token_id = self.config.audio_eos_token_id
-            except AttributeError:
-                generation_config.audio_eos_token_id = None
+            generation_config.audio_eos_token_id = getattr(self.config, "audio_eos_token_id", None)
 
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
@@ -889,7 +886,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             inputs_tensor=None,
             input_ids_length=input_ids_length,
         )
-        assert generation_config.num_beams == 1, "Currently, we only support beam search with num_beams=1"
         return_dict_in_generate = generation_config.return_dict_in_generate
         output_scores = generation_config.output_scores
 
