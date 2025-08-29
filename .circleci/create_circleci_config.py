@@ -105,7 +105,7 @@ class CircleCIJob:
         else:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
-            self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
+            # self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
