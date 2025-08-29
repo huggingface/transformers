@@ -2,14 +2,13 @@
 
 from abc import ABC
 from collections import deque
-from dataclasses import dataclass
 from functools import partial
 import copy
 import math
 import os
 import os.path as osp
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -18,10 +17,8 @@ from huggingface_hub.utils import HFValidationError
 
 from ... import (
     AutoConfig,
-    AutoModel,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
     GenerationConfig,
     PreTrainedModel,
     PretrainedConfig,
@@ -252,22 +249,17 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_docstring(
-    custom_intro="""
-    The audio model from AudioFlamingo3 without any head or projection on top.
-    """
-)
-# Copied from transformers.models.whisper.modeling_whisper.WhisperEncoder with Whisper->AudioFlamingo3
 class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`AudioFlamingo3EncoderLayer`].
+    Transformer encoder consisting of *config.encoder_layers* self attention layers.
+    This version folds the old "AudioFlamingo3SoundTower" wrapper functionality directly into the encoder.
 
-    Args:
-        config: AudioFlamingo3EncoderConfig
+    Use cases:
+      - HF-native: forward(input_features=..., attention_mask=...) -> BaseModelOutput
+      - Tower-style (old wrapper): forward_tower(sounds, mask) -> last_hidden_state
     """
 
-    # Ignore copy
+    # keep HF typing and split rules
     config: AudioFlamingo3EncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
@@ -279,141 +271,196 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = getattr(config, "pad_token_id", None)
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        # frontend
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
+        # fixed positional embeddings (non-trainable, like Whisper)
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
         self.embed_positions.requires_grad_(False)
 
+        # transformer
         self.layers = nn.ModuleList([AudioFlamingo3EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
-        # Ignore copy
+
+        # additional pooling to match your prior wrapper’s behavior
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
         self.post_init()
 
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
+    # ----------------------------
+    # Compatibility helpers (tower)
+    # ----------------------------
 
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes output lengths after the two convs:
+          conv1: stride=1
+          conv2: stride=2
+        And returns both the feature length after conv1 and after conv2 (encoder S).
+        """
+        input_lengths = (input_lengths - 1) // 2 + 1  # conv2 path as in your previous code (kept verbatim)
+        output_lengths = (input_lengths - 2) // 2 + 1
+        return input_lengths, output_lengths
+
+    def _build_square_attn_mask(self, mask_1d: torch.Tensor, max_mel_seq_len: int) -> torch.Tensor:
+        """
+        Build (B,1,S,S) attention mask with -inf on padded positions for Whisper-style encoders.
+
+        mask_1d: (B, T_mel) boolean/0-1 mask indicating valid mel frames.
+        max_mel_seq_len: T_mel
+        """
+        audio_feat_lengths, _ = self._get_feat_extract_output_lengths(mask_1d.sum(-1))
+        B = mask_1d.shape[0]
+        S = (max_mel_seq_len - 2) // 2 + 1
+
+        seq_range = torch.arange(S, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device).unsqueeze(0).expand(B, S)
+        lengths_expand = audio_feat_lengths.expand(B, S)
+        padding_mask = seq_range >= lengths_expand  # (B, S) True => pad
+
+        square = padding_mask.view(B, 1, 1, S).expand(B, 1, S, S)
+        attn = square.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
+        attn[square] = float("-inf")
+        return attn
+
+    @torch.no_grad()
+    def forward_tower(self, sounds: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Wrapper-compatible entry point:
+        sounds: (B, num_mel_bins, T_mel) or (1,1,B,num_mel_bins,T_mel)
+        mask:   (B, T_mel) 0/1 mask for valid mel frames (required)
+
+        Returns:
+          last_hidden_state: (B, S, d_model) in sounds.dtype
+        """
+        if sounds.ndim == 5:
+            sounds = sounds.squeeze(0).squeeze(1)  # -> (B, M, T)
+            if mask is not None:
+                mask = mask.squeeze(0)
+
+        if mask is None:
+            raise ValueError("forward_tower requires a frame mask of shape (B, T_mel).")
+
+        B, M, T_mel = sounds.shape
+        if M != self.num_mel_bins:
+            raise ValueError(f"Expected sounds with num_mel_bins={self.num_mel_bins}, got {M}.")
+
+        attn_mask = self._build_square_attn_mask(mask, max_mel_seq_len=T_mel)
+        out = self.forward(input_features=sounds, attention_mask=attn_mask)
+        return out.last_hidden_state.to(sounds.dtype)
+
+    # HF-required embeddings API (kept)
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
 
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    # ----------------------------
+    # Core HF forward
+    # ----------------------------
     def forward(
         self,
-        input_features,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        r"""
-        Args:
-            attention_mask (`torch.Tensor`)`, *optional*):
-                AudioFlamingo3 does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-
+        HF-native forward with mel-spectrogram features.
+        input_features: (B, num_mel_bins, T_mel)
+        attention_mask: (B, 1, S, S) with -inf on padded positions (optional)
+        """
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"AudioFlamingo3 expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"AudioFlamingo3 expects the mel input features to be of length {expected_seq_length}, " f"but found {input_features.shape[-1]}. Pad/truncate mel features to {expected_seq_length}."
             )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Ignore copy
-        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
+        # dtype/device normalization (match conv weights)
+        x = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)  # (B, M, T)
 
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
+        # frontend convs
+        x = nn.functional.gelu(self.conv1(x))
+        x = nn.functional.gelu(self.conv2(x))  # (B, d_model, T/2)
 
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        # time-major for transformer: (B, T', C)
+        x = x.permute(0, 2, 1)
+        embed_pos = self.embed_positions.weight  # (max_source_positions, C)
+        # broadcast add positional embeddings (trim if needed)
+        if embed_pos.shape[0] < x.shape[1]:
+            raise ValueError(f"embed_positions shorter than sequence length: {embed_pos.shape[0]} < {x.shape[1]}")
+        x = x + embed_pos[: x.shape[1]]
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_attns = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size(0) == len(self.layers), f"head_mask should have {len(self.layers)} layers, but has {head_mask.size(0)}."
 
-        for idx, encoder_layer in enumerate(self.layers):
+        hidden_states = x
+        for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
 
-            # Ignore copy
+            to_drop = False
+            if self.training and torch.rand([]) < self.layerdrop:
+                to_drop = True
+
             if to_drop:
-                layer_outputs = (None, None)
+                layer_outputs = (hidden_states, None)
             else:
-                layer_outputs = encoder_layer(
+                layer_outputs = layer(
                     hidden_states,
                     attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions,
                 )
-
                 hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attns = all_attns + (layer_outputs[1],)
 
-        # Ignore copy
-        hidden_states = hidden_states.permute(0, 2, 1)
-        hidden_states = self.avg_pooler(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 1)
+        # match prior wrapper’s pooling path
+        hs = hidden_states.permute(0, 2, 1)  # (B, C, S)
+        hs = self.avg_pooler(hs)  # downsample in time
+        hs = hs.permute(0, 2, 1)  # (B, S', C)
+        hs = self.layer_norm(hs)
 
-        hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            encoder_states = encoder_states + (hs,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions)
+            return tuple(v for v in [hs, encoder_states, all_attns] if v is not None)
 
-    # Ignore copy
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers and the output length of the audio encoder
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
+        return BaseModelOutput(last_hidden_state=hs, hidden_states=encoder_states, attentions=all_attns)
+
+    # ----------------------------
+    # Legacy convenience properties
+    # ----------------------------
+    @property
+    def device(self):
+        return self.conv1.weight.device
+
+    @property
+    def dtype(self):
+        return self.conv1.weight.dtype
+
+    @property
+    def hidden_size(self):
+        return self.config.d_model
 
 
 # -------------------------------------------------------------------------------------------------
@@ -632,13 +679,14 @@ class LlavaMetaForCausalLM(ABC):
         generation_config.max_new_tokens = 512
         return generation_config
 
-    def encode_sound(self, sounds: torch.Tensor, masks: torch.Tensor | None = None) -> torch.Tensor:
+    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
         proj_dtype = next(self.sound_mm_projector.parameters()).dtype
         sounds = sounds.to(device=device, dtype=proj_dtype)
-        if masks is not None:
-            masks = masks.to(device)
-        return self.sound_mm_projector(self.sound_tower(sounds, masks).to(dtype=proj_dtype))
+        masks = masks.to(device) if masks is not None else None
+
+        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
+        return self.sound_mm_projector(feats)
 
 
 class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
@@ -655,7 +703,7 @@ class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
         llm_path, sound_tower_path, sound_mm_projector_path = get_model_config(config)
 
         self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
-        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_path).to(self.llm.device)
+        self.sound_tower = AudioFlamingo3Encoder.from_pretrained(sound_tower_path).to(self.llm.device)
         self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
         self.sound_encoder = BasicSoundEncoder(parent=self)
 
@@ -700,74 +748,6 @@ class SoundMultimodalProjector(PreTrainedModel):
 
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
-
-
-# -------------------------------------------------------------------------------------------------
-
-
-class AudioFlamingo3SoundTower(nn.Module):
-    def __init__(self, model_name_or_path):
-        super().__init__()
-
-        self.is_loaded = False
-        self.sound_tower_name = model_name_or_path
-        self.cfg_only = None
-        self.sound_tower = AudioFlamingo3Encoder.from_pretrained(model_name_or_path)
-        self.is_loaded = True
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers and the output length of the audio encoder
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
-
-    def forward(self, sounds, mask=None):
-        sounds = sounds.squeeze(0).squeeze(1)
-        mask = mask.squeeze(0)
-        audio_feat_lengths, audio_output_lengths = self._get_feat_extract_output_lengths(mask.sum(-1))
-        # for cases where only one window is there for the audio_clip
-        batch_size, _, max_mel_seq_len = sounds.shape
-        max_seq_len = (max_mel_seq_len - 2) // 2 + 1
-        seq_range = torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device).unsqueeze(0).expand(batch_size, max_seq_len)
-        lengths_expand = audio_feat_lengths.expand(batch_size, max_seq_len)
-        padding_mask = seq_range >= lengths_expand
-        audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(batch_size, 1, max_seq_len, max_seq_len)
-        audio_attention_mask = audio_attention_mask_.to(dtype=self.sound_tower.conv1.weight.dtype, device=self.sound_tower.conv1.weight.device)
-        audio_attention_mask[audio_attention_mask_] = float("-inf")
-        # Calculate features
-        sound_features = self.sound_tower(sounds, attention_mask=audio_attention_mask)
-        sound_features = sound_features.last_hidden_state
-        sound_features = sound_features.to(sounds.dtype)
-
-        return sound_features
-
-    @property
-    def dummy_feature(self):
-        return torch.zeros(1, self.hidden_size, device=self.device, dtype=self.dtype)
-
-    @property
-    def dtype(self):
-        return self.sound_tower.dtype
-
-    @property
-    def config(self):
-        if self.is_loaded:
-            return self.sound_tower.config
-        else:
-            return self.cfg_only
-
-    @property
-    def device(self):
-        return self.sound_tower.device
-
-    @property
-    def hidden_size(self):
-        return self.config.hidden_size
-
-
-# -------------------------------------------------------------------------------------------------
 
 
 class BasicSoundEncoder(nn.Module):
