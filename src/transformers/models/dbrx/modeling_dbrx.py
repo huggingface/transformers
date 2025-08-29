@@ -311,11 +311,11 @@ class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
             expert_idx = expert_idx[0]
             with torch.no_grad():
                 _, token_idx = torch.where(expert_mask[expert_idx])
-            hidden_states = hidden_states[token_idx]
+            current_state = hidden_states[token_idx]
             v1 = self.mlp.v1.view(split_expert_shape)[expert_idx]
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
-            states = self.mlp(hidden_states, w1, v1, w2)
+            states = self.mlp(current_state, w1, v1, w2)
             states = states.view(-1, self.hidden_size) * router_scores[token_idx, expert_idx, None]
             next_states.index_add_(0, token_idx, states)
 
@@ -505,7 +505,6 @@ class DbrxPreTrainedModel(PreTrainedModel):
     config: DbrxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DbrxDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -517,6 +516,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
         "hidden_states": DbrxDecoderLayer,
         "attentions": DbrxAttention,
     }
+    _no_split_modules = ["DbrxBlock"]
 
 
 @auto_docstring

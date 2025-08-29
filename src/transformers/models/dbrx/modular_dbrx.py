@@ -190,6 +190,7 @@ class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
         self.top_k = config.moe_top_k
         self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
 
+
     def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
@@ -215,11 +216,11 @@ class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
             expert_idx = expert_idx[0]
             with torch.no_grad():
                 _, token_idx = torch.where(expert_mask[expert_idx])
-            hidden_states = hidden_states[token_idx]
-            v1 = self.mlp.v1.view(split_expert_shape).transpose(1, 2)[expert_idx]
+            current_state = hidden_states[token_idx]
+            v1 = self.mlp.v1.view(split_expert_shape)[expert_idx]
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
-            states = self.mlp(hidden_states, w1, v1, w2)
+            states = self.mlp(current_state, w1, v1, w2)
             states = states.view(-1, self.hidden_size) * router_scores[token_idx, expert_idx, None]
             next_states.index_add_(0, token_idx, states)
 
@@ -321,7 +322,8 @@ class DbrxBlock(GradientCheckpointingLayer):
         return hidden_states
 
 class DbrxPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _no_split_modules = ["DbrxBlock"]
+
 
 @auto_docstring
 class DbrxModel(DbrxPreTrainedModel):
