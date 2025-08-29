@@ -156,6 +156,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
     valid_kwargs = RTDetrFastImageProcessorKwargs
+    call_only_args = ["images", "annotations", "masks_path"]
     do_convert_annotations = True
 
     def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
