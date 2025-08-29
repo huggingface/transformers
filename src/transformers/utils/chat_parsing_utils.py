@@ -1,14 +1,48 @@
 import ast
 import json
 import re
+from collections import namedtuple
 
 # Next line only used because eval might grab them. Can be removed once we have something better than eval
 from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: F401
 
 from .chat_template_utils import _parse_type_hint, parse_google_format_docstring
 
+offset_content = namedtuple("offset_content", ["content", "offset"])
+location_content = namedtuple("location_content", ["content", "start", "end"])
 
-def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_vars: dict | None = None):
+def _parse_re_match(node_match, offset, require_groups: List[str] | None = None):
+    if require_groups:
+        if not node_match.groupdict():
+            raise ValueError(f"Regex has no named groups, but require_groups was set to {require_groups}")
+        for group in require_groups:
+            if group not in node_match.groupdict():
+                raise ValueError(f"Regex missing required group {group}!\nGroups: {node_match.groupdict().keys()}\n")
+    # If the regex has named groups, return a dict of those groups
+    if node_match.groupdict():
+        if offset is not None:
+            return {group: offset_content(content, node_match.start(group) + offset)
+                    for group, content in node_match.groupdict().items()}
+        else:
+            return node_match.groupdict()
+    # If the regex has unnamed groups, it MUST only have one, and we return that group
+    elif groups := list(node_match.groups()):
+        if len(groups) > 1:
+            raise ValueError(f"Regex has multiple unnamed groups!\nGroups: {groups}\n")
+        if offset is not None:
+            return offset_content(groups[0], node_match.start(1) + offset)  # TODO Is (1) right here?
+        else:
+            return groups[0]
+    # If no groups, use the whole match
+    else:
+        if offset is not None:
+            return offset_content(node_match.group(0), node_match.start(0) + offset)
+        else:
+            return node_match.group(0)
+
+
+
+def recursive_parse(node_content: str | list | dict | offset_content, node_schema: dict, scope_vars: dict | None = None, offset: int | None = None):
     """
     This function takes content and a JSON schema node which includes
     regex extractors, and recursively parses the content according to the schema. It uses recursion to handle
@@ -25,19 +59,6 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
     Returns:
         The parsed data structure for the current node.
     """
-
-    def _parse_re_match(node_match):
-        # If the regex has named groups, return a dict of those groups
-        if node_match.groupdict():
-            return node_match.groupdict()
-        # If the regex has unnamed groups, it MUST only have one, and we return that group
-        elif groups := list(node_match.groups()):
-            if len(groups) > 1:
-                raise ValueError(f"Regex has multiple unnamed groups!\nGroups: {groups}\n")
-            return groups[0]
-        # If no groups, use the whole match
-        else:
-            return node_match.group(0)
 
     # If the schema has a const, we just return that value and do absolutely nothing else
     if "const" in node_schema:
@@ -59,6 +80,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
     # Next, if the node has a parser we can just use that and ignore everything else.
     if "x-parser" in node_schema:
         parser = node_schema["x-parser"]
+        offset = None  # We cannot track offsets through parsers, so stop trying
         if parser == "json":
             try:
                 node_content = json.loads(node_content)
@@ -101,13 +123,16 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         node_match = re.search(node_regex, node_content, flags=re.DOTALL)
         if not node_match:
             return None  # TODO Is this correct? Should I raise an error?
-        node_content = _parse_re_match(node_match)
+        node_content = _parse_re_match(node_match, offset)
+        if isinstance(node_content, offset_content):
+            offset = node_content.offset
+            node_content = node_content.content
     if node_regex_iterator is not None:
         if node_type != "array":
             raise TypeError(f"Schema node with type {node_type} cannot use x-regex-iterator.\nSchema: {node_schema}")
         # Note that this can be applied after a standard node-regex search
         node_content = [
-            _parse_re_match(node_match)
+            _parse_re_match(node_match, offset)
             for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)
         ]
         if not node_content:
@@ -118,19 +143,8 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         # Note that this can be applied after a standard node-regex search
         output_content = {}
         for node_match in re.finditer(node_regex_to_dict, node_content, flags=re.DOTALL):
-            if not (match_keys := node_match.groupdict()):
-                raise ValueError(
-                    f'Regex for x-regex-to-dict must return groups named "key" and "value".\n'
-                    f"Regex: {node_regex_to_dict}\n"
-                    f"Match: {node_match.group(0)}\n"
-                )
-            if not set(match_keys.keys()) == {"key", "value"}:
-                raise ValueError(
-                    f'Regex for x-regex-to-dict must return groups named "key" and "value".\n'
-                    f"Regex: {node_regex_to_dict}\n"
-                    f"Match: {node_match.group(0)}\n"
-                )
-            output_content[match_keys["key"]] = match_keys["value"]
+            match_groups = _parse_re_match(node_match, offset, require_groups=["key", "value"])
+            output_content[match_groups["key"]] = match_groups["value"]
         node_content = output_content
         if not node_content:
             return None
@@ -146,6 +160,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         mapping = node_schema["x-mapping"]
         if node_content in mapping:
             node_content = mapping[node_content]
+            offset = None  # Don't try to track offsets through mappings
         else:
             raise ValueError(
                 f"Value {node_content} not found in x-mapping.\nMapping: {mapping}\nSchema: {node_schema}"
@@ -166,22 +181,32 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
                     f"Schema: {node_schema}"
                 )
             for key, child_node in node_schema["properties"].items():
-                parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key], scope_vars)
+                parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key], scope_vars, offset)
             return parsed_schema
         for key, child_node in node_schema.get("properties", {}).items():
             # TODO Error if required keys are not present
             if key in node_content:
-                parsed_schema[key] = recursive_parse(node_content[key], child_node, scope_vars)
+                key_content = node_content[key]
+                if isinstance(key_content, offset_content):
+                    key_offset = key_content.offset
+                    key_content = key_content.content
+                else:
+                    key_offset = offset
+                parsed_schema[key] = recursive_parse(key_content, child_node, scope_vars, key_offset)
             elif "default" in child_node:
                 # TODO Do I want to allow defaults?
                 parsed_schema[key] = child_node["default"]
             else:
                 pass  # TODO Add an error for required keys not present
         if "additionalProperties" in node_schema:
-            # TODO Allow untyped additional properties with a parser where we just dump the entire parser output?
             for key, value in node_content.items():
                 if key not in node_schema.get("properties", {}):
-                    parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"], scope_vars)
+                    if isinstance(value, offset_content):
+                        value_offset = value.offset
+                        value = value.content
+                    else:
+                        value_offset = offset
+                    parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"], scope_vars, offset=value_offset)
         return parsed_schema
     elif node_type == "array":
         if not node_content:
@@ -191,23 +216,43 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict, scope_va
         parsed_schema = []
         # TODO Handle tuples/prefixItems?
         for item in node_content:
-            parsed_schema.append(recursive_parse(item, node_schema["items"], scope_vars))
+            if isinstance(item, offset_content):
+                item_content = item.content
+                item_offset = item.offset
+            else:
+                item_content = item
+                item_offset = offset
+            parsed_schema.append(recursive_parse(item_content, node_schema["items"], scope_vars, item_offset))
         return parsed_schema
     elif node_type in ("string", "integer", "number", "boolean"):
         if not isinstance(node_content, str):
             raise TypeError(f"Expected a string for schema node with type {node_type}, got {node_content}")
         if node_type == "integer":
-            return int(node_content)
+            if offset is not None:
+                return location_content(int(node_content), offset, offset + len(node_content))
+            else:
+                return int(node_content)
         elif node_type == "number":
-            return float(node_content)
+            if offset is not None:
+                return location_content(float(node_content), offset, offset + len(node_content))
+            else:
+                return float(node_content)
         elif node_type == "boolean":
             if node_content.lower() in ("true", "1"):
-                return True
+                value = True
             elif node_content.lower() in ("false", "0"):
-                return False
+                value = False
             else:
                 raise ValueError(f"Invalid boolean value: {node_content}")
-        return node_content
+            if offset is not None:
+                return location_content(value, offset, offset + len(node_content))
+            else:
+                return value
+        else:
+            if offset is not None:
+                return location_content(node_content, offset, offset + len(node_content))
+            else:
+                return node_content
     else:
         # TODO Should we handle null types?
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
