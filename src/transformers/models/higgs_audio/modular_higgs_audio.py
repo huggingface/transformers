@@ -637,10 +637,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self.use_delay_pattern = config.use_delay_pattern
         self.use_audio_out_embed_projector = config.use_audio_out_embed_projector
 
-        # A hacky solution. Not sure why _attn_implementation is None
-        if config.text_config._attn_implementation is None:
-            config.text_config._attn_implementation = "sdpa"
-
         self.embed_tokens = nn.Embedding(self.vocab_size, config.text_config.hidden_size, self.padding_idx)
 
         if config.audio_adapter_type == "dual_ffn":
