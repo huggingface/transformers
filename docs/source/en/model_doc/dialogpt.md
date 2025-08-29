@@ -15,19 +15,25 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2019-11-01 and added to Hugging Face Transformers on 2020-11-16.*
 
-# DialoGPT
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
     </div>
 </div>
 
-## Overview
+# DialoGPT
 
-DialoGPT was proposed in [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://huggingface.co/papers/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao,
-Jianfeng Gao, Jingjing Liu, Bill Dolan. It's a GPT2 Model trained on 147M conversation-like exchanges extracted from
-Reddit.
+[DialoGPT](https://huggingface.co/papers/1911.00536) is a conversational AI model fine-tuned from GPT-2 on more than 
+147 million multi-turn dialogues collected from Reddit. It is designed to generate natural, engaging, and context-aware 
+responses for chat applications, making it more suitable for dialogue than standard text-generation models.
+
+You can find all the original DialoGPT checkpoints under the 
+[microsoft](https://huggingface.co/microsoft?search_models=dialogpt) organization.
+
+> [!TIP]
+> Click on the DialoGPT models in the right sidebar for more examples of how to apply DialoGPT to different 
+> conversational tasks.
+
 
 The abstract from the paper is the following:
 
