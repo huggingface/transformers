@@ -1170,7 +1170,6 @@ class AriaGroupedExpertsMLP(nn.Module):
         sorted_indices = torch.argsort(flatten_indices)
         permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
 
-
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
         projection, gate = torch.chunk(fc1_output, 2, dim=-1)
         fc1_output = nn.functional.silu(projection) * gate
@@ -1187,6 +1186,7 @@ class AriaGroupedExpertsMLP(nn.Module):
 
         output = (unpermuted_tokens * scores.unsqueeze(-1)).sum(dim=1)
         return output
+
 
 # Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class AriaTextMoELayer(nn.Module):
