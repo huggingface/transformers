@@ -26,6 +26,7 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     GotOcr2ImageProcessorFast,
+    Phi4MultimodalImageProcessorFast,
     InternVLConfig,
     InternVLForConditionalGeneration,
     InternVLProcessor,
@@ -66,7 +67,7 @@ LM_TYPE_CORRESPONDENCE = {
     "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview": "gpt_oss",  # conversion works, generation effy
 }
 
-UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_intermediate_size", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
+UNNECESSARY_CONFIG_KEYS = [ "_name_or_path", "_attn_implementation_autoset", "auto_map", "use_bfloat16", "use_flash_attn", "bias", "laux_allreduce", "moe_coeff_ratio", "moe_output_scale", "noisy_gate_policy", "shared_expert_intermediate_size", "use_residual", "use_moe", "use_rts", "use_weighted_residual", "moe_config", "num_experts", "num_routed_experts", "num_shared_experts", "capacity_factor", "eval_capacity_factor", "drop_path_rate"]  # fmt: skip
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
@@ -433,7 +434,7 @@ def write_model(
         model = InternVLForConditionalGeneration(config)
     print(model.config)
     print("Moving state dict to model.")
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False, assign=True)
     model = model.to(torch.bfloat16)
     print("model dtype:", model.dtype)
     print("Missing keys:", missing_keys)
@@ -446,7 +447,8 @@ def write_model(
 
     # Load the correct image processor based on model type
     if "InternVL3_5" in input_base_path:
-        image_processor = InternVL3_5ImageProcessor.from_pretrained(model_path)
+        image_processor = Phi4MultimodalImageProcessorFast.from_pretrained(model_path)
+        # image_processor = InternVL3_5ImageProcessor.from_pretrained(model_path)
     else:
         image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)
