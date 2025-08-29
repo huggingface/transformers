@@ -17,29 +17,24 @@ import copy
 import json
 import os
 import warnings
-from io import BytesIO
 from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
-import requests
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .image_utils import is_valid_image, load_image
 from .utils import (
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_vision_available,
     logging,
 )
-
-
-if is_vision_available():
-    from PIL import Image
+from .utils.hub import cached_files
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -335,9 +330,9 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
+                resolved_image_processor_files = cached_files(
                     pretrained_model_name_or_path,
-                    image_processor_file,
+                    filenames=[image_processor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -347,7 +342,9 @@ class ImageProcessingMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
                 )
+                resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -366,6 +363,7 @@ class ImageProcessingMixin(PushToHubMixin):
             with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
+            image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
 
         except json.JSONDecodeError:
             raise OSError(
@@ -514,25 +512,19 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, list[str]]):
+    def fetch_images(self, image_url_or_urls: Union[str, list[str], list[list[str]]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0"
-                " Safari/537.36"
-            )
-        }
         if isinstance(image_url_or_urls, list):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
-            response = requests.get(image_url_or_urls, stream=True, headers=headers)
-            response.raise_for_status()
-            return Image.open(BytesIO(response.content))
+            return load_image(image_url_or_urls)
+        elif is_valid_image(image_url_or_urls):
+            return image_url_or_urls
         else:
             raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 

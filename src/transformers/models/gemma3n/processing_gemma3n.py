@@ -24,10 +24,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class Gemma3nImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
     do_convert_rgb: Optional[bool]
 
 
@@ -134,6 +130,7 @@ class Gemma3nProcessor(ProcessorMixin):
             audio_inputs = {}
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
             image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
 

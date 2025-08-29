@@ -416,6 +416,9 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"
                 ],
+                ("rocm", (9, 5)): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
@@ -486,6 +489,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    # TODO joao, manuel: remove this in v4.62.0
     def test_model_2b_bf16_dola(self):
         model_id = "google/gemma-2b"
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
@@ -509,7 +513,13 @@ class GemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(
-            **inputs, max_new_tokens=20, do_sample=False, dola_layers="low", repetition_penalty=1.2
+            **inputs,
+            max_new_tokens=20,
+            do_sample=False,
+            dola_layers="low",
+            repetition_penalty=1.2,
+            trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
