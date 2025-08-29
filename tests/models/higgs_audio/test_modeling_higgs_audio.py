@@ -602,7 +602,7 @@ class HiggsAudioForConditionalGenerationTest(
 
 class HiggsAudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
-    See https://gist.github.com/vasqu/0e3b06360373a4e612aa3b9a7c09185e for generating the integration tests
+    See https://gist.github.com/szhengac/22060ca87e654d85886a6dec161fe01e for generating the integration tests
 
     NOTE: We add a single `eos` line for the last channel which is skipped in the original HiggsAudio
     (It doesn't change the behaviour as we cut by the eos token position)
