@@ -182,8 +182,6 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         self.legacy = legacy
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
-        self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
         self.add_prefix_space = add_prefix_space
 
         super().__init__(
