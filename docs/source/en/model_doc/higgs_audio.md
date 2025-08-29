@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Higgs Audio
+# Higgs Audio V2
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -51,7 +51,6 @@ torch_device = "cuda"
 
 processor = AutoProcessor.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
 model = HiggsAudioForConditionalGeneration.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base")
 
 conversation = [
     {"role": "system", "content": "Generate audio following instruction.\n\n<|scene_desc_start|>\nAudio is recorded from a quiet room.\n<|scene_desc_end|>"},
@@ -61,7 +60,7 @@ text = processor.apply_chat_template(conversation, add_generation_prompt=True, t
 
 inputs = processor(text=text, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
@@ -81,7 +80,6 @@ torch_device = "cuda"
 
 processor = AutoProcessor.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
 model = HiggsAudioForConditionalGeneration.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base")
 
 conversation = [
     {"role": "system", "content": "Generate audio following instruction with the same voice.\n\n<|scene_desc_start|>\nAudio is recorded from a quiet room.\n<|scene_desc_end|>"},
@@ -102,7 +100,7 @@ for message in conversation:
 
 inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
@@ -121,7 +119,6 @@ torch_device = "cuda"
 
 processor = AutoProcessor.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
 model = HiggsAudioForConditionalGeneration.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base")
 
 system_text = f"""As an AI assistant, your task is to convert written text into spoken words.
     If the user's input begins with a [SPEAKER*] tag, omit the tag and create speech based on the following content using the designated voice.
@@ -149,7 +146,7 @@ for message in conversation:
 
 inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
@@ -169,7 +166,6 @@ torch_device = "cuda"
 
 processor = AutoProcessor.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
 model = HiggsAudioForConditionalGeneration.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base", device_map=torch_device, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base")
 
 conversation = [
     {"role": "system", "content": "Generate audio following instruction with the same voice.\n\n<|scene_desc_start|>\nAudio is recorded from a quiet room.\n<|scene_desc_end|>"},

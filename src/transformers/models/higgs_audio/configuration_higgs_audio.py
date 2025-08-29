@@ -139,15 +139,17 @@ class HiggsAudioConfig(PretrainedConfig):
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
 
-        assert audio_adapter_type in [
+        if audio_adapter_type not in [
             "stack",
             "dual_ffn",
             "dual_ffn_fast_forward",
-        ], f"Invalid audio adapter type: {audio_adapter_type}"
+        ]:
+            raise ValueError("Invalid audio adapter type: {audio_adapter_type}")
         if audio_adapter_type.startswith("dual_ffn"):
-            assert audio_dual_ffn_layers is not None, (
-                "audio_dual_ffn_layers must be specified when using dual_ffn adapter."
-            )
+            if audio_dual_ffn_layers is None:
+                raise ValueError(
+                    "audio_dual_ffn_layers must be specified when using dual_ffn adapter."
+                )
         self.text_config = text_config
         self.audio_adapter_type = audio_adapter_type
         self.audio_embed_avg = audio_embed_avg
@@ -170,8 +172,7 @@ class HiggsAudioConfig(PretrainedConfig):
         self.audio_out_bos_token_id = audio_out_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
 
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
 
 __all__ = ["HiggsAudioConfig"]
