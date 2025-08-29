@@ -195,7 +195,7 @@ class GenerationTesterMixin:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
                     token_index = getattr(self.model_tester, key, None)
-                if token_index is not None and token_index < config.get_text_config().vocab_size:
+                if token_index is not None and token_index < config.get_text_config(decoder=True).vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
@@ -380,7 +380,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -404,7 +404,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -426,7 +426,7 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -444,7 +444,7 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(
@@ -461,7 +461,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -486,7 +486,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -511,7 +511,7 @@ class GenerationTesterMixin:
             beam_kwargs = self._get_beam_kwargs()
             output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -536,7 +536,7 @@ class GenerationTesterMixin:
                 return_dict_in_generate=True,
                 use_cache=False,
             )
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -561,7 +561,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -585,7 +585,7 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(
@@ -638,7 +638,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -665,7 +665,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -731,7 +731,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -755,7 +755,7 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
@@ -795,7 +795,7 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
@@ -858,7 +858,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -961,7 +961,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1027,7 +1027,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1107,7 +1107,7 @@ class GenerationTesterMixin:
         decoder_only_classes = []
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 continue
             else:
                 decoder_only_classes.append(model_class)
@@ -1158,7 +1158,9 @@ class GenerationTesterMixin:
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_text_config(decoder=True).pad_token_id
+                if config.get_text_config(decoder=True).pad_token_id is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
@@ -1183,7 +1185,7 @@ class GenerationTesterMixin:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # 1. If it doesn't support cache, skip the test
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
@@ -1371,7 +1373,7 @@ class GenerationTesterMixin:
 
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 continue
             config.is_decoder = True
 
@@ -1450,7 +1452,7 @@ class GenerationTesterMixin:
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
@@ -1465,7 +1467,7 @@ class GenerationTesterMixin:
             max_new_tokens = 10
 
             # here we force to not stop at eos and go until max-length
-            model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
+            model.generation_config.eos_token_id = model.config.get_text_config(decoder=True).eos_token_id = -1
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
@@ -1505,7 +1507,7 @@ class GenerationTesterMixin:
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:
@@ -1601,11 +1603,11 @@ class GenerationTesterMixin:
             if "token_type_ids" in inputs_dict:
                 del inputs_dict["token_type_ids"]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
             # TODO (joao, raushan): the correct line below is `if not hasattr(config.get_text_config(), "use_cache")`,
             # but it breaks a few models. Fix and then apply `has_similar_generate_outputs` pattern
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device).eval()
@@ -1646,7 +1648,7 @@ class GenerationTesterMixin:
 
             # Combine the (3 + 1) generated tokens and verify it matches with full generation.
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
-            self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
+            self.assertTrue(has_similar_generate_outputs(outputs, combined_output_sequences))
             # The two sets of past kv should be equal to each other
             for layer_idx in range(len(cached_output.past_key_values)):
                 for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
@@ -1674,7 +1676,7 @@ class GenerationTesterMixin:
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
@@ -1729,10 +1731,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if (
-                config.get_text_config(decoder=True).is_encoder_decoder
-                or not model_class._supports_default_dynamic_cache()
-            ):
+            if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
 
             config.is_decoder = True
@@ -1832,7 +1831,7 @@ class GenerationTesterMixin:
                     if not has_defined_cache_implementation:
                         decoder_cache = (
                             gen_out.past_key_values.self_attention_cache
-                            if config.get_text_config(decoder=True).is_encoder_decoder
+                            if config.is_encoder_decoder
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
@@ -1858,7 +1857,7 @@ class GenerationTesterMixin:
                         # sanity checks
                         decoder_cache = (
                             gen_out.past_key_values.self_attention_cache
-                            if config.get_text_config(decoder=True).is_encoder_decoder
+                            if config.is_encoder_decoder
                             else gen_out.past_key_values
                         )
                         self.assertFalse(isinstance(decoder_cache, DynamicCache))
@@ -1940,7 +1939,7 @@ class GenerationTesterMixin:
             else:
                 self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
+            if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
             else:

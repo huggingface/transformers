@@ -1188,11 +1188,18 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=None, encoder=None) -> "PretrainedConfig":
+    def get_text_config(
+        self,
+        decoder: Optional[bool] = None,
+        encoder: Optional[bool] = None,
+    ) -> "PretrainedConfig":
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
         `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
         which is useful on models that have both text input and output modalities.
+
+        If the model is a composite model and there are multiple matches (e.g. both encoder and decoder are text
+        configs), then the original config instance itself is returned.
 
         There are three possible outcomes of using this method:
         1. On most models, it returns the original config instance itself.
@@ -1202,14 +1209,14 @@ class PretrainedConfig(PushToHubMixin):
 
         Args:
             decoder (`Optional[bool]`, *optional*):
-                If set to `True`, then only search for decoder config names.
+                If set to `True` and `encoder` is unset or `False`, then only search for decoder config names.
             encoder (`Optional[bool]`, *optional*):
-                If set to `True`, then only search for encoder config names.
+                If set to `True` and `decoder` is unset or `False`, then only search for encoder config names.
         """
         return_both = decoder == encoder  # both unset or both set -> search all possible names
 
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
-        encoder_possible_text_config_names = ("text_encoder",)
+        encoder_possible_text_config_names = ("text_encoder", "encoder")
         if return_both:
             possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
         elif decoder:
@@ -1224,13 +1231,7 @@ class PretrainedConfig(PushToHubMixin):
                 if text_config is not None:
                     valid_text_config_names += [text_config_name]
 
-        if len(valid_text_config_names) > 1:
-            raise ValueError(
-                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
-                "case, using `get_text_config()` would be ambiguous. Please specify the desired text config directly, "
-                "e.g. `text_config = config.sub_config_name`"
-            )
-        elif len(valid_text_config_names) == 1:
+        if len(valid_text_config_names) == 1:
             config_to_return = getattr(self, valid_text_config_names[0])
         else:
             config_to_return = self

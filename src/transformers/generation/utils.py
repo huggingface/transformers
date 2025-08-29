@@ -1035,7 +1035,7 @@ class GenerationMixin(ContinuousMixin):
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    self.config.get_text_config().vocab_size,
+                    self.config.get_text_config(decoder=True).vocab_size,
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
@@ -1290,7 +1290,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.watermarking_config is not None:
             processors.append(
                 generation_config.watermarking_config.construct_processor(
-                    self.config.get_text_config().vocab_size, device
+                    self.config.get_text_config(decoder=True).vocab_size, device
                 )
             )
 
@@ -1469,7 +1469,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(-1, self.config.get_text_config().vocab_size, scores.shape[-1])
+            scores = scores.reshape(-1, self.config.get_text_config(decoder=True).vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 
@@ -1483,7 +1483,7 @@ class GenerationMixin(ContinuousMixin):
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_text_config(decoder=True).vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
@@ -1516,7 +1516,10 @@ class GenerationMixin(ContinuousMixin):
         doc_reference = (
             "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
         )
-        if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+        if (
+            self.config.get_text_config(decoder=True).vocab_size
+            == assistant_model.config.get_text_config(decoder=True).vocab_size
+        ):
             if assistant_tokenizer is not None:
                 raise ValueError(
                     f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
@@ -3249,7 +3252,7 @@ class GenerationMixin(ContinuousMixin):
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = self.config.get_text_config().vocab_size
+            vocab_size = self.config.get_text_config(decoder=True).vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
