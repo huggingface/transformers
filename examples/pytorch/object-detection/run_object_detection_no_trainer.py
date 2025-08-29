@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==4.56.0",
 #     "albumentations >= 1.4.16",
 #     "timm",
 #     "datasets>=4.0",
@@ -63,7 +63,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.56.0.dev0")
+check_min_version("4.56.0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)

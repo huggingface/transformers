@@ -15,7 +15,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==4.56.0",
 #     "accelerate >= 0.12.0",
 #     "sentencepiece != 0.1.92",
 #     "protobuf",
@@ -65,7 +65,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.56.0.dev0")
+check_min_version("4.56.0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
