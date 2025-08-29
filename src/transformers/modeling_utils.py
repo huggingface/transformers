@@ -231,6 +231,7 @@ VLMS = [
     "gotocr2",
     "gemma3",
     "internvl",
+    "keye",
     "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
