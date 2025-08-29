@@ -1007,7 +1007,7 @@ class FalconH1Mixer(nn.Module):
 
 
 class FalconH1MLP(nn.Module):
-    def __init__(self, config: FalconH1Config = None):
+    def __init__(self, config: FalconH1Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

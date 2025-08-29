@@ -249,9 +249,9 @@ class EomtPatchEmbeddings(Dinov2PatchEmbeddings):
     pass
 
 
-class EomtEmbeddings(Dinov2Embeddings, nn.Module):
+class EomtEmbeddings(Dinov2Embeddings):
     def __init__(self, config: EomtConfig) -> None:
-        Dinov2Embeddings().__init__()
+        nn.Module.__init__(self)
 
         self.config = config
         self.patch_size = config.patch_size
@@ -431,9 +431,9 @@ class EomtPreTrainedModel(PreTrainedModel):
     The EoMT Model with head on top for instance/semantic/panoptic segmentation.
     """
 )
-class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Module):
+class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
     def __init__(self, config: EomtConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.embeddings = EomtEmbeddings(config)
