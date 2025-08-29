@@ -1069,7 +1069,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
 
-        attention_mask = create_causal_mask(
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -1086,7 +1086,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 cross_attn_block = self.gated_cross_attn_layers[idx // self.cross_layer_interval]
                 hidden_states = cross_attn_block(
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     image_hidden_states,
                     image_attention_mask=image_attention_mask,
                     cross_attention_gate=cross_attention_gate,
@@ -1096,7 +1096,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
