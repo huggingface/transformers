@@ -997,6 +997,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         # Get embeddings for all text queries in all batch samples
         text_outputs: BaseModelOutputWithPooling = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
         text_features = self.text_projection(text_outputs.pooler_output)
+
         return text_features
 
     @filter_out_non_signature_kwargs()
@@ -1014,8 +1015,8 @@ class Owlv2Model(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> from transformers import AutoProcessor, Owlv2Model
         >>> from transformers.image_utils import load_image
+        >>> from transformers import AutoProcessor, Owlv2Model
 
         >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
@@ -1032,6 +1033,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
         image_features = self.visual_projection(vision_outputs.pooler_output)
+
         return image_features
 
     @auto_docstring
