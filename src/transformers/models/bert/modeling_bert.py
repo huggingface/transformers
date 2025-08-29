@@ -630,7 +630,10 @@ class BertEncoder(nn.Module):
                 use_cache = False
 
         if use_cache and self.config.is_decoder and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            past_key_values = EncoderDecoderCache(
+                DynamicCache(config=self.config.get_text_config(decoder=True)),  # self-attention cache
+                DynamicCache(config=self.config.get_text_config(encoder=True)),  # cross-attention cache
+            )
 
         if use_cache and self.config.is_decoder and isinstance(past_key_values, tuple):
             logger.warning_once(
