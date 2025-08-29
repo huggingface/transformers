@@ -1686,7 +1686,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                        for assistant_start_char, assistant_end_char in jinja_generation_indices[i]:
                             start_token = out.char_to_token(i, assistant_start_char)
                             end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
