@@ -66,6 +66,7 @@ from .utils import (
     to_py_obj,
 )
 from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -1521,6 +1522,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tools: Optional[list[Union[dict, Callable]]] = None,
         documents: Optional[list[dict[str, str]]] = None,
         chat_template: Optional[str] = None,
+        chat_schema: Optional[dict] = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
@@ -1556,6 +1558,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
+            chat_schema (`dict[str]`, *optional*):
+                A JSON schema dict with optional parsing fields, used to indicate the model's input spec and allow
+                parsing of rendered chats.
             add_generation_prompt (bool, *optional*):
                 If this is set, a prompt with the token(s) that indicate
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
@@ -1618,6 +1623,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_kwargs = {}
 
         chat_template = self.get_chat_template(chat_template, tools)
+        if chat_schema is None and getattr(self, "chat_schema", None) is not None:
+            chat_schema = self.chat_schema
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1637,7 +1644,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        rendered_chat, generation_indices = render_jinja_template(
+        rendered_chat, jinja_generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
             documents=documents,
@@ -1647,6 +1654,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             add_generation_prompt=add_generation_prompt,
             **template_kwargs,
         )
+
+        if return_assistant_tokens_mask and chat_schema:
+            # TODO Check the schema actually has regexes/parsers for the assistant turns, not just that a schema exists
+            for chat in rendered_chat:
+                parsed_chat = recursive_parse(chat, chat_schema, offset=0)
+                assistant_messages = [message for message in parsed_chat.get("messages", [])
+                                      if message.get("role") == "assistant" and "content" in message]
+
+
 
         if not is_batched:
             rendered_chat = rendered_chat[0]
