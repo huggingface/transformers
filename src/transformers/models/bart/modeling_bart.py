@@ -1044,7 +1044,10 @@ class BartDecoder(BartPreTrainedModel):
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                EncoderDecoderCache(
+                    DynamicCache(config=self.config.get_text_config(decoder=True)),  # self-attention cache
+                    DynamicCache(config=self.config.get_text_config(encoder=True)),  # cross-attention cache
+                )
                 if encoder_hidden_states is not None
                 else DynamicCache(config=self.config)
             )

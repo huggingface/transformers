@@ -856,7 +856,10 @@ class FlaubertModel(FlaubertPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if cache is None:
-            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            cache = EncoderDecoderCache(
+                DynamicCache(config=self.config.get_text_config(decoder=True)),  # self-attention cache
+                DynamicCache(config=self.config.get_text_config(encoder=True)),  # cross-attention cache
+            )
 
         if isinstance(cache, tuple):
             cache = EncoderDecoderCache.from_legacy_cache(cache)

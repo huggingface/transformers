@@ -88,6 +88,7 @@ class ColQwen2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs) -> PretrainedConfig:
+        # Overwritten: `ColQwen2Config` wraps a VLM config
         return self.vlm_config.get_text_config(*args, **kwargs)
 
 
