@@ -317,8 +317,8 @@ class StaticLayer(CacheLayerMixin):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as
-        # cross-attention, in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
@@ -392,8 +392,8 @@ class SlidingWindowLayer(StaticLayer):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as
-        # cross-attention, in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
@@ -476,8 +476,8 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as
-        # cross-attention, in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
