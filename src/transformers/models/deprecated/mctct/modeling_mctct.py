@@ -29,8 +29,8 @@ from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....utils import logging
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ....modeling_utils import PreTrainedModel
+from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from .configuration_mctct import MCTCTConfig
 
 
