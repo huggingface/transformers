@@ -240,7 +240,7 @@ def convert_audio_encoder_weights(
     converted_weights: list[Any] = []
 
     if path.startswith(_AUDIO_ENCODER_CONFORMER):
-        assert weights.shape[0] == config.conf_num_hidden_layers
+        assert weights.shape[0] == config.num_hidden_layers
 
         for i, matrix in enumerate(weights):
             if "fflayer_end" in path:
