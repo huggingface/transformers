@@ -938,7 +938,9 @@ class GenerationTesterMixin:
         # - assisted_decoding does not support `use_cache = False`
         # - assisted_decoding does not support `batch_size > 1`
 
-        set_model_tester_for_less_flaky_test(self)
+        # No idea why this cause problem!
+        if type(self).__name__ not in ["Gemma3nTextModelTest"]:
+            set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
