@@ -883,7 +883,7 @@ class RouterParallel(TensorParallelLayer):
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
         router_indices = torch.fmod(router_indices, num_local_experts)
-        router_indices.masked_fill[router_indices == -1, num_local_experts]  # masking class for one hot
+        router_indices.masked_fill(router_indices == -1, num_local_experts)  # masking class for one hot
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
