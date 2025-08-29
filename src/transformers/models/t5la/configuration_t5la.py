@@ -142,10 +142,6 @@ class T5LaConfig(PretrainedConfig):
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
         self.lookahead_type = lookahead_type
         self.lookahead_size = lookahead_size
 

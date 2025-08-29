@@ -142,8 +142,6 @@ class T5LaConfig(T5Config):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-        self.lookahead_type = lookahead_type
-        self.lookahead_size = lookahead_size
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -155,10 +153,8 @@ class T5LaConfig(T5Config):
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
+        self.lookahead_type = lookahead_type
+        self.lookahead_size = lookahead_size
 
 
 class T5LaLayerNorm(T5LayerNorm):
