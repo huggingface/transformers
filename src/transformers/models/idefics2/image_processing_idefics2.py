@@ -497,8 +497,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -506,7 +509,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(first_image_in_list)
 
         if do_image_splitting:
             new_images_list = []

@@ -36,7 +36,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -761,9 +761,9 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")

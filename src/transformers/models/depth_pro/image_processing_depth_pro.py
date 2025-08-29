@@ -35,7 +35,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_torch_available,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -258,7 +258,7 @@ class DepthProImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

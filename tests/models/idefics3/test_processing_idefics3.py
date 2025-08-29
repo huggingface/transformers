@@ -323,13 +323,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = [[self.image1], []]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 

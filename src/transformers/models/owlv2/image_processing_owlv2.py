@@ -34,7 +34,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -434,7 +434,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size)  # for BC
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

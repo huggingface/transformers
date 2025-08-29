@@ -39,7 +39,7 @@ from ...image_utils import (
     is_scaled_image,
     is_torch_available,
     is_torch_tensor,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -525,10 +525,10 @@ class DPTImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

@@ -25,7 +25,7 @@ from ...image_utils import (
     ImageInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -159,7 +159,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         pad_size = pad_size if pad_size is not None else self.pad_size
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

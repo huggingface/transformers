@@ -561,7 +561,7 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
+        tensor_batch_images = torch.stack([img[0] for img in batch_images if img]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []

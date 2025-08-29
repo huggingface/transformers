@@ -196,6 +196,10 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(train_data["pixel_values"]), len(train_data["input_ids"]))
 
+    @unittest.skip("We will not support batch input with and without images for UDOP!")
+    def test_processor_text_has_no_visual(self):
+        pass
+
 
 # different use cases tests
 @require_sentencepiece

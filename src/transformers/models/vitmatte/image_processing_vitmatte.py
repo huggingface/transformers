@@ -28,7 +28,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -195,8 +195,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
 
-        images = make_list_of_images(images)
-        trimaps = make_list_of_images(trimaps, expected_ndims=2)
+        images = make_flat_list_of_images(images)
+        trimaps = make_flat_list_of_images(trimaps, expected_ndims=2)
 
         if not valid_images(trimaps):
             raise ValueError(
