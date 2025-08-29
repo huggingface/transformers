@@ -233,8 +233,7 @@ class VitPoseBackboneAttention(nn.Module):
 class VitPoseNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
 
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         part_features = config.part_features
