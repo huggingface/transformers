@@ -191,7 +191,7 @@ class RequestState:
             f"query_length={len(self.prompt_ids)}",
             f"remaining_tokens={len(self.remaining_prompt_ids)}",
             f"kv_length={self.position_offset}",
-            f"full_prompt_lenght={len(self.full_prompt_ids)}",
+            f"full_prompt_length={len(self.full_prompt_ids)}",
             f"allocated_blocks={self.allocated_blocks}",
             f"generated_tokens={self.static_outputs}",
         ]

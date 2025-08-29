@@ -247,8 +247,8 @@ class AutoRoundConfig(QuantizationConfigMixin):
             raise ValueError("group_size must be greater than 0 or equal to -1")
 
     def get_loading_attributes(self):
-        loading_attibutes_dict = {"backend": self.backend}
-        return loading_attibutes_dict
+        loading_attributes_dict = {"backend": self.backend}
+        return loading_attributes_dict
 
     def to_dict(self):
         config_dict = super().to_dict()
@@ -449,7 +449,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
-            This sets the storage type to pack the quanitzed 4-bit prarams.
+            This sets the storage type to pack the quantized 4-bit params.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -759,16 +759,16 @@ class GPTQConfig(QuantizationConfigMixin):
         self.post_init()
 
     def get_loading_attributes(self):
-        attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = [
+        attributes_dict = copy.deepcopy(self.__dict__)
+        loading_attributes = [
             "use_exllama",
             "exllama_config",
             "use_cuda_fp16",
             "max_input_length",
             "backend",
         ]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
-        return loading_attibutes_dict
+        loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
+        return loading_attributes_dict
 
     def post_init(self):
         r"""
@@ -1045,10 +1045,10 @@ class AwqConfig(QuantizationConfigMixin):
                     )
 
     def get_loading_attributes(self):
-        attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len", "exllama_config"]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
-        return loading_attibutes_dict
+        attributes_dict = copy.deepcopy(self.__dict__)
+        loading_attributes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len", "exllama_config"]
+        loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
+        return loading_attributes_dict
 
 
 @dataclass
@@ -1489,10 +1489,10 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
 
     def get_loading_attributes(self):
-        attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["activation_scale_ub"]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
-        return loading_attibutes_dict
+        attributes_dict = copy.deepcopy(self.__dict__)
+        loading_attributes = ["activation_scale_ub"]
+        loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
+        return loading_attributes_dict
 
 
 @dataclass
@@ -1828,8 +1828,8 @@ class TorchAoConfig(QuantizationConfigMixin):
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
-        ao_verison = cls._get_ao_version()
-        assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
+        ao_version = cls._get_ao_version()
+        assert ao_version > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
 
