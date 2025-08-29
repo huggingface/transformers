@@ -50,7 +50,7 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
 >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
->>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+>>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
