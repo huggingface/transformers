@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 Meta Platforms, Inc. and affiliates, and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""XCodec2 model configuration"""
+"""Xcodec2 model configuration"""
 
+
+import math
+from typing import Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
+import numpy as np
+
+from transformers import AutoConfig, Wav2Vec2BertConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class XCodec2Config(PretrainedConfig):
+class Xcodec2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`XCodec2Model`]. It is used to instantiate a
-    XCodec2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of an [`Xcodec2Model`]. It is used to instantiate a
+    Xcodec2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [HKUSTAudio/xcodec2](https://huggingface.co/HKUSTAudio/xcodec2) architecture.
 
@@ -32,24 +39,24 @@ class XCodec2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        semantic_hidden_size (`int`, *optional*, defaults to 1024):
-            Hidden size for the semantic model.
-        codec_encoder_hidden_size (`int`, *optional*, defaults to 1024):
-            Hidden size for the codec encoder model.
-        codec_decoder_hidden_size (`int`, *optional*, defaults to 1024):
-            Hidden size for the codec decoder model.
+        encoder_hidden_size (`int`, *optional*, defaults to 1024):
+            Hidden size for the audio encoder model.
+        downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
+            Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
+        decoder_hidden_size (`int`, *optional*, defaults to 1024):
+            Hidden size for the audio decoder model.
+        semantic_model_config (`Union[Dict, Wav2Vec2BertConfig]`, *optional*):
+            An instance of the configuration object for the semantic (Wav2Vec2BertConfig) model.
+
+        
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        audio_channels (`int`, *optional*, defaults to 1):
-            Number of channels in the audio data. Either 1 for mono or 2 for stereo.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         use_vocos (`bool`, *optional*, defaults to `True`):
             Whether to use VOCOS.
         hidden_size (`int`, *optional*, defaults to 1024):
             Intermediate representation dimension.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Intermediate size for the model.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for the model.
         num_key_value_heads (`int`, *optional*, defaults to 16):
@@ -64,14 +71,10 @@ class XCodec2Config(PretrainedConfig):
             Epsilon for RMS normalization.
         head_dim (`int`, *optional*, defaults to 64):
             Head dimension for the model.
-        up_ratios (`tuple`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
-            Up sampling ratios for the model.
         dilations (`tuple`, *optional*, defaults to `[1, 3, 9]`):
             Dilation values for the model.
         depth (`int`, *optional*, defaults to 12):
             Depth for the model.
-        num_quantizers (`int`, *optional*, defaults to 1):
-            Number of VQ quantizers for the model.
         hop_length (`int`, *optional*, defaults to 320):
             The hop length for STFT.
         vq_dim (`int`, *optional*, defaults to 2048):
@@ -83,7 +86,7 @@ class XCodec2Config(PretrainedConfig):
         vq_full_commit_loss (`bool`, *optional*, defaults to `False`):
             Whether to use full commit loss for the VQ.
         codebook_size (`int`, *optional*, defaults to 16384):
-            Number of discret codes that make up VQVAE.
+            Number of discrete codes that make up VQVAE.
         codebook_dim (`int`, *optional*, defaults to 16):
             Dimension of the codebook vectors. If not defined, uses `hidden_size`.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -94,17 +97,21 @@ class XCodec2Config(PretrainedConfig):
 
     model_type = "xcodec2"
 
+    sub_configs = {
+        "semantic_model_config": Wav2Vec2BertConfig,
+    }
+
     def __init__(
         self,
-        semantic_hidden_size: int = 1024,
-        codec_encoder_hidden_size: int = 1024,
-        codec_decoder_hidden_size: int = 1024,
+        encoder_hidden_size: int = 1024,
+        downsampling_ratios: tuple = [2, 2, 4, 4, 5],
+        decoder_hidden_size: int = 1024,
+        semantic_model_config: Union[dict, Wav2Vec2BertConfig] = None,
+
         initializer_range: float = 0.02,
-        audio_channels: int = 1,
         sampling_rate: int = 16000,
         use_vocos: bool = True,
         hidden_size: int = 1024,
-        intermediate_size: int = 4096,
         num_attention_heads: int = 16,
         num_key_value_heads: int = 16,
         num_hidden_layers: int = 12,
@@ -112,11 +119,8 @@ class XCodec2Config(PretrainedConfig):
         attention_bias: bool = False,
         rms_norm_eps: float = 1e-6,
         head_dim: int = 64,
-        up_ratios: tuple = [2, 2, 4, 4, 5],
         dilations: tuple = [1, 3, 9],
         depth: int = 12,
-        num_quantizers: int = 1,
-        hop_length: int = 320,
         vq_dim: int = 2048,
         vq_commit_weight: float = 0.25,
         vq_weight_init: bool = False,
@@ -128,15 +132,33 @@ class XCodec2Config(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.semantic_hidden_size = semantic_hidden_size
-        self.codec_encoder_hidden_size = codec_encoder_hidden_size
-        self.codec_decoder_hidden_size = codec_decoder_hidden_size
+        self.encoder_hidden_size = encoder_hidden_size
+        self.decoder_hidden_size = decoder_hidden_size
+        self.downsampling_ratios = downsampling_ratios
+
+        if semantic_model_config is None:
+            self.semantic_model_config = Wav2Vec2BertConfig()
+        elif isinstance(semantic_model_config, dict):
+            if "_name_or_path" in semantic_model_config:
+                # If the config is a path, load it using AutoConfig
+                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
+            else:
+                # assume HubertConfig as probably created from scratch
+                logger.warning(
+                    "Could not determine semantic model type from config architecture. Defaulting to `Wav2Vec2BertConfig`."
+                )
+                self.semantic_model_config = Wav2Vec2BertConfig(**semantic_model_config)
+        elif isinstance(semantic_model_config, Wav2Vec2BertConfig):
+            self.semantic_model_config = semantic_model_config
+        else:
+            raise ValueError(
+                f"semantic_model_config must be a dict or Wav2Vec2BertConfig instance, but got {type(semantic_model_config)}"
+            )
+
         self.initializer_range = initializer_range
-        self.audio_channels = audio_channels
         self.sampling_rate = sampling_rate
         self.use_vocos = use_vocos
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
@@ -144,11 +166,10 @@ class XCodec2Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.rms_norm_eps = rms_norm_eps
         self.head_dim = head_dim
-        self.up_ratios = up_ratios
         self.dilations = dilations
         self.depth = depth
-        self.num_quantizers = num_quantizers
-        self.hop_length = hop_length
+        # single codebook is main feature of xcodec2
+        self.num_quantizers = 1
         self.vq_dim = vq_dim
         self.vq_commit_weight = vq_commit_weight
         self.vq_weight_init = vq_weight_init
@@ -158,5 +179,21 @@ class XCodec2Config(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
 
+    @property
+    def frame_rate(self) -> int:
+        return math.ceil(self.sampling_rate / self.hop_length)
+    
+    @property
+    def semantic_hidden_size(self) -> int:
+        return self.semantic_model_config.hidden_size
 
-__all__ = ["XCodec2Config"]
+    @property
+    def intermediate_size(self) -> int:
+        return self.encoder_hidden_size + self.decoder_hidden_size + self.semantic_hidden_size + self.hidden_size
+
+    @property
+    def hop_length(self) -> int:
+        return int(np.prod(self.downsampling_ratios))
+    
+
+__all__ = ["Xcodec2Config"]

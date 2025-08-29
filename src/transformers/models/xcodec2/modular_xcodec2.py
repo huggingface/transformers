@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 import random
 from contextlib import nullcontext
@@ -10,7 +25,6 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import int32, nn, sin, sinc
 from torch.amp import autocast
 from torch.nn import Module, Parameter
@@ -28,27 +42,26 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoConfig, AutoModel
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from .configuration_xcodec2 import XCodec2Config
+from .configuration_xcodec2 import Xcodec2Config
 
 
 # General docstring
-_CONFIG_FOR_DOC = "XCodec2Config"
+_CONFIG_FOR_DOC = "Xcodec2Config"
 
 
 @dataclass
-class XCodec2Output(ModelOutput):
+class Xcodec2Output(ModelOutput):
     """
     Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`.
         audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Mimi.
+            Decoded audio values, obtained using the decoder part of Xcodec2.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -56,22 +69,22 @@ class XCodec2Output(ModelOutput):
 
 
 @dataclass
-class XCodec2EncoderOutput(ModelOutput):
+class Xcodec2EncoderOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
 
 
 @dataclass
-class XCodec2DecoderOutput(ModelOutput):
+class Xcodec2DecoderOutput(ModelOutput):
     """
     Args:
         audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Mimi.
+            Decoded audio values, obtained using the decoder part of Xcodec2.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -156,10 +169,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class XCodec2Attention(nn.Module):
+class Xcodec2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: XCodec2Config, layer_idx: int):
+    def __init__(self, config: Xcodec2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -234,16 +247,16 @@ class XCodec2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class XCodec2RMSNorm(LlamaRMSNorm):
+class Xcodec2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class XCodec2RotaryEmbedding(LlamaRotaryEmbedding):
+class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class XCodec2MLP(nn.Module):
-    def __init__(self, config: XCodec2Config):  # Use your specific config
+class Xcodec2MLP(nn.Module):
+    def __init__(self, config: Xcodec2Config):  # Use your specific config
         super().__init__()
         dim = config.hidden_size
 
@@ -258,14 +271,14 @@ class XCodec2MLP(nn.Module):
         return x
 
 
-class XCodec2DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: XCodec2Config, layer_idx: int):
+class Xcodec2DecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: Xcodec2Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.self_attn = XCodec2Attention(config, layer_idx)
-        self.mlp = XCodec2MLP(config)
-        self.input_layernorm = XCodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = XCodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Xcodec2Attention(config, layer_idx)
+        self.mlp = Xcodec2MLP(config)
+        self.input_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     # Override forward to enforce non-causal attention
     def forward(
@@ -352,7 +365,7 @@ def WNConv1d(*args, **kwargs):
     return weight_norm(nn.Conv1d(*args, **kwargs))
 
 
-class XCodec2SnakeBeta(nn.Module):
+class Xcodec2SnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -381,7 +394,7 @@ class XCodec2SnakeBeta(nn.Module):
         beta is initialized to 1 by default, higher values = higher-magnitude.
         alpha will be trained along with the rest of your model.
         """
-        super(XCodec2SnakeBeta, self).__init__()
+        super(Xcodec2SnakeBeta, self).__init__()
         self.in_features = in_features
 
         # initialize alpha
@@ -543,9 +556,9 @@ class ResidualUnit(nn.Module):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
         self.block = nn.Sequential(
-            Activation1d(activation=XCodec2SnakeBeta(dim, alpha_logscale=True)),
+            Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True)),
             WNConv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad),
-            Activation1d(activation=XCodec2SnakeBeta(dim, alpha_logscale=True)),
+            Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True)),
             WNConv1d(dim, dim, kernel_size=1),
         )
 
@@ -559,7 +572,7 @@ class EncoderBlock(nn.Module):
         runits = [ResidualUnit(dim // 2, dilation=d) for d in dilations]
         self.block = nn.Sequential(
             *runits,
-            Activation1d(activation=XCodec2SnakeBeta(dim // 2, alpha_logscale=True)),
+            Activation1d(activation=Xcodec2SnakeBeta(dim // 2, alpha_logscale=True)),
             WNConv1d(
                 dim // 2,
                 dim,
@@ -579,7 +592,7 @@ def init_weights(m):
         nn.init.constant_(m.bias, 0)
 
 
-class XCodec2CodecEncoder_Transformer(nn.Module):
+class Xcodec2CodecEncoder_Transformer(nn.Module):
     def __init__(
         self,
         ngf=48,
@@ -601,7 +614,7 @@ class XCodec2CodecEncoder_Transformer(nn.Module):
 
         self.conv_blocks = nn.Sequential(*self.conv_blocks)
         self.conv_final_block = [
-            Activation1d(activation=XCodec2SnakeBeta(d_model, alpha_logscale=True)),
+            Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True)),
             WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1),
         ]
         self.conv_final_block = nn.Sequential(*self.conv_final_block)
@@ -735,7 +748,7 @@ class VocosBackbone(Backbone):
                                                 None means non-conditional model. Defaults to None.
     """
 
-    def __init__(self, config: XCodec2Config):
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
 
         self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
@@ -751,11 +764,11 @@ class VocosBackbone(Backbone):
         self.prior_net = nn.Sequential(*prior_net)
 
         # Initialize rotary embeddings
-        self.rotary_emb = XCodec2RotaryEmbedding(config=config)
+        self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
 
         # Create transformer layers
         self.transformers = nn.ModuleList(
-            [XCodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Xcodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -1301,10 +1314,10 @@ class ResidualFSQ(Module):
         return (*ret, all_codes)
 
 
-class XCodec2CodecDecoderVocos(nn.Module):
+class Xcodec2CodecDecoderVocos(nn.Module):
     def __init__(
         self,
-        config: XCodec2Config,
+        config: Xcodec2Config,
     ):
         super().__init__()
         self.hop_length = config.hop_length
@@ -1384,7 +1397,7 @@ class XCodec2CodecDecoderVocos(nn.Module):
         self.apply(init_weights)
 
 
-class XCodec2SemanticEncoder(nn.Module):
+class Xcodec2SemanticEncoder(nn.Module):
     def __init__(
         self,
         input_channels: int,
@@ -1393,7 +1406,7 @@ class XCodec2SemanticEncoder(nn.Module):
         kernel_size: int = 3,
         bias: bool = True,
     ):
-        super(XCodec2SemanticEncoder, self).__init__()
+        super(Xcodec2SemanticEncoder, self).__init__()
 
         # Initial convolution, maps input_channels to encode_channels
         self.initial_conv = nn.Conv1d(
@@ -1453,12 +1466,12 @@ class XCodec2SemanticEncoder(nn.Module):
         return x
 
 
-class XCodec2PreTrainedModel(PreTrainedModel):
+class Xcodec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = XCodec2Config
+    config_class = Xcodec2Config
     base_model_prefix = "xcodec2"
     main_input_name = "input_values"
     supports_gradient_checkpointing = False
@@ -1498,37 +1511,35 @@ XCODEC2_INPUTS_DOCSTRING = r"""
     args:
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`:
             Discrete code indices computed using `model.encode`.
         return_dict (`bool`, *optional*):
             whether to return a `XcodecOutput` or a plain tuple.
 """
 
-
+# Taking inspiration form modeling code of original authors: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
 @add_start_docstrings(
     "The Xcodec2 neural audio codec model.",
     XCODEC2_INPUTS_DOCSTRING,
 )
-class XCodec2Model(XCodec2PreTrainedModel):
-    config_class = XCodec2Config
+class Xcodec2Model(Xcodec2PreTrainedModel):
+    config_class = Xcodec2Config
 
-    def __init__(self, config: XCodec2Config):
+    def __init__(self, config: Xcodec2Config):
         super().__init__(config)
 
-        semantic_model_config = AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True)
-        self.semantic_model = AutoModel.from_config(semantic_model_config)
-        self.semantic_model.eval()
-
-        self.SemanticEncoder_module = XCodec2SemanticEncoder(
+        self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
+        self.SemanticEncoder_module = Xcodec2SemanticEncoder(
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
 
-        self.CodecEnc = XCodec2CodecEncoder_Transformer()
-
-        self.generator = XCodec2CodecDecoderVocos(config=config)
+        self.CodecEnc = Xcodec2CodecEncoder_Transformer()
+        self.generator = Xcodec2CodecDecoderVocos(config=config)
 
         self.fc_prior = nn.Linear(2048, 2048)
         self.fc_post_a = nn.Linear(2048, 1024)
+
+        from ..auto.feature_extraction_auto import AutoFeatureExtractor
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
         self.feature_extractor = feature_extractor
 
@@ -1538,7 +1549,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         self,
         input_values,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2EncoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1595,7 +1606,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         if not return_dict:
             return vq_code
 
-        return XCodec2EncoderOutput(
+        return Xcodec2EncoderOutput(
             audio_codes=vq_code,
         )
 
@@ -1603,7 +1614,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         self,
         audio_codes,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2DecoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2DecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1611,13 +1622,13 @@ class XCodec2Model(XCodec2PreTrainedModel):
         trimmed.
 
         Args:
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
+            audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
                 Discrete code indices computed using `model.encode`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of XCodec2.
+            Decoded audio values of shape `(batch_size, 1, num_samples)` obtained using the decoder part of Xcodec2.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1633,18 +1644,18 @@ class XCodec2Model(XCodec2PreTrainedModel):
         if not return_dict:
             return recon_audio
 
-        return XCodec2DecoderOutput(
+        return Xcodec2DecoderOutput(
             audio_values=recon_audio,
         )
 
     @add_start_docstrings_to_model_forward(XCODEC2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=XCodec2Output, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Xcodec2Output, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: torch.Tensor,
         audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2Output]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
         r"""
         Returns:
 
@@ -1652,13 +1663,13 @@ class XCodec2Model(XCodec2PreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import AutoFeatureExtractor, XCodec2Model
+        >>> from transformers import AutoFeatureExtractor, Xcodec2Model
 
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "Steveeeeeeen/xcodec2"
-        >>> model = XCodec2Model.from_pretrained(model_id)
+        >>> model_id = "bezzam/xcodec2"
+        >>> model = Xcodec2Model.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
@@ -1677,10 +1688,10 @@ class XCodec2Model(XCodec2PreTrainedModel):
         if not return_dict:
             return (audio_codes, audio_values)
 
-        return XCodec2Output(
+        return Xcodec2Output(
             audio_values=audio_values,
             audio_codes=audio_codes,
         )
 
 
-__all__ = ["XCodec2Model", "XCodec2PreTrainedModel"]
+__all__ = ["Xcodec2Model", "Xcodec2PreTrainedModel"]
