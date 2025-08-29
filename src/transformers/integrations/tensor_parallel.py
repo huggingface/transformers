@@ -878,7 +878,15 @@ class RouterParallel(TensorParallelLayer):
         Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
         num_local_experts = mod.num_experts // ep_size
+        if num_local_experts == 1:
+            raise ValueError(
+                "As masking filled by -1, we currently don't support 1 expert per rank, will enable it soon."
+            )
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
