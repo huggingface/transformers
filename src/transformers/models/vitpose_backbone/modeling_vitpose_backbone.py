@@ -274,7 +274,7 @@ class VitPoseBackboneMoeMLP(nn.Module):
         shared_hidden_state = self.fc2(hidden_state)
         indices = indices.view(-1, 1, 1)
 
-        expert_hidden_state = self.experts(hidden_state, shared_hidden_state, indices)
+        expert_hidden_state = self.experts(hidden_state, indices)
         hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
 
         return hidden_state
