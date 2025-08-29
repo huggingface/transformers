@@ -286,7 +286,8 @@ class EomtEmbeddings(Dinov2Embeddings):
 
 
 class EomtAttention(SiglipAttention):
-    pass
+    def __init__(self, config: EomtConfig):
+        super().__init__()
 
 
 class EomtLayerScale(Dinov2LayerScale):
