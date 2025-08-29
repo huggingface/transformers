@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -271,7 +271,6 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:

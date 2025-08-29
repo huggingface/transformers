@@ -84,7 +84,8 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
-from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers import HfQuantizer
+from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -868,6 +869,7 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
+                # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )
@@ -2790,17 +2792,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        # Register kernel if relevant
-        if attn_implementation is not None and re.match(
-            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation
+        applicable_attn_implementation = attn_implementation
+        # If FA not installed, do not fail but use kernels instead
+        if (
+            applicable_attn_implementation == "flash_attention_2"
+            and self._supports_flash_attn
+            and not is_flash_attn_2_available()
+            and is_kernels_available()
+        ):
+            applicable_attn_implementation = "kernels-community/flash-attn"
+        if applicable_attn_implementation is not None and re.match(
+            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation
         ):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
             # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            actual_attn_name = attn_implementation
-            if "|" in attn_implementation:
-                attention_wrapper, actual_attn_name = attn_implementation.split("|")
+            actual_attn_name = applicable_attn_implementation
+            if "|" in applicable_attn_implementation:
+                attention_wrapper, actual_attn_name = applicable_attn_implementation.split("|")
                 # `transformers` has wrapper for sdpa, paged, flash, flex etc.
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
@@ -2824,27 +2834,37 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
+                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
                 )
+                # log that we used kernel fallback
+                if attn_implementation == "flash_attention_2":
+                    logger.warning_once(
+                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
+                        "library instead!"
+                    )
             except Exception as e:
+                if attn_implementation == "flash_attention_2":
+                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 try:
                     self._sdpa_can_dispatch(is_init_check)
-                    attn_implementation = "sdpa"
+                    applicable_attn_implementation = "sdpa"
                 except (ValueError, ImportError) as e:
-                    attn_implementation = "eager"
+                    applicable_attn_implementation = "eager"
         else:
-            attn_implementation = self.get_correct_attn_implementation(attn_implementation, is_init_check)
+            applicable_attn_implementation = self.get_correct_attn_implementation(
+                applicable_attn_implementation, is_init_check
+            )
             # preload flash attention here to allow compile with fullgraph
-            if attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(attn_implementation)
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
 
-        return attn_implementation
+        return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
@@ -4037,12 +4057,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            create_pr = kwargs.pop("create_pr", False)
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        if hf_quantizer is not None:
+            state_dict = hf_quantizer.get_state_dict(self)
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
@@ -4354,6 +4376,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 files_timestamps,
                 commit_message=commit_message,
                 token=token,
+                create_pr=create_pr,
             )
 
     @wraps(PushToHubMixin.push_to_hub)
@@ -5035,41 +5058,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"{transformers_explicit_filename}"
                 )
 
-        pre_quantized = hasattr(config, "quantization_config")
-        if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
-            pre_quantized = False
-
-        if pre_quantized or quantization_config is not None:
-            if pre_quantized:
-                config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                    config.quantization_config, quantization_config
-                )
-            else:
-                config.quantization_config = quantization_config
-
-            hf_quantizer = AutoHfQuantizer.from_config(
-                config.quantization_config,
-                pre_quantized=pre_quantized,
-            )
-        else:
-            hf_quantizer = None
-
-        if hf_quantizer is not None:
-            hf_quantizer.validate_environment(
-                dtype=dtype,
-                from_tf=from_tf,
-                from_flax=from_flax,
-                device_map=device_map,
-                weights_only=weights_only,
-            )
-            dtype = hf_quantizer.update_dtype(dtype)
-            device_map = hf_quantizer.update_device_map(device_map)
-            config = hf_quantizer.update_tp_plan(config)
-
-            # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if not getattr(hf_quantizer.quantization_config, "dequantize", False):
-                quant_method = hf_quantizer.quantization_config.quant_method
-                user_agent["quant"] = getattr(quant_method, "value", quant_method)
+        hf_quantizer, config, dtype, device_map = get_hf_quantizer(
+            config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent
+        )
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -5483,7 +5474,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
     ):
-        # Useful flags
+        # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
@@ -6229,7 +6220,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_cuda_warm_up_factor()
+    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {

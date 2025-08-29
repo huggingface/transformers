@@ -2061,6 +2061,8 @@ class Mxfp4Config(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
+        dequantize (`bool`, *optional*, default to `False`):
+            Whether we dequantize the model to bf16 precision or not
     """
 
     def __init__(
@@ -2074,6 +2076,11 @@ class Mxfp4Config(QuantizationConfigMixin):
         self.dequantize = dequantize
 
     def get_loading_attributes(self):
-        return {
-            "dequantize": self.dequantize,
-        }
+        return {"dequantize": self.dequantize}
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}

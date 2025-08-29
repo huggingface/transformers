@@ -95,7 +95,7 @@ class GptOssExperts(nn.Module):
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
         num_experts = routing_weights.shape[1]
-        if self.training:
+        if hidden_states.device.type == "cpu" or self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
                 expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
@@ -104,8 +104,10 @@ class GptOssExperts(nn.Module):
                 # are hit this time around
                 expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             for expert_idx in expert_hit[:]:
+                # expert_idx only have 1 element, so we can use scale for fast indexing
+                expert_idx = expert_idx[0]
                 with torch.no_grad():
-                    _, token_idx = torch.where(expert_mask[expert_idx[0]])
+                    _, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
                 gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
                 gate, up = gate_up[..., ::2], gate_up[..., 1::2]

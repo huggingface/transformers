@@ -16,10 +16,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-)
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -302,7 +299,6 @@ class DeepseekVLProcessor(ProcessorMixin):
 
         # process images if pixel_values are provided
         if images is not None:
-            images = make_flat_list_of_images(images)
             data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
         return BatchFeature(data=data)

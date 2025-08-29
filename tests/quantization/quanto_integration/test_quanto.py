@@ -422,7 +422,10 @@ class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a professional photographer, I"
+    EXPECTED_OUTPUTS = [
+        "Hello my name is John, I am a professional photographer, I",  # CUDA output
+        "Hello my name is Nils, I am a student of the University",  # XPU output
+    ]
     weights = "int4"
 
 

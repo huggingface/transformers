@@ -523,7 +523,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "ydshieh/kosmos-2.5"
+        model_name = "microsoft/kosmos-2.5"
         model = Kosmos2_5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -583,14 +583,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         "KOSMOS-2.5 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten",
     )
     def test_generate_from_inputs_embeds(self):
-        pass
-
-    # TODO: ydshieh
-    @pytest.mark.generate
-    @unittest.skip(
-        "Kosmos2_5ForConditionalGeneration returns `vision_model_output` which is currently not working with `stack_model_outputs`",
-    )
-    def test_beam_search_low_memory(self):
         pass
 
     @pytest.mark.generate
@@ -677,11 +669,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
@@ -714,11 +706,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     def test_sdpa(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
@@ -755,11 +747,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,

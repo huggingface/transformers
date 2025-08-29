@@ -23,7 +23,7 @@
 from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
@@ -187,13 +187,8 @@ class ColPaliProcessor(ProcessorMixin):
             raise ValueError("Only one of text or images can be processed at a time")
 
         if images is not None:
-            if is_valid_image(images):
-                images = [images]
-            elif isinstance(images, list) and is_valid_image(images[0]):
-                pass
-            elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
-                raise ValueError("images must be an image, list of images or list of list of images")
-
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
             texts_doc = [self.visual_prompt_prefix] * len(images)
             images = [image.convert("RGB") for image in images]
 
@@ -207,7 +202,6 @@ class ColPaliProcessor(ProcessorMixin):
                 )
                 for prompt, image_list in zip(texts_doc, images)
             ]
-            images = make_flat_list_of_images(images)
             pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
             # max_length has to account for the image tokens

@@ -314,9 +314,9 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         return _is_torchao_serializable
 
-    def get_cuda_warm_up_factor(self):
+    def get_accelerator_warm_up_factor(self):
         """
-        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for CUDA warmup.
+        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for accelerator warmup.
         - A factor of 2 means we pre-allocate the full memory footprint of the model.
         - A factor of 4 means we pre-allocate half of that, and so on
 
