@@ -252,6 +252,9 @@ class StopStringCriteria(StoppingCriteria):
     def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
+        if len(stop_strings) == 0 or any("" == stop_string for stop_string in stop_strings):
+            raise ValueError("`stop_strings` cannot be an empty list or contain empty strings")
+
         self.stop_strings: tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
@@ -509,6 +512,8 @@ class StopStringTextMatchCriteria(StoppingCriteria):
     def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
+        if len(stop_strings) == 0 or any("" == stop_string for stop_string in stop_strings):
+            raise ValueError("`stop_strings` cannot be an empty list or contain empty strings")
 
         self.stop_strings = stop_strings
         self.tokenizer = tokenizer
