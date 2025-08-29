@@ -147,9 +147,7 @@ class HiggsAudioConfig(PretrainedConfig):
             raise ValueError("Invalid audio adapter type: {audio_adapter_type}")
         if audio_adapter_type.startswith("dual_ffn"):
             if audio_dual_ffn_layers is None:
-                raise ValueError(
-                    "audio_dual_ffn_layers must be specified when using dual_ffn adapter."
-                )
+                raise ValueError("audio_dual_ffn_layers must be specified when using dual_ffn adapter.")
         self.text_config = text_config
         self.audio_adapter_type = audio_adapter_type
         self.audio_embed_avg = audio_embed_avg

@@ -14,7 +14,6 @@
 # limitations under the License.
 """HiggsAudioProcessor."""
 
-import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, Union
@@ -30,7 +29,6 @@ from ...utils import is_soundfile_available, is_torch_available, logging
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-    import torchaudio
 
     from .generation_higgs_audio import _ceil_to_nearest
 
@@ -362,7 +360,9 @@ class HiggsAudioProcessor(ProcessorMixin):
 
                 # Generate audio tokens
                 input_values = self.feature_extractor(processed_audio)
-                input_values = torch.tensor(input_values["input_values"][0], device=self.audio_tokenizer.device).unsqueeze(0)
+                input_values = torch.tensor(
+                    input_values["input_values"][0], device=self.audio_tokenizer.device
+                ).unsqueeze(0)
                 audio_ids = self.audio_tokenizer.encode(input_values)
                 audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
 

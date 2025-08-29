@@ -23,12 +23,12 @@ import yaml
 from safetensors.torch import load_file
 
 from transformers import (
+    AutoTokenizer,
+    DacFeatureExtractor,
     HiggsAudioConfig,
     HiggsAudioForConditionalGeneration,
     HiggsAudioProcessor,
     HiggsAudioTokenizer,
-    DacFeatureExtractor,
-    AutoTokenizer,
     logging,
 )
 
@@ -101,6 +101,10 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
         raise ValueError(f"missing keys found: {missing_keys}")
 
     model.generation_config.stop_strings = ["<|end_of_text|>", "<|eot_id|>"]
+    model.generation_config.temperature = 0.3
+    model.generation_config.top_p = 0.95
+    model.generation_config.top_k = 50
+    model.generation_config.do_sample = True
 
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -155,4 +159,4 @@ if __name__ == "__main__":
 
         if args.push_to_hub:
             print("Pushing processor to the hub...")
-            processor.push_to_hub(push_to_hub)
+            processor.push_to_hub(args.push_to_hub)
