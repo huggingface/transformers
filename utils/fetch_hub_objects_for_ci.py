@@ -12,6 +12,8 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+    "https://www.ilankelman.org/stopsigns/australia.jpg",
+    "http://images.cocodataset.org/val2017/000000039769.jpg",
 ]
 
 
