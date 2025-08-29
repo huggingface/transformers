@@ -29,6 +29,7 @@ try:
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
     )
+
     _kernels_available = True
 
     _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
@@ -89,6 +90,7 @@ try:
 
 except ImportError:
     _kernels_available = False
+
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
