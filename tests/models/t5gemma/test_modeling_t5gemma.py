@@ -1012,7 +1012,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_text_config().decoder
+            text_config = config.get_text_config(decoder=True)
             num_decoder_layers = text_config.num_hidden_layers
 
             if custom_all_cache_shapes is None:
