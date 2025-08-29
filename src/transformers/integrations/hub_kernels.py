@@ -16,11 +16,10 @@ from functools import partial
 from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
-from ..utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
 
-if is_kernels_available():
+try:
     from kernels import (
         Device,
         LayerRepository,
@@ -30,6 +29,7 @@ if is_kernels_available():
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
     )
+    _kernels_available = True
 
     _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
@@ -87,7 +87,8 @@ if is_kernels_available():
 
     register_kernel_mapping(_KERNEL_MAPPING)
 
-else:
+except ImportError:
+    _kernels_available = False
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
@@ -121,7 +122,7 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     """Load and register the kernel associated to `attn_implementation`."""
     if not is_kernel(attn_implementation):
         return
-    if not is_kernels_available():
+    if not _kernels_available:
         raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
 
     # Need to be imported here as otherwise we have a circular import in `modeling_utils`
