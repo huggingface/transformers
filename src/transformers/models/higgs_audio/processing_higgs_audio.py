@@ -563,36 +563,16 @@ class HiggsAudioSampleProcessor:
         )
 
 
-def audio_extraction(raw_audio, original_sr=None, target_sr=None, device="cuda"):
-    if not isinstance(raw_audio, torch.Tensor):
-        audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=device)
-    else:
-        audio_signal = raw_audio.float()
-
-    if audio_signal.ndim == 1:
-        audio_signal = audio_signal.unsqueeze(0)  # [1, time]
-
-    if (original_sr is not None and target_sr is not None) and original_sr != target_sr:
-        resampler = torchaudio.transforms.Resample(orig_freq=original_sr, new_freq=target_sr)
-        audio_signal = resampler(audio_signal)
-
-    # Add batch dimension
-    if audio_signal.ndim == 2:
-        audio_signal = audio_signal.unsqueeze(0)  # [batch, channel, time]
-
-    return audio_signal
-
-
 class HiggsAudioProcessor(ProcessorMixin):
     r"""
-    Constructs a Higgs Audio processor which wraps a [`WhisperFeatureExtractor`], a [`AutoTokenizer`],
+    Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
     and a [`HiggsAudioTokenizer`] into a single processor. It inherits, the audio feature extraction, tokenizer,
     and audio encode/decode functionalities.
     See [`~HiggsAudioProcessor.__call__`] and [`~HiggsAudioProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`WhisperFeatureExtractor`):
-            An instance of [`WhisperFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`DacFeatureExtractor`):
+            An instance of [`DacFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of [`AutoTokenizer`]. The tokenizer is a required input.
         audio_tokenizer (`HiggsAudioTokenizer`):
@@ -601,7 +581,7 @@ class HiggsAudioProcessor(ProcessorMixin):
             A template string for chat formatting when combining text and audio interactions.
     """
 
-    feature_extractor_class = "WhisperFeatureExtractor"
+    feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
     audio_tokenizer_class = "HiggsAudioTokenizer"
 
@@ -632,7 +612,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         self,
         text: Union[str, list[str]],
         audio: Optional[Union[np.ndarray, list[np.ndarray]]] = None,
-        original_sr: Optional[Union[np.ndarray, list[np.ndarray]]] = None,
         output_labels: Optional[bool] = False,
         **kwargs: Unpack[HiggsAudioProcessorKwargs],
     ) -> BatchFeature:
@@ -642,9 +621,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         Args:
             text: Single text string or list of text strings (chat format)
             audio: Optional audio input as numpy array(s)
-            original_sr: Optional original sampling rate of the audio before any resampling
-                or processing was applied. It will be compared to the audio_tokenizer.sampling rate and will be resampled if different.
-                If ``None``, the original rate is unknown.
             output_labels: Whether to generate label tokens for training
             **kwargs: Additional arguments
 
@@ -694,11 +670,6 @@ class HiggsAudioProcessor(ProcessorMixin):
                     f"Found {num_audio_tokens} {audio_in_token} and {audio_out_token} token{'s' if num_audio_tokens > 1 else ''} "
                     f"in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
                 )
-            if original_sr is not None and original_sr.size() != num_audios:
-                raise ValueError(
-                    f"{num_audios} audio{'s are' if num_audios > 1 else 'is'} "
-                    f"provided, but received {original_sr.size()} original sample rate{'s' if original_sr.size() > 1 else ''}"
-                )
 
         # Process audio and expand audio tokens if needed
         audio_ids_list = []
@@ -707,9 +678,6 @@ class HiggsAudioProcessor(ProcessorMixin):
             # Ensure audio is a list
             if isinstance(audio, np.ndarray):
                 audio = [audio]
-
-            # Resample if needed
-            target_sr = self.audio_tokenizer.sampling_rate
 
             # Process each audio
             for i, audio_data in enumerate(audio):
@@ -721,12 +689,10 @@ class HiggsAudioProcessor(ProcessorMixin):
 
                 # Generate audio tokens if tokenizer available
                 if hasattr(self, "audio_tokenizer"):
-                    input_values = audio_extraction(
-                        processed_audio,
-                        original_sr=original_sr[i] if original_sr is not None else None,
-                        target_sr=target_sr,
-                        device=self.audio_tokenizer.device,
-                    )
+                    input_values = self.feature_extractor(processed_audio)
+                    print(input_values)
+                    input_values = torch.tensor(input_values["input_values"][0], device=self.audio_tokenizer.device).unsqueeze(0)
+                    print(input_values.shape)
                     audio_ids = self.audio_tokenizer.encode(input_values)
                     audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
 

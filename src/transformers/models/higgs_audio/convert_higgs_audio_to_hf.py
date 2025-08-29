@@ -25,6 +25,10 @@ from safetensors.torch import load_file
 from transformers import (
     HiggsAudioConfig,
     HiggsAudioForConditionalGeneration,
+    HiggsAudioProcessor,
+    HiggsAudioTokenizer,
+    DacFeatureExtractor,
+    AutoTokenizer,
     logging,
 )
 
@@ -96,10 +100,12 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if len(missing_keys) != 0:
         raise ValueError(f"missing keys found: {missing_keys}")
 
+    model.generation_config.stop_strings = ["<|end_of_text|>", "<|eot_id|>"]
+
     model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing to the hub...")
+        print("Pushing model to the hub...")
         model.push_to_hub(push_to_hub)
 
 
@@ -122,6 +128,12 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
+        "--convert_preprocessor",
+        type=bool,
+        default=True,
+        help="Whether or not the preprocessor (tokenizer + feature extractor) should be converted along with the model.",
+    )
+    parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
 
@@ -132,3 +144,15 @@ if __name__ == "__main__":
         args.config_path,
         args.push_to_hub,
     )
+
+    if args.convert_preprocessor:
+        processor = HiggsAudioProcessor(
+            DacFeatureExtractor(sampling_rate=24000, hop_length=1),
+            AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base"),
+            HiggsAudioTokenizer.from_pretrained("szhengac25/higgs-audio-v2-tokenizer"),
+        )
+        processor.save_pretrained(args.pytorch_dump_folder_path)
+
+        if args.push_to_hub:
+            print("Pushing processor to the hub...")
+            processor.push_to_hub(push_to_hub)

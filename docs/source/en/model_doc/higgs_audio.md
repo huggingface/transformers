@@ -60,7 +60,7 @@ text = processor.apply_chat_template(conversation, add_generation_prompt=True, t
 
 inputs = processor(text=text, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
@@ -100,7 +100,7 @@ for message in conversation:
 
 inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
@@ -146,7 +146,7 @@ for message in conversation:
 
 inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
 
-outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, stop_strings=["<|end_of_text|>", "<|eot_id|>"], tokenizer=processor.tokenizer, do_sample=True)
+outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
 response = processor.decode(outputs[0], outputs[1], prompt_token_length=processor.get_prompt_len(inputs.input_ids))
 
