@@ -116,7 +116,7 @@ class GptOssExperts(nn.Module):
                 glu = gate * torch.sigmoid(gate * self.alpha)
                 gated_output = (up + 1) * glu
                 out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-                weighted_output = out * routing_weights[token_idx, expert_idx, None]
+                weighted_output = out[0] * routing_weights[token_idx, expert_idx, None]
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         else:
