@@ -505,15 +505,15 @@ class LlavaMetaForCausalLM(ABC):
 
         # Extract text and media embeddings
         text_embeds = self.llm.model.embed_tokens(input_ids)
-        media_embeds = deque(self.sound_encoder(media, {}, media_meta["sound_feature_masks"]))
-        # This is a workaround to make sure the dummy embeddings are consumed
-        # Remove padding
+
+        media_embeds = deque(self._sound_features(media, media_meta["sound_feature_masks"]))
+
         batch_size = labels.shape[0]
 
         # -------------------------------- #
         num_audio_tokens = torch.stack(media_meta["sound_embed_masks"], dim=0).sum(-1)
         num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])
-        num_audios = len(media_embeds)  # length of queue is the number of audios we have in total
+        num_audios = len(media_embeds)  # number of total audios
         max_audio_tokens, embed_dim = media_embeds[0].shape
 
         audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(num_audio_tokens.device) < num_audio_tokens.unsqueeze(1)
@@ -535,28 +535,23 @@ class LlavaMetaForCausalLM(ABC):
             elif not _left_padding and _right_padding:
                 left_padding = False
             elif not _left_padding and not _right_padding:
-                # both side is 1, so cannot tell
                 left_padding = self.tokenizer.padding_side == "left"
             else:
-                # invalid attention_mask
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
-        # 1. Create a mask to know where special audio tokens are
-        special_audio_token_mask = input_ids == self.tokenizer.convert_tokens_to_ids(self.tokenizer.media_tokens["sound"])  # hard coded to just work with 'sound'
+        # 1. Mask of special audio tokens (uses tokenizer.media_tokens["sound"])
+        sound_token_id = self.tokenizer.convert_tokens_to_ids(self.tokenizer.media_tokens["sound"])
+        special_audio_token_mask = input_ids == sound_token_id
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
-        # In case the Audio model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
+        # devices
         target_device = text_embeds.device
         attention_mask = attention_mask.to(target_device)
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
-        batch_indices, non_audio_indices = torch.where((input_ids != self.tokenizer.convert_tokens_to_ids(self.tokenizer.media_tokens["sound"])) & (attention_mask == 1))
+        batch_indices, non_audio_indices = torch.where((input_ids != sound_token_id) & (attention_mask == 1))
 
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged audio-text sequence.
-        # `special_audio_token_mask` identifies audio tokens. Each audio token will be replaced by `audio_feat_lengths - 1` text tokens.
-        # `torch.cumsum` computes how each audio token shifts subsequent text token positions.
+        # 2. positions where text should be written
         token_placeholder_num = torch.zeros_like(input_ids)
         token_placeholder_num[special_audio_token_mask] = num_audio_tokens.long() - 1
         token_placeholder_num = token_placeholder_num + 1
@@ -564,7 +559,7 @@ class LlavaMetaForCausalLM(ABC):
         max_token_num = token_placeholder_num.sum(-1).max()
         nb_audio_pad = max_token_num - 1 - new_token_positions[:, -1]
         if left_padding:
-            new_token_positions += nb_audio_pad[:, None]  # offset for left padding
+            new_token_positions += nb_audio_pad[:, None]
         text_to_overwrite = new_token_positions[batch_indices, non_audio_indices]
         batch_indices, non_audio_indices, text_to_overwrite = (
             batch_indices.to(target_device),
@@ -572,48 +567,42 @@ class LlavaMetaForCausalLM(ABC):
             text_to_overwrite.to(target_device),
         )
 
-        # 3. Create the full embedding, already padded to the maximum position
+        # 3. final padded embedding containers
         final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=text_embeds.device)
         final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=text_embeds.device)
         final_input_ids = torch.full((batch_size, max_token_num), self.tokenizer.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device)
 
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<audio>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the audio features
+        # 4. scatter text
         final_embedding[batch_indices, text_to_overwrite] = text_embeds[batch_indices, non_audio_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_audio_indices]
         final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_audio_indices]
         final_labels = None
         if labels is not None:
             labels = labels.to(target_device)
-            final_labels = torch.full_like(final_attention_mask, self.config.ignore_index, dtype=torch.long)  # .to(torch.long)
+            final_labels = torch.full_like(final_attention_mask, self.config.ignore_index, dtype=torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_audio_indices]
 
-        # 5. Fill the embeddings corresponding to the audios. Anything that is still zeros needs filling
+        # 5. scatter audio features
         audio_to_overwrite = torch.full((batch_size, max_token_num), True, dtype=torch.bool, device=text_embeds.device)
         audio_to_overwrite[batch_indices, text_to_overwrite] = False
         seq_indices = torch.arange(max_token_num).unsqueeze(0).to(target_device)
         seq_indices = seq_indices.expand(batch_size, max_token_num)
 
         if left_padding:
-            # exclude padding on the left
             max_token_num = max_token_num.to(target_device)
             val = (max_token_num - seq_indices) <= (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
         else:
-            # exclude padding on the right
             val = seq_indices < (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
 
         audio_to_overwrite &= val
 
         if audio_to_overwrite.sum() != num_audio_tokens.sum():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of audio tokens is {num_special_audio_tokens} while"
-                f" the number of audio given to the model is {num_audios}. This prevents correct indexing and breaks batch generation."
-            )
+            raise ValueError(f"Bad inputs: #audio tokens={num_special_audio_tokens} vs #audios={num_audios}. " "Indexing would break.")
 
         final_embedding[audio_to_overwrite] = masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= audio_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-        # # Truncate sequences to `model_max_length` as media embeddings are inserted
+
+        # Truncate & batchify
         inputs, labels = self.__truncate_sequence(final_embedding, final_labels)
         return self.__batchify_sequence(inputs, labels)
 
@@ -679,15 +668,6 @@ class LlavaMetaForCausalLM(ABC):
         generation_config.max_new_tokens = 512
         return generation_config
 
-    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
-        device = self.llm.device
-        proj_dtype = next(self.sound_mm_projector.parameters()).dtype
-        sounds = sounds.to(device=device, dtype=proj_dtype)
-        masks = masks.to(device) if masks is not None else None
-
-        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
-        return self.sound_mm_projector(feats)
-
 
 class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
     config_class = LlavaConfig
@@ -705,12 +685,48 @@ class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
         self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
         self.sound_tower = AudioFlamingo3Encoder.from_pretrained(sound_tower_path).to(self.llm.device)
         self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
-        self.sound_encoder = BasicSoundEncoder(parent=self)
 
+        # tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
         self.tokenizer.media_tokens = config.media_tokens
 
         self.is_loaded = True
+
+    def _embed_text_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+        if tokens is None:
+            return None
+        token_ids = self.tokenizer(tokens).input_ids
+        token_ids = torch.tensor(token_ids, device=self.llm.device)
+        return self.llm.model.embed_tokens(token_ids)
+
+    def _process_features(
+        self,
+        features: torch.Tensor,
+        start_token_embeds: Optional[torch.Tensor],
+        end_token_embeds: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        out = features.to(self.llm.device)
+        if start_token_embeds is not None:
+            out = torch.cat([start_token_embeds, out], dim=0)
+        if end_token_embeds is not None:
+            out = torch.cat([out, end_token_embeds], dim=0)
+        return out
+
+    def _sound_features(
+        self,
+        sounds: List[torch.Tensor],
+        masks: List[torch.Tensor],
+        start_tokens: Optional[str] = None,
+        end_tokens: Optional[str] = "\n",
+    ) -> List[torch.Tensor]:
+        sounds = torch.stack(sounds, dim=0).to(self.llm.device)
+        masks = torch.stack(masks, dim=0).to(self.llm.device)
+        feats = self.encode_sound(sounds, masks)  # (B, S, D)
+
+        start_emb = self._embed_text_tokens(start_tokens)
+        end_emb = self._embed_text_tokens(end_tokens)
+
+        return [self._process_features(f, start_emb, end_emb) for f in feats]
 
     @classmethod
     def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3":
@@ -720,11 +736,17 @@ class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
         model.eval()
         return model
 
+    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
+        device = self.llm.device
+        proj_dtype = next(self.sound_mm_projector.parameters()).dtype
+        sounds = sounds.to(device=device, dtype=proj_dtype)
+        masks = masks.to(device) if masks is not None else None
+
+        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
+        return self.sound_mm_projector(feats)
+
 
 AutoConfig.register("llava_llama", LlavaConfig)
-
-
-# -------------------------------------------------------------------------------------------------
 
 
 class SoundMultimodalProjectorConfig(PretrainedConfig):
@@ -748,53 +770,3 @@ class SoundMultimodalProjector(PreTrainedModel):
 
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
-
-
-class BasicSoundEncoder(nn.Module):
-    def __init__(
-        self,
-        parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
-    ) -> None:
-        super().__init__()
-        self._parent = [parent]
-        self.start_tokens = start_tokens
-        self.end_tokens = end_tokens
-
-    @property
-    def parent(self) -> nn.Module:
-        return self._parent[0]
-
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
-        if tokens is None:
-            return None
-        token_ids = self.parent.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.parent.device)
-        return self.parent.llm.model.embed_tokens(token_ids)
-
-    def _process_features(
-        self,
-        features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
-    ) -> torch.Tensor:
-        features = features.to(self.parent.device)
-        if start_token_embeds is not None:
-            features = torch.cat([start_token_embeds, features], dim=0)
-        if end_token_embeds is not None:
-            features = torch.cat([features, end_token_embeds], dim=0)
-        return features
-
-    def forward(self, sounds: List[torch.Tensor], config: Dict[str, Any], masks: Dict[str, Any]) -> List[torch.Tensor]:
-        sounds = torch.stack(sounds, dim=0)
-        masks = torch.stack(masks, dim=0)
-        sounds = sounds.to(self.parent.device)
-        masks = masks.to(self.parent.device)
-        features = self.parent.encode_sound(sounds, masks)
-        process_features = partial(
-            self._process_features,
-            start_token_embeds=self.embed_tokens(self.start_tokens),
-            end_token_embeds=self.embed_tokens(self.end_tokens),
-        )
-        return [process_features(f) for f in features]
