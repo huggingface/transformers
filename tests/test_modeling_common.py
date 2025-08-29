@@ -3502,8 +3502,6 @@ class ModelTesterMixin:
                 config.sliding_window = 2
 
             model = model_class(config)
-            if not model._can_set_attn_implementation():
-                continue
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
             ):
@@ -3511,44 +3509,18 @@ class ModelTesterMixin:
 
             _has_run_at_least_one_model = True
             with tempfile.TemporaryDirectory() as tmpdirname:
+                # Save the model so we can reload with correct attention
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
-                )
 
+                # Create first inputs without attention mask
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if torch.is_floating_point(dummy_input):
                     dummy_input = dummy_input.to(torch.bfloat16)
-                inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
+                first_inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
                 if "pixel_values" in inputs_dict:
-                    inputs["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
-                    inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-
-                # First run without attention mask
-                outputs = model(**inputs)
-                # Switch to FA
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(**inputs)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-                torch.testing.assert_close(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                # Set back to eager
-                model.set_attn_implementation("eager")
+                    first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
                 # Create attention mask with padding
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
@@ -3561,38 +3533,68 @@ class ModelTesterMixin:
                         dummy_attention_mask[:, :-1] = 1
                         dummy_attention_mask[:, -1] = 0
 
-                # Add attention mask to inputs
-                inputs["attention_mask"] = dummy_attention_mask
-                if model.config.is_encoder_decoder:
-                    inputs["decoder_attention_mask"] = dummy_attention_mask
+                # Create second inputs with attention mask and padding
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
 
-                # Second run with attention mask and padding
-                outputs = model(**inputs)
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(**inputs)
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
 
-                logits = (
+                # First run without attention mask
+                outputs = model(**first_inputs)
+                logits_1_eager = (
                     outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_eager = (
+                    outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
+                    else outputs.decoder_hidden_states[-1]
                 )
 
+                # Switch to FA
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+                outputs = model(**first_inputs)
+                logits_1_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                # Check the results
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=4e-2, rtol=4e-2)
                 if padding_side == "left":
-                    torch.testing.assert_close(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=4e-2, rtol=4e-2)
                     # Check it can run in training mode
                     model.train()
-                    _ = model(**inputs)
+                    _ = model(**second_inputs)
                 else:
-                    torch.testing.assert_close(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=4e-2, rtol=4e-2)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
