@@ -24,7 +24,6 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
@@ -161,10 +160,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
-    _can_record_outputs = {
-        "hidden_states": Ovis2VisionEncoderLayer,
-        "attentions": Ovis2VisionAttention,
-    }
 
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__(config)
@@ -179,10 +174,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    @check_model_inputs
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
-        last_hidden_state = outputs.last_hidden_state
+        last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
             num_images, seq_len, hidden_dim = last_hidden_state.shape
             hidden_stride = self.config.hidden_stride
