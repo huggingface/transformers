@@ -1644,7 +1644,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        rendered_chat, jinja_generation_indices = render_jinja_template(
+        rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
             documents=documents,
@@ -1656,13 +1656,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         if return_assistant_tokens_mask and chat_schema:
+            generation_indices = []  # This takes priority over jinja generation parsing
             # TODO Check the schema actually has regexes/parsers for the assistant turns, not just that a schema exists
+            # TODO Make a test comparing the indices we get from this to the ones we get from % generation % tags
             for chat in rendered_chat:
                 parsed_chat = recursive_parse(chat, chat_schema, offset=0)
-                assistant_messages = [message for message in parsed_chat.get("messages", [])
-                                      if message.get("role") == "assistant" and "content" in message]
-
-
+                assistant_messages = [message['content'] for message in parsed_chat.get("messages", [])
+                                      if message["role"] == "assistant"]
+                generation_indices.append(
+                    [(message.start, message.end) for message in assistant_messages]
+                )
 
         if not is_batched:
             rendered_chat = rendered_chat[0]
@@ -1686,7 +1689,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in jinja_generation_indices[i]:
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
                             start_token = out.char_to_token(i, assistant_start_char)
                             end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
