@@ -301,6 +301,8 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "They completed the challenging puzzle, revealing the hidden image at the end",
             "Today a dragon flew over France",
             "The aroma of freshly baked pizza filled the kitchen",
+            "This should not trigger: the end is near",
+            "The following word should trigger: mend",  # important "mend" is a single token, != token for "end"
         ]
         stop_strings = ["end"]
 
@@ -318,7 +320,13 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         )
 
         # trigger stopping when at least one criteria is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"], scores).tolist(),
+            [True, False, False, False, True],
+        )
 
         # False when neither is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"][:, :-1], scores).tolist(),
+            [False, False, False, False, False],
+        )
