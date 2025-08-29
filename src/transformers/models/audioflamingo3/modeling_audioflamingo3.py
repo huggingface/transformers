@@ -444,45 +444,6 @@ def has_tokenizer(repo_id_or_path: str) -> bool:
         return False
 
 
-class LlavaMetaModel(ABC):
-    def get_llm(self):
-        llm = getattr(self, "llm", None)
-        if type(llm) is list:
-            llm = llm[0]
-        return llm
-
-    def get_sound_tower(self):
-        sound_tower = getattr(self, "sound_tower", None)
-        if type(sound_tower) is list:
-            sound_tower = sound_tower[0]
-        return sound_tower
-
-    def get_sound_mm_projector(self):
-        sound_mm_projector = getattr(self, "sound_mm_projector", None)
-        if type(sound_mm_projector) is list:
-            sound_mm_projector = sound_mm_projector[0]
-        return sound_mm_projector
-
-    def get_input_embeddings(self):
-        return self.get_llm().get_input_embeddings()
-
-    def get_output_embeddings(self):
-        return self.get_llm().get_output_embeddings()
-
-    def resize_token_embeddings(self, embed_size):
-        self.get_llm().resize_token_embeddings(embed_size)
-
-    def encode_sound(self, sounds: torch.Tensor, masks: torch.Tensor | None = None) -> torch.Tensor:
-        device = self.get_llm().device
-        proj_dtype = next(self.get_sound_mm_projector().parameters()).dtype
-        sounds = sounds.to(device=device, dtype=proj_dtype)
-        if masks is not None:
-            masks = masks.to(device)
-        sound_features = self.get_sound_tower()(sounds, masks)
-        sound_features = self.get_sound_mm_projector()(sound_features.to(dtype=proj_dtype))
-        return sound_features
-
-
 class LlavaMetaForCausalLM(ABC):
     def _embed(
         self,
@@ -671,8 +632,16 @@ class LlavaMetaForCausalLM(ABC):
         generation_config.max_new_tokens = 512
         return generation_config
 
+    def encode_sound(self, sounds: torch.Tensor, masks: torch.Tensor | None = None) -> torch.Tensor:
+        device = self.llm.device
+        proj_dtype = next(self.sound_mm_projector.parameters()).dtype
+        sounds = sounds.to(device=device, dtype=proj_dtype)
+        if masks is not None:
+            masks = masks.to(device)
+        return self.sound_mm_projector(self.sound_tower(sounds, masks).to(dtype=proj_dtype))
 
-class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
+
+class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
     config_class = LlavaConfig
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
@@ -683,18 +652,16 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         super().__init__(config)
         self.is_loaded = False
 
-        llm_path, sound_tower_cfg, sound_mm_projector_cfg = get_model_config(config)
+        llm_path, sound_tower_path, sound_mm_projector_path = get_model_config(config)
 
-        llm_cfg = AutoConfig.from_pretrained(llm_path)
-        self.llm = AutoModelForCausalLM.from_pretrained(llm_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs)
-        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
-        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
+        self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
+        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_path).to(self.llm.device)
+        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
         self.sound_encoder = BasicSoundEncoder(parent=self)
 
-        tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
-        tokenizer.media_tokens = config.media_tokens
+        self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
+        self.tokenizer.media_tokens = config.media_tokens
 
-        self.tokenizer = tokenizer
         self.is_loaded = True
 
     @classmethod
