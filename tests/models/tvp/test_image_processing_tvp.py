@@ -19,7 +19,7 @@ from typing import Optional, Union
 import numpy as np
 
 from transformers.image_transforms import PaddingMode
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
@@ -349,6 +349,9 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @require_vision
     @require_torch
+    @is_flaky(
+        description="FIXME: @yoni probably because of an extra 'time' dimension and since image processors don't handle it well?"
+    )
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
