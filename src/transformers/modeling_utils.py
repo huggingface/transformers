@@ -55,6 +55,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.hub_kernels import is_kernel, load_and_register_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -67,7 +68,6 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
@@ -152,9 +152,6 @@ if is_safetensors_available():
 
 if is_peft_available():
     from .utils import find_adapter_config_file
-
-if is_kernels_available():
-    from kernels import get_kernel
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -6245,59 +6242,6 @@ def get_disk_only_shard_files(device_map, weight_map):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
-
-
-def is_kernel(attn_implementation: Optional[str]) -> bool:
-    """Check whether `attn_implementation` matches a kernel pattern from the hub."""
-    return (
-        attn_implementation is not None
-        and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
-    )
-
-
-def load_and_register_kernel(attn_implementation: str) -> None:
-    """Load and register the kernel associated to `attn_implementation`."""
-    if not is_kernel(attn_implementation):
-        return
-    if not is_kernels_available():
-        raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
-
-    attention_wrapper = None
-    # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-    actual_attn_name = attn_implementation
-    if "|" in attn_implementation:
-        attention_wrapper, actual_attn_name = attn_implementation.split("|")
-        # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
-    # Extract repo_id and kernel_name from the string
-    if ":" in actual_attn_name:
-        repo_id, kernel_name = actual_attn_name.split(":")
-        kernel_name = kernel_name.strip()
-    else:
-        repo_id = actual_attn_name
-        kernel_name = None
-    repo_id = repo_id.strip()
-    # extract the rev after the @ if it exists
-    repo_id, _, rev = repo_id.partition("@")
-    repo_id = repo_id.strip()
-    rev = rev.strip() if rev else None
-
-    # Load the kernel from hub
-    try:
-        kernel = get_kernel(repo_id, revision=rev)
-    except Exception as e:
-        raise ValueError(f"An error occured while trying to load from '{repo_id}': {e}.")
-    # correctly wrap the kernel
-    if hasattr(kernel, "flash_attn_varlen_func"):
-        if attention_wrapper is None:
-            attention_wrapper = flash_attention_forward
-        kernel_function = partial(attention_wrapper, implementation=kernel)
-        lazy_import_flash_attention(kernel)
-    elif kernel_name is not None:
-        kernel_function = getattr(kernel, kernel_name)
-    # Register the kernel as a valid attention
-    ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
-    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
 
 class AttentionInterface(GeneralInterface):
