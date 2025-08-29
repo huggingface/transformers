@@ -49,11 +49,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] T5LaOnnxConfig
 
-## T5LaEncoderModel
-
-[[autodoc]] T5LaEncoderModel
-    - forward
-
 ## T5LaForConditionalGeneration
 
 [[autodoc]] T5LaForConditionalGeneration

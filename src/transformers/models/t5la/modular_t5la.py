@@ -29,7 +29,6 @@ from ..t5.modeling_t5 import (
     T5ClassificationHead,
     T5DenseActDense,
     T5DenseGatedActDense,
-    T5EncoderModel,
     T5ForConditionalGeneration,
     T5LayerCrossAttention,
     T5LayerFF,
@@ -210,7 +209,7 @@ class T5LaPreTrainedModel(T5PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (T5LaForConditionalGeneration, T5LaEncoderModel),
+            (T5LaForConditionalGeneration,),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
@@ -570,14 +569,9 @@ class T5LaForConditionalGeneration(T5ForConditionalGeneration):
         )
 
 
-class T5LaEncoderModel(T5EncoderModel):
-    pass
-
-
 __all__ = [
     "T5LaConfig",
     "T5LaOnnxConfig",
-    "T5LaEncoderModel",
     "T5LaForConditionalGeneration",
     "T5LaPreTrainedModel",
     "load_tf_weights_in_t5la",

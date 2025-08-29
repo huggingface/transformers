@@ -49,7 +49,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
-        T5LaEncoderModel,
         T5LaForConditionalGeneration,
         T5Tokenizer,
     )
@@ -432,7 +431,9 @@ class T5LaModelTester:
         la_labels,
     ):
         model = T5LaForConditionalGeneration(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)[
+            "encoder_last_hidden_state"
+        ]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_encoder_decoder_shared_weights(
@@ -857,177 +858,9 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google-t5/t5-small"
+        model_name = "hrezaei/t5la-small"
         model = T5LaForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-
-class T5LaEncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
-
-    def get_large_model_config(self):
-        return T5LaConfig.from_pretrained("google-t5/t5-base")
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-
-        config = T5LaConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-        )
-
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = T5LaEncoderModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        result = model(input_ids=input_ids)
-        encoder_output = result.last_hidden_state
-
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = T5LaEncoderModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-
-class T5LaEncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (T5LaEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_resize_embeddings = False
-    test_model_parallel = True
-    pipeline_model_mapping = (
-        {
-            # "token-classification": T5LaForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    all_parallelizable_model_classes = (T5LaEncoderModel,) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = T5LaEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5LaConfig, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        if tokenizer_name is None:
-            return True
-
-        # `T5LaEncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
-        if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
-            return True
-
-        return False
 
 
 def use_task_specific_params(model, task):
@@ -1626,8 +1459,8 @@ class T5LaModelIntegrationTests(unittest.TestCase):
             "summarize: My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my pizza.",
         ]
-        model = T5LaEncoderModel.from_pretrained("google-t5/t5-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        model = T5LaForConditionalGeneration.from_pretrained("hrezaei/t5la-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("hrezaei/t5la-small")
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         logits = model(**inputs)
@@ -1638,18 +1471,18 @@ class T5LaModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_export_encoder(self):
-        """Test exporting T5LaEncoderModel to torch export format."""
+        """Test exporting T5LaForConditionalGeneration to torch export format."""
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers.integrations.executorch import Seq2SeqLMEncoderExportableModule
 
-        model_id = "google-t5/t5-small"
+        model_id = "hrezaei/t5la-small"
         device = "cpu"
         example_input_ids = torch.ones((1, 10), dtype=torch.long).to(device)
 
         # Load model
-        model = T5LaEncoderModel.from_pretrained(model_id).to(device=device).eval()
+        model = T5LaForConditionalGeneration.from_pretrained(model_id).to(device=device).eval()
 
         # Get original output for comparison
         with torch.no_grad():
