@@ -536,7 +536,7 @@ class JanusVisionMLP(nn.Module):
 
 class JanusVisionEncoderLayer(SiglipEncoderLayer):
     def __init__(self, config: JanusVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embed_dim = config.hidden_size
         self.self_attn = JanusVisionAttention(config)

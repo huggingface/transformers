@@ -29,7 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+from transformers.utils.generic import OutputRecorder
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -41,6 +41,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
 )
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam2 import (
     Sam2Config,

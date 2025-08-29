@@ -23,26 +23,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from transformers.models.maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
-from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
-from transformers.models.sam.modeling_sam import (
-    SamLayerNorm,
-    SamMaskDecoder,
-    SamMaskEmbedding,
-    SamModel,
-    SamPromptEncoder,
-    SamTwoWayAttentionBlock,
-    SamTwoWayTransformer,
-    eager_attention_forward,
-)
-from transformers.models.vitdet.modeling_vitdet import window_partition, window_unpartition
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import (
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -60,11 +43,23 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
+from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
+from ..sam.image_processing_sam_fast import SamImageProcessorFast
+from ..sam.modeling_sam import (
+    SamLayerNorm,
+    SamMaskDecoder,
+    SamMaskEmbedding,
+    SamModel,
+    SamPromptEncoder,
+    SamTwoWayAttentionBlock,
+    SamTwoWayTransformer,
+    eager_attention_forward,
+)
+from ..vitdet.modeling_vitdet import window_partition, window_unpartition
 from .configuration_sam2 import (
     Sam2Config,
     Sam2HieraDetConfig,
@@ -77,11 +72,6 @@ from .configuration_sam2 import (
 if is_torch_available():
     import torch
     from torch.nn import functional as F
-
-if is_torchvision_v2_available():
-    pass
-elif is_torchvision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -116,7 +106,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     mask_pad_size = None
 
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
-        SamImageProcessorFast().__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
     def pad_image():
         raise NotImplementedError("No pad_image for SAM 2.")
@@ -133,7 +123,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> "torch.Tensor":
-        return SamImageProcessorFast()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+        return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _preprocess_image_like_inputs(
         self,
@@ -213,10 +203,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -844,7 +842,7 @@ class Sam2MaskEmbedding(SamMaskEmbedding):
 
 class Sam2PromptEncoder(SamPromptEncoder):
     def __init__(self, config: Sam2PromptEncoderConfig):
-        SamPromptEncoder().__init__()
+        nn.Module.__init__(self)
         self.shared_embedding = Sam2PositionalEmbedding(config)
         self.mask_embed = Sam2MaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
@@ -958,7 +956,7 @@ class Sam2Attention(nn.Module):
 
 class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
-        SamTwoWayAttentionBlock().__init__()
+        nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size)
 
@@ -1185,7 +1183,7 @@ class Sam2Model(SamModel):
     ]
 
     def __init__(self, config: Sam2Config):
-        SamModel().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)

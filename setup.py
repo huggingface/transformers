@@ -445,7 +445,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api")
+extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
