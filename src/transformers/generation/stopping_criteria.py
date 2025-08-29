@@ -533,11 +533,14 @@ class StopStringTextMatchCriteria(StoppingCriteria):
             for stop_string in self.stop_strings:
                 if stop_string in last_generated_text[batch_idx]:
                     # Secondary check: the last token MUST be part of the stop string, to prevent the case where the
-                    # prompt contains a stop string to trigger this criteria right at the start of generation. More
+                    # prompt contains a stop string and triggers this criteria right at the start of generation. More
                     # precisely, the stop string must end with the starting characters of the last token AND the stop
                     # string can't be complete without the last token
                     # Examples:
-                    # - input text=["st", "op"], stop_strings=["stop"] -> should stop, perfect string match
+                    # - input text=["st", "op"], stop_strings=["stop"] -> should stop, last token completes the
+                    #     stop string
+                    # - input text=["you", "stop"], stop_strings=["stop"] -> should stop, last token fully contains
+                    #     the stop string
                     # - input text=["st", "opped"], stop_strings=["stop"] -> should stop, the start of the last token
                     #     ("op") matches the end of the stop string.
                     # - input text=["st", "op", "ped"], stop_strings=["stop"] -> should NOT stop, the last token does
@@ -563,10 +566,12 @@ class StopStringTextMatchCriteria(StoppingCriteria):
                             last_token_text += last_two_tokens_text[-i - 1]
                         else:
                             break
-                    last_token_partially_in_stop_string = any(
-                        stop_string.endswith(last_token_text[:i]) for i in range(len(last_token_text))
+                    last_token_text = last_token_text[::-1]  # `last_token_text` was built in reverse order
+                    last_fully_contains_stop_string = stop_string in last_token_text
+                    last_completes_stop_string = any(
+                        stop_string.endswith(last_token_text[: i + 1]) for i in range(len(last_token_text))
                     )
-                    should_stop[batch_idx] = last_token_partially_in_stop_string
+                    should_stop[batch_idx] = last_fully_contains_stop_string or last_completes_stop_string
         return should_stop
 
 
