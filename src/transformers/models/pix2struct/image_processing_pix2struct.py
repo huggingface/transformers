@@ -207,7 +207,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             rendered onto the input images.
     """
 
-    model_input_names = ["flattened_patches"]
+    model_input_names = ["flattened_patches", "attention_mask"]
 
     def __init__(
         self,

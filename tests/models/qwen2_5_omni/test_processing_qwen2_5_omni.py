@@ -408,6 +408,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
+        elif modality == "audio":
+            mm_len = batch_size
         else:
             mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
@@ -519,11 +521,21 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
 
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
+
     @require_librosa
     @require_av
-    @unittest.skip(
-        "@raushan: librosa can'r decode this audio in CI runner, fix after adding moviepy or another decoder"
-    )
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -570,7 +582,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)

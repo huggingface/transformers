@@ -22,7 +22,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -105,74 +104,12 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         self.model_tester = GptOssModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
     @unittest.skip("GptOss's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together.")
-    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip("GptOss eager/FA2 attention outputs are expected to be different")
@@ -186,6 +123,10 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("GptOss does not support flex officially")
     def test_flex_attention_with_grads(self):
         pass
+
+    @unittest.skipIf(torch_device == "cpu", "GptOss does not support flex officially")
+    def test_generate_compile_model_forward_fullgraph(self):
+        return super().test_generate_compile_model_forward_fullgraph()
 
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"

@@ -126,10 +126,10 @@ def _lazy_define_process_function(flash_function):
 
 def lazy_import_flash_attention(implementation: Optional[str]):
     """
-    Lazy loading flash attention and returning the respective functions + flags back
+    Lazily import flash attention and return the respective functions + flags.
 
-    NOTE: For fullgraph, this needs to be called before compile while no fullgraph can
-          can work without preloading. See `_check_and_adjust_attn_implementation` in `modeling_utils`.
+    NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
+    work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
     """
     global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
     if any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
@@ -313,17 +313,13 @@ def _upad_input(
     )
 
 
-def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool = True):
+def prepare_fa_kwargs_from_position_ids(position_ids):
     """
-    This function returns all the necessary kwargs to call `flash_attn_varlen_func`
-    extracted from position_ids. The `position_ids` can be either packed sequence or
-    the usual padded position ids, for example in inference time.
+    This function returns all the necessary kwargs to call `flash_attn_varlen_func` extracted from position_ids.
 
     Arguments:
         position_ids (`torch.Tensor`):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-        is_packed_sequence (`bool`, *optional*, defaults to `True`):
-            Whether the input position ids are a packed sequence or not.
 
     Return:
         (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
@@ -333,52 +329,35 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query,
             `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
-    # If the lengths are not equal, most probably we are in decoding stage with cache
-    # In that case the position ids will not always start with `0` and we need a better way to infer
-    # cumulative seq lengths.
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
-    if not is_packed_sequence:
-        last_position_ids = position_ids[:, -1]
-        q_len = (
-            torch.ones(position_ids.size(0), **tensor_kwargs)
-            if position_ids.shape[-1] == 1
-            else last_position_ids.add(1)
-        )
-        cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kwargs), q_len.cumsum(0).to(torch.int32)], 0)
-        cu_seq_lens_k = torch.cat(
-            [torch.zeros(1, **tensor_kwargs), last_position_ids.add(1).cumsum(0).to(torch.int32)], 0
-        )
 
-        max_length_q = int(q_len.max())
-        max_length_k = int(last_position_ids.max()) + 1
-    else:
-        position_ids = position_ids.view(-1)
-        indices_q = (position_ids == 0).nonzero().view(-1)
+    position_ids = position_ids.view(-1)
+    indices_q = (position_ids == 0).nonzero().view(-1)
 
-        cu_seq_lens_q = torch.cat(
-            (
-                indices_q.to(**tensor_kwargs),
-                torch.tensor(position_ids.size(), **tensor_kwargs),
-            )
+    cu_seq_lens_q = torch.cat(
+        (
+            indices_q.to(**tensor_kwargs),
+            torch.tensor(position_ids.size(), **tensor_kwargs),
         )
-        cu_seq_lens_k = cu_seq_lens_q
+    )
+    cu_seq_lens_k = cu_seq_lens_q
 
-        # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
-        # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
-        # for some models (e.g. qwen2-vl).
-        max_length_q = cu_seq_lens_q.diff().max()
-        # NOTE: With torch compile, this will cause a graph break if you don't set
-        # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
-        # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
-        # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
-        # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
-        max_length_q = max_length_q.item()
-        max_length_k = max_length_q
+    # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
+    # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
+    # for some models (e.g. qwen2-vl).
+    max_length_q = cu_seq_lens_q.diff().max()
+    # NOTE: With torch compile, this will cause a graph break if you don't set
+    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
+    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
+    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
+    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    max_length_q = max_length_q.item()
+    max_length_k = max_length_q
 
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
 
 
-def _prepare_from_posids(query, key, value, position_ids, query_length):
+def _prepare_from_posids(query, key, value, position_ids):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
@@ -394,8 +373,6 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
             Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
         position_ids (`torch.Tensor`):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-        query_length (`int`):
-            Sequence length of the input queries.
 
     Return:
         query (`torch.Tensor`):
@@ -409,16 +386,11 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
-    kv_length = key.shape[1]
-    is_packed_sequence = query_length == kv_length
-
     query = query.contiguous().view(-1, query.size(-2), query.size(-1))
     key = key.contiguous().view(-1, key.size(-2), key.size(-1))
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
 
-    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
-        position_ids, is_packed_sequence=is_packed_sequence
-    )
+    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
@@ -462,9 +434,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for Flash Attention with Compile.
 
     Attributes:
-        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -472,8 +444,8 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cumulative_seqlens_q: Optional[torch.LongTensor]
-    cumulative_seqlens_k: Optional[torch.LongTensor]
+    cu_seq_lens_q: Optional[torch.LongTensor]
+    cu_seq_lens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
 
@@ -660,7 +632,7 @@ def _flash_attention_forward(
     elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
             q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids, query_length=query_length
+                query_states, key_states, value_states, position_ids
             )
         else:
             q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))

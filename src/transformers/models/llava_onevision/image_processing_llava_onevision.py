@@ -692,6 +692,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         # only single image patching is supported
         need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
