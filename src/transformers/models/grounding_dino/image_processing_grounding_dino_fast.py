@@ -7,30 +7,21 @@
 import pathlib
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    SizeDict,
-    get_image_size_for_max_height_width,
-    get_max_height_width,
-    safe_squeeze,
 )
-from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
-    AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
-    validate_annotations,
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
@@ -38,11 +29,10 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import requires
-from .image_processing_grounding_dino import get_size_with_aspect_ratio
 
 
 if TYPE_CHECKING:
-    from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+    pass
 
 if is_torch_available():
     import torch
@@ -50,11 +40,9 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.io import read_image
-    from torchvision.transforms.v2 import functional as F
 
 elif is_torchvision_available():
     from torchvision.io import read_image
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -337,17 +325,9 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        self.size = get_size_dict(size, default_to_square=False)
 
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
@@ -365,444 +345,3 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
-
-    def prepare_annotation(
-        self,
-        image: torch.Tensor,
-        target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> dict:
-        """
-        Prepare an annotation for feeding into GROUNDING_DINO model.
-        """
-        format = format if format is not None else self.format
-
-        if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
-            )
-        elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_panoptic_annotation(
-                image,
-                target,
-                masks_path=masks_path,
-                return_masks=return_segmentation_masks,
-                input_data_format=input_data_format,
-            )
-        else:
-            raise ValueError(f"Format {format} is not supported.")
-        return target
-
-    def resize(
-        self,
-        image: torch.Tensor,
-        size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
-        int, smaller edge of the image will be matched to this number.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to resize.
-            size (`SizeDict`):
-                Size of the image's `(height, width)` dimensions after resizing. Available options are:
-                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                        Do NOT keep the aspect ratio.
-                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                        less or equal to `longest_edge`.
-                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                        `max_width`.
-            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                Resampling filter to use if resizing the image.
-        """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        if size.shortest_edge and size.longest_edge:
-            # Resize the image so that the shortest edge or the longest edge is of the given size
-            # while maintaining the aspect ratio of the original image.
-            new_size = get_size_with_aspect_ratio(
-                image.size()[-2:],
-                size["shortest_edge"],
-                size["longest_edge"],
-            )
-        elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
-        elif size.height and size.width:
-            new_size = (size["height"], size["width"])
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
-                f" {size.keys()}."
-            )
-
-        image = F.resize(
-            image,
-            size=new_size,
-            interpolation=interpolation,
-            **kwargs,
-        )
-        return image
-
-    def resize_annotation(
-        self,
-        annotation: dict[str, Any],
-        orig_size: tuple[int, int],
-        target_size: tuple[int, int],
-        threshold: float = 0.5,
-        interpolation: "F.InterpolationMode" = None,
-    ):
-        """
-        Resizes an annotation to a target size.
-
-        Args:
-            annotation (`dict[str, Any]`):
-                The annotation dictionary.
-            orig_size (`tuple[int, int]`):
-                The original size of the input image.
-            target_size (`tuple[int, int]`):
-                The target size of the image, as returned by the preprocessing `resize` step.
-            threshold (`float`, *optional*, defaults to 0.5):
-                The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
-                The resampling filter to use when resizing the masks.
-        """
-        interpolation = (
-            interpolation
-            if interpolation is not None
-            else F.InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else F.InterpolationMode.NEAREST
-        )
-        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
-
-        new_annotation = {}
-        new_annotation["size"] = target_size
-
-        for key, value in annotation.items():
-            if key == "boxes":
-                boxes = value
-                scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
-                )
-                new_annotation["boxes"] = scaled_boxes
-            elif key == "area":
-                area = value
-                scaled_area = area * (ratio_width * ratio_height)
-                new_annotation["area"] = scaled_area
-            elif key == "masks":
-                masks = value[:, None]
-                masks = [F.resize(mask, target_size, interpolation=interpolation) for mask in masks]
-                masks = torch.stack(masks).to(torch.float32)
-                masks = masks[:, 0] > threshold
-                new_annotation["masks"] = masks
-            elif key == "size":
-                new_annotation["size"] = target_size
-            else:
-                new_annotation[key] = value
-
-        return new_annotation
-
-    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
-        image_height, image_width = image_size
-        norm_annotation = {}
-        for key, value in annotation.items():
-            if key == "boxes":
-                boxes = value
-                boxes = corners_to_center_format(boxes)
-                boxes /= torch.as_tensor(
-                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
-                )
-                norm_annotation[key] = boxes
-            else:
-                norm_annotation[key] = value
-        return norm_annotation
-
-    def _update_annotation_for_padded_image(
-        self,
-        annotation: dict,
-        input_image_size: tuple[int, int],
-        output_image_size: tuple[int, int],
-        padding,
-        update_bboxes,
-    ) -> dict:
-        """
-        Update the annotation for a padded image.
-        """
-        new_annotation = {}
-        new_annotation["size"] = output_image_size
-        ratio_height, ratio_width = (input / output for output, input in zip(output_image_size, input_image_size))
-
-        for key, value in annotation.items():
-            if key == "masks":
-                masks = value
-                masks = F.pad(
-                    masks,
-                    padding,
-                    fill=0,
-                )
-                masks = safe_squeeze(masks, 1)
-                new_annotation["masks"] = masks
-            elif key == "boxes" and update_bboxes:
-                boxes = value
-                boxes *= torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], device=boxes.device)
-                new_annotation["boxes"] = boxes
-            elif key == "size":
-                new_annotation["size"] = output_image_size
-            else:
-                new_annotation[key] = value
-        return new_annotation
-
-    def pad(
-        self,
-        image: torch.Tensor,
-        padded_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
-        update_bboxes: bool = True,
-        fill: int = 0,
-    ):
-        original_size = image.size()[-2:]
-        padding_bottom = padded_size[0] - original_size[0]
-        padding_right = padded_size[1] - original_size[1]
-        if padding_bottom < 0 or padding_right < 0:
-            raise ValueError(
-                f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
-            )
-        if original_size != padded_size:
-            padding = [0, 0, padding_right, padding_bottom]
-            image = F.pad(image, padding, fill=fill)
-            if annotation is not None:
-                annotation = self._update_annotation_for_padded_image(
-                    annotation, original_size, padded_size, padding, update_bboxes
-                )
-
-        # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
-        pixel_mask[: original_size[0], : original_size[1]] = 1
-
-        return image, pixel_mask, annotation
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
-
-        return super().preprocess(images, annotations, masks_path, **kwargs)
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
-        return_segmentation_masks: bool,
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: bool,
-        pad_size: Optional[dict[str, int]],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images so that it can be used by the model.
-        """
-        if annotations is not None and isinstance(annotations, dict):
-            annotations = [annotations]
-
-        if annotations is not None and len(images) != len(annotations):
-            raise ValueError(
-                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
-            )
-
-        format = AnnotationFormat(format)
-        if annotations is not None:
-            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
-
-        if (
-            masks_path is not None
-            and format == AnnotationFormat.COCO_PANOPTIC
-            and not isinstance(masks_path, (pathlib.Path, str))
-        ):
-            raise ValueError(
-                "The path to the directory containing the mask PNG files should be provided as a"
-                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
-            )
-
-        data = {}
-
-        processed_images = []
-        processed_annotations = []
-        pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            # prepare (COCO annotations as a list of Dict -> GROUNDING_DINO target as a single Dict per image)
-            if annotations is not None:
-                annotation = self.prepare_annotation(
-                    image,
-                    annotation,
-                    format,
-                    return_segmentation_masks=return_segmentation_masks,
-                    masks_path=masks_path,
-                    input_data_format=ChannelDimension.FIRST,
-                )
-
-            if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
-                if annotations is not None:
-                    annotation = self.resize_annotation(
-                        annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
-                    )
-                image = resized_image
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
-
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
-
-        if do_pad:
-            # depends on all resized image shapes so we need another loop
-            if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
-            else:
-                padded_size = get_max_height_width(images)
-
-            padded_images = []
-            padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                    continue
-                image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
-                )
-                padded_images.append(image)
-                padded_annotations.append(annotation)
-                pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
-
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-        if annotations is not None:
-            encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
-            ]
-        return encoded_inputs
-
-    def post_process_object_detection(
-        self,
-        outputs: "GroundingDinoObjectDetectionOutput",
-        threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-    ):
-        """
-        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`GroundingDinoObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*, defaults to 0.1):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
-            - "scores": The confidence scores for each predicted box on the image.
-            - "labels": Indexes of the classes predicted by the model on the image.
-            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
-        """
-        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
-        batch_size = len(batch_logits)
-
-        if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
-
-        # batch_logits of shape (batch_size, num_queries, num_classes)
-        batch_class_logits = torch.max(batch_logits, dim=-1)
-        batch_scores = torch.sigmoid(batch_class_logits.values)
-        batch_labels = batch_class_logits.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        batch_boxes = center_to_corners_format(batch_boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
-
-        results = []
-        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
-            keep = scores > threshold
-            scores = scores[keep]
-            labels = labels[keep]
-            boxes = boxes[keep]
-            results.append({"scores": scores, "labels": labels, "boxes": boxes})
-
-        return results
-
-
-__all__ = ["GroundingDinoImageProcessorFast"]
