@@ -223,8 +223,6 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        # important: this ported version of AudioFlamingo3 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
         std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.audio_config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
@@ -481,7 +479,81 @@ def has_tokenizer(repo_id_or_path: str) -> bool:
         return False
 
 
-class LlavaMetaForCausalLM(ABC):
+class AudioFlamingo3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
+    config_class = AudioFlamingo3Config
+    main_input_name = "input_embeds"
+    supports_gradient_checkpointing = True
+    _supports_flash_attn_2 = True
+
+    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
+        super().__init__(config)
+        self.is_loaded = False
+
+        llm_path, sound_tower_path, sound_mm_projector_path = get_model_config(config)
+
+        self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
+        self.sound_tower = AudioFlamingo3Encoder.from_pretrained(sound_tower_path).to(self.llm.device)
+        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
+
+        # tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
+        self.tokenizer.media_tokens = config.media_tokens
+
+        self.is_loaded = True
+
+    def _embed_text_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+        if tokens is None:
+            return None
+        token_ids = self.tokenizer(tokens).input_ids
+        token_ids = torch.tensor(token_ids, device=self.llm.device)
+        return self.llm.model.embed_tokens(token_ids)
+
+    def _process_features(
+        self,
+        features: torch.Tensor,
+        start_token_embeds: Optional[torch.Tensor],
+        end_token_embeds: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        out = features.to(self.llm.device)
+        if start_token_embeds is not None:
+            out = torch.cat([start_token_embeds, out], dim=0)
+        if end_token_embeds is not None:
+            out = torch.cat([out, end_token_embeds], dim=0)
+        return out
+
+    def _sound_features(
+        self,
+        sounds: List[torch.Tensor],
+        masks: List[torch.Tensor],
+        start_tokens: Optional[str] = None,
+        end_tokens: Optional[str] = "\n",
+    ) -> List[torch.Tensor]:
+        sounds = torch.stack(sounds, dim=0).to(self.llm.device)
+        masks = torch.stack(masks, dim=0).to(self.llm.device)
+        feats = self.encode_sound(sounds, masks)  # (B, S, D)
+
+        start_emb = self._embed_text_tokens(start_tokens)
+        end_emb = self._embed_text_tokens(end_tokens)
+
+        return [self._process_features(f, start_emb, end_emb) for f in feats]
+
+    @classmethod
+    def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3":
+        kwargs["device_map"] = {"": device} if device != "cuda" else device_map
+        config = AutoConfig.from_pretrained(model_path)
+        model = cls(config=config, **kwargs)
+        model.eval()
+        return model
+
+    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
+        device = self.llm.device
+        proj_dtype = next(self.sound_mm_projector.parameters()).dtype
+        sounds = sounds.to(device=device, dtype=proj_dtype)
+        masks = masks.to(device) if masks is not None else None
+
+        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
+        return self.sound_mm_projector(feats)
+
     def _embed(
         self,
         input_ids: torch.Tensor,
@@ -657,82 +729,6 @@ class LlavaMetaForCausalLM(ABC):
             generation_config.eos_token_id = [self.tokenizer.eos_token_id]
         generation_config.max_new_tokens = 512
         return generation_config
-
-
-class AudioFlamingo3ForConditionalGeneration(LlavaMetaForCausalLM, PreTrainedModel, GenerationMixin):
-    config_class = AudioFlamingo3Config
-    main_input_name = "input_embeds"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
-
-    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
-        super().__init__(config)
-        self.is_loaded = False
-
-        llm_path, sound_tower_path, sound_mm_projector_path = get_model_config(config)
-
-        self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
-        self.sound_tower = AudioFlamingo3Encoder.from_pretrained(sound_tower_path).to(self.llm.device)
-        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
-
-        # tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
-        self.tokenizer.media_tokens = config.media_tokens
-
-        self.is_loaded = True
-
-    def _embed_text_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
-        if tokens is None:
-            return None
-        token_ids = self.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.llm.device)
-        return self.llm.model.embed_tokens(token_ids)
-
-    def _process_features(
-        self,
-        features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
-    ) -> torch.Tensor:
-        out = features.to(self.llm.device)
-        if start_token_embeds is not None:
-            out = torch.cat([start_token_embeds, out], dim=0)
-        if end_token_embeds is not None:
-            out = torch.cat([out, end_token_embeds], dim=0)
-        return out
-
-    def _sound_features(
-        self,
-        sounds: List[torch.Tensor],
-        masks: List[torch.Tensor],
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
-    ) -> List[torch.Tensor]:
-        sounds = torch.stack(sounds, dim=0).to(self.llm.device)
-        masks = torch.stack(masks, dim=0).to(self.llm.device)
-        feats = self.encode_sound(sounds, masks)  # (B, S, D)
-
-        start_emb = self._embed_text_tokens(start_tokens)
-        end_emb = self._embed_text_tokens(end_tokens)
-
-        return [self._process_features(f, start_emb, end_emb) for f in feats]
-
-    @classmethod
-    def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3":
-        kwargs["device_map"] = {"": device} if device != "cuda" else device_map
-        config = AutoConfig.from_pretrained(model_path)
-        model = cls(config=config, **kwargs)
-        model.eval()
-        return model
-
-    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
-        device = self.llm.device
-        proj_dtype = next(self.sound_mm_projector.parameters()).dtype
-        sounds = sounds.to(device=device, dtype=proj_dtype)
-        masks = masks.to(device) if masks is not None else None
-
-        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
-        return self.sound_mm_projector(feats)
 
 
 class SoundMultimodalProjector(PreTrainedModel):
