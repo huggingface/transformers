@@ -23,6 +23,7 @@ from ... import (
     PreTrainedModel,
     PretrainedConfig,
     LlamaForCausalLM,
+    GenerationMixin,
 )
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -91,18 +92,10 @@ class AudioFlamingo3Attention(nn.Module):
         self.head_dim = embed_dim // num_heads
         self.config = config
 
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}" f" and `num_heads`: {num_heads}).")
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
         self.layer_idx = layer_idx
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
@@ -465,12 +458,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
 # -------------------------------------------------------------------------------------------------
 
-__all__ = ["AudioFlamingo3"]
+__all__ = ["AudioFlamingo3ForConditionalGeneration"]
 
 
 def get_model_config(config):
     root_path = config._name_or_path
-    # download from huggingface
     if root_path is not None and not osp.exists(root_path):
         try:
             if repo_exists(root_path):
@@ -478,8 +470,8 @@ def get_model_config(config):
         except HFValidationError as e:
             pass
 
-    default_keys = ["llm_cfg", "sound_tower_cfg", "sound_mm_projector_cfg"]
-    return [os.path.join(root_path, key[:-4]) for key in default_keys]
+    default_keys = ["llm", "sound_tower", "sound_mm_projector"]
+    return [os.path.join(root_path, key) for key in default_keys]
 
 
 def has_tokenizer(repo_id_or_path: str) -> bool:
@@ -669,12 +661,11 @@ class LlavaMetaForCausalLM(ABC):
         return generation_config
 
 
-class AudioFlamingo3(LlavaMetaForCausalLM, PreTrainedModel):
+class AudioFlamingo3ForConditionalGeneration(LlavaMetaForCausalLM, PreTrainedModel, GenerationMixin):
     config_class = LlavaConfig
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
-    prepare_inputs_for_generation = LlamaForCausalLM.prepare_inputs_for_generation
 
     def __init__(self, config: LlavaConfig = None, *args, **kwargs):
         super().__init__(config)
