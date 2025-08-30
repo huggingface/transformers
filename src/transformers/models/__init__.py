@@ -295,6 +295,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
+    from .seed_oss import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
