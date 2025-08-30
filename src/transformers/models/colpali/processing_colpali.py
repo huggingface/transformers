@@ -106,10 +106,6 @@ class ColPaliProcessor(ProcessorMixin):
         query_prefix: str = "Question: ",
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
