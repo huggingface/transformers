@@ -21,7 +21,7 @@ from pathlib import Path
 from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
-from transformers import AutoImageProcessor, ViTImageProcessor
+from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
@@ -45,9 +45,12 @@ class ImageProcessorUtilTester(unittest.TestCase):
 
         # Download this model to make sure it's in the cache.
         _ = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
+        _ = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
+
         # Under the mock environment we get a 500 error when trying to reach the model.
         with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
+            _ = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
             # This check we did call the fake head request
             mock_head.assert_called()
 
@@ -79,6 +82,15 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
             for k, v in image_processor.__dict__.items():
                 self.assertEqual(v, getattr(new_image_processor, k))
 
+    def test_push_to_hub_fast(self):
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessorFast.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
+
+            new_image_processor = ViTImageProcessorFast.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
+
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
@@ -87,6 +99,17 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
+
+    def test_push_to_hub_via_save_pretrained_fast(self):
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessorFast.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+
+            new_image_processor = ViTImageProcessorFast.from_pretrained(tmp_repo.repo_id)
             for k, v in image_processor.__dict__.items():
                 self.assertEqual(v, getattr(new_image_processor, k))
 
@@ -99,6 +122,15 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
             for k, v in image_processor.__dict__.items():
                 self.assertEqual(v, getattr(new_image_processor, k))
 
+    def test_push_to_hub_in_organization_fast(self):
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessorFast.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
+
+            new_image_processor = ViTImageProcessorFast.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
+
     def test_push_to_hub_in_organization_via_save_pretrained(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
@@ -107,6 +139,17 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
+
+    def test_push_to_hub_in_organization_via_save_pretrained_fast(self):
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessorFast.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+
+            new_image_processor = ViTImageProcessorFast.from_pretrained(tmp_repo.repo_id)
             for k, v in image_processor.__dict__.items():
                 self.assertEqual(v, getattr(new_image_processor, k))
 
