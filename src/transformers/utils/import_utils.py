@@ -635,6 +635,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return True
     if is_torch_npu_available():
         return torch.npu.is_bf16_supported()
+    if is_torch_mps_available():
+        # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
+        return torch.backends.mps.is_macos_or_newer(14, 0)
     return False
 
 
