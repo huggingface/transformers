@@ -97,7 +97,9 @@ PRIVATE_MODELS = [
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "MossTTSDPretrainedModel",
     "Ovis2VisionModel",
+    "XYTokenizerPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
