@@ -1,6 +1,5 @@
 """PyTorch AudioFlamingo3 model."""
 
-from abc import ABC
 from collections import deque
 import copy
 import math
@@ -8,6 +7,7 @@ import os
 import os.path as osp
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -25,7 +25,7 @@ from ... import (
 )
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
@@ -35,6 +35,13 @@ from .configuration_audioflamingo3 import (
 )
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.whisper.modeling_whisper.eager_attention_forward
@@ -434,7 +441,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hs, encoder_states, all_attns] if v is not None)
 
-        return BaseModelOutput(last_hidden_state=hs, hidden_states=encoder_states, attentions=all_attns)
+        return AudioFlamingo3CausalLMOutputWithPast(last_hidden_state=hs, hidden_states=encoder_states, attentions=all_attns)
 
     # ----------------------------
     # Legacy convenience properties
@@ -450,11 +457,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     @property
     def hidden_size(self):
         return self.config.d_model
-
-
-# -------------------------------------------------------------------------------------------------
-
-__all__ = ["AudioFlamingo3ForConditionalGeneration"]
 
 
 def get_model_config(config):
@@ -481,9 +483,6 @@ def has_tokenizer(repo_id_or_path: str) -> bool:
 
 class AudioFlamingo3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = AudioFlamingo3Config
-    main_input_name = "input_embeds"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
 
     def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
         super().__init__(config)
@@ -537,14 +536,6 @@ class AudioFlamingo3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         return [self._process_features(f, start_emb, end_emb) for f in feats]
 
-    @classmethod
-    def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3":
-        kwargs["device_map"] = {"": device} if device != "cuda" else device_map
-        config = AutoConfig.from_pretrained(model_path)
-        model = cls(config=config, **kwargs)
-        model.eval()
-        return model
-
     def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
         proj_dtype = next(self.sound_mm_projector.parameters()).dtype
@@ -572,7 +563,6 @@ class AudioFlamingo3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         batch_size = labels.shape[0]
 
-        # -------------------------------- #
         num_audio_tokens = torch.stack(media_meta["sound_embed_masks"], dim=0).sum(-1)
         num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])
         num_audios = len(media_embeds)  # number of total audios
@@ -730,6 +720,14 @@ class AudioFlamingo3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         generation_config.max_new_tokens = 512
         return generation_config
 
+    @classmethod
+    def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3":
+        kwargs["device_map"] = {"": device} if device != "cuda" else device_map
+        config = AutoConfig.from_pretrained(model_path)
+        model = cls(config=config, **kwargs)
+        model.eval()
+        return model
+
 
 class SoundMultimodalProjector(PreTrainedModel):
     config_class = SoundMultimodalProjectorConfig
@@ -744,3 +742,6 @@ class SoundMultimodalProjector(PreTrainedModel):
 
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
+
+
+__all__ = ["AudioFlamingo3ForConditionalGeneration"]
