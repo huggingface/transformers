@@ -24,12 +24,12 @@ rendered properly in your Markdown viewer.
 
 # CodeLlama[[codellama]]
 
-[Code Llama](https://huggingface.co/papers/2308.12950)는 코딩 작업을 위해 [Llama 2](./llama2)를 기반으로 한 특화된 대규모 언어 모델 제품군입니다. 일반 코드, Python 전용, 명령어 수행 변형 등 다양한 버전으로 제공되며, 모두 7B, 13B, 34B, 70B 매개변수로 사용할 수 있습니다. Code Llama 모델은 코드를 생성하고, 설명하며, 코드의 누락된 부분을 채울 수도 있습니다("infilling"이라고 함). 16K 토큰의 시퀀스로 훈련되었지만, 최대 100k 토큰까지 안정적인 생성이 가능한 매우 긴 컨텍스트를 처리할 수 있습니다.
+[Code Llama](https://huggingface.co/papers/2308.12950)는 코딩 작업에 특화된 대규모 언어 모델 계열로,  [Llama 2](./llama2)를 기반으로 개발되었습니다. 일반적인 코드, Python 특화, 명령어(지시) 기반 변형 등 다양한 버전으로 제공되며, 모두 7B, 13B, 34B, 70B 매개변수 크기로 사용할 수 있습니다. Code Llama 모델은 코드를 생성하고 설명하며, 코드의 누락된 부분을 채울 수도 있습니다("infilling"이라고 함). 16K 토큰 길이로 훈련되었지만, 최대 100K 토큰까지 안정적으로 생성하며 긴 컨텍스트도 처리할 수 있습니다.
 
 [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) 컬렉션에서 모든 원본 Code Llama 체크포인트를 찾을 수 있습니다.
 
 > [!TIP]
-> 다양한 코딩 작업에 Code Llama를 적용하는 방법에 대한 더 많은 예시를 보려면 오른쪽 사이드바의 Code Llama 모델을 클릭하세요.
+> 다양한 코딩 작업에 Code Llama를 적용하는 더 많은 예시를 보려면 오른쪽 사이드바의 Code Llama 모델을 클릭하세요.
 
 아래 예시는 [`Pipeline`], [`AutoModel`], 그리고 명령줄에서 코드를 생성하는 방법을 보여줍니다.
 
@@ -126,7 +126,7 @@ output = model.generate(**input_ids, max_new_tokens=200, cache_implementation="s
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139)를 사용하여 모델이 어떤 토큰에 주의를 기울일 수 있고 없는지 더 잘 이해할 수 있습니다.
+[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139)를 사용하면 모델이 어떤 토큰에 주의를 기울일 수 있고 기울일 수 없는지를 더 잘 이해할 수 있습니다.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
@@ -143,7 +143,7 @@ visualizer("""def func(a, b):
 ## 참고사항[[notes]]
 
 - 채우기 기능은 7B 및 13B 기반 모델에서만 사용할 수 있으며, Python, Instruct, 34B 또는 70B 모델에서는 사용할 수 없습니다.
-- 입력을 채우고 싶은 위치에 `<FILL_ME>` 토큰을 사용하세요. 토크나이저는 이 토큰을 분할하여 [원본 훈련 패턴](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402)을 따르는 형식화된 입력 문자열을 생성합니다. 이는 패턴을 직접 준비하는 것보다 더 견고합니다.
+- 코드를 작성하고 싶은 부분에 `<FILL_ME>` 토큰을 사용하세요. 토크나이저는 이 토큰을 분할하여 [원본 훈련 패턴](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402) 을 따르는 입력 문자열로 변환합니다. 이는 직접 패턴을 준비하는 것보다 더 안정적입니다.
     ```py
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
@@ -160,8 +160,8 @@ visualizer("""def func(a, b):
     print(PROMPT.replace("<FILL_ME>", filling))
     ```
 - 추가 훈련이나 미세 조정에는 `bfloat16`을 사용하고 추론에는 `float16`을 사용하세요.
-- `BOS` 문자는 접두사나 접미사를 인코딩할 때 채우기에 사용되지 않으며, 각 프롬프트의 시작 부분에서만 사용됩니다.
-- 토크나이저는 [SentencePiece](https://github.com/google/sentencepiece)를 기반으로 한 바이트 쌍 인코딩 모델입니다. 디코딩 중에 첫 번째 토큰이 단어의 시작인 경우(예: "Banana"), 토크나이저는 문자열에 접두사 공백을 추가하지 않습니다.
+- `BOS` 문자는 접두사나 접미사를 인코딩할 때 infilling(코드의 누락된 부분을 채우는 일)에 사용되지 않으며, 각 프롬프트의 맨 앞에서만 사용됩니다.
+- 토크나이저는 [SentencePiece](https://github.com/google/sentencepiece)를 기반으로 하는 byte-pair 인코딩 모델입니다. 디코딩 과정에서 첫 번째 토큰이 단어의 시작인 경우(예를 들어 "Banana"), 토크나이저는 문자열에 접두사 공백을 추가하지 않습니다.
 
 ## CodeLlamaTokenizer
 
