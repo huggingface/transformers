@@ -16,6 +16,7 @@
 import inspect
 import json
 import random
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Union
@@ -33,7 +34,11 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
-from transformers.utils import is_av_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
+
+
+sys.path.append(".")
+from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 global_rng = random.Random()
@@ -59,14 +64,9 @@ MODALITY_INPUT_DATA = {
     ],
 }
 
-if is_av_available():
-    from transformers.video_utils import load_video
 
-    # load a video file in memory for testing
-    video, _ = load_video(
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
-    )
-    MODALITY_INPUT_DATA["videos"].append(video)
+for modality, urls in MODALITY_INPUT_DATA.items():
+    MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
 
 
 def prepare_image_inputs():
@@ -1007,8 +1007,11 @@ class ProcessorTesterMixin:
         )
 
     @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
+    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
+        input_data = MODALITY_INPUT_DATA["videos"]
+        dummy_preloaded_video = np.array(self.prepare_video_inputs())
+        input_data.append(dummy_preloaded_video)
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
         )
