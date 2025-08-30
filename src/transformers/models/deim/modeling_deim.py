@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deim.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -12,9 +12,8 @@ from torch import Tensor, nn
 
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_outputs import BaseModelOutput
-from ...utils import torch_int
+from ...utils import is_torchdynamo_compiling, torch_int
 from ...utils.backbone_utils import load_backbone
-from ..d_fine.modular_d_fine import DFineCSPRepLayer, DFineRepNCSPELAN4, DFineSCDown
 from .configuration_deim import DEIMConfig
 
 
@@ -39,16 +38,87 @@ class DEIMConvNormLayer(nn.Module):
         return hidden_state
 
 
-class DEIMSCDown(DFineSCDown):
-    pass
+class DEIMSCDown(nn.Module):
+    def __init__(self, config: DEIMConfig, kernel_size: int, stride: int):
+        super().__init__()
+        self.conv1 = DEIMConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
+        self.conv2 = DEIMConvNormLayer(
+            config,
+            config.encoder_hidden_dim,
+            config.encoder_hidden_dim,
+            kernel_size,
+            stride,
+            config.encoder_hidden_dim,
+        )
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        input_features = self.conv1(input_features)
+        input_features = self.conv2(input_features)
+        return input_features
 
 
-class DEIMCSPRepLayer(DFineCSPRepLayer):
-    pass
+class DEIMCSPRepLayer(nn.Module):
+    """
+    Cross Stage Partial (CSP) network layer with RepVGG blocks.
+    """
+
+    def __init__(
+        self, config: DEIMConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
+    ):
+        super().__init__()
+        in_channels = in_channels
+        out_channels = out_channels
+        activation = config.activation_function
+
+        hidden_channels = int(out_channels * expansion)
+        self.conv1 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.conv2 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.bottlenecks = nn.ModuleList(
+            [DEIMRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        )
+        if hidden_channels != out_channels:
+            self.conv3 = DEIMConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+        else:
+            self.conv3 = nn.Identity()
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state_1 = self.conv1(hidden_state)
+        for bottleneck in self.bottlenecks:
+            hidden_state_1 = bottleneck(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
+        hidden_state_3 = self.conv3(hidden_state_1 + hidden_state_2)
+        return hidden_state_3
 
 
-class DEIMRepNCSPELAN4(DFineRepNCSPELAN4):
-    pass
+class DEIMRepNCSPELAN4(nn.Module):
+    def __init__(self, config: DEIMConfig, act: str = "silu", numb_blocks: int = 3):
+        super().__init__()
+        conv1_dim = config.encoder_hidden_dim * 2
+        conv2_dim = config.encoder_hidden_dim
+        conv3_dim = config.encoder_hidden_dim * 2
+        conv4_dim = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
+        self.conv_dim = conv3_dim // 2
+        self.conv1 = DEIMConvNormLayer(config, conv1_dim, conv3_dim, 1, 1, activation=act)
+        self.csp_rep1 = DEIMCSPRepLayer(config, conv3_dim // 2, conv4_dim, num_blocks=numb_blocks)
+        self.conv2 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.csp_rep2 = DEIMCSPRepLayer(config, conv4_dim, conv4_dim, num_blocks=numb_blocks)
+        self.conv3 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.conv4 = DEIMConvNormLayer(config, conv3_dim + (2 * conv4_dim), conv2_dim, 1, 1, activation=act)
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        # Split initial features into two branches after first convolution
+        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
+
+        # Process branches sequentially
+        branch1 = self.csp_rep1(split_features[-1])
+        branch1 = self.conv2(branch1)
+        branch2 = self.csp_rep2(branch1)
+        branch2 = self.conv3(branch2)
+
+        split_features.extend([branch1, branch2])
+        merged_features = torch.cat(split_features, 1)
+        merged_features = self.conv4(merged_features)
+        return merged_features
 
 
 class DEIMRepVggBlock(nn.Module):
@@ -558,3 +628,281 @@ class DEIMConvEncoder(nn.Module):
             mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
+
+
+def multi_scale_deformable_attention_v2(
+    value: Tensor,
+    value_spatial_shapes: Tensor,
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
+    num_points_list: list[int],
+    method="default",
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points = sampling_locations.shape
+    value_list = (
+        value.permute(0, 2, 3, 1)
+        .flatten(0, 1)
+        .split([height * width for height, width in value_spatial_shapes], dim=-1)
+    )
+    # sampling_offsets [8, 480, 8, 12, 2]
+    if method == "default":
+        sampling_grids = 2 * sampling_locations - 1
+    elif method == "discrete":
+        sampling_grids = sampling_locations
+    sampling_grids = sampling_grids.permute(0, 2, 1, 3, 4).flatten(0, 1)
+    sampling_grids = sampling_grids.split(num_points_list, dim=-2)
+    sampling_value_list = []
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = value_list[level_id].reshape(batch_size * num_heads, hidden_dim, height, width)
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[level_id]
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        if method == "default":
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+            )
+        elif method == "discrete":
+            sampling_coord = (sampling_grid_l_ * torch.tensor([[width, height]], device=value.device) + 0.5).to(
+                torch.int64
+            )
+
+            # Separate clamping for x and y coordinates
+            sampling_coord_x = sampling_coord[..., 0].clamp(0, width - 1)
+            sampling_coord_y = sampling_coord[..., 1].clamp(0, height - 1)
+
+            # Combine the clamped coordinates
+            sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
+            sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
+            sampling_idx = (
+                torch.arange(sampling_coord.shape[0], device=value.device)
+                .unsqueeze(-1)
+                .repeat(1, sampling_coord.shape[1])
+            )
+            sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
+            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+                batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
+            )
+        sampling_value_list.append(sampling_value_l_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.permute(0, 2, 1, 3).reshape(
+        batch_size * num_heads, 1, num_queries, sum(num_points_list)
+    )
+    output = (
+        (torch.concat(sampling_value_list, dim=-1) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
+    return output.transpose(1, 2).contiguous()
+
+
+class DEIMMultiscaleDeformableAttention(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        """
+        D-Fine version of multiscale deformable attention
+        """
+        super().__init__()
+        self.d_model = config.d_model
+        self.n_heads = config.decoder_attention_heads
+        self.n_levels = config.num_feature_levels
+        self.offset_scale = config.decoder_offset_scale
+        self.decoder_method = config.decoder_method
+        self.n_points = config.decoder_n_points
+
+        if isinstance(self.n_points, list):
+            num_points_list = self.n_points
+        else:
+            num_points_list = [self.n_points for _ in range(self.n_levels)]
+
+        self.num_points_list = num_points_list
+        num_points_scale = [1 / n for n in self.num_points_list for _ in range(n)]
+        self.register_buffer("num_points_scale", torch.tensor(num_points_scale, dtype=torch.float32))
+
+        self.total_points = self.n_heads * sum(self.num_points_list)
+
+        self.sampling_offsets = nn.Linear(self.d_model, self.total_points * 2)
+        self.attention_weights = nn.Linear(self.d_model, self.total_points)
+
+        self.ms_deformable_attn_core = multi_scale_deformable_attention_v2
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        reference_points=None,
+        encoder_hidden_states=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+
+        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+            raise ValueError(
+                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
+            )
+
+        # Reshape for multi-head attention
+        value = encoder_hidden_states.reshape(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        if attention_mask is not None:
+            value = value.masked_fill(~attention_mask[..., None], float(0))
+
+        sampling_offsets: torch.Tensor = self.sampling_offsets(hidden_states)
+        sampling_offsets = sampling_offsets.reshape(
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list), 2
+        )
+
+        attention_weights = self.attention_weights(hidden_states).reshape(
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list)
+        )
+        attention_weights = F.softmax(attention_weights, dim=-1)
+
+        if reference_points.shape[-1] == 2:
+            offset_normalizer = torch.tensor(spatial_shapes)
+            offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
+            sampling_locations = (
+                reference_points.reshape(batch_size, sequence_length, 1, self.n_levels, 1, 2)
+                + sampling_offsets / offset_normalizer
+            )
+        elif reference_points.shape[-1] == 4:
+            # reference_points [8, 480, None, 1,  4]
+            # sampling_offsets [8, 480, 8,    12, 2]
+            num_points_scale = self.num_points_scale.to(dtype=hidden_states.dtype).unsqueeze(-1)
+            offset = sampling_offsets * num_points_scale * reference_points[:, :, None, :, 2:] * self.offset_scale
+            sampling_locations = reference_points[:, :, None, :, :2] + offset
+        else:
+            raise ValueError(
+                f"Last dim of reference_points must be 2 or 4, but get {reference_points.shape[-1]} instead."
+            )
+
+        output = self.ms_deformable_attn_core(
+            value,
+            spatial_shapes_list,
+            sampling_locations,
+            attention_weights,
+            self.num_points_list,
+            self.decoder_method,
+        )
+
+        return output, attention_weights
+
+
+class DEIMGate(nn.Module):
+    def __init__(self, d_model: int):
+        super().__init__()
+        self.gate = nn.Linear(2 * d_model, 2 * d_model)
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, second_residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        gate_input = torch.cat([second_residual, hidden_states], dim=-1)
+        gates = torch.sigmoid(self.gate(gate_input))
+        gate1, gate2 = gates.chunk(2, dim=-1)
+        hidden_states = self.norm(gate1 * second_residual + gate2 * hidden_states)
+        return hidden_states
+
+
+class DEIMDecoderLayer(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        # self-attention
+        self.self_attn = DEIMMultiheadAttention(
+            embed_dim=config.d_model,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.activation_dropout = config.activation_dropout
+
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+
+        # override the encoder attention module with d-fine version
+        self.encoder_attn = DEIMMultiscaleDeformableAttention(config=config)
+        # feedforward neural networks
+        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        # gate
+        self.gateway = DEIMGate(config.d_model)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> tuple[torch.Tensor, Any, Any]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings that are added to the queries and keys in the self-attention layer.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes.
+            level_start_index (`torch.LongTensor`, *optional*):
+                Level start index.
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        # Self Attention
+        hidden_states_2, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states
+
+        # Cross-Attention
+        cross_attn_weights = None
+        hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
+        hidden_states_2, cross_attn_weights = self.encoder_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+        )
+
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = self.gateway(residual, hidden_states_2)
+
+        # Fully Connected
+        hidden_states_2 = self.activation_fn(self.fc1(hidden_states))
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.activation_dropout, training=self.training)
+        hidden_states_2 = self.fc2(hidden_states_2)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
+        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
+
+        return outputs

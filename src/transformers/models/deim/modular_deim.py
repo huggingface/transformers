@@ -1,6 +1,5 @@
 from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
-from ..d_fine.modular_d_fine import DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder
+from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer
 
 class DEIMConvNormLayer(RTDetrConvNormLayer):
     pass
@@ -25,4 +24,15 @@ class DEIMHybridEncoder(DFineHybridEncoder):
 
 
 class DEIMConvEncoder(DFineConvEncoder):
+    pass
+
+class DEIMMultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
+    pass
+
+
+
+class DEIMGate(DFineGate):
+    pass
+
+class DEIMDecoderLayer(DFineDecoderLayer):
     pass
