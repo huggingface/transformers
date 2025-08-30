@@ -336,6 +336,8 @@
         title: (번역중) CamemBERT
       - local: in_translation
         title: (번역중) CANINE
+      - local: model_doc/code_llama
+        title: CodeLlama
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/cohere
