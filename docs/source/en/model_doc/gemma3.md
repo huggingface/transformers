@@ -273,3 +273,8 @@ visualizer("<img>What is shown in this image?")
 
 [[autodoc]] Gemma3ForSequenceClassification
     - forward
+
+## Gemma3TextForSequenceClassification
+
+[[autodoc]] Gemma3TextForSequenceClassification
+    - forward
