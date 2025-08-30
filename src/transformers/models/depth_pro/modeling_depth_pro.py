@@ -103,7 +103,7 @@ def reshape_features(hidden_states: torch.Tensor) -> torch.Tensor:
 
 def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     """Merges smaller patches into image-like feature map."""
-    n_patches, hidden_size, out_size, out_size = patches.shape
+    n_patches, hidden_size, out_size, _ = patches.shape
     n_patches_per_batch = n_patches // batch_size
     sqrt_n_patches_per_batch = torch_int(n_patches_per_batch**0.5)
     new_out_size = sqrt_n_patches_per_batch * out_size
@@ -299,7 +299,6 @@ class DepthProPatchEncoder(nn.Module):
         scaled_images_features = []
         for i in range(self.n_scaled_images):
             hidden_state = scaled_images_last_hidden_state[i]
-            batch_size = batch_size
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i]))
             output_height = base_height * 2**i
             output_width = base_width * 2**i
