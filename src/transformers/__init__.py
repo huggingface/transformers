@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.56.0.dev0"
+__version__ = "4.57.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -163,6 +163,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -488,6 +489,7 @@ else:
         "Conv1D",
         "apply_chunking_to_forward",
         "prune_layer",
+        "infer_device",
     ]
     _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
@@ -825,6 +827,7 @@ if TYPE_CHECKING:
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
+    from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline

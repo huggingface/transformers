@@ -91,8 +91,8 @@ deps = {
     "timeout-decorator": "timeout-decorator",
     "tiktoken": "tiktoken",
     "timm": "timm<=1.0.19,!=1.0.18",
-    "tokenizers": "tokenizers>=0.21,<0.22",
-    "torch": "torch>=2.1",
+    "tokenizers": "tokenizers>=0.22.0,<=0.23.0",
+    "torch": "torch>=2.2",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
@@ -105,7 +105,5 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
-    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk": "opentelemetry-sdk",
     "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
 }

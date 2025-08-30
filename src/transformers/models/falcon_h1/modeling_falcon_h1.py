@@ -1007,7 +1007,7 @@ class FalconH1Mixer(nn.Module):
 
 
 class FalconH1MLP(nn.Module):
-    def __init__(self, config: FalconH1Config = None):
+    def __init__(self, config: FalconH1Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1477,12 +1477,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

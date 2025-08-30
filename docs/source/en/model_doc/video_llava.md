@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-11-16 and added to Hugging Face Transformers on 2024-05-15.*
 
 # Video-LLaVA
 
@@ -99,7 +100,7 @@ def read_video_pyav(container, indices):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 # Load the model in half-precision
-model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", torch_dtype=torch.float16, device_map="auto")
+model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", dtype=torch.float16, device_map="auto")
 processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
 # Load the video as an np.arrau, sampling uniformly 8 frames
@@ -197,7 +198,7 @@ from transformers import VideoLlavaForConditionalGeneration
 
 model = VideoLlavaForConditionalGeneration.from_pretrained(
     "LanguageBind/Video-LLaVA-7B-hf", 
-    torch_dtype=torch.float16, 
+    dtype=torch.float16, 
     attn_implementation="flash_attention_2",
 ).to(0)
 ```

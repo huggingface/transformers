@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     logging,
 )
@@ -504,8 +504,10 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 

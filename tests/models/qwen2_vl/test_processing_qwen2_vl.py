@@ -138,23 +138,6 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(TypeError):
             processor(images=image_input)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = Qwen2VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-
-        inputs = processor(text=input_str, images=image_input, videos=video_inputs)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
     @require_torch
     @require_av
     def _test_apply_chat_template(
@@ -291,7 +274,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
         }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
@@ -355,6 +338,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 160)
 
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
+
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
@@ -371,7 +367,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
 
         _ = processor(

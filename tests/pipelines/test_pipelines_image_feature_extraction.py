@@ -107,7 +107,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if image_processor is None:
             self.skipTest(reason="No image processor")
@@ -132,7 +132,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         img = prepare_img()
         return feature_extractor_pipeline, [img, img]

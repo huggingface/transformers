@@ -325,7 +325,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", dtype=torch.float16)
         model.to(torch_device)
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 

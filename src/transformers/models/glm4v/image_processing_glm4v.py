@@ -70,8 +70,8 @@ def smart_resize(
 
     if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif t_bar * h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (num_frames * height * width))
         h_bar = math.ceil(height * beta / factor) * factor
@@ -247,6 +247,8 @@ class Glm4vImageProcessor(BaseImageProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"],
                 )
                 image = resize(
                     image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
@@ -368,10 +370,9 @@ class Glm4vImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
-
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
+        elif size is None:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
 
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -388,6 +389,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
+            images = self.fetch_images(images)
             images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
@@ -451,6 +453,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
@@ -458,6 +461,8 @@ class Glm4vImageProcessor(BaseImageProcessor):
             height=height,
             width=width,
             factor=factor,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
             temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-14 and added to Hugging Face Transformers on 2025-04-18.*
 
 
 <div style="float: right;">
@@ -85,10 +86,9 @@ This example demonstrates how to perform inference on a single image with the In
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -117,10 +117,9 @@ This example shows how to generate text using the InternVL model without providi
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -147,10 +146,9 @@ InternVL models also support batched image and text inputs.
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -191,10 +189,9 @@ This implementation of the InternVL models supports batched text-images inputs w
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -274,10 +271,9 @@ This example showcases how to handle a batch of chat conversations with interlea
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [

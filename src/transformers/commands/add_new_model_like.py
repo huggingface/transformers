@@ -91,7 +91,7 @@ COPYRIGHT = f"""
 """.lstrip()
 
 
-class ModelInfos(object):
+class ModelInfos:
     """
     Retrieve the basic informations about an existing model classes.
     """

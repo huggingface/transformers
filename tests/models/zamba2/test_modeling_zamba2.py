@@ -568,7 +568,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="flash_attention_2",
                     load_in_4bit=True,
                 )
@@ -630,7 +630,7 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
     @slow
     def setUpClass(cls):
         model_id = "Zyphra/Zamba2-1.2B"
-        cls.model = Zamba2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, revision="PR")
+        cls.model = Zamba2ForCausalLM.from_pretrained(model_id, dtype=torch.float32, revision="PR")
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision="PR")
 
     @parameterized.expand([(torch_device,), ("cpu",)])

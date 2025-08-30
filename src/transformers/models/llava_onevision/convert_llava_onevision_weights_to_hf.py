@@ -196,7 +196,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # Load everything back for inference tests in float32 because prev script was written as that
     # Though it's mostly loaded in fp16 as original weights are in fp16
     model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-        pytorch_dump_folder_path, torch_dtype="float16", device_map="auto"
+        pytorch_dump_folder_path, dtype="float16", device_map="auto"
     )
     processor = LlavaOnevisionProcessor.from_pretrained(pytorch_dump_folder_path)
     device = model.device

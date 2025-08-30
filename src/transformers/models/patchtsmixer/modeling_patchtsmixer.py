@@ -2044,7 +2044,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
                 # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
-                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
+                y_hat = tuple(item.view(-1, self.config.num_targets) for item in y_hat)
                 loss_val = loss(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
