@@ -211,7 +211,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_hidden_states = len(self.model_tester.stage_num_blocks)
+            expected_num_hidden_states = len(self.model_tester.stage_num_blocks) + 1
             self.assertEqual(len(hidden_states), expected_num_hidden_states)
 
             self.assertListEqual(
