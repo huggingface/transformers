@@ -34,6 +34,7 @@ from .configuration_audioflamingo3 import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
     LlavaConfig,
+    SoundMultimodalProjectorConfig,
 )
 
 logger = logging.get_logger(__name__)
@@ -735,17 +736,6 @@ class AudioFlamingo3ForConditionalGeneration(LlavaMetaForCausalLM, PreTrainedMod
 
         feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
         return self.sound_mm_projector(feats)
-
-
-AutoConfig.register("llava_llama", LlavaConfig)
-
-
-class SoundMultimodalProjectorConfig(PretrainedConfig):
-    model_type = "sound_mm_projector"
-
-    def __init__(self, sound_mm_projector_type: str = None, **kwargs):
-        super().__init__()
-        self.sound_mm_projector_type = sound_mm_projector_type
 
 
 class SoundMultimodalProjector(PreTrainedModel):
