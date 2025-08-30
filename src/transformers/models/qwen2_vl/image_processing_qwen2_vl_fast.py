@@ -243,7 +243,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = torch.cat(processed_images, dim=0) if processed_images else torch.empty(0)
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(

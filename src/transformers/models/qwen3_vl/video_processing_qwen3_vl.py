@@ -263,7 +263,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
-        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        pixel_values_videos = torch.cat(processed_videos, dim=0) if processed_videos else torch.empty(0)
         video_grid_thw = torch.tensor(processed_grids)
         data = {
             "pixel_values_videos": pixel_values_videos,
