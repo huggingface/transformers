@@ -529,26 +529,9 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
-        super().test_model_parallelism()
-
-    # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 flash attention does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    # TODO: ydshieh
-
     @require_torch_gpu
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")

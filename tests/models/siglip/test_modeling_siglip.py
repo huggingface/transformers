@@ -21,14 +21,11 @@ import unittest
 import numpy as np
 import requests
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.testing_utils import (
     is_flaky,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -600,89 +597,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         model_name = "google/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # Test with attention mask
-                dummy_attention_mask = inputs_dict["attention_mask"]
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                outputs = model(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("SigLIP does not support right padding")
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):

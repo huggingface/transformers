@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -97,13 +96,6 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen3Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
