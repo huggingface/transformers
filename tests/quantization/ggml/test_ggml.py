@@ -825,8 +825,8 @@ class GgufModelTests(unittest.TestCase):
             gguf_file=self.q6_k_nemotron_model_id,
             dtype=torch.float16,
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
+        # use the original tokenizer from nvidia to avoid long load times
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-Mini-4B-Instruct")
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=16)
 
