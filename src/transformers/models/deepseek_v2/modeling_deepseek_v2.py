@@ -90,6 +90,7 @@ class DeepseekV2MoEGate(nn.Module):
         return topk_idx, topk_weight
 
 
+# FIXME: update the experts
 class DeepseekV2MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
