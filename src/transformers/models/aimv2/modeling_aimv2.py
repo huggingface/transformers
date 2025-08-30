@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
@@ -650,14 +650,13 @@ class Aimv2Model(Aimv2PreTrainedModel):
 
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -667,39 +666,32 @@ class Aimv2Model(Aimv2PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, Aimv2Model
 
         >>> model = Aimv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/aimv2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-        # Use AIMV2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
+        ```"""
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
         )
-
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
@@ -710,33 +702,25 @@ class Aimv2Model(Aimv2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, Aimv2Model
+        >>> from transformers.image_utils import load_image
 
         >>> model = Aimv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/aimv2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        # Use AIMV2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
-
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
 
