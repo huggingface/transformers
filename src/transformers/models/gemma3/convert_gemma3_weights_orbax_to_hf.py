@@ -278,9 +278,9 @@ def convert_siglip_weight(
             raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
-        next_path_seperator_idx = encoder_block_path.find("/")
-        layer_idx = encoder_block_path[:next_path_seperator_idx]
-        encoder_block_path = encoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = encoder_block_path.find("/")
+        layer_idx = encoder_block_path[:next_path_separator_idx]
+        encoder_block_path = encoder_block_path[next_path_separator_idx:]
         normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
 
         if encoder_block_path.startswith("/LayerNorm"):
@@ -393,9 +393,9 @@ def convert_transformer_weights(
         converted_weights = [weights]
     elif path.startswith(_TRANSFORMER_DECODER_BLOCK):
         decoder_block_path = path[_TRANSFORMER_DECODER_BLOCK_LEN:]
-        next_path_seperator_idx = decoder_block_path.find("/")
-        layer_idx = decoder_block_path[:next_path_seperator_idx]
-        decoder_block_path = decoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = decoder_block_path.find("/")
+        layer_idx = decoder_block_path[:next_path_separator_idx]
+        decoder_block_path = decoder_block_path[next_path_separator_idx:]
 
         base_path = f"language_model.model.layers.{layer_idx}"
 

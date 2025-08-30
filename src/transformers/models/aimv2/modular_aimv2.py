@@ -613,11 +613,11 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
 
 
 @auto_docstring
-class Aimv2Model(CLIPModel, nn.Module):
+class Aimv2Model(CLIPModel):
     _supports_flash_attn = True
 
     def __init__(self, config: Aimv2Config):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.projection_dim = config.projection_dim
         self.vision_embed_dim = config.vision_config.hidden_size

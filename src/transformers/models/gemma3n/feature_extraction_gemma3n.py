@@ -108,7 +108,7 @@ def _unfold(array: np.ndarray, dimension: int, size: int, step: int) -> np.ndarr
 
 
 class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
-    """An audio feature extractor Universal Speech Models https://arxiv.org/abs/2303.01037.
+    """An audio feature extractor Universal Speech Models https://huggingface.co/papers/2303.01037.
 
     Args:
         feature_size (`int`, *optional*, defaults to 128):

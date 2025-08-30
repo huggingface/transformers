@@ -289,6 +289,7 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig(num_beams=2)
         self.assertEqual(config.get_generation_mode(), GenerationMode.BEAM_SEARCH)
 
+        # TODO joao, manuel: remove this in v4.62.0
         config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
         self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
 
