@@ -182,6 +182,22 @@ class CircleCIJob:
                 "name": "Run tests",
                 "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
+            {"run":
+                {
+                    "name": "Check for test crashes",
+                    "when": "always",
+                    "command": """if [ ! -f tests_output.txt ]; then
+                            echo "ERROR: tests_output.txt does not exist - tests may not have run properly"
+                            exit 1
+                        elif grep -q "crashed and worker restarting disabled" tests_output.txt; then
+                            echo "ERROR: Worker crash detected in test output"
+                            echo "Found: crashed and worker restarting disabled"
+                            exit 1
+                        else
+                            echo "Tests output file exists and no worker crashes detected"
+                        fi"""
+                },
+            },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
