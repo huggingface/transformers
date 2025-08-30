@@ -2,7 +2,6 @@
 
 from abc import ABC
 from collections import deque
-from functools import partial
 import copy
 import math
 import os
@@ -22,7 +21,6 @@ from ... import (
     GenerationConfig,
     PreTrainedModel,
     PretrainedConfig,
-    LlamaForCausalLM,
     GenerationMixin,
 )
 from ...activations import ACT2FN
@@ -31,9 +29,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
-    AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
-    LlavaConfig,
+    AudioFlamingo3Config,
     SoundMultimodalProjectorConfig,
 )
 
@@ -663,12 +660,12 @@ class LlavaMetaForCausalLM(ABC):
 
 
 class AudioFlamingo3ForConditionalGeneration(LlavaMetaForCausalLM, PreTrainedModel, GenerationMixin):
-    config_class = LlavaConfig
+    config_class = AudioFlamingo3Config
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
 
-    def __init__(self, config: LlavaConfig = None, *args, **kwargs):
+    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
         super().__init__(config)
         self.is_loaded = False
 

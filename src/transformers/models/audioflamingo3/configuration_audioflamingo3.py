@@ -54,7 +54,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
 
 
-class LlavaConfig(PretrainedConfig):
+class AudioFlamingo3Config(PretrainedConfig):
     model_type = "audioflamingo3"
     sub_configs = {"llm_cfg": AutoConfig, "sound_tower_cfg": AutoConfig}  # , "sound_mm_projector_cfg": AutoConfig}
 
@@ -93,51 +93,6 @@ class LlavaConfig(PretrainedConfig):
         self.llm_cfg = llm_cfg
 
         self.sound_mm_projector_cfg = sound_mm_projector_cfg
-        super().__init__(**kwargs)
-
-
-class AudioFlamingo3Config(PretrainedConfig):
-    model_type = "audioflamingo3"
-    attribute_map = {
-        "audio_token_id": "audio_token_index",
-    }
-    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
-
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_index=151646,
-        **kwargs,
-    ):
-        self.audio_token_index = audio_token_index
-
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "audioflamingo3_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["audioflamingo3_encoder"](
-                d_model=1280,
-                encoder_attention_heads=20,
-                encoder_ffn_dim=5120,
-                encoder_layerdrop=0.0,
-                encoder_layers=32,
-                num_mel_bins=128,
-                max_source_positions=1500,
-                scale_embedding=False,
-                activation_function="gelu",
-            )
-
-        self.audio_config = audio_config
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-
-        self.text_config = text_config
-
         super().__init__(**kwargs)
 
 
