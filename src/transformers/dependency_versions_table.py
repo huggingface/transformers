@@ -58,7 +58,7 @@ deps = {
     "pydantic": "pydantic>=2",
     "pytest": "pytest>=7.2.0",
     "pytest-asyncio": "pytest-asyncio",
-    "pytest-rerunfailures": "pytest-rerunfailures",
+    "pytest-rerunfailures": "pytest-rerunfailures<16.0",
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "pytest-order": "pytest-order",
