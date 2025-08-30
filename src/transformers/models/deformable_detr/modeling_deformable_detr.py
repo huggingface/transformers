@@ -930,14 +930,14 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
         r"DeformableDetrDecoderLayer",
     ]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = self.config.init_std
 
         if isinstance(module, DeformableDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DeformableDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            nn.init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -950,15 +950,15 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+
+            module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            nn.init.constant_(module.attention_weights.weight, 0.0)
+            nn.init.constant_(module.attention_weights.bias, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight)
+            nn.init.constant_(module.value_proj.bias, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight)
+            nn.init.constant_(module.output_proj.bias, 0.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
@@ -968,9 +968,13 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            nn.init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
