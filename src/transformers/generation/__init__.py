@@ -96,6 +96,7 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
         "StopStringCriteria",
+        "StopStringTextMatchCriteria",
     ]
     _import_structure["continuous_batching"] = [
         "ContinuousMixin",
@@ -259,6 +260,7 @@ if TYPE_CHECKING:
             StoppingCriteria,
             StoppingCriteriaList,
             StopStringCriteria,
+            StopStringTextMatchCriteria,
             validate_stopping_criteria,
         )
         from .utils import (

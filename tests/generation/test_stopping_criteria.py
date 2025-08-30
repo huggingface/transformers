@@ -15,6 +15,8 @@
 import time
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
@@ -31,6 +33,7 @@ if is_torch_available():
         MaxTimeCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
+        StopStringTextMatchCriteria,
         validate_stopping_criteria,
     )
 
@@ -127,7 +130,13 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         self.assertEqual(len(stopping_criteria), 1)
 
-    def test_stop_string_criteria(self):
+    @parameterized.expand(
+        [
+            ("StopStringCriteria", StopStringCriteria),
+            ("StopStringTextMatchCriteria", StopStringTextMatchCriteria),
+        ]
+    )
+    def test_stop_string_criteria(self, name, criteria_cls):
         true_strings = [
             "<|im_start|><|im_end|>",
             "<|im_start|><|im_end|<|im_end|>",
@@ -157,7 +166,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
 
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        criteria = criteria_cls(tokenizer=tokenizer, stop_strings=stop_strings)
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
@@ -169,25 +178,32 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
 
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        criteria = criteria_cls(tokenizer=tokenizer, stop_strings=stop_strings)
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
             self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
 
-    def test_stop_string_criteria_vocab_size_mismatch(self):
+    @parameterized.expand(
+        [
+            ("StopStringCriteria", StopStringCriteria),
+            ("StopStringTextMatchCriteria", StopStringTextMatchCriteria),
+        ]
+    )
+    def test_stop_string_criteria_vocab_size_mismatch(self, name, criteria_cls):
         """Test that StopStringCriteria handles tokens above len(tokenizer) correctly."""
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         # Create input_ids with tokens above len(tokenizer)
         input_ids = torch.tensor([[len(tokenizer) + 1024, 1, 2]], device=torch_device)
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["test"])
+        criteria = criteria_cls(tokenizer=tokenizer, stop_strings=["test"])
 
         # This should not raise an error and should return False since no stop string is matched
         self.assertFalse(criteria(input_ids, scores))
 
     def test_stop_string_matching_positions(self):
+        # This test only applies to StopStringCriteria, not StopStringTextMatchCriteria
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
         token_indices = list(range(len(token_list)))
@@ -202,6 +218,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(end_overlaps, {"top": [3], "topper": [3], "p": [1]})
 
     def test_stop_string_embedding_vecs(self):
+        # This test only applies to StopStringCriteria, not StopStringTextMatchCriteria
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
         token_indices = list(range(len(token_list)))
@@ -221,7 +238,13 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         token_lengths = embedding_vec[:-1, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
-    def test_single_letter_stop_string(self):
+    @parameterized.expand(
+        [
+            ("StopStringCriteria", StopStringCriteria),
+            ("StopStringTextMatchCriteria", StopStringTextMatchCriteria),
+        ]
+    )
+    def test_single_letter_stop_string(self, name, criteria_cls):
         true_strings = ["a", "baa", "abc"]  # "abc" is a single token
         false_strings = ["abbbbbbb", "b"]  # "abbbbbbb" is split into multiple tokens
         stop_strings = ["a"]
@@ -233,13 +256,19 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
 
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        criteria = criteria_cls(tokenizer=tokenizer, stop_strings=stop_strings)
         for input_ids in true_input_ids["input_ids"]:
             self.assertTrue(criteria(input_ids.unsqueeze(0), scores))
         for input_ids in false_input_ids["input_ids"]:
             self.assertFalse(criteria(input_ids.unsqueeze(0), scores))
 
-    def test_criterias_per_row(self):
+    @parameterized.expand(
+        [
+            ("StopStringCriteria", StopStringCriteria),
+            ("StopStringTextMatchCriteria", StopStringTextMatchCriteria),
+        ]
+    )
+    def test_criterias_per_row(self, name, criteria_cls):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"
         stop_strings = ["end"]
 
@@ -251,7 +280,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         criteria = StoppingCriteriaList(
             [
                 MaxLengthCriteria(max_length=20),
-                StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings),
+                criteria_cls(tokenizer=tokenizer, stop_strings=stop_strings),
             ]
         )
 
@@ -261,11 +290,19 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         # return False when neither is satisfied
         self.assertFalse(criteria(inputs["input_ids"][:, :-1], scores))
 
-    def test_criterias_per_row_batched(self):
+    @parameterized.expand(
+        [
+            ("StopStringCriteria", StopStringCriteria),
+            ("StopStringTextMatchCriteria", StopStringTextMatchCriteria),
+        ]
+    )
+    def test_criterias_per_row_batched(self, name, criteria_cls):
         text = [
             "They completed the challenging puzzle, revealing the hidden image at the end",
             "Today a dragon flew over France",
             "The aroma of freshly baked pizza filled the kitchen",
+            "This should not trigger: the end is near",
+            "The following word should trigger: mend",  # important "mend" is a single token, != token for "end"
         ]
         stop_strings = ["end"]
 
@@ -278,12 +315,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         criteria = StoppingCriteriaList(
             [
                 MaxLengthCriteria(max_length=20),
-                StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings),
+                criteria_cls(tokenizer=tokenizer, stop_strings=stop_strings),
             ]
         )
 
         # trigger stopping when at least one criteria is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"], scores).tolist(),
+            [True, False, False, False, True],
+        )
 
         # False when neither is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"][:, :-1], scores).tolist(),
+            [False, False, False, False, False],
+        )
