@@ -114,7 +114,7 @@ class VideoPrismConfig(PretrainedConfig):
         self._attn_implementation = _attn_implementation
         self.atten_logit_cap = atten_logit_cap
         self.num_auxiliary_layers = num_auxiliary_layers
-        self.enable_causal_atten = enable_causal_atten  #! todo
+        self.enable_causal_atten = enable_causal_atten
         self.num_unimodal_layers = num_unimodal_layers
         self.vocabulary_size = vocabulary_size
         self.apply_l2_norm = apply_l2_norm
