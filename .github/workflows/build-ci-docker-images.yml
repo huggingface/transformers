@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - porting_jieba_dependency_to_rjieba
+      - porting_jieba_dependency_to_rjieba222
   repository_dispatch:
   workflow_call:
     inputs:
