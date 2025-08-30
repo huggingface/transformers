@@ -44,6 +44,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
+# For kernels
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av

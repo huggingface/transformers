@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -48,7 +49,7 @@ class Glm4vMoeVisionConfig(Glm4vVisionConfig):
     pass
 
 
-class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
+class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -197,10 +198,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
         norm_topk_prob=True,
         **kwargs,
     ):
-        nn.Module().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PretrainedConfig.__init__(self, tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
