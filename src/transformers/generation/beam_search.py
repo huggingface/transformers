@@ -20,8 +20,11 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
-from ..utils import add_start_docstrings
+from ..utils import add_start_docstrings, logging
 from .beam_constraints import Constraint, ConstraintListState
+
+
+logger = logging.get_logger(__name__)
 
 
 PROCESS_INPUTS_DOCSTRING = r"""
@@ -170,6 +173,9 @@ class BeamSearchScorer(BeamScorer):
         num_beam_groups: Optional[int] = 1,
         max_length: Optional[int] = None,
     ):
+        logger.warning_once(
+            "`BeamSearchScorer` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         self.num_beams = num_beams
         self.device = device
         self.length_penalty = length_penalty
@@ -465,6 +471,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         num_beam_groups: Optional[int] = 1,
         max_length: Optional[int] = None,
     ):
+        logger.warning_once(
+            "`ConstrainedBeamSearchScorer` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         self.num_beams = num_beams
         self.device = device
         self.length_penalty = length_penalty
@@ -932,6 +941,9 @@ class BeamHypotheses:
         """
         Initialize n-best list of hypotheses.
         """
+        logger.warning_once(
+            "`BeamHypotheses` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
         self.max_length = max_length

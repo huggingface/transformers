@@ -430,10 +430,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("Cannot do constraint generation, has custom `generate()`")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

@@ -1121,8 +1121,6 @@ class PretrainedConfig(PushToHubMixin):
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
             "temperature": 1.0,
             "top_k": 50,
             "top_p": 1.0,
@@ -1141,6 +1139,9 @@ class PretrainedConfig(PushToHubMixin):
             "exponential_decay_length_penalty": None,
             "suppress_tokens": None,
             "begin_suppress_tokens": None,
+            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
         }
 
     def _get_non_default_generation_parameters(self) -> dict[str, Any]:

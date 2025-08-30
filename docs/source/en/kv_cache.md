@@ -146,7 +146,7 @@ tokenizer = AutoTokenizer.from_pretrained(ckpt)
 model = AutoModelForCausalLM.from_pretrained(ckpt, dtype=torch.float16, device_map="auto")
 prompt = ["okay "*1000 + "Fun fact: The most"]
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-beams = { "num_beams": 40, "num_beam_groups": 40, "num_return_sequences": 40, "diversity_penalty": 1.0, "max_new_tokens": 23, "early_stopping": True, }
+beams = { "num_beams": 40, "num_return_sequences": 20, "max_new_tokens": 23, "early_stopping": True, }
 out = resilient_generate(model, **inputs, **beams)
 responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 ```

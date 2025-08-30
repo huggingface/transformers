@@ -387,25 +387,11 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
-    def test_constrained_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_constrained_beam_search_generate_dict_output()
-        self.has_attentions = old_has_attentions
-
     def test_greedy_generate_dict_outputs(self):
         # This model has a custom attention output shape AND config flags, let's skip those checks
         old_has_attentions = self.has_attentions
         self.has_attentions = False
         super().test_greedy_generate_dict_outputs()
-        self.has_attentions = old_has_attentions
-
-    def test_group_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_group_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
     def test_sample_generate_dict_output(self):
