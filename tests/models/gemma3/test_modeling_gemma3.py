@@ -56,8 +56,8 @@ if is_torch_available():
         Gemma3ForSequenceClassification,
         Gemma3Model,
         Gemma3Processor,
-        Gemma3TextModel,
         Gemma3TextForSequenceClassification,
+        Gemma3TextModel,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
@@ -71,7 +71,9 @@ class Gemma3ModelTester(GemmaModelTester):
 
 @require_torch
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM, Gemma3TextForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (Gemma3TextModel, Gemma3ForCausalLM, Gemma3TextForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -143,11 +145,11 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
-        
+
         model = Gemma3TextForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        
+
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, config.num_labels))
 

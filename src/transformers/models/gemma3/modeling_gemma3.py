@@ -1303,6 +1303,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
     It uses the generic sequence classification implementation for efficiency and consistency.
     """
+
     pass
 
 
