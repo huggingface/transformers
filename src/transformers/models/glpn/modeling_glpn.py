@@ -126,11 +126,6 @@ class GLPNEfficientSelfAttention(nn.Module):
             )
             self.layer_norm = nn.LayerNorm(hidden_size)
 
-    def transpose_for_scores(self, hidden_states):
-        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        hidden_states = hidden_states.view(new_shape)
-        return hidden_states.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states,
@@ -138,7 +133,12 @@ class GLPNEfficientSelfAttention(nn.Module):
         width,
         output_attentions=False,
     ):
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         if self.sr_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
@@ -150,8 +150,16 @@ class GLPNEfficientSelfAttention(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -401,7 +409,7 @@ class GLPNEncoder(nn.Module):
 
 @auto_docstring
 class GLPNPreTrainedModel(PreTrainedModel):
-    config_class = GLPNConfig
+    config: GLPNConfig
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
     _no_split_modules = []

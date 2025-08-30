@@ -844,7 +844,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             outputs,
             text_labels=text_labels_batched,
             target_sizes=[image.size[::-1] for image in images_batched],
-            score_threshold=0.2,
+            threshold=0.2,
         )
         expected_scores = torch.tensor([0.7675, 0.3016, 0.7454]).to(torch_device)
         expected_slice_boxes = torch.tensor(

@@ -30,6 +30,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_dbrx import DbrxConfig
 
 
@@ -46,6 +47,8 @@ logger = logging.get_logger(__name__)
 
 
 class DbrxRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -124,7 +127,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def load_balancing_loss_func(
-    gate_logits: torch.Tensor,
+    gate_probabilities: torch.Tensor,
     num_experts: int,
     top_k: int,
     attention_mask: Optional[torch.Tensor],
@@ -150,14 +153,12 @@ def load_balancing_loss_func(
     Returns:
         The auxiliary loss.
     """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
+    if gate_probabilities is None or not isinstance(gate_probabilities, tuple):
         return torch.tensor(0.0)
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if isinstance(gate_probabilities, tuple):
+        compute_device = gate_probabilities[0].device
+        routing_weights = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_probabilities], dim=0)
 
     _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
@@ -171,7 +172,7 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = routing_weights.shape[0] // (batch_size * sequence_length)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
@@ -239,12 +240,13 @@ class DbrxAttention(nn.Module):
             base=self.rope_theta,
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -273,10 +275,10 @@ class DbrxAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.block_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -324,18 +326,19 @@ class DbrxFlashAttention2(DbrxAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
+        if isinstance(past_key_values, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
@@ -368,10 +371,10 @@ class DbrxFlashAttention2(DbrxAttention):
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.block_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout
         # [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -440,12 +443,13 @@ class DbrxSdpaAttention(DbrxAttention):
     SDPA API.
     """
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -460,7 +464,7 @@ class DbrxSdpaAttention(DbrxAttention):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -488,10 +492,10 @@ class DbrxSdpaAttention(DbrxAttention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.block_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -509,7 +513,7 @@ class DbrxSdpaAttention(DbrxAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = causal_mask is None and q_len > 1
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -547,12 +551,13 @@ class DbrxNormAttentionNorm(nn.Module):
         )
         self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -565,7 +570,7 @@ class DbrxNormAttentionNorm(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -737,12 +742,13 @@ class DbrxBlock(GradientCheckpointingLayer):
         )
         self.ffn = DbrxFFN(config=config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
@@ -765,7 +771,7 @@ class DbrxBlock(GradientCheckpointingLayer):
             attention_mask (`torch.Tensor`, *optional*): attention mask of size (batch_size, sequence_length)
                 if flash attention is used or (batch_size, 1, query_sequence_length, key_sequence_length)
                 if default attention is used.
-            past_key_value (`Tuple(torch.Tensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.Tensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all
                 attention layers. See `attentions` under returned tensors for more detail.
             output_router_logits (`bool`, *optional*): Whether or not to return the router logits.
@@ -779,7 +785,7 @@ class DbrxBlock(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -804,16 +810,15 @@ class DbrxBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
-    config_class = DbrxConfig
+    config: DbrxConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
@@ -910,7 +915,7 @@ class DbrxModel(DbrxPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -941,7 +946,7 @@ class DbrxModel(DbrxPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 output_router_logits=output_router_logits,
                 use_cache=use_cache,

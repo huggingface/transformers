@@ -35,7 +35,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_llava_next_video import LlavaNextVideoConfig
 
@@ -164,16 +164,16 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
 
 @auto_docstring
 class LlavaNextVideoPreTrainedModel(PreTrainedModel):
-    config_class = LlavaNextVideoConfig
+    config: LlavaNextVideoConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -476,6 +476,46 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         )
         return image_features
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -498,10 +538,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, LlavaNextVideoModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`LlavaNextVideoVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoVideoProcessor`] for processing videos.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -523,35 +563,20 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and pixel_values.size(0) > 0:
+        if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
             )
-            image_features = torch.cat(image_features, dim=0)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
+        if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos,
                 vision_feature_layer=self.vision_feature_layer,
@@ -561,25 +586,12 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -689,9 +701,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -720,7 +729,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -757,10 +766,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`LlavaNextVideoVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoVideoProcessor`] for processing videos.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

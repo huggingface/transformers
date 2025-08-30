@@ -28,7 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_llava import LlavaConfig
 
@@ -113,31 +113,17 @@ class LlavaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class LlavaPreTrainedModel(PreTrainedModel):
-    config_class = LlavaConfig
+    config: LlavaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        # important: this ported version of Llava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 @auto_docstring(
@@ -232,6 +218,30 @@ class LlavaModel(LlavaPreTrainedModel):
             image_features = list(image_features)
         return image_features
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -279,25 +289,10 @@ class LlavaModel(LlavaPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
-            image_features = torch.cat(image_features, dim=0)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -351,14 +346,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.get_decoder
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
@@ -374,7 +366,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

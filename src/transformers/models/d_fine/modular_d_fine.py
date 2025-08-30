@@ -423,6 +423,14 @@ class DFineConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`DFineConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
@@ -890,7 +898,7 @@ class DFineModel(RTDetrModel):
 
 class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
-        DFinePreTrainedModel.__init__(config)
+        DFinePreTrainedModel.__init__(self, config)
 
         # D-FINE encoder-decoder model
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx

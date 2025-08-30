@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_git import GitConfig, GitVisionConfig
 
 
@@ -151,41 +152,48 @@ class GitSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         cutoff = self.image_patch_tokens if pixel_values_present else 0
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        if past_key_value is not None:
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        if past_key_values is not None:
             # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
-            key_layer_past, value_layer_past = past_key_value.update(
+            key_layer_past, value_layer_past = past_key_values.update(
                 key_layer[:, :, cutoff:, :], value_layer[:, :, cutoff:, :], self.layer_idx
             )
             key_layer = torch.cat([key_layer[:, :, :cutoff, :], key_layer_past], dim=2)
             value_layer = torch.cat([value_layer[:, :, :cutoff, :], value_layer_past], dim=2)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if past_key_value is not None:
+            if past_key_values is not None:
                 position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
                     -1, 1
                 )
@@ -278,12 +286,13 @@ class GitAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
@@ -291,7 +300,7 @@ class GitAttention(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
-            past_key_value,
+            past_key_values,
             output_attentions,
             pixel_values_present,
         )
@@ -339,12 +348,13 @@ class GitLayer(GradientCheckpointingLayer):
         self.intermediate = GitIntermediate(config)
         self.output = GitOutput(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
@@ -354,7 +364,7 @@ class GitLayer(GradientCheckpointingLayer):
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             pixel_values_present=pixel_values_present,
         )
 
@@ -400,7 +410,7 @@ class GitEncoder(nn.Module):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -447,11 +457,9 @@ class GitEncoder(nn.Module):
 
 @auto_docstring
 class GitPreTrainedModel(PreTrainedModel):
-    config_class = GitConfig
+    config: GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -875,7 +883,7 @@ class GitVisionTransformer(nn.Module):
     """
 )
 class GitVisionModel(GitPreTrainedModel):
-    config_class = GitVisionConfig
+    config: GitVisionConfig
     main_input_name = "pixel_values"
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
@@ -1095,7 +1103,7 @@ class GitModel(GitPreTrainedModel):
         past_key_values_length = 0
         if past_key_values is not None:
             past_key_values_length = (
-                past_key_values[0][0].shape[2]
+                past_key_values.get_seq_length()
                 if not isinstance(past_key_values, Cache)
                 else past_key_values.get_seq_length()
             )
@@ -1447,18 +1455,10 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": kwargs.get("pixel_values", None),
+            "pixel_values": kwargs.get("pixel_values"),
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

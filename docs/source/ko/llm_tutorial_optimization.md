@@ -21,11 +21,11 @@ GPT3/4, [Falcon](https://huggingface.co/tiiuae/falcon-40b), [Llama](https://hugg
 
 이 가이드에서는 효율적인 대규모 언어 모델 배포를 위한 효과적인 기법들을 살펴보겠습니다. 
 
-1.  **낮은 정밀도:** 연구에 따르면, [8비트와 4비트](./main_classes/quantization.md)와 같이 낮은 수치 정밀도로 작동하면 모델 성능의 큰 저하 없이 계산상의 이점을 얻을 수 있습니다.
+1.  **낮은 정밀도:** 연구에 따르면, [8비트와 4비트](./main_classes/quantization)와 같이 낮은 수치 정밀도로 작동하면 모델 성능의 큰 저하 없이 계산상의 이점을 얻을 수 있습니다.
 
 2.  **플래시 어텐션:** 플래시 어텐션은 메모리 효율성을 높일 뿐만 아니라 최적화된 GPU 메모리 활용을 통해 효율성을 향상시키는 어텐션 알고리즘의 변형입니다.
 
-3.  **아키텍처 혁신:** 추론 시 대규모 언어 모델은 주로 동일한 방식(긴 입력 맥락을 가진 자기회귀 텍스트 생성 방식)으로 배포되는데, 더 효율적인 추론을 가능하게 하는 특화된 모델 아키텍처가 제안되었습니다. 이러한 모델 아키텍처의 가장 중요한 발전으로는 [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150), [Grouped-Query-Attention (GQA)]((https://huggingface.co/papers/2305.13245))이 있습니다. 
+3.  **아키텍처 혁신:** 추론 시 대규모 언어 모델은 주로 동일한 방식(긴 입력 맥락을 가진 자기회귀 텍스트 생성 방식)으로 배포되는데, 더 효율적인 추론을 가능하게 하는 특화된 모델 아키텍처가 제안되었습니다. 이러한 모델 아키텍처의 가장 중요한 발전으로는 [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150), [Grouped-Query-Attention (GQA)](https://huggingface.co/papers/2305.13245)이 있습니다. 
 
 이 가이드에서는 텐서의 관점에서 자기회귀 생성에 대한 분석을 제공합니다. 낮은 정밀도를 채택하는 것의 장단점을 논의하고, 최신 어텐션 알고리즘을 포괄적으로 탐구하며, 향상된 대규모 언어 모델 아키텍처에 대해 논합니다. 이 과정에서 각 기능의 개선 사항을 보여주는 실용적인 예제를 확인합니다.
 
@@ -81,7 +81,7 @@ model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", device_map="aut
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -121,7 +121,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 > 거의 모든 모델이 요즘 bfloat16으로 학습되므로, [GPU가 bfloat16을 지원](https://discuss.pytorch.org/t/bfloat16-native-support/117155/5)한다면 모델을 float32 정밀도로 실행할 이유가 없습니다. float32로 돌리는 모델은 학습할 때 사용했던 정밀도보다 더 나은 추론 결과를 제공하지 않습니다.
 
-모델 가중치가 어떤 정밀도 형식으로 Hub에 저장되어 있는지 확실하지 않은 경우, HuggingFace Hub에서 해당 체크포인트 config의 `"torch_dtype"`을 확인하면 됩니다, *예*를 들어 [여기](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21)를 확인하세요. 모델을 `from_pretrained(..., torch_dtype=...)`로 로드할 때는 config에 명시된 정밀도 유형과 동일한 정밀도로 설정하는 것이 권장됩니다. 단, 원래 유형이 float32인 경우 추론을 위해 `float16` 또는 `bfloat16`을 둘 다 사용할 수 있습니다.
+모델 가중치가 어떤 정밀도 형식으로 Hub에 저장되어 있는지 확실하지 않은 경우, HuggingFace Hub에서 해당 체크포인트 config의 `"dtype"`을 확인하면 됩니다, *예*를 들어 [여기](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21)를 확인하세요. 모델을 `from_pretrained(..., dtype=...)`로 로드할 때는 config에 명시된 정밀도 유형과 동일한 정밀도로 설정하는 것이 권장됩니다. 단, 원래 유형이 float32인 경우 추론을 위해 `float16` 또는 `bfloat16`을 둘 다 사용할 수 있습니다.
 
 이제 `flush(...)` 함수를 정의하여 모든 메모리를 해제하고, GPU 메모리의 최대 할당량을 정확하게 측정하도록 합시다.
 
@@ -380,7 +380,7 @@ long_prompt = 10 * system_prompt + prompt
 모델을 다시 bfloat16 정밀도로 인스턴스화합니다.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)

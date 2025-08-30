@@ -156,7 +156,7 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
@@ -297,7 +297,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-7.5969, -7.5969, -7.4313], [-7.5969, -7.5969, -7.4313], [-7.4808, -7.4808, -7.3080]]
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 

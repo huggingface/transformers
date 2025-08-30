@@ -134,7 +134,7 @@ def create_rename_keys(state_dict, base_model=False):
         model_prefix = "mobilevitv2."
 
     rename_keys = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k[:8] == "encoder.":
             k_new = k[8:]
         else:
@@ -216,7 +216,7 @@ def create_rename_keys(state_dict, base_model=False):
 def remove_unused_keys(state_dict):
     """remove unused keys (e.g.: seg_head.aux_head)"""
     keys_to_ignore = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k.startswith("seg_head.aux_head."):
             keys_to_ignore.append(k)
     for k in keys_to_ignore:

@@ -164,7 +164,7 @@ def _replace_with_bnb_linear(
             current_key_name = []
         current_key_name.append(name)
 
-        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
+        if (isinstance(module, (nn.Linear, Conv1D))) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
             if not any(
@@ -382,7 +382,7 @@ def _create_accelerate_new_hook(old_hook):
     old_hook_attr = old_hook.__dict__
     filtered_old_hook_attr = {}
     old_hook_init_signature = inspect.signature(old_hook_cls.__init__)
-    for k in old_hook_attr.keys():
+    for k in old_hook_attr:
         if k in old_hook_init_signature.parameters:
             filtered_old_hook_attr[k] = old_hook_attr[k]
     new_hook = old_hook_cls(**filtered_old_hook_attr)

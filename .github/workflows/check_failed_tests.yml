@@ -21,6 +21,9 @@ on:
       report_repo_id:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
 
 
 env:
@@ -87,7 +90,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Get target commit
         working-directory: /transformers/utils

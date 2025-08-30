@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -111,7 +110,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -129,7 +128,7 @@ class TFWhisperPositionalEmbedding(keras.layers.Layer):
         self,
         num_positions: int,
         embedding_dim: int,
-        padding_idx: Optional[int] = None,
+        padding_idx: int | None = None,
         embedding_initializer=None,
         **kwargs,
     ):
@@ -197,7 +196,7 @@ class TFWhisperAttention(keras.layers.Layer):
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: Optional[bool] = False,
+        training: bool | None = False,
     ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -731,7 +730,7 @@ class TFWhisperEncoder(keras.layers.Layer):
             input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
@@ -867,12 +866,6 @@ class TFWhisperDecoder(keras.layers.Layer):
         self.decoder_layers = [TFWhisperDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
 
         self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
@@ -1114,9 +1107,6 @@ class TFWhisperMainLayer(keras.layers.Layer):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
@@ -1265,15 +1255,15 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        encoder_outputs: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[tuple[Union[np.ndarray, tf.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        encoder_outputs: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        decoder_inputs_embeds: tuple[np.ndarray | tf.Tensor] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor], TFSeq2SeqModelOutput]:
+    ) -> tuple[tf.Tensor] | TFSeq2SeqModelOutput:
         r"""
         Returns:
 
@@ -1388,16 +1378,16 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        encoder_outputs: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[tuple[Union[np.ndarray, tf.Tensor]]] = None,
+        encoder_outputs: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        decoder_inputs_embeds: tuple[np.ndarray | tf.Tensor] | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor], TFSeq2SeqLMOutput]:
+    ) -> tuple[tf.Tensor] | TFSeq2SeqLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1476,15 +1466,15 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
 
     def generate(
         self,
-        inputs: Optional[tf.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[TFLogitsProcessorList] = None,
-        seed: Optional[list[int]] = None,
-        return_timestamps: Optional[bool] = None,
-        task: Optional[str] = None,
-        language: Optional[str] = None,
-        is_multilingual: Optional[bool] = None,
-        prompt_ids: Optional[tf.Tensor] = None,
+        inputs: tf.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: TFLogitsProcessorList | None = None,
+        seed: list[int] | None = None,
+        return_timestamps: bool | None = None,
+        task: str | None = None,
+        language: str | None = None,
+        is_multilingual: bool | None = None,
+        prompt_ids: tf.Tensor | None = None,
         return_token_timestamps=None,
         **kwargs,
     ):
@@ -1599,14 +1589,14 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         ):
             forced_decoder_ids = self.generation_config.forced_decoder_ids
         else:
-            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
+            forced_decoder_ids = kwargs.get("forced_decoder_ids")
 
         if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
             forced_decoder_ids = []
             if hasattr(generation_config, "language"):
-                if generation_config.language in generation_config.lang_to_id.keys():
+                if generation_config.language in generation_config.lang_to_id:
                     language_token = generation_config.language
-                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                elif generation_config.language in TO_LANGUAGE_CODE:
                     language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
                 elif generation_config.language in TO_LANGUAGE_CODE.values():
                     language_token = f"<|{generation_config.language}|>"

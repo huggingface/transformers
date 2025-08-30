@@ -42,6 +42,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_whisper import WhisperConfig
 from .generation_whisper import WhisperGenerationMixin
 
@@ -284,11 +285,12 @@ class WhisperAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -317,30 +319,30 @@ class WhisperAttention(nn.Module):
         query_states = query_states.transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
+                past_key_values.is_updated[self.layer_idx] = True
+                past_key_values = past_key_values.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                past_key_values = past_key_values.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
+        if is_cross_attention and past_key_values and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_values.layers[self.layer_idx].keys
+            value_states = past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
 
@@ -364,7 +366,7 @@ class WhisperAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
@@ -407,7 +409,7 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -428,12 +430,7 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 class WhisperDecoderLayer(GradientCheckpointingLayer):
@@ -468,6 +465,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -476,7 +474,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
@@ -494,7 +492,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
                 size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -503,9 +501,9 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -519,19 +517,16 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-
-            # add cross-attn to positions 1 of present_key_value tuple
-            present_key_value = (present_key_value, cross_attn_present_key_value)
 
         # Fully Connected
         residual = hidden_states
@@ -547,15 +542,12 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         return outputs
 
 
 @auto_docstring
 class WhisperPreTrainedModel(PreTrainedModel):
-    config_class = WhisperConfig
+    config: WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
@@ -563,8 +555,8 @@ class WhisperPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -652,7 +644,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
             input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
@@ -773,12 +765,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(
         self,
         input_ids=None,
@@ -883,9 +869,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         if use_cache and past_key_values is None:
             if self.config.is_encoder_decoder:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
             else:
-                past_key_values = DynamicCache()
+                past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -956,7 +944,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
-                past_key_value=past_key_values if use_cache else None,
+                past_key_values=past_key_values if use_cache else None,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -1008,9 +996,6 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_encoder(self):
         """
@@ -1083,13 +1068,6 @@ class WhisperModel(WhisperPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1160,7 +1138,7 @@ class WhisperModel(WhisperPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1254,13 +1232,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1387,9 +1358,6 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def get_decoder(self):
-        return self.decoder
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -1534,15 +1502,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 @auto_docstring(
     custom_intro="""
@@ -1589,13 +1548,6 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

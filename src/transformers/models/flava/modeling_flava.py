@@ -27,7 +27,8 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
@@ -442,11 +443,6 @@ class FlavaSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -454,11 +450,22 @@ class FlavaSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -688,7 +695,7 @@ class FlavaPooler(nn.Module):
 
 @auto_docstring
 class FlavaPreTrainedModel(PreTrainedModel):
-    config_class = FlavaConfig
+    config: FlavaConfig
     base_model_prefix = "flava"
     supports_gradient_checkpointing = True
 
@@ -723,7 +730,7 @@ class FlavaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FlavaImageModel(FlavaPreTrainedModel):
-    config_class = FlavaImageConfig
+    config: FlavaImageConfig
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
@@ -820,7 +827,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
 
 @auto_docstring
 class FlavaTextModel(FlavaPreTrainedModel):
-    config_class = FlavaTextConfig
+    config: FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
 
@@ -933,7 +940,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
 
 @auto_docstring
 class FlavaMultimodalModel(FlavaPreTrainedModel):
-    config_class = FlavaMultimodalConfig
+    config: FlavaMultimodalConfig
     # This override allows us to load FlavaMultimodalModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.multimodal_model"
     main_input_name = "hidden_states"
@@ -1029,7 +1036,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
 
 @auto_docstring
 class FlavaModel(FlavaPreTrainedModel):
-    config_class = FlavaConfig
+    config: FlavaConfig
 
     def __init__(self, config: FlavaConfig):
         super().__init__(config)
@@ -1394,7 +1401,7 @@ class FlavaImageCodebookLayerGroup(nn.Module):
 )
 class FlavaImageCodebook(FlavaPreTrainedModel):
     base_model_prefix = ""
-    config_class = FlavaImageCodebookConfig
+    config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 

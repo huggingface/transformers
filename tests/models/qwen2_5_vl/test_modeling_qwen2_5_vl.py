@@ -28,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flaky,
     require_cv2,
@@ -325,6 +326,88 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             )
             self.assertIsNotNone(outputs)
 
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        max_new_tokens = 30
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.float16]:
+                dummy_input = dummy_input.to(torch.bfloat16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    "pixel_values": inputs_dict["pixel_values"],
+                    "image_grid_thw": inputs_dict["image_grid_thw"],
+                    "input_ids": inputs_dict["input_ids"][dummy_attention_mask.bool()].unsqueeze(0),
+                }
+
+                # add position_ids
+                vision_position_ids, deltas = model.model.get_rope_index(
+                    input_ids=inputs_dict["input_ids"],
+                    image_grid_thw=inputs_dict["image_grid_thw"],
+                    attention_mask=inputs_dict["attention_mask"],
+                )  # [3, bs, padded-seq-len]
+                vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
+                    3, -1
+                )  # [3, bs*padfree-len]
+                text_padfree_positions = torch.cat(
+                    [torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()]
+                )  # [1, bs*padfree-len]
+                text_padfree_positions = text_padfree_positions.long().unsqueeze(0).to(torch_device)
+                padfree_inputs_dict["position_ids"] = torch.cat([text_padfree_positions, vision_padfree_positions])[
+                    :, None, :
+                ]
+
+                if fa_kwargs:
+                    cu_seq_lens = [0] + dummy_attention_mask.sum(1).tolist()
+                    cu_seq_lens = torch.tensor(cu_seq_lens, device=torch_device)
+                    max_length = cu_seq_lens.diff().max().item()
+                    padfree_inputs_dict.update(
+                        {
+                            "cu_seq_lens_q": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
+                            "cu_seq_lens_k": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
+                            "max_length_q": max_length,
+                            "max_length_k": max_length,
+                        }
+                    )
+
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass
@@ -386,7 +469,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -423,7 +506,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -446,7 +529,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -467,7 +550,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -495,7 +578,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -510,10 +593,24 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
-        ]
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
+                ],
+                ("cuda", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n',
+                ],
+                ("rocm", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n'
+                ],
+            }
+        )  # fmt: skip
+
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -526,7 +623,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
@@ -558,7 +655,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
@@ -589,7 +686,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @require_cv2
     def test_small_model_integration_test_with_video(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
 
         video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"

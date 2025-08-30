@@ -140,23 +140,29 @@ class Idefics3VisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full(size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
+        boundaries = torch.arange(
+            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
+        )
+        position_ids = torch.full(
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+        )
 
         for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
-            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
+
+            fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
+            fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
 
             bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
             bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
 
             pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
+            position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
 
-        position_ids = position_ids.to(self.position_embedding.weight.device)
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
 
@@ -468,7 +474,7 @@ class Idefics3Connector(nn.Module):
 
 @auto_docstring
 class Idefics3PreTrainedModel(PreTrainedModel):
-    config_class = Idefics3Config
+    config: Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
@@ -476,7 +482,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -503,7 +509,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
-    config_class = Idefics3VisionConfig
+    config: Idefics3VisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -558,10 +564,10 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
-            patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        if not self._use_flash_attention_2:
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+        elif not torch.any(~patch_attention_mask):
+            patch_attention_mask = None
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -777,7 +783,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
@@ -869,14 +875,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
 
@@ -929,7 +927,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

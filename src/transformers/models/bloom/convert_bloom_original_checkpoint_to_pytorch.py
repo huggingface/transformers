@@ -114,7 +114,7 @@ def convert_bloom_checkpoint_to_pytorch(
                 if tensors is None:
                     tensors = temp
                 else:
-                    for key in tensors.keys():
+                    for key in tensors:
                         if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                             # We average (sum and then divide) some weights across TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                             tensors[key] += temp[key]
@@ -125,7 +125,7 @@ def convert_bloom_checkpoint_to_pytorch(
                             tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)
 
             # Divide by the number of TP the weights we want to average
-            for key in tensors.keys():
+            for key in tensors:
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                     tensors[key] = tensors[key] / pretraining_tp
             torch.save(
@@ -136,7 +136,7 @@ def convert_bloom_checkpoint_to_pytorch(
                 ),
             )
 
-            for key in tensors.keys():
+            for key in tensors:
                 value = tensors[key]
                 total_size += value.numel() * get_dtype_size(value.dtype)
                 if key not in index_dict["weight_map"]:
@@ -174,7 +174,7 @@ def convert_bloom_checkpoint_to_pytorch(
                 if tensors is None:
                     tensors = temp
                 else:
-                    for key in tensors.keys():
+                    for key in tensors:
                         # We average (sum and then divide) some weights across TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                         if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                             tensors[key] += temp[key]
@@ -185,7 +185,7 @@ def convert_bloom_checkpoint_to_pytorch(
                             tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)
 
             # Divide by the number of TP the weights we want to average
-            for key in tensors.keys():
+            for key in tensors:
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
                     tensors[key] = tensors[key] / pretraining_tp
 
@@ -202,9 +202,9 @@ def convert_bloom_checkpoint_to_pytorch(
         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
         pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
-        print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.torch_dtype}")
-        if config.torch_dtype is not None:
-            model = model.to(config.torch_dtype)
+        print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.dtype}")
+        if config.dtype is not None:
+            model = model.to(config.dtype)
         torch.save(model.state_dict(), pytorch_weights_dump_path)
         print(f"Save configuration file to {pytorch_config_dump_path}")
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:

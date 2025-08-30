@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -218,7 +217,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_15b_a2b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window

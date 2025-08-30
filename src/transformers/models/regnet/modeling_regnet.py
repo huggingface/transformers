@@ -260,7 +260,7 @@ class RegNetEncoder(nn.Module):
 
 @auto_docstring
 class RegNetPreTrainedModel(PreTrainedModel):
-    config_class = RegNetConfig
+    config: RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]

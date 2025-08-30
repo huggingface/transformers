@@ -24,8 +24,6 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -44,6 +42,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
 
 
@@ -90,6 +90,8 @@ class T5GemmaMLP(nn.Module):
 
 
 class T5GemmaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -233,12 +235,13 @@ class T5GemmaSelfAttention(nn.Module):
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -252,10 +255,10 @@ class T5GemmaSelfAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -310,12 +313,13 @@ class T5GemmaCrossAttention(nn.Module):
         if config.cross_attention_hidden_size is None:
             raise ValueError("Cross-attention needs cross_attention_hidden_size to be specified.")
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         encoder_hidden_states: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if encoder_hidden_states is None:
@@ -325,22 +329,22 @@ class T5GemmaCrossAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            curr_past_key_value = past_key_value.cross_attention_cache
+        if past_key_values is not None:
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
+            curr_past_key_value = past_key_values.cross_attention_cache
 
-        if past_key_value is None or not is_updated:
+        if past_key_values is None or not is_updated:
             encoder_input_shape = encoder_hidden_states.shape[:-1]
             encoder_hidden_shape = (*encoder_input_shape, -1, self.head_dim)
             key_states = self.k_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
             value_states = self.v_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
-                past_key_value.is_updated[self.layer_idx] = True
+                past_key_values.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -402,7 +406,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=None,
+            past_key_values=None,
             **kwargs,
         )
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -425,13 +429,14 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -445,7 +450,7 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value.self_attention_cache if past_key_value is not None else None,
+            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -459,7 +464,7 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=encoder_attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             **kwargs,
         )
@@ -528,12 +533,13 @@ class T5GemmaAttention(nn.Module):
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -547,10 +553,10 @@ class T5GemmaAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -576,7 +582,7 @@ class T5GemmaAttention(nn.Module):
 
 @auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
-    config_class = T5GemmaConfig
+    config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
@@ -584,9 +590,8 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": T5GemmaDecoderLayer,
@@ -595,18 +600,9 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
+        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, T5GemmaRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, T5GemmaClassificationHead):
+        if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
             module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
@@ -708,12 +704,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     def forward(
         self,
@@ -725,6 +715,9 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
+        kwargs.pop("past_key_values", None)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -818,10 +811,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(
-                self_attention_cache=DynamicCache(),
-                cross_attention_cache=DynamicCache(),
-            )
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -907,9 +897,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()

@@ -14,6 +14,7 @@
 
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -253,7 +254,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -306,7 +308,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -325,7 +327,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -351,7 +353,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         images = []
@@ -378,7 +380,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_torchcodec
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"

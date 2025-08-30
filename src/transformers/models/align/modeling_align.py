@@ -33,7 +33,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -395,7 +394,7 @@ class AlignVisionBlock(nn.Module):
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
-        self.expand = True if self.expand_ratio != 1 else False
+        self.expand = self.expand_ratio != 1
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
@@ -465,10 +464,10 @@ class AlignVisionEncoder(nn.Module):
             expand_ratio = config.expand_ratios[i]
 
             for j in range(round_repeats(config.num_block_repeats[i])):
-                id_skip = True if j == 0 else False
+                id_skip = j == 0
                 stride = 1 if j > 0 else stride
                 in_dim = out_dim if j > 0 else in_dim
-                adjust_padding = False if curr_block_num in config.depthwise_padding else True
+                adjust_padding = curr_block_num not in config.depthwise_padding
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
                 block = AlignVisionBlock(
@@ -621,17 +620,11 @@ class AlignTextSelfAttention(nn.Module):
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.attention_head_size**-0.5
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -703,17 +696,11 @@ class AlignTextAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -769,17 +756,11 @@ class AlignTextLayer(GradientCheckpointingLayer):
         self.intermediate = AlignTextIntermediate(config)
         self.output = AlignTextOutput(config)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -813,20 +794,12 @@ class AlignTextEncoder(nn.Module):
         self.layer = nn.ModuleList([AlignTextLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_values", version="4.54.0")
-    @deprecate_kwarg("use_cache", version="4.54.0")
     @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -881,25 +854,26 @@ class AlignTextPooler(nn.Module):
 
 @auto_docstring
 class AlignPreTrainedModel(PreTrainedModel):
-    config_class = AlignConfig
+    config: AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AlignModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
             module.text_projection.bias.data.zero_()
-            module.text_projection._is_hf_initialized = True
+            module.temperature.data.fill_(self.config.temperature_init_value)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        if isinstance(module, nn.LayerNorm):
+        if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -910,7 +884,7 @@ class AlignPreTrainedModel(PreTrainedModel):
     """
 )
 class AlignTextModel(AlignPreTrainedModel):
-    config_class = AlignTextConfig
+    config: AlignTextConfig
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
@@ -1038,7 +1012,7 @@ class AlignTextModel(AlignPreTrainedModel):
     """
 )
 class AlignVisionModel(AlignPreTrainedModel):
-    config_class = AlignVisionConfig
+    config: AlignVisionConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
@@ -1119,7 +1093,7 @@ class AlignVisionModel(AlignPreTrainedModel):
 
 @auto_docstring
 class AlignModel(AlignPreTrainedModel):
-    config_class = AlignConfig
+    config: AlignConfig
 
     def __init__(self, config: AlignConfig):
         super().__init__(config)

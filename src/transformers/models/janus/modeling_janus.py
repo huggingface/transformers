@@ -55,35 +55,16 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
-    config_class = JanusConfig
+    config: JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_param_buffer_assignment = False
 
-    def _init_weights(self, module):
-        std = (
-            self.config.vision_config.initializer_range
-            if hasattr(self.config, "vision_config")
-            else self.config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.GroupNorm, nn.LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+    _can_compile_fullgraph = True
+    _supports_param_buffer_assignment = False
 
 
 @dataclass
@@ -514,7 +495,7 @@ class JanusVisionEncoder(nn.Module):
 @auto_docstring
 class JanusVisionModel(JanusPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = JanusVisionConfig
+    config: JanusVisionConfig
 
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
@@ -933,7 +914,7 @@ class JanusVQVAEDecoder(nn.Module):
     """
 )
 class JanusVQVAE(JanusPreTrainedModel):
-    config_class = JanusVQVAEConfig
+    config: JanusVQVAEConfig
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",
@@ -1065,6 +1046,30 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1088,18 +1093,12 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            if input_ids is None:
-                image_attention_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_attention_mask = image_attention_mask.all(-1)
-            else:
-                image_attention_mask = input_ids == self.config.image_token_id
-
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values)
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_attention_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         lm_output = self.language_model(
@@ -1124,7 +1123,7 @@ class JanusModel(JanusPreTrainedModel):
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1146,18 +1145,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1172,7 +1159,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1198,7 +1185,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return JanusCausalLMOutputWithPast(
             loss=loss,
@@ -1365,7 +1354,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
-                device=device,
                 model_kwargs=model_kwargs,
             )
 

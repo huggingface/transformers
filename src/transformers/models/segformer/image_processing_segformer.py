@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Segformer."""
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -41,7 +41,6 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import requires
 
 
@@ -94,7 +93,6 @@ class SegformerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
     def __init__(
         self,
@@ -121,16 +119,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -304,7 +292,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         """
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,

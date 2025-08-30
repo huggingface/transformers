@@ -439,7 +439,7 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
 
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

@@ -434,7 +434,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     models. The model is only intended for inference and doesn't support finetuning.
     """
 
-    config_class = Aimv2Config
+    config: Aimv2Config
     base_model_prefix = "aimv2"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -448,24 +448,12 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.vision_config.initializer_range
-            if hasattr(self.config, "vision_config")
-            else self.config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Aimv2RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif hasattr(module, "logit_scale"):
+        super()._init_weights(module)
+        if hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
                 module.logit_scale.data.fill_(math.log(1 / 0.07))
         elif isinstance(module, Aimv2AttentionPoolingHead):
-            module.cls_token.data.normal_(mean=0.0, std=std)
+            module.cls_token.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring(
@@ -474,8 +462,8 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     """
 )
 class Aimv2VisionModel(Aimv2PreTrainedModel):
+    config: Aimv2VisionConfig
     main_input_name = "pixel_values"
-    config_class = Aimv2VisionConfig
 
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
@@ -640,8 +628,9 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class Aimv2Model(Aimv2PreTrainedModel):
-    config_class = Aimv2Config
+    config: Aimv2Config
     _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
+    _supports_flash_attn = True
 
     def __init__(self, config: Aimv2Config):
         super().__init__(config)

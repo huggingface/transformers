@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from contextlib import nullcontext
 from typing import Literal, Optional, Union
@@ -30,6 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -659,20 +661,21 @@ class ModernBertAttention(nn.Module):
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
+            rope_theta = config.local_rope_theta if config.local_rope_theta is not None else config.global_rope_theta
+            max_position_embeddings = config.local_attention
         else:
             self.local_attention = (-1, -1)
-
-        max_position_embeddings = config.max_position_embeddings
-        if self.local_attention != (-1, -1):
-            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
-            max_position_embeddings = config.local_attention
+            max_position_embeddings = config.max_position_embeddings
+            rope_theta = config.global_rope_theta
 
         if config._attn_implementation == "flash_attention_2":
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config)
+            config_copy = copy.deepcopy(config)
+            config_copy.rope_theta = rope_theta
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config_copy)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -756,7 +759,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class ModernBertPreTrainedModel(PreTrainedModel):
-    config_class = ModernBertConfig
+    config: ModernBertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
@@ -803,7 +806,12 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.decoder, stds["out"])
         elif isinstance(
             module,
-            (ModernBertForSequenceClassification, ModernBertForTokenClassification, ModernBertForQuestionAnswering),
+            (
+                ModernBertForSequenceClassification,
+                ModernBertForMultipleChoice,
+                ModernBertForTokenClassification,
+                ModernBertForQuestionAnswering,
+            ),
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
@@ -811,7 +819,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def _check_and_adjust_attn_implementation(
+        self, attn_implementation: Optional[str], is_init_check: bool = False
+    ) -> str:
         """
         Checks and dispatches to hhe requested attention implementation.
         """
@@ -820,16 +830,17 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
 
-        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
         try:
             attn_implementation = (
                 "flash_attention_2"
-                if requested_attn_implementation is None and self._flash_attn_2_can_dispatch()
+                if attn_implementation is None and self._flash_attn_2_can_dispatch()
                 else attn_implementation
             )
         except (ValueError, ImportError):
             pass
-        return super().set_attention_implementation(attn_implementation=attn_implementation)
+        return super()._check_and_adjust_attn_implementation(
+            attn_implementation=attn_implementation, is_init_check=is_init_check
+        )
 
     def _maybe_set_compile(self):
         if self.config.reference_compile is False:
@@ -1266,6 +1277,19 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
+        if input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+
+        if batch_size is None and seq_len is None:
+            if inputs_embeds is not None:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+            else:
+                batch_size, seq_len = input_ids.shape[:2]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1516,6 +1540,123 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a softmax) e.g. for RocStories/SWAG tasks.
+    """
+)
+class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.model = ModernBertModel(config)
+        self.head = ModernBertPredictionHead(config)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
+        r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        self._maybe_set_compile()
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            sliding_window_mask=sliding_window_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            indices=indices,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            batch_size=batch_size,
+            seq_len=seq_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs[0]
+
+        if self.config.classifier_pooling == "cls":
+            last_hidden_state = last_hidden_state[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                dim=1, keepdim=True
+            )
+
+        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.drop(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 __all__ = [
     "ModernBertConfig",
     "ModernBertModel",
@@ -1524,4 +1665,5 @@ __all__ = [
     "ModernBertForSequenceClassification",
     "ModernBertForTokenClassification",
     "ModernBertForQuestionAnswering",
+    "ModernBertForMultipleChoice",
 ]

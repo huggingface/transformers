@@ -151,7 +151,7 @@ def main(args):
 
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: sum(examples[k], []) for k in examples}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, though you could add padding instead if the model supports it
         # In this, as in all things, we advise you to follow your heart 🫀

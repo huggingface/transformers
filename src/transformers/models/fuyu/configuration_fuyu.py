@@ -158,7 +158,7 @@ class FuyuConfig(PretrainedConfig):
                 "tie_word_embeddings": tie_word_embeddings,
             }
             logger.info("text_config is None. initializing the text model with default values.")
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
+        text_model_type = text_config.get("model_type", "persimmon")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self._vocab_size = vocab_size

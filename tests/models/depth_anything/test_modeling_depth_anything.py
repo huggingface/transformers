@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -147,7 +149,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -286,6 +288,7 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         for strict in [False, True]:
             with self.subTest(strict=strict):

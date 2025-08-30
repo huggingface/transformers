@@ -53,7 +53,6 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -425,8 +424,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size", "metadata", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
@@ -473,16 +470,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.num_text = num_text
         self.num_labels = num_labels
 
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
-
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.to_dict
     def to_dict(self) -> dict[str, Any]:
         """
@@ -493,7 +480,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_processor_dict.pop("_max_size", None)
         return image_processor_dict
 
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size"])
     def resize(
         self,

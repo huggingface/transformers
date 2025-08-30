@@ -104,7 +104,7 @@ class HeliumAttention(GraniteAttention):
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -130,24 +130,15 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 __all__ = [

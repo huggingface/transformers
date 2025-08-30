@@ -133,7 +133,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarr
             Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
-        raise ValueError("Heatmaps should be np.ndarray")
+        raise TypeError("Heatmaps should be np.ndarray")
     if heatmaps.ndim != 4:
         raise ValueError("Heatmaps should be 4-dimensional")
 

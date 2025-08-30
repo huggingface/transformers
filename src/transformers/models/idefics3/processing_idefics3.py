@@ -16,7 +16,6 @@
 Processor class for Idefics3.
 """
 
-import math
 import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Optional, Union
@@ -390,7 +389,7 @@ class Idefics3Processor(ProcessorMixin):
             images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_image_patches = [
+            num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
@@ -398,37 +397,16 @@ class Idefics3Processor(ProcessorMixin):
             base_image_length = self.image_seq_len + 3
             col_length = self.image_seq_len + 2
             num_image_tokens = []
+            num_image_patches = []
 
-            for num_patches in num_image_patches:
-                num_cols = num_rows = int(math.sqrt(num_patches - 1))
+            for num_patches, num_rows, num_cols in num_image_row_cols:
                 row_length = col_length * num_cols + 1
                 num_image_tokens.append(base_image_length + (row_length * num_rows))
+                num_image_patches.append(num_patches)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
 
 __all__ = ["Idefics3Processor"]

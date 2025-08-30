@@ -44,7 +44,7 @@ def concat_pairs(tensor_tuple0: tuple[torch.Tensor], tensor_tuple1: tuple[torch.
     Returns:
         (`tuple[torch.Tensor]`): Tuple of concatenated tensors.
     """
-    return tuple([torch.cat([tensor0, tensor1]) for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1)])
+    return tuple(torch.cat([tensor0, tensor1]) for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1))
 
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -233,7 +233,6 @@ class SuperGlueKeypointEncoder(nn.Module):
         return hidden_state, all_hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->SuperGlue
 class SuperGlueSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -261,11 +260,6 @@ class SuperGlueSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -273,58 +267,38 @@ class SuperGlueSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
-
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        use_cache = past_key_value is not None
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+        batch_size = hidden_states.shape[0]
+        key_layer = (
+            self.key(current_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(current_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if use_cache:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
-            else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
             position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
 
@@ -364,7 +338,7 @@ class SuperGlueSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (None,)
         return outputs
 
 
@@ -383,12 +357,12 @@ SUPERGLUE_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->SuperGlue,BERT->SUPERGLUE
 class SuperGlueAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         self.self = SUPERGLUE_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config, position_embedding_type=position_embedding_type
+            config,
+            position_embedding_type=position_embedding_type,
         )
         self.output = SuperGlueSelfOutput(config)
         self.pruned_heads = set()
@@ -417,18 +391,16 @@ class SuperGlueAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -545,7 +517,7 @@ class SuperGlueFinalProjection(nn.Module):
 
 @auto_docstring
 class SuperGluePreTrainedModel(PreTrainedModel):
-    config_class = SuperGlueConfig
+    config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
 
@@ -704,8 +676,10 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         if mask is not None:
             mask = mask.reshape(batch_size, 2, num_keypoints)
-            mask0 = mask[:, 0].unsqueeze(-1).expand(-1, -1, num_keypoints)
-            scores = scores.masked_fill(mask0 == 0, -1e9)
+            mask0 = mask[:, 0].unsqueeze(2)
+            mask1 = mask[:, 1].unsqueeze(1)
+            mask = torch.logical_and(mask0, mask1)
+            scores = scores.masked_fill(mask == 0, torch.finfo(scores.dtype).min)
 
         # Run the optimal transport.
         scores = log_optimal_transport(scores, self.bin_score, iterations=self.config.sinkhorn_iterations)

@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -84,6 +85,8 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_vl import *
+    from .deepseek_vl_hybrid import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
@@ -96,12 +99,15 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
     from .donut import *
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
     from .emu3 import *
@@ -109,12 +115,15 @@ if TYPE_CHECKING:
     from .encoder_decoder import *
     from .ernie import *
     from .esm import *
+    from .evolla import *
+    from .exaone4 import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
@@ -123,6 +132,7 @@ if TYPE_CHECKING:
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *
+    from .gemma3n import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -133,6 +143,7 @@ if TYPE_CHECKING:
     from .gpt_neo import *
     from .gpt_neox import *
     from .gpt_neox_japanese import *
+    from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
@@ -147,6 +158,8 @@ if TYPE_CHECKING:
     from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
+    from .hunyuan_v1_dense import *
+    from .hunyuan_v1_moe import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -230,6 +243,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .opt import *
+    from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
@@ -255,6 +269,7 @@ if TYPE_CHECKING:
     from .pvt import *
     from .pvt_v2 import *
     from .qwen2 import *
+    from .qwen2_5_omni import *
     from .qwen2_5_vl import *
     from .qwen2_audio import *
     from .qwen2_moe import *
@@ -275,9 +290,12 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
+    from .seed_oss import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
@@ -335,6 +353,7 @@ if TYPE_CHECKING:
     from .vits import *
     from .vivit import *
     from .vjepa2 import *
+    from .voxtral import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *
@@ -343,11 +362,13 @@ if TYPE_CHECKING:
     from .wavlm import *
     from .whisper import *
     from .x_clip import *
+    from .xcodec import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
     from .xlm_roberta_xl import *
     from .xlnet import *
+    from .xlstm import *
     from .xmod import *
     from .yolos import *
     from .yoso import *

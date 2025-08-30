@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-07-15.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -24,14 +25,18 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT Decoder
 
-ModernBERT Decoder is the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but trained from scratch with a causal language modeling (CLM) objective. This allows for using the same architecture for comparing encoders and decoders. This is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
+ModernBERT Decoder has the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but it is trained from scratch with a causal language modeling objective from the [Ettin paper](https://huggingface.co/papers/2507.11412). This allows for using the same architecture to compare encoders and decoders. This model is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
 
-Like the encoder version, ModernBERT Decoder incorporates modern architectural improvements such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention patterns. However, it uses causal (unidirectional) attention to enable autoregressive generation.
+ModernBERT Decoder uses sliding window attention and rotary positional embeddings for efficiency and to handle longer sequences.
+
+You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp](https://huggingface.co/collections/jhu-clsp/encoders-vs-decoders-the-ettin-suite-686303e16142257eed8e6aeb) collection.
 
 > [!TIP]
+> This model was contributed by [orionw](https://huggingface.co/orionweller).
+>
 > Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
 
-The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`] (with and without quantization), and from the command line. 
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -42,8 +47,8 @@ from transformers import pipeline
 
 generator = pipeline(
     task="text-generation",
-    model="blab-jhu/test-32m-dec",
-    torch_dtype=torch.float16,
+    model="jhu-clsp/ettin-decoder-17m",
+    dtype=torch.float16,
     device=0
 )
 generator("The future of artificial intelligence is", max_length=50, num_return_sequences=1)
@@ -51,8 +56,8 @@ generator("The future of artificial intelligence is", max_length=50, num_return_
 # For sequence classification
 classifier = pipeline(
     task="text-classification",
-    model="blab-jhu/test-32m-dec",
-    torch_dtype=torch.float16,
+    model="jhu-clsp/ettin-decoder-17m",
+    dtype=torch.float16,
     device=0
 )
 classifier("This movie is really great!")
@@ -65,15 +70,15 @@ classifier("This movie is really great!")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
+tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
 model = AutoModelForCausalLM.from_pretrained(
-    "blab-jhu/test-32m-dec",
-    torch_dtype=torch.float16,
+    "jhu-clsp/ettin-decoder-17m",
+    dtype=torch.float16,
     device_map="auto",
 )
 
 prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(
@@ -92,14 +97,14 @@ print(f"Generated text: {generated_text}")
 from transformers import AutoModelForSequenceClassification
 
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
-    "blab-jhu/test-32m-dec",
-    torch_dtype=torch.float16,
+    "jhu-clsp/ettin-decoder-17m",
+    dtype=torch.float16,
     device_map="auto",
     num_labels=2
 )
 
 text = "This movie is really great!"
-inputs = tokenizer(text, return_tensors="pt").to("cuda")
+inputs = tokenizer(text, return_tensors="pt").to(classifier_model.device)
 
 with torch.no_grad():
     outputs = classifier_model(**inputs)
@@ -111,14 +116,52 @@ print(f"Prediction probabilities: {predictions}")
 ```
 
 </hfoption>
+
+<hfoption id="AutoModel (w/quantization)">
+
+```
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+)
+
+tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-1b")
+model = AutoModelForCausalLM.from_pretrained(
+    "jhu-clsp/ettin-decoder-1b",
+    dtype=torch.float16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+prompt = "The future of artificial intelligence is"
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model.generate(
+        **inputs,
+        max_length=50,
+        num_return_sequences=1,
+        temperature=0.7,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id
+    )
+
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(f"Generated text: {generated_text}")
+```
+</hfoption>
+
 <hfoption id="transformers CLI">
 
 ```bash
-echo "The future of artificial intelligence is" | transformers run --task text-generation --model your-username/modernbert-decoder-base --device 0
+echo "The future of artificial intelligence is" | transformers run --task text-generation --model jhu-clsp/ettin-decoder-17m --device 0
 ```
 
 </hfoption>
 </hfoptions>
+
 
 ## ModernBertDecoderConfig
 
@@ -141,15 +184,6 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderForSequenceClassification
     - forward
-
-### Usage tips
-
-The ModernBertDecoder model can be fine-tuned for various text generation tasks using the HuggingFace Transformers library. It supports efficient inference with features like:
-
-- **Causal attention**: Ensures autoregressive generation by masking future tokens
-- **Sliding window attention**: Alternates between local and global attention patterns for efficiency
-- **Rotary positional embeddings**: Enables handling of longer sequences up to 8000 tokens
-- **FlashAttention support**: Optimized attention computation for faster training and inference
 
 </pt>
 </frameworkcontent>

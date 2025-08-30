@@ -25,9 +25,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
-from transformers.models.jamba.modeling_jamba import JambaAttentionDecoderLayer
+from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache, JambaAttentionDecoderLayer
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -52,6 +51,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
@@ -99,7 +99,7 @@ class BambaFlashAttentionKwargs(TypedDict, total=False):
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
-class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynamicCache):
+class HybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -114,7 +114,6 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
     """
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(config, batch_size, dtype, device)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
@@ -226,7 +225,7 @@ class BambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
 
     The are a few differences between this and Mamba2Mixer:
-    - The variable use_precomputed_states is slightly different due to the HybridCache structure
+    - The variable use_precomputed_states is slightly different due to the hybrid cache structure
     - There's a few non-obvious bugs fixed with batching in the slow path that exist in main
     - Some extra variables that our layer doesn't need have been removed
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
@@ -709,7 +708,7 @@ class BambaRMSNorm(LlamaRMSNorm):
 
 class BambaDecoderLayer(JambaAttentionDecoderLayer):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
-        super().__init__()
+        super().__init__(config, layer_idx)
 
         del self.self_attn
 
@@ -725,12 +724,13 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         else:
             raise ValueError("Invalid layer_type")
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -742,7 +742,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
+            past_key_values (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -767,7 +767,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         if self.layer_type == "mamba":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
-                cache_params=past_key_value,
+                cache_params=past_key_values,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
                 **kwargs,
@@ -778,7 +778,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -805,29 +805,19 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
 @auto_docstring
 class BambaPreTrainedModel(PreTrainedModel):
-    config_class = BambaConfig
+    config: BambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports HybridMambaAttentionDynamicCache
+    # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (BambaRMSNormGated, BambaRMSNorm)):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, BambaMixer):
+        super()._init_weights(module)
+        if isinstance(module, BambaMixer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -853,12 +843,6 @@ class BambaModel(BambaPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -927,7 +911,7 @@ class BambaModel(BambaPreTrainedModel):
                 hidden_states,
                 attention_mask=layer_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,

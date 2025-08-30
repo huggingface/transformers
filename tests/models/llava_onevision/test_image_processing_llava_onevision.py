@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
@@ -246,6 +247,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     @unittest.skip(
         reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
     )  # FIXME yoni
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         pass
 

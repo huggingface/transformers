@@ -744,7 +744,7 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GroupViTPreTrainedModel(PreTrainedModel):
-    config_class = GroupViTConfig
+    config: GroupViTConfig
     base_model_prefix = "groupvit"
     supports_gradient_checkpointing = True
 
@@ -1021,7 +1021,7 @@ class GroupViTTextTransformer(nn.Module):
 
 
 class GroupViTTextModel(GroupViTPreTrainedModel):
-    config_class = GroupViTTextConfig
+    config: GroupViTTextConfig
 
     def __init__(self, config: GroupViTTextConfig):
         super().__init__(config)
@@ -1124,7 +1124,7 @@ class GroupViTVisionTransformer(nn.Module):
 
 
 class GroupViTVisionModel(GroupViTPreTrainedModel):
-    config_class = GroupViTVisionConfig
+    config: GroupViTVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: GroupViTVisionConfig):
@@ -1174,7 +1174,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
 
 @auto_docstring
 class GroupViTModel(GroupViTPreTrainedModel):
-    config_class = GroupViTConfig
+    config: GroupViTConfig
 
     def __init__(self, config: GroupViTConfig):
         super().__init__(config)

@@ -454,7 +454,7 @@ class TimesformerEncoder(nn.Module):
 
 @auto_docstring
 class TimesformerPreTrainedModel(PreTrainedModel):
-    config_class = TimesformerConfig
+    config: TimesformerConfig
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

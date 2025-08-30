@@ -24,6 +24,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from ...utils.hub import cached_file
 from ..auto import AutoTokenizer
@@ -232,7 +233,7 @@ class BarkProcessor(ProcessorMixin):
         return_attention_mask=True,
         return_token_type_ids=False,
         **kwargs,
-    ):
+    ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
         arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
@@ -255,8 +256,9 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output of the
-            `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
+            [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.
+            If a voice preset is provided, the returned object will include a `"history_prompt"` key
+            containing a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
             if (

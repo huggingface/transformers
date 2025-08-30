@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import random
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -102,7 +101,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -173,7 +172,7 @@ class TFConv1dSubsampler(keras.layers.Layer):
 class TFSpeech2TextSinusoidalPositionalEmbedding(keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None, **kwargs):
         super().__init__(**kwargs)
         self.offset = 2
         self.embedding_dim = embedding_dim
@@ -181,7 +180,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(keras.layers.Layer):
         self.embedding_weights = self._get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
-    def _get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
+    def _get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None) -> tf.Tensor:
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
         description in Section 3.5 of "Attention Is All You Need".
@@ -214,7 +213,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(keras.layers.Layer):
 
     @staticmethod
     def create_position_ids_from_input_ids(
-        input_ids: tf.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+        input_ids: tf.Tensor, padding_idx: int, past_key_values_length: int | None = 0
     ) -> tf.Tensor:
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
@@ -271,7 +270,7 @@ class TFSpeech2TextAttention(keras.layers.Layer):
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: Optional[bool] = False,
+        training: bool | None = False,
     ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -850,7 +849,7 @@ class TFSpeech2TextEncoder(keras.layers.Layer):
             input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of floats. See [`~Speech2TextFeatureExtractor.__call__`]
@@ -1349,15 +1348,15 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[tuple, TFSeq2SeqModelOutput]:
+    ) -> tuple | TFSeq2SeqModelOutput:
         outputs = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1429,12 +1428,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         return new_embeddings
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1448,16 +1441,16 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
         **kwargs,
-    ) -> Union[tuple, TFSeq2SeqLMOutput]:
+    ) -> tuple | TFSeq2SeqLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

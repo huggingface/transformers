@@ -26,11 +26,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_tapas import TapasConfig
 
 
@@ -279,7 +281,7 @@ class TapasEmbeddings(nn.Module):
 
 
 class TapasSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -297,51 +299,64 @@ class TapasSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.is_decoder = config.is_decoder
+        self.layer_idx = layer_idx
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
+        cache_position=None,
     ):
-        mixed_query_layer = self.query(hidden_states)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
+                    curr_past_key_value = past_key_values.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_values.self_attention_cache
+            else:
+                curr_past_key_value = past_key_values
 
-        if is_cross_attention and past_key_value is not None:
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            key_layer = curr_past_key_value.layers[self.layer_idx].keys
+            value_layer = curr_past_key_value.layers[self.layer_idx].values
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = (
+                self.key(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
+            value_layer = (
+                self.value(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        if self.is_decoder:
-            past_key_value = (key_layer, value_layer)
+            if past_key_values is not None:
+                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_layer, value_layer = curr_past_key_value.update(
+                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -369,7 +384,7 @@ class TapasSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (past_key_values,)
         return outputs
 
 
@@ -389,9 +404,9 @@ class TapasSelfOutput(nn.Module):
 
 
 class TapasAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.self = TapasSelfAttention(config)
+        self.self = TapasSelfAttention(config, layer_idx=layer_idx)
         self.output = TapasSelfOutput(config)
         self.pruned_heads = set()
 
@@ -421,18 +436,18 @@ class TapasAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -471,17 +486,17 @@ class TapasOutput(nn.Module):
 
 
 class TapasLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = TapasAttention(config)
+        self.attention = TapasAttention(config, layer_idx=layer_idx)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = TapasAttention(config)
+            self.crossattention = TapasAttention(config, layer_idx=layer_idx)
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
@@ -493,28 +508,21 @@ class TapasLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
@@ -522,32 +530,22 @@ class TapasLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
+                attention_mask=encoder_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
+            outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -562,7 +560,7 @@ class TapasEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TapasLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([TapasLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -577,7 +575,18 @@ class TapasEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        cache_position=None,
     ):
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and isinstance(past_key_values, tuple):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
@@ -592,8 +601,9 @@ class TapasEncoder(nn.Module):
                 layer_head_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -680,7 +690,7 @@ class TapasOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class TapasPreTrainedModel(PreTrainedModel):
-    config_class = TapasConfig
+    config: TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
@@ -874,7 +884,7 @@ class TapasModel(TapasPreTrainedModel):
 @auto_docstring
 class TapasForMaskedLM(TapasPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
-    config_class = TapasConfig
+    config: TapasConfig
     base_model_prefix = "tapas"
 
     def __init__(self, config):

@@ -271,7 +271,7 @@ The model is ready to be pushed to the Hub now. Log in to your Hugging Face acco
 <hfoption id="huggingface-CLI">
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 </hfoption>

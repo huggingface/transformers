@@ -341,17 +341,23 @@ class YosoSelfAttention(nn.Module):
                 groups=config.num_attention_heads,
             )
 
-    def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        layer = layer.view(*new_layer_shape)
-        return layer.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         if self.use_conv:
             conv_value_layer = self.conv(value_layer * attention_mask[:, None, :, None])
@@ -633,25 +639,28 @@ class YosoOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class YosoPreTrainedModel(PreTrainedModel):
-    config_class = YosoConfig
+    config: YosoConfig
     base_model_prefix = "yoso"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, YosoLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @auto_docstring

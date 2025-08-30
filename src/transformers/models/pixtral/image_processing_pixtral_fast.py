@@ -75,6 +75,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     valid_kwargs = PixtralFastImageProcessorKwargs
 
+    model_input_names = ["pixel_values", "image_sizes"]
+
     def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 

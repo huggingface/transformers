@@ -405,22 +405,6 @@ class Kosmos2Processor(ProcessorMixin):
 
         return result
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def post_process_generation(self, text, cleanup_and_extract=True):
         caption = text.split(self.eoi_token)[-1]
         if cleanup_and_extract:
@@ -447,11 +431,10 @@ class Kosmos2Processor(ProcessorMixin):
         return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
 
     @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return tokenizer_input_names + image_processor_input_names + ["image_embeds_position_mask"]
 
     def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
         if bboxes is None or len(bboxes) == 0:

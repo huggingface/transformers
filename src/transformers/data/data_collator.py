@@ -183,7 +183,7 @@ def tf_default_data_collator(features: list[InputDataClass]) -> dict[str, Any]:
     if label_col_name is not None:
         if isinstance(first[label_col_name], tf.Tensor):
             dtype = tf.int64 if first[label_col_name].dtype.is_integer else tf.float32
-        elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
+        elif isinstance(first[label_col_name], (np.ndarray, np.generic)):
             dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
         elif isinstance(first[label_col_name], (tuple, list)):
             dtype = tf.int64 if isinstance(first[label_col_name][0], int) else tf.float32
@@ -326,8 +326,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def torch_call(self, features):
         import torch
 
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        label_name = "label" if "label" in features[0] else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0] else None
 
         no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
 
@@ -366,8 +366,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def tf_call(self, features):
         import tensorflow as tf
 
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        label_name = "label" if "label" in features[0] else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0] else None
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
             features,
@@ -396,8 +396,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         return batch
 
     def numpy_call(self, features):
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        label_name = "label" if "label" in features[0] else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0] else None
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
             features,
@@ -573,7 +573,7 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
         import torch
 
         # Take labels out of the examples beforehand, because they aren't nested.
-        label_name = "label" if "label" in examples[0].keys() else "labels"
+        label_name = "label" if "label" in examples[0] else "labels"
         labels = [example.pop(label_name) for example in examples]
 
         batch_size = len(examples)
@@ -602,7 +602,7 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     def tf_call(self, features):  # Implementation taken from the docs.
         import tensorflow as tf
 
-        label_name = "label" if "label" in features[0].keys() else "labels"
+        label_name = "label" if "label" in features[0] else "labels"
         labels = [feature.pop(label_name) for feature in features]
         batch_size = len(features)
         num_choices = len(features[0]["input_ids"])
@@ -671,8 +671,8 @@ class DataCollatorForSeq2Seq:
         if return_tensors is None:
             return_tensors = self.return_tensors
 
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        label_name = "label" if "label" in features[0] else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0] else None
         # reconvert list[None] to None if necessary
         # this might occur when we pass {..., "labels": None}
         if labels is not None and all(label is None for label in labels):

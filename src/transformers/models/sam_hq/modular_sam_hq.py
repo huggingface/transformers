@@ -186,11 +186,7 @@ class SamHQVisionLayer(SamVisionLayer):
 
 
 class SamHQPreTrainedModel(SamPreTrainedModel):
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, SamHQVisionEncoder):
-            if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+    pass
 
 
 class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
@@ -327,7 +323,7 @@ class SamHQMaskDecoder(nn.Module):
                 - (Optional) A tuple containing attention tensors if output_attentions is True.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
-        point_batch_size = sparse_prompt_embeddings.shape[1]
+        point_batch_size = sparse_prompt_embeddings.shape[1] if sparse_prompt_embeddings is not None else 1
 
         has_intermediate = intermediate_embeddings is not None and len(intermediate_embeddings) > 0
 
@@ -350,7 +346,7 @@ class SamHQMaskDecoder(nn.Module):
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if torch.any(sparse_prompt_embeddings != 0):
+        if sparse_prompt_embeddings is not None:
             tokens = torch.cat([output_tokens, sparse_prompt_embeddings], dim=2)
         else:
             tokens = output_tokens
@@ -641,8 +637,8 @@ class SamHQModel(SamModel):
         return SamHQImageSegmentationOutput(
             iou_scores=mask_decoder_output[1],
             pred_masks=mask_decoder_output[0],
-            vision_hidden_states=vision_outputs.hidden_states,
-            vision_attentions=vision_outputs.attentions,
+            vision_hidden_states=vision_outputs.hidden_states if pixel_values is not None else None,
+            vision_attentions=vision_outputs.attentions if pixel_values is not None else None,
         )
 
 

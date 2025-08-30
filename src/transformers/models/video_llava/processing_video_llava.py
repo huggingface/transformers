@@ -152,7 +152,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         data = {}
         if images is not None:
@@ -195,29 +195,6 @@ class VideoLlavaProcessor(ProcessorMixin):
         data.update(text_inputs)
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["VideoLlavaProcessor"]

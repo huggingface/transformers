@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional, Union, overload
 
 import numpy as np
 
+from transformers.audio_utils import load_audio_as
 from transformers.tokenization_utils_base import (
     LARGE_INTEGER,
     VERY_LARGE_INTEGER,
@@ -41,10 +42,12 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 if is_mistral_common_available():
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.protocol.instruct.validator import ValidationMode
-    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, TokenizerVersion
+    from mistral_common.tokens.tokenizers.image import MultiModalVersion
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.tekken import Tekkenizer
     from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
+
 
 if is_torch_available():
     import torch
@@ -1200,7 +1203,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1446,7 +1449,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             if not isinstance(message, dict):
                 return
             maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
-                "content", None
+                "content"
             )
             if not maybe_list_content or isinstance(maybe_list_content, str):
                 return
@@ -1473,12 +1476,24 @@ class MistralCommonTokenizer(PushToHubMixin):
                     else:
                         raise ValueError("Image content must be specified.")
                     normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
+                elif content_type == "audio":
+                    maybe_url: Optional[str] = content.get("url")
+                    maybe_path: Optional[str] = content.get("path")
+                    maybe_base64: Optional[str] = content.get("base64")
+                    if maybe_url or maybe_path:
+                        audio_data = load_audio_as(maybe_url or maybe_path, return_format="dict", force_mono=True)
+                        normalized_content.append({"type": "input_audio", "input_audio": audio_data})
+                        continue
+                    if not maybe_base64:
+                        raise ValueError("Audio content must be specified.")
+                    normalized_content.append({"type": "audio_url", "audio_url": {"url": maybe_base64}})
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
 
         outputs = []
         images: list[np.ndarray] = []
+        audios: list[np.ndarray] = []
 
         for conversation in conversations:
             messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
@@ -1498,6 +1513,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             else:
                 outputs.append(tokenized_request.text)
             images.extend(tokenized_request.images)
+            audios.extend([el.audio_array for el in tokenized_request.audios])
 
         if not is_batched:
             outputs = outputs[0]
@@ -1528,6 +1544,13 @@ class MistralCommonTokenizer(PushToHubMixin):
                     else:
                         raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
                     out.data["pixel_values"] = pixel_values
+                if audios:
+                    if return_tensors is not None:
+                        raise NotImplementedError(
+                            "When passing audio content in apply_chat_template, `return_tensors` must be None since we cannot batch the audio inputs. The returned audio will be a list of numpy arrays."
+                        )
+                    # Transformers convention is audio for plural audio (audio does not take a "s")
+                    out.data["audio"] = audios
                 return out
             else:
                 return out["input_ids"]
@@ -1703,7 +1726,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 exist.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -1735,12 +1758,12 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer case
-        if kwargs and not kwargs.keys() == {"_from_auto"}:
+        if kwargs and not set(kwargs.keys()).issubset({"_from_auto", "trust_remote_code"}):
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )
 
-        if not os.path.isfile(pretrained_model_name_or_path):
+        if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
                 repo_id=pretrained_model_name_or_path,
                 cache_dir=cache_dir,
@@ -1750,7 +1773,35 @@ class MistralCommonTokenizer(PushToHubMixin):
                 local_files_only=local_files_only,
             )
         else:
-            tokenizer_path = pretrained_model_name_or_path
+            valid_tokenizer_files = []
+            tokenizer_file: str
+
+            instruct_versions = list(TokenizerVersion.__members__)
+            mm_versions = list(MultiModalVersion.__members__) + [""]  # allow no mm version
+            sentencepiece_suffixes = [f".model.{v}{m}" for v in instruct_versions for m in mm_versions] + [".model"]
+
+            for path in os.listdir(pretrained_model_name_or_path):
+                pathlib_repo_file = Path(path)
+                file_name = pathlib_repo_file.name
+                suffix = "".join(pathlib_repo_file.suffixes)
+                if file_name == "tekken.json" or suffix in sentencepiece_suffixes:
+                    valid_tokenizer_files.append(file_name)
+
+            if len(valid_tokenizer_files) == 0:
+                raise ValueError(f"No tokenizer file found in directory: {pretrained_model_name_or_path}")
+            # If there are multiple tokenizer files, we use tekken.json if it exists, otherwise the versioned one.
+            if len(valid_tokenizer_files) > 1:
+                if "tekken.json" in valid_tokenizer_files:
+                    tokenizer_file = "tekken.json"
+                else:
+                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                logger.warning(
+                    f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
+                )
+            else:
+                tokenizer_file = valid_tokenizer_files[0]
+
+            tokenizer_path = os.path.join(pretrained_model_name_or_path, tokenizer_file)
 
         return cls(
             tokenizer_path=tokenizer_path,
@@ -1802,6 +1853,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
+        # `save_jinja_files`` must be skipped to be able to save from a processor
+        kwargs.pop("save_jinja_files", None)
         if kwargs:
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.save_pretrained`."

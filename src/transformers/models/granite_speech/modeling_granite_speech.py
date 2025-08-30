@@ -281,9 +281,9 @@ class GraniteSpeechCTCEncoder(nn.Module):
 
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
-    config_class = GraniteSpeechConfig
-    _supports_cache_class = True
-    _supports_flash_attn = True
+    config: GraniteSpeechConfig
+
+    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
@@ -373,10 +373,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         **lm_kwargs,
     ) -> Union[tuple[torch.Tensor], GraniteSpeechCausalLMOutputWithPast]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, audio seq len, mel feat dim)):
-            The tensors corresponding to the input audios. input features can be obtained using
-            [`AutoFeatureExtractor`]. See [`GraniteSpeechFeatureExtractor.__call__`] for details.
-            [`GraniteSpeechProcessor`] uses [`GraniteSpeechFeatureExtractor`] for processing audio.
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

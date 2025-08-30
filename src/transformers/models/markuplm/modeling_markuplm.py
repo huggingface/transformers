@@ -32,15 +32,9 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    ALL_ATTENTION_FUNCTIONS,
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_markuplm import MarkupLMConfig
 
 
@@ -378,17 +372,11 @@ class MarkupLMSelfAttention(nn.Module):
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.attention_head_size**-0.5
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -446,17 +434,11 @@ class MarkupLMAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -482,17 +464,11 @@ class MarkupLMLayer(GradientCheckpointingLayer):
         self.intermediate = MarkupLMIntermediate(config)
         self.output = MarkupLMOutput(config)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -527,20 +503,12 @@ class MarkupLMEncoder(nn.Module):
         self.layer = nn.ModuleList([MarkupLMLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_values", version="4.54.0")
-    @deprecate_kwarg("use_cache", version="4.54.0")
     @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -579,7 +547,7 @@ class MarkupLMEncoder(nn.Module):
 
 @auto_docstring
 class MarkupLMPreTrainedModel(PreTrainedModel):
-    config_class = MarkupLMConfig
+    config: MarkupLMConfig
     base_model_prefix = "markuplm"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM
@@ -741,15 +709,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring

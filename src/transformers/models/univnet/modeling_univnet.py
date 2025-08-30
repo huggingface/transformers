@@ -426,7 +426,7 @@ class UnivNetLvcBlock(nn.Module):
 
 @auto_docstring
 class UnivNetModel(PreTrainedModel):
-    config_class = UnivNetConfig
+    config: UnivNetConfig
     main_input_name = "input_features"
 
     def __init__(self, config: UnivNetConfig):
@@ -478,9 +478,6 @@ class UnivNetModel(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
-        input_features (`torch.FloatTensor`):
-            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
         noise_sequence (`torch.FloatTensor`, *optional*):
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
             sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,

@@ -56,29 +56,15 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class DiaPreTrainedModel(PreTrainedModel):
-    config_class = DiaConfig
+    config: DiaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DiaRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class DiaMultiChannelEmbedding(nn.Module):
@@ -121,11 +107,11 @@ class DiaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class DiaSelfAttention(LlamaAttention, nn.Module):
+class DiaSelfAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], layer_idx: int, is_causal: bool = False):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
@@ -182,8 +168,8 @@ class DiaCrossAttention(nn.Module):
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.cross_attention_cache.key_cache[self.layer_idx]
-            value_states = past_key_values.cross_attention_cache.value_cache[self.layer_idx]
+            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
@@ -556,9 +542,6 @@ class DiaModel(DiaPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -617,7 +600,7 @@ class DiaModel(DiaPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

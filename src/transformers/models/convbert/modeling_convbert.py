@@ -232,7 +232,7 @@ class ConvBertEmbeddings(nn.Module):
 
 @auto_docstring
 class ConvBertPreTrainedModel(PreTrainedModel):
-    config_class = ConvBertConfig
+    config: ConvBertConfig
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
@@ -325,11 +325,6 @@ class ConvBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -338,8 +333,7 @@ class ConvBertSelfAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-        batch_size = hidden_states.size(0)
+        batch_size, seq_length, _ = hidden_states.shape
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -353,9 +347,16 @@ class ConvBertSelfAttention(nn.Module):
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states.transpose(1, 2))
         mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        mixed_query_layer = self.query(hidden_states)
+        query_layer = mixed_query_layer.view(
+            batch_size, -1, self.num_attention_heads, self.attention_head_size
+        ).transpose(1, 2)
+        key_layer = mixed_key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
+        value_layer = mixed_value_layer.view(
+            batch_size, -1, self.num_attention_heads, self.attention_head_size
+        ).transpose(1, 2)
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)

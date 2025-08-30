@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -100,7 +99,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -1470,7 +1469,7 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: Optional[tf.Tensor] = None
+    last_hidden_state: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor, ...] | None = None
     attentions: tuple[tf.Tensor, ...] | None = None
     global_attentions: tuple[tf.Tensor, ...] | None = None
@@ -1533,7 +1532,7 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: Optional[tf.Tensor] = None
+    last_hidden_state: tf.Tensor | None = None
     past_key_values: list[tf.Tensor] | None = None
     decoder_hidden_states: tuple[tf.Tensor, ...] | None = None
     decoder_attentions: tuple[tf.Tensor, ...] | None = None
@@ -1600,7 +1599,7 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: Optional[tf.Tensor] = None
+    logits: tf.Tensor | None = None
     past_key_values: list[tf.Tensor] | None = None
     decoder_hidden_states: tuple[tf.Tensor, ...] | None = None
     decoder_attentions: tuple[tf.Tensor, ...] | None = None
@@ -1731,7 +1730,7 @@ class TFLEDEncoder(keras.layers.Layer):
         config: LEDConfig
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = keras.layers.Dropout(config.dropout)
@@ -1908,9 +1907,7 @@ class TFLEDEncoder(keras.layers.Layer):
         # undo padding
         if output_attentions:
             all_attentions = (
-                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
-                if padding_len > 0
-                else all_attentions
+                tuple(state[:, :, :-padding_len, :] for state in all_attentions) if padding_len > 0 else all_attentions
             )
 
         if output_hidden_states:
@@ -2001,7 +1998,7 @@ class TFLEDDecoder(keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -2253,7 +2250,7 @@ class TFLEDMainLayer(keras.layers.Layer):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
-        encoder_outputs: Optional[Union[tuple, TFLEDEncoderBaseModelOutput]] = None,
+        encoder_outputs: tuple | TFLEDEncoderBaseModelOutput | None = None,
         global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
@@ -2509,7 +2506,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: TFLEDEncoderBaseModelOutput | None = None,
         global_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: tuple[tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: bool | None = None,

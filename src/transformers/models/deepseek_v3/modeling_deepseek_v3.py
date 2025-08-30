@@ -17,12 +17,13 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_deepseek_v3 import DeepseekV3Config
 
@@ -49,6 +50,8 @@ class DeepseekV3RMSNorm(nn.Module):
 
 
 class DeepseekV3RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: DeepseekV3Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -369,12 +372,13 @@ class DeepseekV3Attention(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -407,10 +411,10 @@ class DeepseekV3Attention(nn.Module):
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
@@ -453,17 +457,18 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
@@ -471,7 +476,7 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -489,7 +494,7 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class DeepseekV3PreTrainedModel(PreTrainedModel):
-    config_class = DeepseekV3Config
+    config: DeepseekV3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV3DecoderLayer"]
@@ -497,9 +502,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
@@ -507,19 +510,9 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DeepseekV3RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DeepseekV3TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
+        super()._init_weights(module)
+        if isinstance(module, DeepseekV3TopkRouter):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -542,12 +535,6 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -568,7 +555,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -596,7 +583,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -624,24 +611,6 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -658,11 +627,6 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -708,4 +672,13 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["DeepseekV3PreTrainedModel", "DeepseekV3Model", "DeepseekV3ForCausalLM"]
+class DeepseekV3ForSequenceClassification(GenericForSequenceClassification, DeepseekV3PreTrainedModel):
+    pass
+
+
+__all__ = [
+    "DeepseekV3PreTrainedModel",
+    "DeepseekV3Model",
+    "DeepseekV3ForCausalLM",
+    "DeepseekV3ForSequenceClassification",
+]

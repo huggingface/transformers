@@ -128,12 +128,13 @@ class JanusImageProcessor(BaseImageProcessor):
         if image_mean is None:
             self.background_color = (127, 127, 127)
         else:
-            self.background_color = tuple([int(x * 255) for x in image_mean])
+            self.background_color = tuple(int(x * 255) for x in image_mean)
 
     def resize(
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
+        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -145,6 +146,10 @@ class JanusImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
+            size (`dict[str, int]` or `int`):
+                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -163,6 +168,7 @@ class JanusImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -194,7 +200,7 @@ class JanusImageProcessor(BaseImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
+            background_color=background_color,
             input_data_format=input_data_format,
         )
         return image
@@ -274,6 +280,7 @@ class JanusImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

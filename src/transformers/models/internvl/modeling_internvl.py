@@ -36,14 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    torch_int,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
@@ -173,7 +166,7 @@ class InternVLVisionAttention(nn.Module):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config_class = InternVLVisionConfig
+    config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -185,20 +178,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InternVLVisionEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, InternVLVisionEmbeddings):
             module.cls_token.data.zero_()
             if module.mask_token is not None:
                 module.mask_token.data.zero_()
@@ -516,28 +497,17 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
-    config_class = InternVLConfig
+    config: InternVLConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 class InternVLMultiModalProjector(nn.Module):
@@ -634,6 +604,7 @@ class InternVLModel(InternVLPreTrainedModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -660,6 +631,30 @@ class InternVLModel(InternVLPreTrainedModel):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         return vision_features
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -706,24 +701,10 @@ class InternVLModel(InternVLPreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -843,14 +824,11 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.get_decoder
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
@@ -866,7 +844,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -911,7 +889,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "OpenGVLab/InternVL3-1B-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [

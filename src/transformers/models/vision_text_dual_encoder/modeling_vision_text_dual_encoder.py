@@ -44,7 +44,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class VisionTextDualEncoderModel(PreTrainedModel):
-    config_class = VisionTextDualEncoderConfig
+    config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -366,9 +366,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         }
 
         # remove vision, text kwargs from kwargs
-        for key in kwargs_vision.keys():
+        for key in kwargs_vision:
             del kwargs["vision_" + key]
-        for key in kwargs_text.keys():
+        for key in kwargs_text:
             del kwargs["text_" + key]
 
         # Load and initialize the vision and text model

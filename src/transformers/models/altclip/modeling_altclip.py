@@ -33,7 +33,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -205,17 +204,11 @@ class AltRobertaSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -319,17 +312,11 @@ class AltRobertaAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -384,17 +371,11 @@ class AltRobertaLayer(GradientCheckpointingLayer):
         self.intermediate = AltRobertaIntermediate(config)
         self.output = AltRobertaOutput(config)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -429,20 +410,12 @@ class AltRobertaEncoder(nn.Module):
         self.layer = nn.ModuleList([AltRobertaLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_values", version="4.54.0")
-    @deprecate_kwarg("use_cache", version="4.54.0")
     @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -837,7 +810,7 @@ class AltCLIPVisionEmbeddings(nn.Module):
 
 @auto_docstring
 class AltCLIPPreTrainedModel(PreTrainedModel):
-    config_class = AltCLIPConfig
+    config: AltCLIPConfig
     base_model_prefix = "altclip"
     supports_gradient_checkpointing = True
     _no_split_module = []
@@ -941,7 +914,7 @@ class AltCLIPVisionTransformer(nn.Module):
 
 
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
-    config_class = AltCLIPVisionConfig
+    config: AltCLIPVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: AltCLIPVisionConfig):
@@ -999,11 +972,11 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
     Kaiser and Illia Polosukhin.
 
-    .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
+    .. _*Attention is all you need*: https://huggingface.co/papers/1706.03762
     """
 )
 class AltRobertaModel(AltCLIPPreTrainedModel):
-    config_class = AltCLIPTextConfig
+    config: AltCLIPTextConfig
 
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
@@ -1036,10 +1009,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
-    @deprecate_kwarg("past_key_values", version="4.54.0")
-    @deprecate_kwarg("use_cache", version="4.54.0")
     @auto_docstring
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
@@ -1050,10 +1019,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1121,7 +1086,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
 
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
-    config_class = AltCLIPTextConfig
+    config: AltCLIPTextConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1139,8 +1104,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         return super().resize_token_embeddings(new_num_tokens)
 
-    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
-    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1151,8 +1114,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1208,7 +1169,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
 
 class AltCLIPModel(AltCLIPPreTrainedModel):
-    config_class = AltCLIPConfig
+    config: AltCLIPConfig
 
     def __init__(self, config: AltCLIPConfig):
         super().__init__(config)
@@ -1226,6 +1187,8 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
 
         text_config = config.text_config
         vision_config = config.vision_config
+        # The module using it is not a PreTrainedModel subclass so we need this
+        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.project_dim

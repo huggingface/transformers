@@ -16,6 +16,7 @@ import unittest
 import warnings
 
 import numpy as np
+import pytest
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput
@@ -261,6 +262,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
+    @pytest.mark.torch_compile_test
     def test_decorator_compiled(self):
         """Test that the can_return_tuple decorator works with compiled mode."""
         config = PretrainedConfig()
@@ -277,6 +279,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         output = compiled_model(torch.tensor(10), return_dict=False)
         self.assertIsInstance(output, tuple)
 
+    @pytest.mark.torch_export_test
     def test_decorator_torch_export(self):
         """Test that the can_return_tuple decorator works with torch.export."""
         config = PretrainedConfig()

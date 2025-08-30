@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging, torch_int
+from ...utils import auto_docstring, can_return_tuple, logging, torch_int
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -79,7 +79,7 @@ class InternVLVisionRMSNorm(LlamaRMSNorm):
 
 class InternVLVisionAttention(JanusVisionAttention):
     def __init__(self, config: InternVLVisionConfig):
-        super().__init__()
+        super().__init__(config)
         del self.num_key_value_groups
 
         # Needed for flash attention
@@ -135,7 +135,7 @@ class InternVLVisionAttention(JanusVisionAttention):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config_class = InternVLVisionConfig
+    config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -147,20 +147,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InternVLVisionEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, InternVLVisionEmbeddings):
             module.cls_token.data.zero_()
             if module.mask_token is not None:
                 module.mask_token.data.zero_()
@@ -466,16 +454,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    pass
 
 
 INTERNVL_INPUTS_DOCSTRING = None
@@ -565,6 +544,7 @@ class InternVLModel(LlavaModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -637,24 +617,10 @@ class InternVLModel(LlavaModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -695,7 +661,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "OpenGVLab/InternVL3-1B-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [

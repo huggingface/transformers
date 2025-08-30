@@ -337,7 +337,7 @@ python examples/pytorch/summarization/run_summarization.py
 すべてのスクリプトは、最終的なモデルを [Model Hub](https://huggingface.co/models) にアップロードできます。開始する前に Hugging Face にログインしていることを確認してください。
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 次に、スクリプトに `push_to_hub` 引数を追加します。この引数は、Hugging Face のユーザー名と `output_dir` で指定したフォルダ名でリポジトリを作成します。

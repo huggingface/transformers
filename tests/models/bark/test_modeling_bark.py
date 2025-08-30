@@ -934,7 +934,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -943,11 +943,11 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict["input_ids"][:1]
@@ -991,7 +991,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1000,13 +1000,13 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 

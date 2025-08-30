@@ -16,6 +16,7 @@ import importlib.metadata
 import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import (
@@ -127,9 +128,7 @@ class Bnb4BitTest(Base4bitTest):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=torch.float16, device_map="auto"
-        )
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
 
     def tearDown(self):
@@ -270,6 +269,33 @@ class Bnb4BitTest(Base4bitTest):
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_clear_quantization_trace(self):
+        r"""
+        Test that dequantizing the model won't leave any attribute relative to quantization in the model's configuration
+        """
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+        model_4bit.dequantize()
+
+        self.assertFalse(hasattr(model_4bit, "hf_quantizer"))
+        self.assertFalse(hasattr(model_4bit.config, "quantization_config"))
+        self.assertFalse(hasattr(model_4bit.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(model_4bit, "quantization_method"))
+        self.assertFalse(model_4bit.is_quantized)
+
+    def test_to_device_dequantized(self):
+        r"""
+        Test that dequantizing the model won't prevent converting it to a different dtype
+        """
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+        model_4bit.dequantize()
+        model_4bit.to(dtype=torch.float16)
 
     def test_device_assignment(self):
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
@@ -511,7 +537,7 @@ class Pipeline4BitTest(Base4bitTest):
                 "device_map": "auto",
                 "load_in_4bit": True,
                 # float16 isn't supported on CPU, use bfloat16 instead
-                "torch_dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
+                "dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
             },
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
@@ -699,7 +725,7 @@ class BaseSerializationTest(unittest.TestCase):
         d1 = dict(model_1.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
 
-        for k in d0.keys():
+        for k in d0:
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)
@@ -822,6 +848,7 @@ class Bnb4bitCompile(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 

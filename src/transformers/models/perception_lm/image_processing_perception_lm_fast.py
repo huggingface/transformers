@@ -37,7 +37,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
 )
@@ -51,14 +51,22 @@ if is_torchvision_available():
 
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
+        Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for
+        multi-scale processing, otherwise uses single tile for lower memory usage.
+    tile_size (`int`, *optional*, defaults to `448`):
+        Height and width dimension (in pixels) of each tile used for image processing.
+    max_num_tiles (`int`, *optional*, defaults to `36`):
+        Maximum number of tiles an image can be split into based on its aspect ratio.
+    """
+
     vision_input_type: str = "thumb+tile"
     tile_size: int = 448
     max_num_tiles: int = 36
 
 
-@add_start_docstrings(
-    "Constructs a fast PerceptionLM image processor.",
-)
+@auto_docstring
 class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
@@ -73,6 +81,10 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     @staticmethod
     def _factors(n: int):
@@ -206,7 +218,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         closest_aspect_ratio = None
         if target_aspect_ratio >= 1:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k <= target_aspect_ratio],
+                [k for k in asp_dict if k <= target_aspect_ratio],
                 key=lambda x: abs(x - target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
@@ -214,7 +226,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             return max(tiles_given_aspect_ratio, key=lambda x: x[0])
         else:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k > target_aspect_ratio],
+                [k for k in asp_dict if k > target_aspect_ratio],
                 key=lambda x: abs(1 / x - 1 / target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
@@ -260,6 +272,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         do_normalize: Optional[bool],
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        vision_input_type: str,
         tile_size: int,
         max_num_tiles: int,
         return_tensors: Optional[Union[str, TensorType]],
@@ -271,7 +284,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                if self.vision_input_type == "thumb+tile":
+                if vision_input_type == "thumb+tile":
                     thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
                     images_for_tiling, (tiles_w, tiles_h) = self.resize(
                         stacked_images, tile_size, max_num_tiles=max_num_tiles
@@ -298,7 +311,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
+        processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

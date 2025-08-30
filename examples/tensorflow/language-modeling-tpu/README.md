@@ -35,7 +35,7 @@ python train_unigram.py --batch_size 1000 --vocab_size 25000 --export_to_hub
 
 The script will automatically load the `train` split of the WikiText dataset and train a [Unigram tokenizer](https://huggingface.co/course/chapter6/7?fw=pt) on it.
 
-> 💡 **Note**: In order for `export_to_hub` to work, you must authenticate yourself with the `huggingface-cli`. Run `huggingface-cli login` and follow the on-screen instructions.
+> 💡 **Note**: In order for `export_to_hub` to work, you must authenticate yourself with the `hf`. Run `hf auth login` and follow the on-screen instructions.
 
 ## Preparing the dataset
 

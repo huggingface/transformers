@@ -96,10 +96,44 @@ class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
 
 
 class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -134,13 +168,45 @@ class PerceptionLMModel(LlavaModel):
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
-    def check_mask_feature_size_match(self, media_mask, media_features):
-        media_token_count = media_mask.sum()
-        media_feature_size = media_features.size()[:-1].numel()
-        if media_token_count != media_feature_size:
-            raise ValueError(
-                f"The number of tokens in the media mask ({media_token_count}) does not match the number of features in the media features ({media_feature_size}. Features shape: {media_features.shape})"
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.size()[:-1].numel()}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.size()[:-1].numel()}"
+            )
+
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring
@@ -160,41 +226,6 @@ class PerceptionLMModel(LlavaModel):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
-        """
-        Forward pass of the PerceptionLM model.
-
-        Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
-
-        Returns:
-            [`PerceptionLMModelOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMModelOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -211,24 +242,20 @@ class PerceptionLMModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values.to(inputs_embeds),
+            image_features = self.get_image_features(pixel_values=pixel_values)
+            image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            self.check_mask_feature_size_match(special_image_mask, image_features)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
         if pixel_values_videos is not None:
-            video_features = self.get_image_features(
-                pixel_values=pixel_values_videos.to(inputs_embeds),
+            video_features = self.get_image_features(pixel_values=pixel_values_videos)
+            video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
-            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            self.check_mask_feature_size_match(special_video_mask, video_features)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            video_features = video_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
@@ -308,43 +335,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
-        """
-        Forward pass for the PerceptionLMForConditionalGeneration model.
-
-        Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            labels (`torch.LongTensor`, *optional*):
-                Labels for computing the language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
-
-        Returns:
-            [`PerceptionLMCausalLMOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMCausalLMOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

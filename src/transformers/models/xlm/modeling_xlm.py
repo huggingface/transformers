@@ -16,7 +16,6 @@
 PyTorch XLM model.
 """
 
-import itertools
 import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
@@ -27,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu, get_activation
+from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -494,13 +494,12 @@ class XLMSequenceSummary(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    NEW_ID = itertools.count()
-
-    def __init__(self, n_heads, dim, config):
+    def __init__(self, n_heads, dim, config, layer_idx: int = 0):
         super().__init__()
-        self.layer_id = next(MultiHeadAttention.NEW_ID)
+        self.layer_id = layer_idx
         self.dim = dim
         self.n_heads = n_heads
+        self.head_dim = dim // n_heads
         self.dropout = config.attention_dropout
         assert self.dim % self.n_heads == 0
 
@@ -525,50 +524,57 @@ class MultiHeadAttention(nn.Module):
         self.dim = attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, input, mask, kv=None, cache=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        input,
+        mask,
+        kv=None,
+        cache=None,
+        head_mask=None,
+        output_attentions=False,
+        cache_position=None,
+    ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = input.size()
-        if kv is None:
-            klen = qlen if cache is None else cache["slen"] + qlen
-        else:
-            klen = kv.size(1)
-        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
-        n_heads = self.n_heads
-        dim_per_head = self.dim // n_heads
-        mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
+        is_cross_attention = kv is not None
+        mask_reshape = (bs, 1, qlen, -1) if mask.dim() == 3 else (bs, 1, 1, -1)
 
-        def shape(x):
-            """projection"""
-            return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
-
-        def unshape(x):
-            """compute context"""
-            return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
-
-        q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
-        if kv is None:
-            k = shape(self.k_lin(input))  # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(input))  # (bs, n_heads, qlen, dim_per_head)
-        elif cache is None or self.layer_id not in cache:
-            k = v = kv
-            k = shape(self.k_lin(k))  # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(v))  # (bs, n_heads, qlen, dim_per_head)
-
+        q = self.q_lin(input).view(bs, -1, self.n_heads, self.head_dim).transpose(1, 2)
         if cache is not None:
-            if self.layer_id in cache:
-                if kv is None:
-                    k_, v_ = cache[self.layer_id]
-                    k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
-                    v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_id)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = cache.cross_attention_cache
                 else:
-                    k, v = cache[self.layer_id]
-            cache[self.layer_id] = (k, v)
+                    curr_past_key_value = cache.self_attention_cache
+            else:
+                curr_past_key_value = cache
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        current_states = kv if is_cross_attention else input
+        if is_cross_attention and cache is not None and is_updated:
+            # reuse k,v, cross_attentions
+            k = curr_past_key_value.key_cache[self.layer_id]
+            v = curr_past_key_value.value_cache[self.layer_id]
+        else:
+            k = self.k_lin(current_states)
+            v = self.v_lin(current_states)
+            k = k.view(bs, -1, self.n_heads, self.head_dim).transpose(1, 2)
+            v = v.view(bs, -1, self.n_heads, self.head_dim).transpose(1, 2)
+
+            if cache is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                k, v = curr_past_key_value.update(k, v, self.layer_id, {"cache_position": cache_position})
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    cache.is_updated[self.layer_id] = True
+
+        q = q / math.sqrt(self.head_dim)  # (bs, n_heads, qlen, head_dim)
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
         mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
         scores.masked_fill_(mask, torch.finfo(scores.dtype).min)  # (bs, n_heads, qlen, klen)
@@ -580,8 +586,8 @@ class MultiHeadAttention(nn.Module):
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
-        context = unshape(context)  # (bs, qlen, dim)
+        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
+        context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
 
         outputs = (self.out_lin(context),)
         if output_attentions:
@@ -612,7 +618,7 @@ class TransformerFFN(nn.Module):
 
 @auto_docstring
 class XLMPreTrainedModel(PreTrainedModel):
-    config_class = XLMConfig
+    config: XLMConfig
     load_tf_weights = None
     base_model_prefix = "transformer"
 
@@ -734,8 +740,8 @@ class XLMModel(XLMPreTrainedModel):
         #     self.layer_norm15 = nn.ModuleList()
         #     self.encoder_attn = nn.ModuleList()
 
-        for _ in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config))
+        for i in range(self.n_layers):
+            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i))
             self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
@@ -785,6 +791,7 @@ class XLMModel(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # Dummy kwargs for now
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -801,12 +808,8 @@ class XLMModel(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -821,45 +824,41 @@ class XLMModel(XLMPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        if cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+
+        if isinstance(cache, tuple):
+            cache = EncoderDecoderCache.from_legacy_cache(cache)
+
         if lengths is None:
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
                 lengths = torch.tensor([slen] * bs, device=device)
-        # mask = input_ids != self.pad_index
 
         # check inputs
         assert lengths.size(0) == bs
         assert lengths.max().item() <= slen
-        # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
-        # assert (src_enc is None) == (src_len is None)
-        # if src_enc is not None:
-        #     assert self.is_decoder
-        #     assert src_enc.size(0) == bs
 
         # generate masks
         mask, attn_mask = get_masks(slen, lengths, self.causal, padding_mask=attention_mask)
-        # if self.is_decoder and src_enc is not None:
-        #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
         # position_ids
         if position_ids is None:
             position_ids = self.position_ids[:, :slen]
         else:
             assert position_ids.size() == (bs, slen)  # (slen, bs)
-            # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             assert langs.size() == (bs, slen)  # (slen, bs)
-            # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layers)
 
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
-            _slen = slen - cache["slen"]
+            _slen = slen - cache.get_seq_length()
             input_ids = input_ids[:, -_slen:]
             position_ids = position_ids[:, -_slen:]
             if langs is not None:
@@ -894,6 +893,7 @@ class XLMModel(XLMPreTrainedModel):
                 cache=cache,
                 head_mask=head_mask[i],
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             attn = attn_outputs[0]
             if output_attentions:
@@ -901,13 +901,6 @@ class XLMModel(XLMPreTrainedModel):
             attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
             tensor = self.layer_norm1[i](tensor)
-
-            # encoder attention (for decoder only)
-            # if self.is_decoder and src_enc is not None:
-            #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-            #     tensor = tensor + attn
-            #     tensor = self.layer_norm15[i](tensor)
 
             # FFN
             tensor = tensor + self.ffns[i](tensor)
@@ -917,13 +910,6 @@ class XLMModel(XLMPreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
-
-        # update cache length
-        if cache is not None:
-            cache["slen"] += tensor.size(1)
-
-        # move back sequence length to dimension 0
-        # tensor = tensor.transpose(0, 1)
 
         if not return_dict:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
@@ -1026,6 +1012,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
@@ -1042,12 +1029,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
@@ -1068,6 +1051,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1134,12 +1118,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1248,12 +1228,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1355,12 +1331,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels whether a question has an answer or no answer (SQuAD 2.0)
         cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1476,12 +1448,8 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -1587,12 +1555,8 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-
-            The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the

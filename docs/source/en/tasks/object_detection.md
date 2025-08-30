@@ -146,7 +146,7 @@ To get an even better understanding of the data, visualize an example in the dat
 >>> annotations = cppe5["train"][2]["objects"]
 >>> draw = ImageDraw.Draw(image)
 
->>> categories = cppe5["train"].features["objects"].feature["category"].names
+>>> categories = cppe5["train"].features["objects"]["category"].feature.names
 
 >>> id2label = {index: x for index, x in enumerate(categories, start=0)}
 >>> label2id = {v: k for k, v in id2label.items()}
@@ -1488,9 +1488,9 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
 ```py
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> from transformers import infer_device
+
+>>> device = infer_device()
 >>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)

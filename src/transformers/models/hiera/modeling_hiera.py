@@ -791,7 +791,7 @@ def unroll(
 
 @auto_docstring
 class HieraPreTrainedModel(PreTrainedModel):
-    config_class = HieraConfig
+    config: HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

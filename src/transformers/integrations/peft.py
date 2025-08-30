@@ -131,7 +131,7 @@ class PeftAdapterMixin:
 
             token (`str`, `optional`):
                 Whether to use authentication token to load the remote folder. Useful to load private repositories
-                that are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to
+                that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
                 cache it.
             device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
@@ -577,7 +577,7 @@ class PeftAdapterMixin:
         import torch
 
         pipeline = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
+            "stabilityai/stable-diffusion-xl-base-1.0", dtype=torch.float16
         ).to("cuda")
         pipeline.load_lora_weights(
             "jbilcke-hf/sdxl-cinematic-1", weight_name="pytorch_lora_weights.safetensors", adapter_names="cinematic"

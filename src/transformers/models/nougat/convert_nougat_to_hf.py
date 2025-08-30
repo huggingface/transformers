@@ -100,7 +100,7 @@ def rename_key(name):
 
 # Copied from transformers.models.donut.convert_donut_to_pytorch.convert_state_dict
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:

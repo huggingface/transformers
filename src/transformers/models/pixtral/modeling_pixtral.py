@@ -58,6 +58,8 @@ class PixtralRotaryEmbedding(nn.Module):
     a corresponding positional embedding, based on its index in the grid.
     """
 
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config, device=None):
         super().__init__()
         self.rope_type = "default"
@@ -400,7 +402,7 @@ class PixtralTransformer(nn.Module):
 
 @auto_docstring
 class PixtralPreTrainedModel(PreTrainedModel):
-    config_class = PixtralVisionConfig
+    config: PixtralVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

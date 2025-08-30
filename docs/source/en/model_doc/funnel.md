@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Funnel Transformer
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -88,11 +88,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 
 [[autodoc]] models.funnel.modeling_funnel.FunnelForPreTrainingOutput
 
-[[autodoc]] models.funnel.modeling_tf_funnel.TFFunnelForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
-
 ## FunnelBaseModel
 
 [[autodoc]] FunnelBaseModel
@@ -132,49 +127,3 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 
 [[autodoc]] FunnelForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFFunnelBaseModel
-
-[[autodoc]] TFFunnelBaseModel
-    - call
-
-## TFFunnelModel
-
-[[autodoc]] TFFunnelModel
-    - call
-
-## TFFunnelModelForPreTraining
-
-[[autodoc]] TFFunnelForPreTraining
-    - call
-
-## TFFunnelForMaskedLM
-
-[[autodoc]] TFFunnelForMaskedLM
-    - call
-
-## TFFunnelForSequenceClassification
-
-[[autodoc]] TFFunnelForSequenceClassification
-    - call
-
-## TFFunnelForMultipleChoice
-
-[[autodoc]] TFFunnelForMultipleChoice
-    - call
-
-## TFFunnelForTokenClassification
-
-[[autodoc]] TFFunnelForTokenClassification
-    - call
-
-## TFFunnelForQuestionAnswering
-
-[[autodoc]] TFFunnelForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

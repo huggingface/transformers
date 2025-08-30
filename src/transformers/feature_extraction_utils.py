@@ -27,9 +27,9 @@ import numpy as np
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
-    cached_file,
     copy_func,
     download_url,
     is_flax_available,
@@ -44,6 +44,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.hub import cached_files
 
 
 if TYPE_CHECKING:
@@ -311,7 +312,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -405,7 +406,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -505,9 +506,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_feature_extractor_file = cached_file(
+                resolved_feature_extractor_files = cached_files(
                     pretrained_model_name_or_path,
-                    feature_extractor_file,
+                    filenames=[feature_extractor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -517,7 +518,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
+                    _raise_exceptions_for_missing_entries=False,
                 )
+                resolved_feature_extractor_file = resolved_feature_extractor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -536,6 +539,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
+            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

@@ -124,7 +124,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 )
 @auto_docstring
 class CsmPreTrainedModel(PreTrainedModel):
-    config_class = CsmConfig
+    config: CsmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
@@ -133,9 +133,8 @@ class CsmPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     # does not because of Mimi codec model
     # _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": CsmDecoderLayer,
@@ -143,26 +142,16 @@ class CsmPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, CsmCodebooksHead):
+        super()._init_weights(module)
+        if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=std)
-        elif isinstance(module, CsmRMSNorm):
-            module.weight.data.fill_(1.0)
+                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
 class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
-    config_class = CsmDepthDecoderConfig
+    config: CsmDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -198,7 +187,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -242,7 +231,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -296,12 +285,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         del self.lm_head
         self.codebooks_head = CsmCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
         self.model = CsmDepthDecoderModel(config)
-
-    def get_output_embeddings(self):
-        raise AttributeError("Not needed for Csm")
-
-    def set_output_embeddings(self, new_embeddings):
-        raise AttributeError("Not needed for Csm")
 
     def prepare_inputs_for_generation(
         self,
@@ -458,12 +441,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
@@ -657,7 +634,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             the input_values_cutoffs would be: [[l1, 2 * l1], [l2, -1]].
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[config.audio_token_id, -100, -101]`.
-            Requires targeted `input_values` to be provided as audio tokens will be infered from it using the `codec_model`.
+            Requires targeted `input_values` to be provided as audio tokens will be inferred from it using the `codec_model`.
             - `config.audio_token_id` indicates an audio frames (considering sequence length elements as frames)
             - `-100` will be ignored in the loss computation
             - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)

@@ -469,7 +469,7 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SiglipPreTrainedModel(PreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
 
@@ -622,7 +622,6 @@ class SiglipTextTransformer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, config.projection_size)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @can_return_tuple
     @auto_docstring
@@ -649,7 +648,10 @@ class SiglipTextTransformer(nn.Module):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        uses_flash_attention = "flash" in self.config._attn_implementation
+        if uses_flash_attention:
+            attention_mask = None
+        elif attention_mask is not None and not uses_flash_attention:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -681,7 +683,7 @@ class SiglipTextTransformer(nn.Module):
     """
 )
 class SiglipTextModel(SiglipPreTrainedModel):
-    config_class = SiglipTextConfig
+    config: SiglipTextConfig
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -809,7 +811,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class SiglipVisionModel(SiglipPreTrainedModel):
-    config_class = SiglipVisionConfig
+    config: SiglipVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SiglipVisionConfig):
@@ -863,7 +865,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
 @auto_docstring
 class SiglipModel(SiglipPreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
 
     def __init__(self, config: SiglipConfig):
         super().__init__(config)

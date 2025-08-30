@@ -68,7 +68,7 @@ GenerationConfig {
 - `max_new_tokens`: 생성할 최대 토큰 수입니다. 즉, 프롬프트에 있는 토큰을 제외한 출력 시퀀스의 크기입니다. 출력의 길이를 중단 기준으로 사용하는 대신, 전체 생성물이 일정 시간을 초과할 때 생성을 중단하기로 선택할 수도 있습니다. 더 알아보려면 [`StoppingCriteria`]를 확인하세요.
 - `num_beams`: 1보다 큰 수의 빔을 지정함으로써, 탐욕 탐색(greedy search)에서 빔 탐색(beam search)으로 전환하게 됩니다. 이 전략은 각 시간 단계에서 여러 가설을 평가하고 결국 전체 시퀀스에 대해 가장 높은 확률을 가진 가설을 선택합니다. 이는 초기 토큰의 확률이 낮아 탐욕 탐색에 의해 무시되었을 높은 확률의 시퀀스를 식별할 수 있는 장점을 가집니다.
 - `do_sample`: 이 매개변수를 `True`로 설정하면, 다항 샘플링, 빔 탐색 다항 샘플링, Top-K 샘플링 및 Top-p 샘플링과 같은 디코딩 전략을 활성화합니다. 이러한 전략들은 전체 어휘에 대한 확률 분포에서 다음 토큰을 선택하며, 전략별로 특정 조정이 적용됩니다.
-- `num_return_sequences`: 각 입력에 대해 반환할 시퀀스 후보의 수입니다. 이 옵션은 빔 탐색(beam search)의 변형과 샘플링과 같이 여러 시퀀스 후보를 지원하는 디코딩 전략에만 사용할 수 있습니다. 탐욕 탐색(greedy search)과 대조 탐색(contrastive search) 같은 디코딩 전략은 단일 출력 시퀀스를 반환합니다.
+- `num_return_sequences`: 각 입력에 대해 반환할 시퀀스 후보의 수입니다. 이 옵션은 빔 탐색(beam search)의 변형과 샘플링과 같이 여러 시퀀스 후보를 지원하는 디코딩 전략에만 사용할 수 있습니다. 탐욕 탐색(greedy search) 같은 디코딩 전략은 단일 출력 시퀀스를 반환합니다.
 
 ## 모델에 사용자 정의 디코딩 전략 저장[[save-a-custom-decoding-strategy-with-your-model]]
 
@@ -163,27 +163,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 >>> outputs = model.generate(**inputs)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
-```
-
-### 대조 탐색(Contrastive search)[[contrastive-search]]
-
-2022년 논문 [A Contrastive Framework for Neural Text Generation](https://huggingface.co/papers/2202.06417)에서 제안된 대조 탐색 디코딩 전략은 반복되지 않으면서도 일관된 긴 출력을 생성하는 데 있어 우수한 결과를 보였습니다. 대조 탐색이 작동하는 방식을 알아보려면 [이 블로그 포스트](https://huggingface.co/blog/introducing-csearch)를 확인하세요. 대조 탐색의 동작을 가능하게 하고 제어하는 두 가지 주요 매개변수는 `penalty_alpha`와 `top_k`입니다:
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-
->>> prompt = "Hugging Face Company is"
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
-in the business and our customer service is second to none.\n\nIf you have any questions about our
-products or services, feel free to contact us at any time. We look forward to hearing from you!']
 ```
 
 ### 다항 샘플링(Multinomial sampling)[[multinomial-sampling]]
@@ -289,7 +268,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 culture, and they allow us to design the'
 ```
 
-이 가이드에서는 다양한 디코딩 전략을 가능하게 하는 주요 매개변수를 보여줍니다. [`generate`] 메서드에 대한 고급 매개변수가 존재하므로 [`generate`] 메서드의 동작을 더욱 세부적으로 제어할 수 있습니다. 사용 가능한 매개변수의 전체 목록은 [API 문서](./main_classes/text_generation.md)를 참조하세요.
+이 가이드에서는 다양한 디코딩 전략을 가능하게 하는 주요 매개변수를 보여줍니다. [`generate`] 메서드에 대한 고급 매개변수가 존재하므로 [`generate`] 메서드의 동작을 더욱 세부적으로 제어할 수 있습니다. 사용 가능한 매개변수의 전체 목록은 [API 문서](./main_classes/text_generation)를 참조하세요.
 
 ### 추론 디코딩(Speculative Decoding)[[speculative-decoding]]
 

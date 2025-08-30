@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, TypedDict, Union
 
 import torch
 import torch.nn.functional as F
@@ -33,7 +33,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
@@ -44,6 +46,31 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
 
 
 class GraniteMoeSharedMLP(nn.Module):
@@ -355,12 +382,13 @@ class GraniteMoeSharedAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # None or rope embeddings
@@ -380,10 +408,10 @@ class GraniteMoeSharedAttention(nn.Module):
         if position_embeddings is not None:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -420,18 +448,19 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         self.residual_multiplier = config.residual_multiplier
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -445,7 +474,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             output_router_logits (`bool`, *optional*):
@@ -455,8 +484,8 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs. Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
 
@@ -467,7 +496,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -487,6 +516,8 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         else:
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
 
+        del moe_hidden_states
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
@@ -502,33 +533,25 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
-    config_class = GraniteMoeSharedConfig
+    config: GraniteMoeSharedConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GraniteMoeSharedRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GraniteMoeSharedParallelExperts):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeSharedParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class GraniteMoeSharedRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GraniteMoeSharedConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -589,12 +612,6 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -609,6 +626,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -636,7 +654,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -671,7 +689,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -897,8 +915,8 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
+            .expand((num_hidden_layers, batch_size, sequence_length, routing_weights.shape[1]))
+            .reshape(-1, routing_weights.shape[1])
             .to(compute_device)
         )
 
@@ -907,7 +925,11 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    device_index = routing_weights.device.index if routing_weights.device.index is not None else 0
+    rank = routing_weights.shape[1] * int(device_index)
+    overall_loss = torch.sum(
+        tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
+    )
     return overall_loss * num_experts
 
 
@@ -926,24 +948,6 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @auto_docstring
     def forward(
@@ -1007,6 +1011,7 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
             output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         # Only compute necessary logits
@@ -1053,15 +1058,6 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]

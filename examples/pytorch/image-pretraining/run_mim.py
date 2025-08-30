@@ -12,6 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "torch>=1.5.0",
+#     "torchvision>=0.6.0",
+#     "datasets>=1.8.0",
+# ]
+# ///
+
 import logging
 import os
 import sys
@@ -47,7 +56,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.54.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -157,7 +166,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -302,7 +311,7 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in ds else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = ds["train"].train_test_split(data_args.train_val_split)
         ds["train"] = split["train"]

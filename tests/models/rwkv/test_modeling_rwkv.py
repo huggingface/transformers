@@ -238,7 +238,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):
@@ -440,7 +440,7 @@ class RWKVIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = RwkvForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = RwkvForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

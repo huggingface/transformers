@@ -234,9 +234,7 @@ class IdeficsProcessor(ProcessorMixin):
         )
 
         self.tokenizer_was_trained_with_end_of_utterance_token = (
-            True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
-            else False
+            "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
@@ -402,7 +400,7 @@ class IdeficsProcessor(ProcessorMixin):
             last_was_text = False
             for i, item in enumerate(sample):
                 if i > 0:
-                    last_was_text = True if not last_was_image else False
+                    last_was_text = bool(not last_was_image)
 
                 if isinstance(item, str):
                     item = item.strip(" ")
@@ -520,25 +518,11 @@ class IdeficsProcessor(ProcessorMixin):
             }
         )
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
 __all__ = ["IdeficsProcessor"]

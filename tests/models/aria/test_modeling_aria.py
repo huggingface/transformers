@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -137,8 +138,8 @@ class AriaVisionText2TextModelTester:
 
     def get_config(self):
         return AriaConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.to_dict(),
+            vision_config=self.vision_config.to_dict(),
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
@@ -211,6 +212,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         pass
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -224,10 +226,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Unstable test")
     def test_initialization(self):
-        pass
-
-    @unittest.skip(reason="Unstable test")
-    def test_dola_decoding_sample(self):
         pass
 
     @unittest.skip(reason="Dynamic control flow due to MoE")

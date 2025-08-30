@@ -528,14 +528,14 @@ class Phi4MultimodalVisionEncoderLayer(SiglipEncoderLayer):
 
 class Phi4MultimodalVisionEncoder(SiglipEncoder):
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.layers = nn.ModuleList(
             [Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
 
 
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
 
@@ -582,9 +582,9 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
+class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.patch_size = config.patch_size
         self.num_patches_per_side = config.image_size // self.patch_size
@@ -649,7 +649,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttention
 
 
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
@@ -702,7 +702,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self.config._attn_implementation == "flash_attention_2"
+                if self.config._attn_implementation != "flash_attention_2"
                 else patch_attention_mask
             )
 
@@ -1117,7 +1117,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalAudioConfig
+    config: Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
@@ -1125,19 +1125,8 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+        super()._init_weights(module)
+        if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
             module.b1.data.zero_()
             module.b2.data.zero_()
 
@@ -1460,23 +1449,13 @@ class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Phi4MultimodalRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Phi4MultimodalImageEmbedding):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Phi4MultimodalImageEmbedding):
             module.global_img_feature_extensor.data.zero_()
             module.sub_img_feature_extensor.data.zero_()
 
 
-class Phi4MultimodalModel(Phi3Model, nn.Module):
+class Phi4MultimodalModel(Phi3Model):
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1535,7 +1514,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1577,7 +1556,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -1591,7 +1570,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         )
 
 
-class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
+class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

@@ -102,7 +102,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
+        do_convert_rgb: Optional[bool] = True,
         do_pan_and_scan: Optional[bool] = None,
         pan_and_scan_min_crop_size: Optional[int] = None,
         pan_and_scan_max_num_crops: Optional[int] = None,
@@ -302,7 +302,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
-            do_pan_and_scan (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+            do_pan_and_scan (`bool`, *optional*, defaults to `self.do_pan_and_scan`):
                 Whether to apply `pan_and_scan` to images.
             pan_and_scan_min_crop_size (`int`, *optional*, defaults to `self.pan_and_scan_min_crop_size`):
                 Minimum size of each crop in pan and scan.
@@ -334,6 +334,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             else self.pan_and_scan_min_ratio_to_activate
         )
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
