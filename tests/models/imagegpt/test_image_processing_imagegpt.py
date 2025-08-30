@@ -23,7 +23,7 @@ from datasets import load_dataset
 
 from transformers import AutoImageProcessor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -35,6 +35,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ImageGPTImageProcessor
+
+    if is_torchvision_available():
+        from transformers import ImageGPTImageProcessorFast
 
 
 class ImageGPTImageProcessingTester:
@@ -94,6 +97,7 @@ class ImageGPTImageProcessingTester:
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ImageGPTImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -104,50 +108,54 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "clusters"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "clusters"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_to_json_string(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        obj = json.loads(image_processor.to_json_string())
-        for key, value in self.image_processor_dict.items():
-            if key == "clusters":
-                self.assertTrue(np.array_equal(value, obj[key]))
-            else:
-                self.assertEqual(obj[key], value)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            obj = json.loads(image_processor.to_json_string())
+            for key, value in self.image_processor_dict.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, obj[key]))
+                else:
+                    self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
-        image_processor_first = self.image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processor_list:
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            json_file_path = os.path.join(tmpdirname, "image_processor.json")
-            image_processor_first.to_json_file(json_file_path)
-            image_processor_second = self.image_processing_class.from_json_file(json_file_path).to_dict()
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                json_file_path = os.path.join(tmpdirname, "image_processor.json")
+                image_processor_first.to_json_file(json_file_path)
+                image_processor_second = image_processing_class.from_json_file(json_file_path).to_dict()
 
-        image_processor_first = image_processor_first.to_dict()
-        for key, value in image_processor_first.items():
-            if key == "clusters":
-                self.assertTrue(np.array_equal(value, image_processor_second[key]))
-            else:
-                self.assertEqual(value, value)
+            image_processor_first = image_processor_first.to_dict()
+            for key, value in image_processor_first.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, image_processor_second[key]))
+                else:
+                    self.assertEqual(image_processor_first[key], value)
 
     def test_image_processor_from_and_save_pretrained(self):
         for image_processing_class in self.image_processor_list:
-            image_processor_first = self.image_processing_class(**self.image_processor_dict)
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processor_first.save_pretrained(tmpdirname)
-                image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
+                image_processor_second = image_processing_class.from_pretrained(tmpdirname).to_dict()
 
             image_processor_first = image_processor_first.to_dict()
             for key, value in image_processor_first.items():
@@ -181,43 +189,45 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pil(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            )
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_numpy(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            )
 
     @unittest.skip(reason="ImageGPT assumes clusters for 3 channels")
     def test_call_numpy_4_channels(self):
@@ -225,25 +235,83 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pytorch(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
 
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape),
-            (self.image_processor_tester.batch_size, *expected_output_image_shape),
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+            )
+
+    def test_slow_fast_equivalence(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processing class not available")
+
+        for image_processing_class in self.image_processor_list:
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(
+                image_inputs[0], return_tensors="pt"
+            )
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs[0], return_tensors="pt"
+            )
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # For quantization-based processors, use absolute tolerance only to avoid infinity issues
+            # when one value is 0 and the other is 1. The rtol=0 prevents relative tolerance calculation.
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
+
+            # Test batched
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs, return_tensors="pt"
+            )
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # Once again using absolute tolerance only to avoid infinity issues
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
+
+    def test_slow_fast_equivalence_batched(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processing class not available")
+
+        for image_processing_class in self.image_processor_list:
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test batched
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs, return_tensors="pt"
+            )
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # For quantization-based processors, use absolute tolerance only to avoid infinity issues
+            # when one value is 0 and the other is 1. The rtol=0 prevents relative tolerance calculation.
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
 
 
 def prepare_images():
