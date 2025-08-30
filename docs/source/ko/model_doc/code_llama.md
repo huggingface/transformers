@@ -22,16 +22,16 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# CodeLlama
+# CodeLlama[[codellama]]
 
-[Code Llama](https://huggingface.co/papers/2308.12950) is a specialized family of large language models based on [Llama 2](./llama2) for coding tasks.  It comes in different flavors - general code, Python-specific, and instruction-following variant - all available in 7B, 13B, 34B, and 70B parameters. Code Llama models can generate, explain, and even fill in missing parts of your code (called "infilling"). It can also handle very long contexts with stable generation up to 100k tokens, even though it was trained on sequences of 16K tokens.
+[Code Llama](https://huggingface.co/papers/2308.12950)는 코딩 작업을 위해 [Llama 2](./llama2)를 기반으로 한 특화된 대규모 언어 모델 제품군입니다. 일반 코드, Python 전용, 명령어 수행 변형 등 다양한 버전으로 제공되며, 모두 7B, 13B, 34B, 70B 매개변수로 사용할 수 있습니다. Code Llama 모델은 코드를 생성하고, 설명하며, 코드의 누락된 부분을 채울 수도 있습니다("infilling"이라고 함). 16K 토큰의 시퀀스로 훈련되었지만, 최대 100k 토큰까지 안정적인 생성이 가능한 매우 긴 컨텍스트를 처리할 수 있습니다.
 
-You can find all the original Code Llama checkpoints under the [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) collection.
+[Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) 컬렉션에서 모든 원본 Code Llama 체크포인트를 찾을 수 있습니다.
 
 > [!TIP]
-> Click on the Code Llama models in the right sidebar for more examples of how to apply Code Llama to different coding tasks.
+> 다양한 코딩 작업에 Code Llama를 적용하는 방법에 대한 더 많은 예시를 보려면 오른쪽 사이드바의 Code Llama 모델을 클릭하세요.
 
-The example below demonstrates how to generate code with [`Pipeline`], or the [`AutoModel`], and from the command line.
+아래 예시는 [`Pipeline`], [`AutoModel`], 그리고 명령줄에서 코드를 생성하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -47,7 +47,7 @@ pipe = pipeline(
     device_map=0
 )
 
-# basic code generation
+# 기본 코드 생성
 result = pipe("# Function to calculate the factorial of a number\ndef factorial(n):", max_new_tokens=256)
 print(result[0]['generated_text'])
 
@@ -71,7 +71,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa"
 )
 
-# basic code generation
+# 기본 코드 생성
 prompt = "# Function to calculate the factorial of a number\ndef factorial(n):"
 input_ids = tokenizer(prompt, return_tensors="pt").to("cuda")
 
@@ -101,9 +101,9 @@ echo -e "# Function to calculate the factorial of a number\ndef factorial(n):" |
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대규모 모델의 메모리 부담을 줄입니다. 더 많은 사용 가능한 양자화 백엔드는 [양자화](../quantization/overview) 개요를 참조하세요.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
+아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 가중치를 4비트로만 양자화합니다.
 
 ```py
 # pip install bitsandbytes
@@ -126,7 +126,7 @@ output = model.generate(**input_ids, max_new_tokens=200, cache_implementation="s
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139)를 사용하여 모델이 어떤 토큰에 주의를 기울일 수 있고 없는지 더 잘 이해할 수 있습니다.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
@@ -140,10 +140,10 @@ visualizer("""def func(a, b):
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/codellama-attn-mask.png"/>
 </div>
 
-## Notes
+## 참고사항[[notes]]
 
-- Infilling is only available in the 7B and 13B base models, and not in the Python, Instruct, 34B, or 70B models.
-- Use the `<FILL_ME>` token where you want your input to be filled. The tokenizer splits this token to create a formatted input string that follows the [original training pattern](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402). This is more robust than preparing the pattern yourself.
+- 채우기 기능은 7B 및 13B 기반 모델에서만 사용할 수 있으며, Python, Instruct, 34B 또는 70B 모델에서는 사용할 수 없습니다.
+- 입력을 채우고 싶은 위치에 `<FILL_ME>` 토큰을 사용하세요. 토크나이저는 이 토큰을 분할하여 [원본 훈련 패턴](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402)을 따르는 형식화된 입력 문자열을 생성합니다. 이는 패턴을 직접 준비하는 것보다 더 견고합니다.
     ```py
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
@@ -159,9 +159,9 @@ visualizer("""def func(a, b):
     filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens = True)[0]
     print(PROMPT.replace("<FILL_ME>", filling))
     ```
-- Use `bfloat16` for further training or fine-tuning and `float16` for inference.
-- The `BOS` character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
-- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, “Banana”), the tokenizer doesn’t prepend the prefix space to the string.
+- 추가 훈련이나 미세 조정에는 `bfloat16`을 사용하고 추론에는 `float16`을 사용하세요.
+- `BOS` 문자는 접두사나 접미사를 인코딩할 때 채우기에 사용되지 않으며, 각 프롬프트의 시작 부분에서만 사용됩니다.
+- 토크나이저는 [SentencePiece](https://github.com/google/sentencepiece)를 기반으로 한 바이트 쌍 인코딩 모델입니다. 디코딩 중에 첫 번째 토큰이 단어의 시작인 경우(예: "Banana"), 토크나이저는 문자열에 접두사 공백을 추가하지 않습니다.
 
 ## CodeLlamaTokenizer
 
