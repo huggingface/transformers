@@ -607,6 +607,8 @@
         title: LED
       - local: in_translation
         title: LFM2
+      - local: in_translation
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
