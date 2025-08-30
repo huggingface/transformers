@@ -123,6 +123,11 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
+[[autodoc]] LogitProcessorRegistry
+    - register
+    - get_processor_class
+    - create_processor
+
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
