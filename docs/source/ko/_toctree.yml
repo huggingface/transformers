@@ -507,7 +507,7 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: in_translation
+      - local: model_doc/deepseek_v3
         title: DeepSeek-V3
       - local: in_translation
         title: DialoGPT
