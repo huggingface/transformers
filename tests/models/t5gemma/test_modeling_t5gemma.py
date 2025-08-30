@@ -1012,7 +1012,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_text_config().decoder
+            text_config = config.get_text_config(decoder=True)
             num_decoder_layers = text_config.num_hidden_layers
 
             if custom_all_cache_shapes is None:
@@ -1693,3 +1693,6 @@ class TestAsymmetricT5Gemma(unittest.TestCase):
     def test_defaulting_to_symmetry(self):
         model = self.build_model_and_check_forward_pass(num_hidden_layers=2, encoder_num_hidden_layers=2)
         assert len(model.decoder.layers) == len(model.encoder.layers) == 2
+
+
+# TODO: add integration tests (and compare vs 1st commit); check if we can remove test overwrites above

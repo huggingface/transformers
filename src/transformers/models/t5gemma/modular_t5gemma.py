@@ -207,10 +207,6 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, *args, **kwargs):
-        # Always return self, regardless of the decoder option.
-        return self
-
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
@@ -668,7 +664,10 @@ class T5GemmaDecoder(T5GemmaEncoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            past_key_values = EncoderDecoderCache(
+                DynamicCache(config=self.config.get_text_config(decoder=True)),  # self-attention cache
+                DynamicCache(config=self.config.get_text_config(encoder=True)),  # cross-attention cache
+            )
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(

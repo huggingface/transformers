@@ -1037,7 +1037,7 @@ class GenerationMixin(ContinuousMixin):
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    self.config.get_text_config().vocab_size,
+                    self.config.get_text_config(decoder=True).vocab_size,
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
@@ -1300,7 +1300,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.watermarking_config is not None:
             processors.append(
                 generation_config.watermarking_config.construct_processor(
-                    self.config.get_text_config().vocab_size, device
+                    self.config.get_text_config(decoder=True).vocab_size, device
                 )
             )
 
@@ -1479,7 +1479,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(-1, self.config.get_text_config().vocab_size, scores.shape[-1])
+            scores = scores.reshape(-1, self.config.get_text_config(decoder=True).vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 
@@ -1493,7 +1493,7 @@ class GenerationMixin(ContinuousMixin):
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_text_config(decoder=True).vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
@@ -1526,7 +1526,10 @@ class GenerationMixin(ContinuousMixin):
         doc_reference = (
             "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
         )
-        if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+        if (
+            self.config.get_text_config(decoder=True).vocab_size
+            == assistant_model.config.get_text_config(decoder=True).vocab_size
+        ):
             if assistant_tokenizer is not None:
                 raise ValueError(
                     f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
@@ -2001,11 +2004,17 @@ class GenerationMixin(ContinuousMixin):
         # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
-            model_kwargs[cache_name] = (
-                DynamicCache(**dynamic_cache_kwargs)
-                if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(**dynamic_cache_kwargs), DynamicCache(**dynamic_cache_kwargs))
-            )
+            if not requires_cross_attention_cache:
+                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+            else:
+                # For encoder-decoder models, we need to use separate configs for encoder and decoder
+                decoder_cache_kwargs = {}
+                encoder_cache_kwargs = {}
+                decoder_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+                encoder_cache_kwargs["config"] = self.config.get_text_config(encoder=True)
+                model_kwargs[cache_name] = EncoderDecoderCache(
+                    DynamicCache(**decoder_cache_kwargs), DynamicCache(**encoder_cache_kwargs)
+                )
 
     def _supports_logits_to_keep(self) -> bool:
         """
@@ -3259,7 +3268,7 @@ class GenerationMixin(ContinuousMixin):
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = self.config.get_text_config().vocab_size
+            vocab_size = self.config.get_text_config(decoder=True).vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
