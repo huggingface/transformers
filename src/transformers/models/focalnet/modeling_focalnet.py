@@ -885,6 +885,8 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     """
 )
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
         super()._init_backbone(config)

@@ -290,6 +290,7 @@ class MllamaProcessor(ProcessorMixin):
 
         n_images_in_images = [0]
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 

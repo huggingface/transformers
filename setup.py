@@ -122,7 +122,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
-    "jieba",
     "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
@@ -152,7 +151,7 @@ _deps = [
     "pydantic>=2",
     "pytest>=7.2.0",
     "pytest-asyncio",
-    "pytest-rerunfailures",
+    "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
     "pytest-order",
@@ -189,7 +188,7 @@ _deps = [
     "timeout-decorator",
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
-    "tokenizers>=0.21,<0.22",
+    "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
     "torchvision",
@@ -445,7 +444,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api")
+extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -463,7 +462,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.56.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.57.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

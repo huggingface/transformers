@@ -51,7 +51,7 @@ MODALITY_INPUT_DATA = {
     ],
     "videos": [
         "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
-        ["https://www.ilankelman.org/stopsigns/australia.jpg", "https://www.ilankelman.org/stopsigns/australia.jpg"],
+        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
     ],
     "audio": [
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
@@ -216,6 +216,36 @@ class ProcessorTesterMixin:
                     # tokenizer repr contains model-path from where we loaded
                     if "tokenizer" not in attribute:
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
+
+    def test_processor_from_and_save_pretrained_as_nested_dict(self):
+        processor_first = self.get_processor()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Save with `legacy_serialization=False` so that all attrbiutes are saved in one json file
+            saved_files = processor_first.save_pretrained(tmpdirname, legacy_serialization=False)
+            check_json_file_has_correct_format(saved_files[0])
+
+            # Load it back and check if loaded correctly
+            processor_second = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
+
+            # Try to load each attribute separately from saved directory
+            for attribute in processor_first.attributes:
+                attribute_class_name = getattr(processor_first, f"{attribute}_class")
+                if isinstance(attribute_class_name, tuple):
+                    if attribute == "image_processor":
+                        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
+                        attribute_class_name = attribute_class_name[0]
+                    else:
+                        attribute_class_name = attribute_class_name[-1]
+
+                attribute_class = processor_class_from_name(attribute_class_name)
+                attribute_reloaded = attribute_class.from_pretrained(tmpdirname)
+                attribute_first = getattr(processor_first, attribute)
+
+                # tokenizer repr contains model-path from where we loaded
+                if "tokenizer" not in attribute:
+                    self.assertEqual(repr(attribute_first), repr(attribute_reloaded))
 
     def test_model_input_names(self):
         processor = self.get_processor()
@@ -973,11 +1003,11 @@ class ProcessorTesterMixin:
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extracttor", MODALITY_INPUT_DATA["audio"]
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
 
     @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])  # video processor supports only torchvision
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
@@ -1082,8 +1112,8 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
 
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
+        # Load video as a list of frames (i.e. images).
+        # NOTE: each frame should have same size because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
@@ -1100,6 +1130,19 @@ class ProcessorTesterMixin:
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
 
     @require_librosa
     @require_av

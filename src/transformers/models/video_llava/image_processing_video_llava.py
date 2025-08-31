@@ -257,6 +257,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
+            images = self.fetch_images(images)
             images = make_list_of_images(images)
 
         if images is not None and not valid_images(images):

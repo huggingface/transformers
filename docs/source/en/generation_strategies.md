@@ -225,29 +225,6 @@ outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=to
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
-
-### Contrastive search
-
-[Contrastive search](https://huggingface.co/papers/2202.06417) is a decoding strategy that aims to reduce repetition even while generating longer sequences. This strategy compares how similar a generated token is against previous tokens, and if they're more similar, a penalty is applied.
-
-Enable contrastive search with the `penalty_alpha` and `top_k` parameters. The `penalty_alpha` manages the penalty applied and `top_k` is the number of most likely tokens to return.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company that provides a platform for building and deploying AI models.\nHugging Face is an open-source company that provides a platform for building and deploying AI models. The platform allows developers to build and deploy AI models, as well as collaborate with other developers.\nHugging Face was founded in 2019 by Thibault Wittemberg and Clément Delangue. The company is based in Paris, France.\nHugging Face has'
-```
-
 ### Diverse beam search
 
 [Diverse beam search](https://hf.co/papers/1610.02424) is a variant of beam search that produces more diverse output candidates to choose from. This strategy measures the dissimilarity of sequences and a penalty is applied if sequences are too similar. To avoid high computation costs, the number of beams is divided into groups.
