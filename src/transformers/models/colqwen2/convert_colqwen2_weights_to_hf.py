@@ -203,6 +203,12 @@ if __name__ == "__main__":
         help="Name or path of the original VLM backbone model",
         default=None,
     )
+    parser.add_argument(
+        "--using_qwen2_5",
+        help="Whether the original VLM backbone is Qwen2.5",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
 
     convert_colqwen2_weights_to_hf(
@@ -211,4 +217,5 @@ if __name__ == "__main__":
         push_to_hub=args.push_to_hub,
         revision=args.revision,
         original_vlm_name_or_path=args.original_vlm_name_or_path,
+        using_qwen2_5=args.using_qwen2_5
     )
