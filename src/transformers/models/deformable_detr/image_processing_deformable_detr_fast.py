@@ -306,17 +306,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        self.size = get_size_dict(size, default_to_square=False)
 
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
@@ -594,13 +586,6 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead."
             )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
 
         return super().preprocess(images, annotations, masks_path, **kwargs)
 
