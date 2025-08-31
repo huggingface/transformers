@@ -42,17 +42,13 @@ class AudioFlamingo3Processor(ProcessorMixin):
             )
 
         # Prefer "<root>/llm", fallback to "<root>/model/llm"
-        llm_dir = os.path.join(root, "tokenizer")
-        if not os.path.isdir(llm_dir):
-            alt = os.path.join(root, "model", "tokenizer")
-            llm_dir = alt if os.path.isdir(alt) else llm_dir
-        if not os.path.isdir(llm_dir):
+        if not os.path.isdir(root):
             raise FileNotFoundError(f"Tokenizer folder 'tokenizer' not found under: {root}")
 
         # Load components
         fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-large-v3")
         tok = AutoTokenizer.from_pretrained(
-            llm_dir,
+            root,
             padding_side="right",
             use_fast=True,
             legacy=False,

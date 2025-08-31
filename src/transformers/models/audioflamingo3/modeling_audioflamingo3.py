@@ -479,7 +479,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self.sound_mm_projector = AudioFlamingo3MultiModalProjector(config)
 
         # tokenizer is fine
-        self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
+        self.tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, padding_side="right", use_fast=True, legacy=False)
         self.tokenizer.media_tokens = config.media_tokens
 
     def _embed_text_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
