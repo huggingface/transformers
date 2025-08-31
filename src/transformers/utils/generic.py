@@ -974,21 +974,21 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache")
-        if use_cache is None:
-            use_cache = getattr(self.config, "use_cache", False)
+        use_cache = (
+            kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
+        )
+        if use_cache is not None:
+            if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                )
+                use_cache = False
+
+            kwargs["use_cache"] = use_cache
 
         return_dict = kwargs.pop("return_dict", None)
         if return_dict is None:
             return_dict = getattr(self.config, "return_dict", True)
-
-        if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        kwargs["use_cache"] = use_cache
 
         all_args = kwargs.copy()
         if "kwargs" in all_args:

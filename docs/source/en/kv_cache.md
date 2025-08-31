@@ -227,7 +227,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 
 messages = []
 for prompt in user_prompts:

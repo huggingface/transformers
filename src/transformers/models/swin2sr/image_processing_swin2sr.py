@@ -137,7 +137,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of typ, input_data_format=input_data_formate
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of typ, input_data_format=input_data_format
                   `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.

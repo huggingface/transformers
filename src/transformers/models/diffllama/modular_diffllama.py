@@ -23,6 +23,7 @@ from torch import nn
 
 from ...cache_utils import Cache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import GemmaForCausalLM
@@ -408,7 +409,7 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = False
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DiffLlamaAttention):
             module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
             module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
