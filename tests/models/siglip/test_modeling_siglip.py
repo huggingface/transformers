@@ -97,14 +97,14 @@ class SiglipVisionModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
+        image_size=4,
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=64,
+        hidden_size=4,
         num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
+        num_attention_heads=2,
+        intermediate_size=3,
         dropout=0.1,
         attention_dropout=0.1,
         initializer_range=0.02,
@@ -258,6 +258,13 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
+        """over 10000
+        tests/models/siglip/test_modeling_siglip.py::SiglipVisionModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask - ValueError: mean relative difference for hidden_states: 4.628e+05, torch atol = 0.01, torch rtol = 0.01
+        tests/models/siglip/test_modeling_siglip.py::SiglipVisionModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask - ValueError: mean relative difference for hidden_states: 4.342e+05, torch atol = 0.01, torch rtol = 0.01
+        tests/models/siglip/test_modeling_siglip.py::SiglipVisionModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask - ValueError: mean relative difference for hidden_states: 6.922e+05, torch atol = 0.01, torch rtol = 0.01
+        tests/models/siglip/test_modeling_siglip.py::SiglipVisionModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask - ValueError: mean relative difference for hidden_states: 6.595e+05, torch atol = 0.01, torch rtol = 0.01
+        """
+
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
 
@@ -271,10 +278,10 @@ class SiglipTextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=64,
+        hidden_size=4,
         num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
+        num_attention_heads=2,
+        intermediate_size=3,
         dropout=0.1,
         attention_dropout=0.1,
         max_position_embeddings=512,
