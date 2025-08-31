@@ -213,7 +213,7 @@ class MetaClip2Attention(nn.Module):
         queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        # META_CLIP2 text model uses both `causal_attention_mask` and `attention_mask`
+        # METACLIP_2 text model uses both `causal_attention_mask` and `attention_mask`
         # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
         if self.config._attn_implementation == "flash_attention_2":
             self.is_causal = causal_attention_mask is not None
@@ -538,7 +538,7 @@ class MetaClip2TextTransformer(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The text model from META_CLIP2 without any head or projection on top.
+    The text model from METACLIP_2 without any head or projection on top.
     """
 )
 class MetaClip2TextModel(MetaClip2PreTrainedModel):
@@ -775,12 +775,12 @@ class MetaClip2Output(ModelOutput):
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/2021-03-07-meta_clip2.html
+# https://sachinruk.github.io/blog/2021-03-07-metaclip_2.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-def meta_clip2_loss(similarity: torch.Tensor) -> torch.Tensor:
+def metaclip_2_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
@@ -898,7 +898,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use META_CLIP2 model's config for some fields (if specified) instead of those of vision & text components.
+        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -947,7 +947,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use META_CLIP2 model's config for some fields (if specified) instead of those of vision & text components.
+        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1004,7 +1004,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use META_CLIP2 model's config for some fields (if specified) instead of those of vision & text components.
+        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1043,7 +1043,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = meta_clip2_loss(logits_per_text)
+            loss = metaclip_2_loss(logits_per_text)
 
         return MetaClip2Output(
             loss=loss,
@@ -1106,7 +1106,7 @@ class MetaClip2VisionTransformer(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The vision model from META_CLIP2 without any head or projection on top.
+    The vision model from METACLIP_2 without any head or projection on top.
     """
 )
 class MetaClip2VisionModel(MetaClip2PreTrainedModel):
@@ -1317,7 +1317,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    META_CLIP2 vision encoder with an image classification head on top (a linear layer on top of the pooled final hidden states of
+    METACLIP_2 vision encoder with an image classification head on top (a linear layer on top of the pooled final hidden states of
     the patch tokens) e.g. for ImageNet.
     """
 )

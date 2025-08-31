@@ -73,7 +73,7 @@ class MetaClip2TextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "meta_clip2_text_model"
+    model_type = "metaclip_2_text_model"
     base_config_key = "text_config"
 
     def __init__(
@@ -90,7 +90,7 @@ class MetaClip2TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        # This differs from `MetaClip2Tokenizer`'s default and from openai/meta_clip2
+        # This differs from `MetaClip2Tokenizer`'s default and from openai/metaclip_2
         # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
         pad_token_id=1,
         bos_token_id=49406,
@@ -168,7 +168,7 @@ class MetaClip2VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "meta_clip2_vision_model"
+    model_type = "metaclip_2_vision_model"
     base_config_key = "vision_config"
 
     def __init__(
@@ -251,7 +251,7 @@ class MetaClip2Config(PretrainedConfig):
     >>> config = MetaClip2Config.from_text_vision_configs(config_text, config_vision)
     ```"""
 
-    model_type = "meta_clip2"
+    model_type = "metaclip_2"
     sub_configs = {"text_config": MetaClip2TextConfig, "vision_config": MetaClip2VisionConfig}
 
     def __init__(
