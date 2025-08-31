@@ -699,6 +699,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             generation_config.bos_token_id = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
         if generation_config.eos_token_id is None:
             generation_config.eos_token_id = [self.tokenizer.eos_token_id]
+        generation_config.do_sample = False
         generation_config.max_new_tokens = 2048
         return generation_config
 

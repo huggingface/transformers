@@ -1,13 +1,10 @@
 import math
-import os
 from collections import defaultdict
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 import torch
-from ... import AutoTokenizer, WhisperFeatureExtractor, AutoConfig
 from ...processing_utils import ProcessorMixin
-from ...utils.hub import snapshot_download
 
 __all__ = ["AudioFlamingo3Processor"]
 
@@ -16,51 +13,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        path: str,
-        *,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        local_files_only: bool = False,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-    ):
-        # Resolve to local dir (supports HF repo id)
-        root = os.path.expanduser(path)
-        if not os.path.isdir(root):
-            root = snapshot_download(
-                repo_id=path,
-                revision=revision,
-                token=token,
-                local_files_only=local_files_only,
-                cache_dir=cache_dir,
-            )
-
-        # Prefer "<root>/llm", fallback to "<root>/model/llm"
-        if not os.path.isdir(root):
-            raise FileNotFoundError(f"Tokenizer folder 'tokenizer' not found under: {root}")
-
-        # Load components
-        fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-large-v3")
-        tok = AutoTokenizer.from_pretrained(
-            root,
-            padding_side="right",
-            use_fast=True,
-            legacy=False,
-        )
-
-        config = AutoConfig.from_pretrained(path)
-        # Post-init tweaks
-        tok.media_tokens = config.media_tokens
-        for _, t in tok.media_tokens.items():
-            tok.add_tokens([t], special_tokens=True)
-
-        return cls(fe, tok)
 
     def _tokenize_conversation(
         self,
@@ -168,8 +120,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         media.append(sound)
         media_meta["sound_feature_masks"].append(audio_feature_masks)
         media_meta["sound_embed_masks"].append(audio_embed_masks)
-        final_text += self.tokenizer.media_tokens["sound"] * len(sound)
-        final_text += text.replace(self.tokenizer.media_tokens["sound"], "").strip()
+        final_text += "<sound>" * len(sound)
+        final_text += text.replace("<sound>", "").strip()
 
         conversation = [{"from": "human", "value": final_text}]
         input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).cuda().unsqueeze(0)
