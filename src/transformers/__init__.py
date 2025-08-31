@@ -408,6 +408,7 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "LogitProcessorRegistry",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "BeamScorer",
@@ -579,7 +580,7 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
-    from .cache_utils import Cache as Cache
+    from .cache_utils import Cache as Cache  # noqa: I001
     from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
@@ -652,6 +653,7 @@ if TYPE_CHECKING:
 
     # Generation
     from .generation import AlternatingCodebooksLogitsProcessor as AlternatingCodebooksLogitsProcessor
+    from .generation import LogitProcessorRegistry as LogitProcessorRegistry
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
