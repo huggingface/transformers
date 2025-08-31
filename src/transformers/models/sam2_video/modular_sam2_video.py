@@ -16,8 +16,9 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
