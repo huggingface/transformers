@@ -823,13 +823,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 delta = delta.repeat_interleave(position_ids.shape[1] // delta.shape[0], dim=0)
                 vision_positions = position_ids + delta.expand_as(position_ids)
                 vision_positions = vision_positions.expand(3, vision_positions.shape[1], -1)
-
-            # Concatenate "text + vision" positions into [4, bs, seq-len]
-            if "position_ids" not in model_inputs:
-                text_positions = torch.arange(input_ids, device=input_ids.device)[None, None, :]
             else:
-                text_positions = model_inputs["position_ids"][None, ...]
-            model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
+                raise ValueError("position_ids not found in model_inputs")
+
+            model_inputs["position_ids"] = vision_positions
 
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None
