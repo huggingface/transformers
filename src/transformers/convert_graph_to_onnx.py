@@ -436,37 +436,19 @@ def quantize(onnx_model_path: Path) -> Path:
     copy_model.CopyFrom(onnx_model)
 
     # Construct quantizer
-    # onnxruntime renamed input_qType to activation_qType in v1.13.1, so we
-    # check the onnxruntime version to ensure backward compatibility.
-    # See also: https://github.com/microsoft/onnxruntime/pull/12873
-    if parse(onnxruntime.__version__) < parse("1.13.1"):
-        quantizer = ONNXQuantizer(
-            model=copy_model,
-            per_channel=False,
-            reduce_range=False,
-            mode=QuantizationMode.IntegerOps,
-            static=False,
-            weight_qType=True,
-            input_qType=False,
-            tensors_range=None,
-            nodes_to_quantize=None,
-            nodes_to_exclude=None,
-            op_types_to_quantize=list(IntegerOpsRegistry),
-        )
-    else:
-        quantizer = ONNXQuantizer(
-            model=copy_model,
-            per_channel=False,
-            reduce_range=False,
-            mode=QuantizationMode.IntegerOps,
-            static=False,
-            weight_qType=True,
-            activation_qType=False,
-            tensors_range=None,
-            nodes_to_quantize=None,
-            nodes_to_exclude=None,
-            op_types_to_quantize=list(IntegerOpsRegistry),
-        )
+    quantizer = ONNXQuantizer(
+        model=copy_model,
+        per_channel=False,
+        reduce_range=False,
+        mode=QuantizationMode.IntegerOps,
+        static=False,
+        weight_qType=True,
+        activation_qType=False,
+        tensors_range=None,
+        nodes_to_quantize=None,
+        nodes_to_exclude=None,
+        op_types_to_quantize=list(IntegerOpsRegistry),
+    )
 
     # Quantize and export
     quantizer.quantize_model()
