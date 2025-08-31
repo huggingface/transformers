@@ -14,40 +14,38 @@
 """PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import ModelOutput, PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
 from .configuration_univnet import UnivNetConfig
 
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-_CONFIG_FOR_DOC = "UnivNetConfig"
-
-_CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
-
 
 @dataclass
-class UnivNetModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
     lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
-
-    Args:
-        waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Batched 1D (mono-channel) output audio waveforms.
-        waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
-            The batched length in samples of each unpadded waveform in `waveforms`.
+    """
+)
+class UnivNetModelOutput(ModelOutput):
+    r"""
+    waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Batched 1D (mono-channel) output audio waveforms.
+    waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+        The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
-    waveforms: torch.FloatTensor = None
-    waveform_lengths: torch.FloatTensor = None
+    waveforms: Optional[torch.FloatTensor] = None
+    waveform_lengths: Optional[torch.FloatTensor] = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):
@@ -87,8 +85,12 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         return hidden_states + residual
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv1)
-        nn.utils.weight_norm(self.conv2)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv1)
+        weight_norm(self.conv2)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv1)
@@ -161,7 +163,7 @@ class UnivNetKernelPredictor(nn.Module):
                 Tensor containing the log-mel spectrograms.
 
         Returns:
-            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+            tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
             location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,
@@ -197,11 +199,15 @@ class UnivNetKernelPredictor(nn.Module):
         return kernels, biases
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.input_conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.input_conv)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.kernel_conv)
-        nn.utils.weight_norm(self.bias_conv)
+        weight_norm(self.kernel_conv)
+        weight_norm(self.bias_conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.input_conv)
@@ -273,7 +279,7 @@ class UnivNetLvcResidualBlock(nn.Module):
         """
         Performs location-variable convolution operation on the input sequence (hidden_states) using the local
         convolution kernel. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for Waveform
-        Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
+        Generation](https://huggingface.co/papers/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
 
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 
@@ -328,7 +334,11 @@ class UnivNetLvcResidualBlock(nn.Module):
         return output_hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv)
@@ -398,7 +408,11 @@ class UnivNetLvcBlock(nn.Module):
         return hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.convt_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.convt_pre)
         self.kernel_predictor.apply_weight_norm()
         for layer in self.resblocks:
             layer.apply_weight_norm()
@@ -410,58 +424,9 @@ class UnivNetLvcBlock(nn.Module):
             layer.remove_weight_norm()
 
 
-UNIVNET_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`UnivNetConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-UNIVNET_INPUTS_DOCSTRING = r"""
-    Converts a noise waveform and a conditioning spectrogram to a speech waveform. Passing a batch of log-mel
-    spectrograms returns a batch of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a
-    single, un-batched speech waveform.
-
-    Args:
-        input_features (`torch.FloatTensor`):
-            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
-        noise_sequence (`torch.FloatTensor`, *optional*):
-            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
-            sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
-            config.model_in_channels)`. If not supplied, will be randomly generated.
-        padding_mask (`torch.BoolTensor`, *optional*):
-            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**
-            - 0 for tokens that are **masked**
-
-            The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
-            `(sequence_length,)`.
-        generator (`torch.Generator`, *optional*):
-            A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
-            deterministic.
-        return_dict:
-            Whether to return a [`~utils.ModelOutput`] subclass instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """UnivNet GAN vocoder.""",
-    UNIVNET_START_DOCSTRING,
-)
+@auto_docstring
 class UnivNetModel(PreTrainedModel):
-    config_class = UnivNetConfig
+    config: UnivNetConfig
     main_input_name = "input_features"
 
     def __init__(self, config: UnivNetConfig):
@@ -503,8 +468,7 @@ class UnivNetModel(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(UNIVNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=UnivNetModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_features: torch.FloatTensor,
@@ -512,9 +476,25 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
-        Returns:
+        noise_sequence (`torch.FloatTensor`, *optional*):
+            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
+            sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
+            config.model_in_channels)`. If not supplied, will be randomly generated.
+        padding_mask (`torch.BoolTensor`, *optional*):
+            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**
+            - 0 for tokens that are **masked**
+
+            The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
+            `(sequence_length,)`.
+        generator (`torch.Generator`, *optional*):
+            A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
+            deterministic.
+            return_dict:
+            Whether to return a [`~utils.ModelOutput`] subclass instead of a plain tuple.
 
         Example:
 
@@ -619,13 +599,20 @@ class UnivNetModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
+        weight_norm(self.conv_post)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
+
+
+__all__ = ["UnivNetModel"]

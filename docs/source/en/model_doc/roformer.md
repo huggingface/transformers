@@ -13,40 +13,77 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2021-05-20.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # RoFormer
 
-## Overview
+[RoFormer](https://huggingface.co/papers/2104.09864) introduces Rotary Position Embedding (RoPE) to encode token positions by rotating the inputs in 2D space. This allows a model to track absolute positions and model relative relationships. RoPE can scale to longer sequences, account for the natural decay of token dependencies, and works with the more efficient linear self-attention.
 
-The RoFormer model was proposed in [RoFormer: Enhanced Transformer with Rotary Position Embedding](https://arxiv.org/pdf/2104.09864v1.pdf) by Jianlin Su and Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.
+You can find all the RoFormer checkpoints on the [Hub](https://huggingface.co/models?search=roformer).
 
-The abstract from the paper is the following:
+> [!TIP]
+> Click on the RoFormer models in the right sidebar for more examples of how to apply RoFormer to different language tasks.
 
-*Position encoding in transformer architecture provides supervision for dependency modeling between elements at
-different positions in the sequence. We investigate various methods to encode positional information in
-transformer-based language models and propose a novel implementation named Rotary Position Embedding(RoPE). The
-proposed RoPE encodes absolute positional information with rotation matrix and naturally incorporates explicit relative
-position dependency in self-attention formulation. Notably, RoPE comes with valuable properties such as flexibility of
-being expand to any sequence lengths, decaying inter-token dependency with increasing relative distances, and
-capability of equipping the linear self-attention with relative position encoding. As a result, the enhanced
-transformer with rotary position embedding, or RoFormer, achieves superior performance in tasks with long texts. We
-release the theoretical analysis along with some preliminary experiment results on Chinese data. The undergoing
-experiment for English benchmark will soon be updated.*
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-This model was contributed by [junnyu](https://huggingface.co/junnyu). The original code can be found [here](https://github.com/ZhuiyiTechnology/roformer).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
-RoFormer is a BERT-like autoencoding model with rotary position embeddings. Rotary position embeddings have shown 
-improved performance on classification tasks with long texts.
+```py
+# uncomment to install rjieba which is needed for the tokenizer
+# !pip install rjieba
+import torch
+from transformers import pipeline
 
-## Resources
+pipe = pipeline(
+    task="fill-mask",
+    model="junnyu/roformer_chinese_base",
+    dtype=torch.float16,
+    device=0
+)
+output = pipe("水在零度时会[MASK]")
+print(output)
+```
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+# uncomment to install rjieba which is needed for the tokenizer
+# !pip install rjieba
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained(
+    "junnyu/roformer_chinese_base", dtype=torch.float16
+)
+tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
+
+input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.device)
+outputs = model(**input_ids)
+decoded = tokenizer.batch_decode(outputs.logits.argmax(-1), skip_special_tokens=True)
+print(decoded)
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- The current RoFormer implementation is an encoder-only model. The original code can be found in the [ZhuiyiTechnology/roformer](https://github.com/ZhuiyiTechnology/roformer) repository.
 
 ## RoFormerConfig
 
@@ -64,9 +101,6 @@ improved performance on classification tasks with long texts.
 
 [[autodoc]] RoFormerTokenizerFast
     - build_inputs_with_special_tokens
-
-<frameworkcontent>
-<pt>
 
 ## RoFormerModel
 
@@ -102,77 +136,3 @@ improved performance on classification tasks with long texts.
 
 [[autodoc]] RoFormerForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFRoFormerModel
-
-[[autodoc]] TFRoFormerModel
-    - call
-
-## TFRoFormerForMaskedLM
-
-[[autodoc]] TFRoFormerForMaskedLM
-    - call
-
-## TFRoFormerForCausalLM
-
-[[autodoc]] TFRoFormerForCausalLM
-    - call
-
-## TFRoFormerForSequenceClassification
-
-[[autodoc]] TFRoFormerForSequenceClassification
-    - call
-
-## TFRoFormerForMultipleChoice
-
-[[autodoc]] TFRoFormerForMultipleChoice
-    - call
-
-## TFRoFormerForTokenClassification
-
-[[autodoc]] TFRoFormerForTokenClassification
-    - call
-
-## TFRoFormerForQuestionAnswering
-
-[[autodoc]] TFRoFormerForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxRoFormerModel
-
-[[autodoc]] FlaxRoFormerModel
-    - __call__
-
-## FlaxRoFormerForMaskedLM
-
-[[autodoc]] FlaxRoFormerForMaskedLM
-    - __call__
-
-## FlaxRoFormerForSequenceClassification
-
-[[autodoc]] FlaxRoFormerForSequenceClassification
-    - __call__
-
-## FlaxRoFormerForMultipleChoice
-
-[[autodoc]] FlaxRoFormerForMultipleChoice
-    - __call__
-
-## FlaxRoFormerForTokenClassification
-
-[[autodoc]] FlaxRoFormerForTokenClassification
-    - __call__
-
-## FlaxRoFormerForQuestionAnswering
-
-[[autodoc]] FlaxRoFormerForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

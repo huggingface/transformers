@@ -1,4 +1,17 @@
-from typing import List, Union
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -86,6 +99,10 @@ class ImageClassificationPipeline(Pipeline):
     """
 
     function_to_apply: ClassificationFunction = ClassificationFunction.NONE
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -109,12 +126,20 @@ class ImageClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -156,13 +181,18 @@ class ImageClassificationPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs:
+            inputs = kwargs.pop("images")
+        if inputs is None:
+            raise ValueError("Cannot call the image-classification pipeline without an inputs argument!")
+        return super().__call__(inputs, **kwargs)
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -171,9 +201,9 @@ class ImageClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, function_to_apply=None, top_k=5):
         if function_to_apply is None:
-            if self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels > 1:
+            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
             elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
                 function_to_apply = self.model.config.function_to_apply

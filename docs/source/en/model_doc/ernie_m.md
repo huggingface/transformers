@@ -13,8 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-12-31 and added to Hugging Face Transformers on 2023-06-20.*
 
 # ErnieM
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 <Tip warning={true}>
 
@@ -27,7 +32,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning
-Cross-lingual Semantics with Monolingual Corpora](https://arxiv.org/abs/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
+Cross-lingual Semantics with Monolingual Corpora](https://huggingface.co/papers/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
 Hao Tian, Hua Wu, Haifeng Wang.
 
 The abstract from the paper is the following:

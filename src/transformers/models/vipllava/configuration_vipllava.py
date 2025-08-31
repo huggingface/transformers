@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -37,16 +37,14 @@ class VipLlavaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`List[int]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
-            The list of layers to select the vision features from.
+        vision_feature_layers (`Union[int, list[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+            The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
 
@@ -72,13 +70,15 @@ class VipLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "vipllava"
-    is_composition = False
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
         projector_layernorm_eps=1e-5,
@@ -86,7 +86,6 @@ class VipLlavaConfig(PretrainedConfig):
         image_seq_length=576,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.projector_layernorm_eps = projector_layernorm_eps
@@ -95,9 +94,7 @@ class VipLlavaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["clip_vision_model"](
@@ -112,7 +109,7 @@ class VipLlavaConfig(PretrainedConfig):
             )
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
@@ -120,3 +117,6 @@ class VipLlavaConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs)
+
+
+__all__ = ["VipLlavaConfig"]

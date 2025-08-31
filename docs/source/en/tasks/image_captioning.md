@@ -256,8 +256,9 @@ image
 Prepare image for the model.
 
 ```python
-device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import infer_device
 
+device = infer_device()
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```

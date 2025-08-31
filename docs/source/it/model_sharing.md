@@ -43,7 +43,7 @@ Come risultato, puoi caricare una specifica versione di un modello con il parame
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # nome di un tag, di un branch, o commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # nome di un tag, di un branch, o commit hash
 ... )
 ```
 
@@ -56,7 +56,7 @@ Anche i file possono essere modificati facilmente in un repository ed è possibi
 Prima di condividere un modello nell'Hub, hai bisogno delle tue credenziali di Hugging Face. Se hai accesso ad un terminale, esegui il seguente comando nell'ambiente virtuale in cui è installata la libreria 🤗 Transformers. Questo memorizzerà il tuo token di accesso nella cartella cache di Hugging Face (di default `~/.cache/`):
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Se stai usando un notebook come Jupyter o Colaboratory, assicurati di avere la libreria [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) installata. Questa libreria ti permette di interagire in maniera programmatica con l'Hub.

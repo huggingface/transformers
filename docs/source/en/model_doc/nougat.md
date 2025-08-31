@@ -12,12 +12,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2023-08-25 and added to Hugging Face Transformers on 2023-09-26.*
 
 # Nougat
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) by
+The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://huggingface.co/papers/2308.13418) by
 Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic. Nougat uses the same architecture as [Donut](donut), meaning an image Transformer
 encoder and an autoregressive text Transformer decoder to translate scientific PDFs to markdown, enabling easier access to them.
 
@@ -28,7 +33,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/nougat_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Nougat high-level overview. Taken from the <a href="https://arxiv.org/abs/2308.13418">original paper</a>. </small>
+<small> Nougat high-level overview. Taken from the <a href="https://huggingface.co/papers/2308.13418">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/facebookresearch/nougat).
@@ -57,14 +62,14 @@ into a single instance to both extract the input features and decode the predict
 >>> import re
 >>> from PIL import Image
 
->>> from transformers import NougatProcessor, VisionEncoderDecoderModel
+>>> from transformers import NougatProcessor, VisionEncoderDecoderModel, infer_device
 >>> from datasets import load_dataset
 >>> import torch
 
 >>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
 >>> model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base")
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = infer_device()
 >>> model.to(device)  # doctest: +IGNORE_RESULT
 
 >>> # prepare PDF image for the model
@@ -98,6 +103,11 @@ The model is identical to [Donut](donut) in terms of architecture.
 ## NougatImageProcessor
 
 [[autodoc]] NougatImageProcessor
+    - preprocess
+
+## NougatImageProcessorFast
+
+[[autodoc]] NougatImageProcessorFast
     - preprocess
 
 ## NougatTokenizerFast

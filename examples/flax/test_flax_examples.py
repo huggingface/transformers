@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,7 +63,7 @@ def get_setup_file():
 def get_results(output_dir, split="eval"):
     path = os.path.join(output_dir, f"{split}_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
     raise ValueError(f"can't find {path}")
 
@@ -265,7 +264,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --num_train_epochs=2

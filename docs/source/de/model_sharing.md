@@ -43,7 +43,7 @@ Folglich können Sie eine bestimmte Modellversion mit dem Parameter "Revision" l
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 
@@ -56,7 +56,7 @@ Dateien lassen sich auch in einem Repository leicht bearbeiten, und Sie können 
 Bevor Sie ein Modell für den Hub freigeben, benötigen Sie Ihre Hugging Face-Anmeldedaten. Wenn Sie Zugang zu einem Terminal haben, führen Sie den folgenden Befehl in der virtuellen Umgebung aus, in der 🤗 Transformers installiert ist. Dadurch werden Ihre Zugangsdaten in Ihrem Hugging Face-Cache-Ordner (standardmäßig `~/.cache/`) gespeichert:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Wenn Sie ein Notebook wie Jupyter oder Colaboratory verwenden, stellen Sie sicher, dass Sie die [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) Bibliothek installiert haben. Diese Bibliothek ermöglicht Ihnen die programmatische Interaktion mit dem Hub.

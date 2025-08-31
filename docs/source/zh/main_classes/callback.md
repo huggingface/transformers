@@ -37,6 +37,7 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 - [`~integrations.DagsHubCallback`]，如果安装了[dagshub](https://dagshub.com/)。
 - [`~integrations.FlyteCallback`]，如果安装了[flyte](https://flyte.org/)。
 - [`~integrations.DVCLiveCallback`]，如果安装了[dvclive](https://dvc.org/doc/dvclive)。
+- [`~integrations.SwanLabCallback`]，如果安装了[swanlab](http://swanlab.cn/)。
 
 如果安装了一个软件包，但您不希望使用相关的集成，您可以将 `TrainingArguments.report_to` 更改为仅包含您想要使用的集成的列表（例如 `["azure_ml", "wandb"]`）。
 
@@ -79,6 +80,9 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 [[autodoc]] integrations.FlyteCallback
 
 [[autodoc]] integrations.DVCLiveCallback
+    - setup
+
+[[autodoc]] integrations.SwanLabCallback
     - setup
 
 ## TrainerCallback

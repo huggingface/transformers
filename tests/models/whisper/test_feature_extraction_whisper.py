@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,11 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import WhisperFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torch_gpu
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_accelerator,
+)
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -50,7 +53,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class WhisperFeatureExtractionTester(unittest.TestCase):
+class WhisperFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -200,6 +203,40 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_dither(self):
+        np.random.seed(42)  # seed the dithering randn()
+
+        # Tests that features with and without little dithering are similar, but not the same
+        dict_no_dither = self.feat_extract_tester.prepare_feat_extract_dict()
+        dict_no_dither["dither"] = 0.0
+
+        dict_dither = self.feat_extract_tester.prepare_feat_extract_dict()
+        dict_dither["dither"] = 0.00003  # approx. 1/32k
+
+        feature_extractor_no_dither = self.feature_extraction_class(**dict_no_dither)
+        feature_extractor_dither = self.feature_extraction_class(**dict_dither)
+
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # compute features
+        input_features_no_dither = feature_extractor_no_dither(
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_no_dither["sampling_rate"]
+        ).input_features
+        input_features_dither = feature_extractor_dither(
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_dither["sampling_rate"]
+        ).input_features
+
+        # test there is a difference between features (there's added noise to input signal)
+        diff = input_features_dither - input_features_no_dither
+
+        # features are not identical
+        self.assertTrue(np.abs(diff).mean() > 1e-6)
+        # features are not too different
+        self.assertTrue(np.abs(diff).mean() <= 1e-4)
+        self.assertTrue(np.abs(diff).max() <= 5e-3)
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
@@ -217,11 +254,11 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration(self):
         # fmt: off
@@ -240,7 +277,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
 
         self.assertEqual(input_features.shape, (1, 80, 3000))
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
 
     @unittest.mock.patch("transformers.models.whisper.feature_extraction_whisper.is_torch_available", lambda: False)
     def test_numpy_integration(self):
@@ -270,7 +307,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.all(np.mean(audio) < 1e-3))
         self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration_batch(self):
         # fmt: off
@@ -298,8 +335,9 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         )
         # fmt: on
 
-        input_speech = self._load_datasamples(3)
-        feature_extractor = WhisperFeatureExtractor()
-        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        with torch.device("cuda"):
+            input_speech = self._load_datasamples(3)
+            feature_extractor = WhisperFeatureExtractor()
+            input_features = feature_extractor(input_speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (3, 80, 3000))
-        self.assertTrue(torch.allclose(input_features[:, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features[:, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)

@@ -14,9 +14,6 @@
 # limitations under the License.
 """Blip model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -78,7 +75,7 @@ class BlipTextConfig(PretrainedConfig):
         label_smoothing (float, *optional*):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
-            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
+            `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
 
     Example:
 
@@ -96,6 +93,7 @@ class BlipTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -145,24 +143,6 @@ class BlipTextConfig(PretrainedConfig):
         self.is_decoder = is_decoder
         self.use_cache = use_cache
         self.label_smoothing = label_smoothing
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from BlipConfig
-        if config_dict.get("model_type") == "blip":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class BlipVisionConfig(PretrainedConfig):
@@ -215,6 +195,7 @@ class BlipVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -245,24 +226,6 @@ class BlipVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from BlipConfig
-        if config_dict.get("model_type") == "blip":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class BlipConfig(PretrainedConfig):
     r"""
@@ -288,7 +251,7 @@ class BlipConfig(PretrainedConfig):
         label_smoothing (float, optional, *optional*, defaults to 0.0):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
-            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
+            `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -316,6 +279,7 @@ class BlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip"
+    sub_configs = {"text_config": BlipTextConfig, "vision_config": BlipVisionConfig}
 
     def __init__(
         self,
@@ -349,14 +313,5 @@ class BlipConfig(PretrainedConfig):
         self.image_text_hidden_size = image_text_hidden_size
         self.label_smoothing = label_smoothing
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`BlipConfig`] (or a derived class) from blip text model configuration and blip vision model
-        configuration.
 
-        Returns:
-            [`BlipConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+__all__ = ["BlipConfig", "BlipTextConfig", "BlipVisionConfig"]

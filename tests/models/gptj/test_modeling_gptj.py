@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,11 @@
 # limitations under the License.
 
 
-import datetime
 import unittest
 
-import pytest
-
-from transformers import BitsAndBytesConfig, GPTJConfig, is_torch_available
+from transformers import GPTJConfig, is_torch_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     tooslow,
     torch_device,
@@ -32,7 +25,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -46,9 +39,6 @@ if is_torch_available():
         GPTJForSequenceClassification,
         GPTJModel,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
-else:
-    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTJModelTester:
@@ -172,35 +162,6 @@ class GPTJModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     def create_and_check_gptj_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPTJModel(config=config)
@@ -379,7 +340,6 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTJModel,
@@ -397,24 +357,25 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_model_parallel = False
     test_head_masking = False
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
-    )
     def test_torch_fx(self):
         super().test_torch_fx()
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
-    )
     def test_torch_fx_output_loss(self):
         super().test_torch_fx_output_loss()
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
@@ -464,7 +425,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @tooslow
     def test_batch_generation(self):
         # Marked as @tooslow due to GPU OOM
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
@@ -504,7 +465,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -524,46 +485,8 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @slow
     def test_model_from_pretrained(self):
         model_name = "EleutherAI/gpt-j-6B"
-        model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
+        model = GPTJModel.from_pretrained(model_name, revision="float16", dtype=torch.float16)
         self.assertIsNotNone(model)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-        expected_outputs = [
-            "hi<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>Q: I have a question about the new version of the game. I have a question about the",
-            "Hello this is a very long sentence.\n\nA:\n\nI think the best way to understand this is to think of it",
-        ]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-
-        model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6b",
-            device_map={"": 0},
-            attn_implementation="flash_attention_2",
-            revision="float16",
-            torch_dtype=torch.float16,
-            quantization_config=quantization_config,
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(expected_outputs, output_fa_2)
 
 
 @require_torch
@@ -572,9 +495,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gptj(self):
         # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained(
-                "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
-            )
+            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
             if checkpointing:
                 model.gradient_checkpointing_enable()
             else:
@@ -590,7 +511,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_gptj_sample(self):
         # Marked as @tooslow due to GPU OOM (issue #13676)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -620,47 +541,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
-    @slow
-    def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
-        model = GPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.5
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
+    # TODO joao, manuel: remove this in v4.62.0
     @tooslow
     def test_contrastive_search_gptj(self):
         article = (
@@ -669,12 +550,19 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16).to(
+            torch_device
+        )
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = model.generate(
+            input_ids,
+            penalty_alpha=0.6,
+            top_k=4,
+            max_length=256,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

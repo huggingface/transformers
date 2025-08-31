@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import flax
 import jax
@@ -173,7 +172,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -266,7 +265,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     Data collator used for BART denoising language modeling. The code is largely copied from
     `<https://github.com/morganmcg1/rotobart/blob/main/data_collator.py#L223>`__.
     For more information on how BART denoising language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.13461.pdf>`__
+    at the `official paper <https://huggingface.co/papers/1910.13461>`__
     or the `official code for preprocessing <https://github.com/facebookresearch/fairseq/blob/main/fairseq/data/denoising_dataset.py>`__ .
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
@@ -294,7 +293,7 @@ class FlaxDataCollatorForBartDenoisingLM:
                 " language modeling. "
             )
 
-    def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
+    def __call__(self, examples: list[dict[str, list[int]]]) -> BatchEncoding:
         # convert list to dict and tensorize input
         batch = BatchEncoding(
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
@@ -531,7 +530,7 @@ def main():
             trust_remote_code=data_args.trust_remote_code,
         )
 
-        if "validation" not in datasets.keys():
+        if "validation" not in datasets:
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
@@ -568,7 +567,7 @@ def main():
             num_proc=data_args.preprocessing_num_workers,
         )
 
-        if "validation" not in datasets.keys():
+        if "validation" not in datasets:
             datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
@@ -672,7 +671,7 @@ def main():
     # max_seq_length.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
@@ -778,7 +777,7 @@ def main():
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}

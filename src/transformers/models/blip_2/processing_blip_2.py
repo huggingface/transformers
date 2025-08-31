@@ -16,22 +16,33 @@
 Processor class for BLIP-2.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PaddingStrategy,
-    PreTokenizedInput,
-    TextInput,
-    TruncationStrategy,
-)
-from ...utils import TensorType, logging
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {},
+    }
 
 
 class Blip2Processor(ProcessorMixin):
@@ -51,15 +62,17 @@ class Blip2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["num_query_tokens"]
-    image_processor_class = "BlipImageProcessor"
+    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
         self.current_processor = image_processor
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        tokenizer.add_tokens([self.image_token], special_tokens=True)
+        if not hasattr(tokenizer, "image_token"):
+            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            tokenizer.add_tokens([self.image_token], special_tokens=True)
+        else:
+            self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
 
         super().__init__(image_processor, tokenizer)
@@ -67,131 +80,75 @@ class Blip2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Blip2ProcessorKwargs],
     ) -> BatchEncoding:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+        Args:
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
+        output_kwargs = self._merge_kwargs(
+            Blip2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        # Get only text
-        if images is None:
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
+        # BC for explicit return_tensors
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        max_length = output_kwargs["text_kwargs"].pop("max_length", None)
+        if max_length is not None:
+            output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
 
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
-
+        encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-            text_encoding = {}
-            _text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=None,  # hardcode "None" here for prepending image tokens
-                **kwargs,
-            )
+            # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
+            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-            # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
-            # because BLIP expects image tokens to be at the beginning even before BOS token
-            if self.num_query_tokens is not None:
+            if images is not None and self.num_query_tokens is not None:
+                # Image tokens should not be padded/truncated or prepended with special BOS token
                 image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
-                for k in _text_encoding:
-                    text_encoding[k] = [
-                        img_encoding + txt_encoding
-                        for img_encoding, txt_encoding in zip(image_token_encoding[k], _text_encoding[k])
-                    ]
-            else:
-                text_encoding = _text_encoding
-                logger.warning_once(
-                    "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
-                    "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
-                )
+                output_kwargs["text_kwargs"]["add_special_tokens"] = False
+                output_kwargs["text_kwargs"]["padding"] = False
+                output_kwargs["text_kwargs"]["truncation"] = False
+                image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
+                for k in text_encoding:
+                    text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
+            encoding.update(text_encoding)
 
-            # cast to desired return tensors type
-            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
-        else:
-            text_encoding = None
+        # Now add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
+        # else, return the text encoding.
+        if images is not None:
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding.update(image_encoding)
 
-        if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
+        # Cast to desired return tensors type
+        encoding = BatchFeature(encoding, tensor_type=return_tensors)
+        return encoding
 
-        return encoding_image_processor
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+__all__ = ["Blip2Processor"]

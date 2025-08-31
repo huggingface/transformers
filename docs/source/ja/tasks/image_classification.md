@@ -323,7 +323,7 @@ food["test"].set_transform(preprocess_val)
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -551,4 +551,3 @@ Epoch 5/5
 
 </tf>
 </frameworkcontent>
-

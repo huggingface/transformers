@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import HieraConfig
 from transformers.testing_utils import (
@@ -250,6 +248,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)
@@ -262,6 +261,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     # Overriding as Hiera `get_input_embeddings` returns HieraPatchEmbeddings
     def test_model_get_set_embeddings(self):
@@ -282,7 +284,8 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -368,7 +371,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_patches, self.model_tester.embed_dim],
             )
 
-            if not model_class.__name__ == "HieraBackbone":
+            if model_class.__name__ != "HieraBackbone":
                 reshaped_hidden_states = outputs.reshaped_hidden_states
                 self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
@@ -409,10 +412,10 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -545,7 +548,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(inputs.pixel_values[0, :3, :3, :3], expected_pixel_values, atol=1e-4))
+        torch.testing.assert_close(inputs.pixel_values[0, :3, :3, :3], expected_pixel_values, rtol=1e-4, atol=1e-4)
 
         # forward pass
         with torch.no_grad():
@@ -557,7 +560,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_interpolate_pos_encoding(self):
         model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(torch_device)
@@ -578,10 +581,10 @@ class HieraModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.8522, 0.1532, 0.3849], [2.7352, -0.1941, 0.1848], [1.5859, -0.0773, 0.0168]]
+            [[1.7853, 0.0690, 0.3177], [2.6853, -0.2334, 0.0889], [1.5445, -0.1515, -0.0300]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_for_pretraining(self):
@@ -619,7 +622,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :5, :5], expected_slice.to(torch_device), atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :5, :5], expected_slice.to(torch_device), rtol=1e-4, atol=1e-4)
 
 
 @require_torch

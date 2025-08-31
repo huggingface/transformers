@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -222,6 +221,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DeiTModelTester(self)
@@ -316,13 +316,13 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -421,7 +421,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -454,7 +454,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = DeiTModel.from_pretrained(
-            "facebook/deit-base-distilled-patch16-224", torch_dtype=torch.float16, device_map="auto"
+            "facebook/deit-base-distilled-patch16-224", dtype=torch.float16, device_map="auto"
         )
         image_processor = self.default_image_processor
 

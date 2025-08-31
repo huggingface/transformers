@@ -49,7 +49,7 @@ class MCTCTProcessor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to MCTCTFeatureExtractor's
         [`~MCTCTFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~MCTCTProcessor.as_target_processor`] this method forwards all its arguments to AutoTokenizer's
-        [`~AutoTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~AutoTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         # For backward compatibility
         if self._in_target_context_manager:
@@ -81,13 +81,6 @@ class MCTCTProcessor(ProcessorMixin):
         else:
             inputs["labels"] = encodings["input_ids"]
             return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
 
     def pad(self, *args, **kwargs):
         """
@@ -141,3 +134,6 @@ class MCTCTProcessor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+
+__all__ = ["MCTCTProcessor"]

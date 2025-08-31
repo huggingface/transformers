@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,7 @@ import os
 import random
 import sys
 import warnings
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 import torch
 import torch.utils._pytree as pytree
@@ -35,7 +34,7 @@ from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
 from .. import logging
-from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
@@ -57,16 +56,13 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    TORCH_FX_REQUIRED_VERSION,
-    get_torch_version,
     is_peft_available,
-    is_torch_fx_available,
 )
 
 
@@ -79,9 +75,9 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 def _generate_supported_model_class_names(
-    model_name: Type[PretrainedConfig],
-    supported_tasks: Optional[Union[str, List[str]]] = None,
-) -> List[str]:
+    model_name: type[PretrainedConfig],
+    supported_tasks: Optional[Union[str, list[str]]] = None,
+) -> list[str]:
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
@@ -124,6 +120,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bart",
     "bert",
+    "bitnet",
     "blenderbot",
     "blenderbot-small",
     "bloom",
@@ -132,6 +129,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "deberta",
     "deberta-v2",
     "dinov2",
+    "dinov3_convnext",
+    "dinov3_vit",
     "distilbert",
     "donut-swin",
     "electra",
@@ -140,6 +139,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "hiera",
     "hubert",
+    "ijepa",
     "layoutlm",
     "llama",
     "cohere",
@@ -158,6 +158,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "plbart",
     "qwen2",
     "qwen2_moe",
+    "qwen3",
+    "qwen3_moe",
     "resnet",
     "roberta",
     "segformer",
@@ -167,6 +169,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "t5",
     "trocr",
     "vit",
+    "vjepa2",
     "xglm",
     "wav2vec2",
     #    "xlnet",
@@ -194,6 +197,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "TrOCRDecoder",
     "PeftModelForCausalLM",
     "PeftModelForSeq2SeqLM",
+    "VJEPA2ForVideoClassification",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -588,7 +592,7 @@ def operator_getitem(a, b):
     return operator.getitem(a, b)
 
 
-_MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
+_MANUAL_META_OVERRIDES: dict[Callable, Callable] = {
     torch.nn.Embedding: torch_nn_embedding,
     torch.nn.functional.embedding: torch_nn_functional_embedding,
     torch.nn.LayerNorm: torch_nn_layernorm,
@@ -634,10 +638,9 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     operator.getitem: operator_getitem,
 }
 
-if is_torch_greater_or_equal_than_2_0:
-    _MANUAL_META_OVERRIDES[torch.nn.functional.scaled_dot_product_attention] = (
-        torch_nn_functional_scaled_dot_product_attention
-    )
+_MANUAL_META_OVERRIDES[torch.nn.functional.scaled_dot_product_attention] = (
+    torch_nn_functional_scaled_dot_product_attention
+)
 
 
 class HFProxy(Proxy):
@@ -715,7 +718,7 @@ class HFCacheProxy(HFProxy):
     Proxy that represents an instance of `transformers.cache_utils.Cache`.
     """
 
-    def install_orig_cache_cls(self, orig_cache_cls: Type[Cache]):
+    def install_orig_cache_cls(self, orig_cache_cls: type[Cache]):
         self._orig_cache_cls = orig_cache_cls
 
     @property
@@ -748,9 +751,7 @@ def create_wrapper(
             tracer = found_proxies[0].tracer
             if op_type == "call_function":
                 target = function
-            elif op_type == "call_method":
-                target = function.__name__
-            elif op_type == "get_attr":
+            elif op_type == "call_method" or op_type == "get_attr":
                 target = function.__name__
             else:
                 raise ValueError(f"op_type {op_type} not supported.")
@@ -769,8 +770,8 @@ class HFProxyableClassMeta(type):
     def __new__(
         cls,
         name: str,
-        bases: Tuple[Type, ...],
-        attrs: Dict[str, Any],
+        bases: tuple[type, ...],
+        attrs: dict[str, Any],
         proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
     ):
         cls = super().__new__(cls, name, bases, attrs)
@@ -793,7 +794,7 @@ class HFProxyableClassMeta(type):
         return cls
 
 
-def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
+def gen_constructor_wrapper(target: Callable) -> tuple[Callable, Callable]:
     """
     Wraps `target` to be proxyable. Used for tensor creators like `torch.ones`, `torch.arange` and so on.
     """
@@ -812,9 +813,8 @@ def _proxies_to_metas(v):
     return v
 
 
-def create_cache_proxy_factory_fn(orig_cache_cls: Type[Cache]) -> Callable[[Node], HFCacheProxy]:
+def create_cache_proxy_factory_fn(orig_cache_cls: type[Cache]) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
-        global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
             raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
         cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)
@@ -834,12 +834,6 @@ ProxyableDynamicCache = HFProxyableClassMeta(
     {},
     proxy_factory_fn=create_cache_proxy_factory_fn(DynamicCache),
 )
-ProxyableSinkCache = HFProxyableClassMeta(
-    "ProxyableSinkCache",
-    (SinkCache,),
-    {},
-    proxy_factory_fn=create_cache_proxy_factory_fn(SinkCache),
-)
 ProxyableStaticCache = HFProxyableClassMeta(
     "ProxyableStaticCache",
     (StaticCache,),
@@ -848,7 +842,7 @@ ProxyableStaticCache = HFProxyableClassMeta(
 )
 
 
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[list[int]] = None):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -882,7 +876,6 @@ class HFTracer(Tracer):
     _CLASSES_TO_PATCH = {
         Cache: ProxyableCache,
         DynamicCache: ProxyableDynamicCache,
-        SinkCache: ProxyableSinkCache,
         StaticCache: ProxyableStaticCache,
     }
 
@@ -891,15 +884,9 @@ class HFTracer(Tracer):
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
-        if not is_torch_fx_available():
-            raise ImportError(
-                f"Found an incompatible version of torch. Found version {get_torch_version()}, but only version "
-                f"{TORCH_FX_REQUIRED_VERSION} is supported."
-            )
-
     def _generate_dummy_input(
-        self, model: "PreTrainedModel", input_name: str, shape: List[int], input_names: List[str]
-    ) -> Dict[str, torch.Tensor]:
+        self, model: "PreTrainedModel", input_name: str, shape: list[int], input_names: list[str]
+    ) -> dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
         # from pickle, or from the "__class__" attribute in the general case.
@@ -918,6 +905,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
@@ -1180,7 +1168,7 @@ class HFTracer(Tracer):
             return attr_val
 
     # Needed for PyTorch 1.13+
-    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
+    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: dict[str, Any]):
         return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
@@ -1232,8 +1220,8 @@ class HFTracer(Tracer):
     def trace(
         self,
         root: Union[torch.nn.Module, Callable[..., Any]],
-        concrete_args: Optional[Dict[str, Any]] = None,
-        dummy_inputs: Optional[Dict[str, Any]] = None,
+        concrete_args: Optional[dict[str, Any]] = None,
+        dummy_inputs: Optional[dict[str, Any]] = None,
         complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
     ) -> Graph:
         """
@@ -1246,9 +1234,9 @@ class HFTracer(Tracer):
             root (`torch.nn.Module` or  `Callable`):
                 Either a `torch.nn.Module`` or a function to be traced through. If root is not a
                 [`~transformers.PreTrainedModel`], then `dummy_inputs` must be passed, otherwise tracing will fail.
-            concrete_args (`Dict[str, Any], *optional*):
+            concrete_args (`dict[str, Any], *optional*):
                 Concrete arguments that should not be treated as Proxies
-            dummy_inputs (`Dict[str, Any]`, *optional*):
+            dummy_inputs (`dict[str, Any]`, *optional*):
                 The dummy inputs needed to handle data-dependent control-flow if `root` is not a
                 [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
                 [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
@@ -1416,12 +1404,12 @@ class HFTracer(Tracer):
         your custom tracer.
         """
         attribute = HFAttribute(obj, "keys")()
-        if obj.node.target == "**kwargs":
+        if obj.node.target.startswith("**"):
             return attribute._metadata
         return attribute
 
 
-def get_concrete_args(model: nn.Module, input_names: List[str]):
+def get_concrete_args(model: nn.Module, input_names: list[str]):
     sig = inspect.signature(model.forward)
 
     if not (set(input_names) <= set(sig.parameters.keys())):
@@ -1449,9 +1437,9 @@ def check_if_model_is_supported(model: "PreTrainedModel"):
 
 def symbolic_trace(
     model: "PreTrainedModel",
-    input_names: Optional[List[str]] = None,
+    input_names: Optional[list[str]] = None,
     disable_check: bool = False,
-    tracer_cls: Type[HFTracer] = HFTracer,
+    tracer_cls: type[HFTracer] = HFTracer,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.
@@ -1459,7 +1447,7 @@ def symbolic_trace(
     Args:
         model ([`PretrainedModel`]):
             The model to trace.
-        input_names (`List[str]`, *optional*):
+        input_names (`list[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.

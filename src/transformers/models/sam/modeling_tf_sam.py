@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import collections
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -30,7 +29,13 @@ from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -65,9 +70,9 @@ class TFSamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: tf.Tensor | None = None
-    last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -99,11 +104,11 @@ class TFSamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: tf.Tensor = None
-    pred_masks: tf.Tensor = None
-    vision_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    vision_attentions: Tuple[tf.Tensor, ...] | None = None
-    mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    iou_scores: tf.Tensor | None = None
+    pred_masks: tf.Tensor | None = None
+    vision_hidden_states: tuple[tf.Tensor, ...] | None = None
+    vision_attentions: tuple[tf.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 class TFSamPatchEmbeddings(keras.layers.Layer):
@@ -425,10 +430,10 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
         point_embeddings: tf.Tensor,
         image_embeddings: tf.Tensor,
         image_positional_embeddings: tf.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | TFBaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -460,7 +465,7 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
 
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
@@ -607,8 +612,8 @@ class TFSamMaskDecoder(keras.layers.Layer):
         sparse_prompt_embeddings: tf.Tensor,
         dense_prompt_embeddings: tf.Tensor,
         multimask_output: bool,
-        output_attentions: Optional[bool] = None,
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        output_attentions: bool | None = None,
+    ) -> tuple[tf.Tensor, tf.Tensor]:
         batch_size, num_channels, height, width = shape_list(image_embeddings)
         point_batch_size = tf.math.maximum(1, tf.shape(sparse_prompt_embeddings)[1])
 
@@ -851,12 +856,12 @@ class TFSamPromptEncoder(keras.layers.Layer):
 
     def call(
         self,
-        batch_size: Optional[int],
-        input_points: Optional[Tuple[tf.Tensor, tf.Tensor]],
+        batch_size: int | None,
+        input_points: tuple[tf.Tensor, tf.Tensor] | None,
         input_labels: tf.Tensor | None,
         input_boxes: tf.Tensor | None,
         input_masks: tf.Tensor | None,
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> tuple[tf.Tensor, tf.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
@@ -982,22 +987,19 @@ class TFSamVisionAttention(keras.layers.Layer):
 
         return tf.gather(rel_pos_resized, tf.cast(relative_coords, tf.int32))
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: tf.Tensor,
         query: tf.Tensor,
         rel_pos_h: tf.Tensor,
         rel_pos_w: tf.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> tf.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`tf.Tensor`):
-                attention map.
             query (`tf.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`tf.Tensor`):
@@ -1010,8 +1012,8 @@ class TFSamVisionAttention(keras.layers.Layer):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`tf.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -1022,10 +1024,12 @@ class TFSamVisionAttention(keras.layers.Layer):
         reshaped_query = tf.reshape(query, (batch_size, query_height, query_width, dim))
         rel_h = tf.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = tf.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = tf.reshape(attn, (batch_size, query_height, query_width, key_height, key_width))
-        attn = attn + tf.expand_dims(rel_h, axis=-1) + tf.expand_dims(rel_w, axis=-2)
-        attn = tf.reshape(attn, (batch_size, query_height * query_width, key_height * key_width))
-        return attn
+
+        rel_h = tf.expand_dims(rel_h, axis=-1)
+        rel_w = tf.expand_dims(rel_w, axis=-2)
+        decomposed_rel_pos = rel_h + rel_w
+
+        return decomposed_rel_pos
 
     def call(self, hidden_states: tf.Tensor, output_attentions=False, training=False) -> tf.Tensor:
         batch_size, height, width, _ = shape_list(hidden_states)
@@ -1039,9 +1043,11 @@ class TFSamVisionAttention(keras.layers.Layer):
         attn_weights = tf.matmul(query * self.scale, key, transpose_b=True)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = tf.reshape(decomposed_rel_pos, shape_list(attn_weights))
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
@@ -1074,7 +1080,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         self.window_size = window_size
         self.config = config
 
-    def window_partition(self, hidden_states: tf.Tensor, window_size: int) -> Tuple[tf.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: tf.Tensor, window_size: int) -> tuple[tf.Tensor, tuple[int, int]]:
         batch_size, height, width, channel = shape_list(hidden_states)
 
         pad_h = (window_size - height % window_size) % window_size
@@ -1093,7 +1099,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: tf.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self, windows: tf.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
     ) -> tf.Tensor:
         pad_height, pad_width = padding_shape
         height, width = original_shape
@@ -1112,9 +1118,9 @@ class TFSamVisionLayer(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        output_attentions: Optional[bool] = False,
-        training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor]:
+        output_attentions: bool | None = False,
+        training: bool | None = False,
+    ) -> tuple[tf.Tensor]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -1261,11 +1267,11 @@ class TFSamVisionEncoder(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSamVisionEncoderOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFSamVisionEncoderOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1367,7 +1373,7 @@ SAM_INPUTS_DOCSTRING = r"""
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `tf` tensor, with each dimension corresponding respectively to the image batch size,
-            the number of boxes per image and the coordinates of the top left and botton right point of the box. In the
+            the number of boxes per image and the coordinates of the top left and bottom right point of the box. In the
             order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1397,6 +1403,70 @@ SAM_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
+SAM_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
+            details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from Sam without any head or projection on top.""",
+    SAM_START_DOCSTRING,
+)
+class TFSamVisionModel(TFSamPreTrainedModel):
+    config_class = SamVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: SamVisionConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.vision_encoder = TFSamVisionEncoder(config, name="vision_encoder")
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_encoder", None) is not None:
+            with tf.name_scope(self.vision_encoder.name):
+                self.vision_encoder.build(None)
+
+    def get_input_embeddings(self):
+        return self.vision_encoder.patch_embed
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSamVisionEncoderOutput, config_class=SamVisionConfig)
+    def call(
+        self,
+        pixel_values: TFModelInputType | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+        **kwargs,
+    ) -> TFSamVisionEncoderOutput | tuple[tf.Tensor]:
+        r"""
+        Returns:
+
+        """
+        return self.vision_encoder(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
 
 
 @add_start_docstrings(
@@ -1435,9 +1505,9 @@ class TFSamModel(TFSamPreTrainedModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
@@ -1510,7 +1580,7 @@ class TFSamModel(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor]:
+    ) -> TFSamImageSegmentationOutput | tuple[tf.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1526,21 +1596,19 @@ class TFSamModel(TFSamPreTrainedModel):
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                " got {}.".format(input_points.shape),
+                f" got {input_points.shape}.",
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
                 "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                " got {}.".format(input_boxes.shape),
+                f" got {input_boxes.shape}.",
             )
         if input_points is not None and input_boxes is not None:
             point_batch_size = shape_list(input_points)[1]
             box_batch_size = shape_list(input_boxes)[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
         if pixel_values is not None:
             # Ensures that later checks pass even with an all-None shape from the serving signature
@@ -1582,7 +1650,7 @@ class TFSamModel(TFSamPreTrainedModel):
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
@@ -1650,3 +1718,6 @@ class TFSamModel(TFSamPreTrainedModel):
         if getattr(self, "mask_decoder", None) is not None:
             with tf.name_scope(self.mask_decoder.name):
                 self.mask_decoder.build(None)
+
+
+__all__ = ["TFSamVisionModel", "TFSamModel", "TFSamPreTrainedModel"]

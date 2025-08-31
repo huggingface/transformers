@@ -18,11 +18,12 @@ import os
 import sys
 import types
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
+from collections.abc import Iterable
 from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Literal, NewType, Optional, Tuple, Union, get_type_hints
+from typing import Any, Callable, Literal, NewType, Optional, Union, get_type_hints
 
 import yaml
 
@@ -62,11 +63,11 @@ def make_choice_type_function(choices: list) -> Callable[[str], Any]:
 
 def HfArg(
     *,
-    aliases: Union[str, List[str]] = None,
-    help: str = None,
+    aliases: Optional[Union[str, list[str]]] = None,
+    help: Optional[str] = None,
     default: Any = dataclasses.MISSING,
     default_factory: Callable[[], Any] = dataclasses.MISSING,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
     **kwargs,
 ) -> dataclasses.Field:
     """Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
@@ -80,7 +81,7 @@ def HfArg(
     ```
 
     Args:
-        aliases (Union[str, List[str]], optional):
+        aliases (Union[str, list[str]], optional):
             Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`.
             Defaults to None.
         help (str, optional): Help string to pass on to argparse that can be displayed with --help. Defaults to None.
@@ -114,18 +115,23 @@ class HfArgumentParser(ArgumentParser):
     The class is designed to play well with the native argparse. In particular, you can add more (non-dataclass backed)
     arguments to the parser after initialization and you'll get the output back after parsing as an additional
     namespace. Optional: To create sub argument groups use the `_argument_group_name` attribute in the dataclass.
+
+    Args:
+        dataclass_types (`DataClassType` or `Iterable[DataClassType]`, *optional*):
+            Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
+        kwargs (`dict[str, Any]`, *optional*):
+            Passed to `argparse.ArgumentParser()` in the regular way.
     """
 
     dataclass_types: Iterable[DataClassType]
 
-    def __init__(self, dataclass_types: Union[DataClassType, Iterable[DataClassType]], **kwargs):
-        """
-        Args:
-            dataclass_types:
-                Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Passed to `argparse.ArgumentParser()` in the regular way.
-        """
+    def __init__(self, dataclass_types: Optional[Union[DataClassType, Iterable[DataClassType]]] = None, **kwargs):
+        # Make sure dataclass_types is an iterable
+        if dataclass_types is None:
+            dataclass_types = []
+        elif not isinstance(dataclass_types, Iterable):
+            dataclass_types = [dataclass_types]
+
         # To make the default appear when using --help
         if "formatter_class" not in kwargs:
             kwargs["formatter_class"] = ArgumentDefaultsHelpFormatter
@@ -138,7 +144,14 @@ class HfArgumentParser(ArgumentParser):
 
     @staticmethod
     def _parse_dataclass_field(parser: ArgumentParser, field: dataclasses.Field):
-        field_name = f"--{field.name}"
+        # Long-option strings are conventionlly separated by hyphens rather
+        # than underscores, e.g., "--long-format" rather than "--long_format".
+        # Argparse converts hyphens to underscores so that the destination
+        # string is a valid attribute name. Hf_argparser should do the same.
+        long_options = [f"--{field.name}"]
+        if "_" in field.name:
+            long_options.append(f"--{field.name.replace('_', '-')}")
+
         kwargs = field.metadata.copy()
         # field.metadata is not used at all by Data Classes,
         # it is provided as a third-party extension mechanism.
@@ -189,7 +202,7 @@ class HfArgumentParser(ArgumentParser):
             else:
                 kwargs["required"] = True
         elif field.type is bool or field.type == Optional[bool]:
-            # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
+            # Copy the correct kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
 
@@ -198,11 +211,11 @@ class HfArgumentParser(ArgumentParser):
             if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
                 # Default value is False if we have no default when of type bool.
                 default = False if field.default is dataclasses.MISSING else field.default
-                # This is the value that will get picked if we don't include --field_name in any way
+                # This is the value that will get picked if we don't include --{field.name} in any way
                 kwargs["default"] = default
-                # This tells argparse we accept 0 or 1 value after --field_name
+                # This tells argparse we accept 0 or 1 value after --{field.name}
                 kwargs["nargs"] = "?"
-                # This is the value that will get picked if we do --field_name (without value)
+                # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
             kwargs["type"] = field.type.__args__[0]
@@ -219,7 +232,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default_factory()
             else:
                 kwargs["required"] = True
-        parser.add_argument(field_name, *aliases, **kwargs)
+        parser.add_argument(*long_options, *aliases, **kwargs)
 
         # Add a complement `no_*` argument for a boolean field AFTER the initial field has already been added.
         # Order is important for arguments with the same destination!
@@ -227,7 +240,13 @@ class HfArgumentParser(ArgumentParser):
         # here and we do not need those changes/additional keys.
         if field.default is True and (field.type is bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
-            parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
+            parser.add_argument(
+                f"--no_{field.name}",
+                f"--no-{field.name.replace('_', '-')}",
+                action="store_false",
+                dest=field.name,
+                **bool_kwargs,
+            )
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         if hasattr(dtype, "_argument_group_name"):
@@ -236,7 +255,7 @@ class HfArgumentParser(ArgumentParser):
             parser = self
 
         try:
-            type_hints: Dict[str, type] = get_type_hints(dtype)
+            type_hints: dict[str, type] = get_type_hints(dtype)
         except NameError:
             raise RuntimeError(
                 f"Type resolution failed for {dtype}. Try declaring the class in global scope or "
@@ -270,12 +289,12 @@ class HfArgumentParser(ArgumentParser):
         look_for_args_file=True,
         args_filename=None,
         args_file_flag=None,
-    ) -> Tuple[DataClass, ...]:
+    ) -> tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
 
         This relies on argparse's `ArgumentParser.parse_known_args`. See the doc at:
-        docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
+        docs.python.org/3/library/argparse.html#argparse.ArgumentParser.parse_args
 
         Args:
             args:
@@ -349,7 +368,7 @@ class HfArgumentParser(ArgumentParser):
 
             return (*outputs,)
 
-    def parse_dict(self, args: Dict[str, Any], allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
+    def parse_dict(self, args: dict[str, Any], allow_extra_keys: bool = False) -> tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
         types.
@@ -379,7 +398,7 @@ class HfArgumentParser(ArgumentParser):
 
     def parse_json_file(
         self, json_file: Union[str, os.PathLike], allow_extra_keys: bool = False
-    ) -> Tuple[DataClass, ...]:
+    ) -> tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
         dataclass types.
@@ -403,7 +422,7 @@ class HfArgumentParser(ArgumentParser):
 
     def parse_yaml_file(
         self, yaml_file: Union[str, os.PathLike], allow_extra_keys: bool = False
-    ) -> Tuple[DataClass, ...]:
+    ) -> tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead loading a yaml file and populating the
         dataclass types.

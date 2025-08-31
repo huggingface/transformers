@@ -19,9 +19,9 @@ and _encode_plus, in which the Rust tokenizer is used.
 
 import json
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
-from tokenizers import pre_tokenizers, processors
+from tokenizers import processors
 
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils_base import (
@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -207,14 +207,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         self.tags_dict = tags_dict
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
-
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
         if tokenizer_component_instance:
@@ -276,16 +268,17 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        xpaths: Union[List[List[int]], List[List[List[int]]]] = None,
-        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        xpaths: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -301,16 +294,16 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         sequences with nodes, xpaths and optional labels.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (`List[str]`, `List[List[str]]`):
+            text_pair (`list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            xpaths (`List[List[int]]`, `List[List[List[int]]]`):
+            xpaths (`list[list[int]]`, `list[list[list[int]]]`):
                 Node-level xpaths. Each bounding box should be normalized to be on a 0-1000 scale.
-            node_labels (`List[int]`, `List[List[int]]`, *optional*):
+            node_labels (`list[int]`, `list[list[int]]`, *optional*):
                 Node-level integer labels (for token classification tasks).
         """
 
@@ -338,18 +331,18 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = nodes
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError("text input must of type `str` (single example) or `list[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "Nodes must be of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "Nodes must be of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be nodes
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Nodes must be of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "Nodes must be of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
 
         if text_pair is not None:
@@ -385,6 +378,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -407,6 +401,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -422,19 +417,20 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
-        is_pair: bool = None,
-        xpaths: Optional[List[List[List[int]]]] = None,
-        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        is_pair: Optional[bool] = None,
+        xpaths: Optional[list[list[list[int]]]] = None,
+        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -466,6 +462,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -477,7 +474,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
@@ -490,14 +487,15 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -513,9 +511,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         `__call__` should be used instead.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (`List[str]` or `List[int]`, *optional*):
+            text_pair (`list[str]` or `list[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -541,6 +539,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -555,19 +554,20 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
-        is_pair: bool = None,
-        xpaths: Optional[List[List[List[int]]]] = None,
-        node_labels: Optional[List[List[int]]] = None,
+        is_pair: Optional[bool] = None,
+        xpaths: Optional[list[list[list[int]]]] = None,
+        node_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -587,6 +587,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
         )
 
         if is_pair:
@@ -599,8 +600,8 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         # Convert encoding to dict
-        # `Tokens` is a tuple of (List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
-        #  List[EncodingFast]) with nested dimensions corresponding to batch, overflows, sequence length
+        # `Tokens` is a tuple of (list[dict[str, list[list[int]]]] or list[dict[str, 2D-Tensor]],
+        #  list[EncodingFast]) with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
             self._convert_encoding(
                 encoding=encoding,
@@ -624,7 +625,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
         sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0].keys():
+        for key in tokens_and_encodings[0][0]:
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
             sanitized_tokens[key] = stack
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
@@ -713,14 +714,15 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -749,6 +751,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -777,17 +780,18 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
         Args:
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -800,6 +804,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
+            padding_side:
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -823,7 +830,8 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            if self.padding_side == "right":
+            padding_side = padding_side if padding_side is not None else self.padding_side
+            if padding_side == "right":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
@@ -843,7 +851,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
+            elif padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
@@ -864,13 +872,13 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A RoBERTa sequence has the following format:
@@ -878,12 +886,12 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -892,19 +900,19 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -913,6 +921,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["MarkupLMTokenizerFast"]

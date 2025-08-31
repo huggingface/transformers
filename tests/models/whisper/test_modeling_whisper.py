@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,21 +27,22 @@ import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
-    is_pt_flax_cross_test,
     require_flash_attn,
+    require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torchaudio,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_flax_available, is_torch_available, is_torchaudio_available
+from transformers.utils import is_torch_available, is_torch_xpu_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -104,7 +104,7 @@ if is_torch_available():
             self.begin_index = begin_index
 
         def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-            # we don't want to randomely sample timestamp tokens
+            # we don't want to randomly sample timestamp tokens
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
 
@@ -153,41 +153,20 @@ if is_torchaudio_available():
     import torchaudio
 
 
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
-
-
 def prepare_whisper_inputs_dict(
     config,
     input_features,
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         # "input_ids": input_features,
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -374,7 +353,6 @@ class WhisperModelTester:
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "audio-classification": WhisperForAudioClassification,
@@ -393,13 +371,18 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
     model_split_percents = [0.5, 0.8, 0.9]
 
-    input_name = "input_features"
-
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name in [
+        if pipeline_test_case_name in [
             "AutomaticSpeechRecognitionPipelineTests",
             "AudioClassificationPipelineTests",
         ]:
@@ -409,9 +392,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    def _get_logits_processor_kwargs(self, do_sample=False):
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
-        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample, config=config)
         logits_processor_kwargs["temperature"] = 0.0
         return logits_processor_kwargs
 
@@ -437,6 +420,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        inputs_dict["force_unique_generate_call"] = True
+        return config, inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -487,7 +475,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for model_class in self.all_model_classes:
             model = model_class(config)
             embeds = model.get_encoder().embed_positions.weight
-            self.assertTrue(torch.allclose(embeds, sinusoids(*embeds.shape)))
+            torch.testing.assert_close(embeds, sinusoids(*embeds.shape))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -496,19 +484,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
-
-    def _get_input_ids_and_config(self, batch_size=3):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size=batch_size
-        input_ids = input_ids[:batch_size, :, :]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-
-        return config, input_ids, None
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -529,6 +504,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 model(**inputs)[0]
 
+    def test_beam_search_output(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+
+        input_features = input_dict["input_features"]
+
+        # Perform beam search
+        output = model.generate(
+            input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True
+        )
+
+        # Check if beam_indices and sequences_scores are in the output
+        self.assertIn("beam_indices", output, "beam_indices not found in the output")
+        self.assertIn("sequences_scores", output, "sequences_scores not found in the output")
+
+        # Validate the shapes of the beam_indices and sequences_scores
+        self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
+        self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
+
     # training is not supported yet
     @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
@@ -539,19 +533,21 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip
-    def test_generate_with_head_masking(self):
+    @parameterized.expand([("offloaded",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
+    def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
     @require_torch_fp16
@@ -668,6 +664,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
@@ -678,7 +677,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -856,71 +856,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip
+    @unittest.skip(reason="Whisper encoder-decoder requires the features directly and can not work on ids only.")
     def test_generate_without_input_ids(self):
         pass
-
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        generation_config = copy.deepcopy(model.generation_config)
-        model._prepare_special_tokens(generation_config)
-        input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + generation_config.decoder_start_token_id
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
-
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
-        batch_size, mel, seq_length = input_ids.shape
-        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
-        num_sequences_in_output = batch_size * num_return_sequences
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
-        )
-
-        # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
-
-        # Attentions
-        # encoder
-        self._check_encoder_attention_for_generate(
-            output.encoder_attentions, batch_size, config, subsampled_seq_length
-        )
-        # decoder
-        self._check_attentions_for_generate(
-            num_sequences_in_output,
-            output.decoder_attentions,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
-
-        # Hidden States
-        # encoder
-        self._check_encoder_hidden_states_for_generate(
-            output.encoder_hidden_states, batch_size, config, subsampled_seq_length
-        )
-
-        # decoder
-        self._check_hidden_states_for_generate(
-            num_sequences_in_output,
-            output.decoder_hidden_states,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
 
     @require_flash_attn
     @require_torch_gpu
@@ -930,7 +868,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         import torch
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -939,13 +877,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 
@@ -962,7 +900,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa, logits, atol=4e-1)
+                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
 
                 # check with inference + dropout
                 model.train()
@@ -976,7 +914,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         import torch
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -985,11 +923,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -1007,7 +945,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa, logits, atol=4e-1)
+                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
 
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
@@ -1022,7 +960,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=4e-1)
+                torch.testing.assert_close(logits_fa[:, -2:], logits[:, -2:], rtol=4e-1, atol=4e-1)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -1079,8 +1017,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -1107,165 +1045,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     models_equal = False
 
             self.assertTrue(models_equal)
-
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as test recently became flaky
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as test recently became flaky
-        super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                # send pytorch model to the correct device
-                pt_model_loaded.to(torch_device)
-                pt_model_loaded.eval()
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
 
     def test_mask_feature_prob(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1295,48 +1074,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
-    def test_generate_with_prompt_ids_and_task_and_language(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        language = "<|de|>"
-        task = "translate"
-        lang_id = 6
-        task_id = 7
-        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
-        model.generation_config.__setattr__("task_to_id", {task: task_id})
-
-        output = model.generate(input_features, max_new_tokens=5, task=task, language=language, prompt_ids=prompt_ids)
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            lang_id,
-            task_id,
-        ]
-        for row in output.tolist():
-            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
-
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
-
-        output = model.generate(
-            input_features, max_new_tokens=5, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids
-        )
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            *[token for _rank, token in forced_decoder_ids],
-        ]
-        for row in output.tolist():
-            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
-
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.max_target_positions = 7
@@ -1349,8 +1086,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         with self.assertRaisesRegex(
             ValueError,
-            f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-            f"is {max_new_tokens}. Thus, the combined length of "
+            f"The length of `decoder_input_ids`, including special start tokens, prompt tokens, and previous tokens, is {decoder_input_ids.shape[-1]}, "
+            f" and `max_new_tokens` is {max_new_tokens}. Thus, the combined length of "
             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
             f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
@@ -1398,7 +1135,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 )
                 for row in output.tolist():
                     # make sure no token below 10 is in generated output => this means for long-form prompt ids should NOT be returned
-                    assert not any(i in row for i in model.generation_config.suppress_tokens)
+                    self.assertTrue(not any(i in row for i in model.generation_config.suppress_tokens))
 
     def _check_longform_generate_single_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1463,13 +1200,15 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         segments = outputs["segments"][0]
 
         for _, segment in enumerate(segments):
-            assert segment["start"] <= segment["end"], "start has to be smaller equal end"
-            assert any(
-                s > timestamp_begin for s in segment["tokens"][1:]
-            ), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}"
-            assert (
-                segment["tokens"].shape[-1] <= max_length
-            ), "make sure that no segment is larger than max generation length"
+            self.assertTrue(segment["start"] <= segment["end"], "start has to be smaller equal end")
+            self.assertTrue(
+                any(s > timestamp_begin for s in segment["tokens"][1:]),
+                f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}",
+            )
+            self.assertTrue(
+                segment["tokens"].shape[-1] <= max_length,
+                "make sure that no segment is larger than max generation length",
+            )
 
     def test_longform_generate_single_batch(self):
         self._check_longform_generate_single_batch(condition_on_prev_tokens=False)
@@ -1552,12 +1291,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         segments = outputs["segments"][1]
 
         # make sure batched and non-batched is the same
-        assert tokens_2.tolist() == tokens[: tokens_2.shape[-1]].tolist()
+        self.assertEqual(tokens_2.tolist(), tokens[: tokens_2.shape[-1]].tolist())
 
         for seg1, seg2 in zip(segments_2, segments):
-            assert seg1["start"] == seg2["start"]
-            assert seg1["end"] == seg2["end"]
-            assert seg1["tokens"].tolist() == seg2["tokens"].tolist()
+            self.assertEqual(seg1["start"], seg2["start"])
+            self.assertEqual(seg1["end"], seg2["end"])
+            self.assertEqual(seg1["tokens"].tolist(), seg2["tokens"].tolist())
 
     def test_longform_generate_multi_batch(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=False)
@@ -1612,7 +1351,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # short-form generation without fallback
             pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
-            assert isinstance(pred_ids, expected_output_type)
+            self.assertIsInstance(pred_ids, expected_output_type)
 
             # short-form generation with fallback
             pred_ids = model.generate(
@@ -1621,91 +1360,110 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 temperature=[0.0, 0.1],
                 return_dict_in_generate=return_dict_in_generate,
             )
-            assert isinstance(pred_ids, expected_output_type)
+            self.assertIsInstance(pred_ids, expected_output_type)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_reuse_cache(self):
-        max_new_tokens = 2
+    def test_labels_sequence_max_length_correct(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            input_features = input_dict["input_features"]
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
-            dummy_input = inputs_dict[model_class.main_input_name][..., :10]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
 
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+    def test_labels_sequence_max_length_correct_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-            model = model_class(config)
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+            config.max_target_positions += 100
 
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
-                # run generate once to get filled cache
-                output = model.generate(
-                    dummy_input,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    return_dict_in_generate=True,
-                )
-                past_key_values = output.past_key_values
+            model = model_class(config).to(torch_device)
+            model(input_features=input_features, labels=labels)
 
-                # Try to continue generation from where we left, given that we have more than 1 new token to process
-                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
-                _ = model.generate(
-                    dummy_input,
-                    decoder_input_ids=output.sequences,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    past_key_values=past_key_values,
-                )
+    def test_labels_sequence_max_length_error(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            model = model_class(config).to(torch_device)
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
+
+            new_max_length = config.max_target_positions + 100
+            model.config.max_length = new_max_length
+            model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
+
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
+    # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
+    @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
+
+    # TODO (joao, eustache): fix me :)
+    @unittest.skip(reason="A CUDA exception is thrown when storing extra outputs")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_output_attentions(self):
+        pass
+
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_output_hidden_state(self):
+        pass
+
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_simple(self):
+        pass
 
 
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
-    def setUp(self):
-        self._unpatched_generation_mixin_generate = transformers.GenerationMixin.generate
+    _dataset = None
 
-    def tearDown(self):
-        transformers.GenerationMixin.generate = self._unpatched_generation_mixin_generate
-
-    @cached_property
-    def default_processor(self):
-        return WhisperProcessor.from_pretrained("openai/whisper-base")
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
+        self._load_dataset()
+        ds = self._dataset
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
-
-    def _patch_generation_mixin_generate(self, check_args_fn=None):
-        test = self
-
-        def generate(self, *args, **kwargs):
-            if check_args_fn is not None:
-                check_args_fn(*args, **kwargs)
-            return test._unpatched_generation_mixin_generate(self, *args, **kwargs)
-
-        transformers.GenerationMixin.generate = generate
 
     @slow
     def test_tiny_logits_librispeech(self):
@@ -1737,7 +1495,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
         # fmt: off
         EXPECTED_GENERATION = torch.tensor(
@@ -1751,7 +1509,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
-        self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
+        torch.testing.assert_close(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_small_en_logits_librispeech(self):
@@ -1786,7 +1544,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_large_logits_librispeech(self):
@@ -1830,12 +1588,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_tiny_en_generation(self):
-        torch_device = "cpu"
-        set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
@@ -1848,16 +1604,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
-        EXPECTED_TRANSCRIPT = (
-            "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes, and we are glad to"
-        )
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_tiny_generation(self):
-        torch_device = "cpu"
-        set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1869,18 +1620,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
-        EXPECTED_TRANSCRIPT = (
-            "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes and we are glad"
-        )
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_large_generation(self):
-        torch_device = "cpu"
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
@@ -1892,19 +1638,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_large_generation_multilingual(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
-        ds = load_dataset(
-            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1915,21 +1658,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " Mein sechster Sohn scheint, wenigstens auf den ersten Blick,"
+        EXPECTED_TRANSCRIPT = " denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünsch"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " My sixth son seems, at least at first glance, the most deeply-minded"
+        EXPECTED_TRANSCRIPT = " Think, my thoughts were just now in Adelaide with you, and I wished to be able"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_large_batched_generation(self):
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
@@ -1940,44 +1683,44 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50258, 50259, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404],
-                [50258, 50259, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257],
-                [50258, 50259, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904],
-                [50258, 50259, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439]
+                [2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281, 2928, 702, 14943],
+                [6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257, 50257, 50257, 50257],
+                [415, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 365, 26586, 3799, 293, 12904, 9256, 450, 10539, 949],
+                [634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 293, 393]
             ]
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids.cpu(), EXPECTED_LOGITS))
+        torch.testing.assert_close(generated_ids.cpu(), EXPECTED_LOGITS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            " Mr. Quilter is the apostle of the middle classes and we are glad",
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all",
+            " he tells us that at this festive season of the year with christmas and roast beef looming before",
+            " He has grave doubts whether Sir Frederick Leighton's work is really Greek after all, and can",
         ]
         # fmt: on
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
+    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
-        torch_device = "cpu"
-        set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        token = os.getenv("HF_HUB_READ_TOKEN", None)
+        if token is None:
+            token = True
         ds = load_dataset(
-            "mozilla-foundation/common_voice_6_1",
+            "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
             token=token,
-            trust_remote_code=True,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
@@ -1986,7 +1729,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        EXPECTED_TRANSCRIPTS = ["木村さんに電話を貸してもらいました", " Kimura-san called me."]
+        EXPECTED_TRANSCRIPTS = [
+            "夏の時期の時期でした",
+            " It was the time of day and all of the pens left during the summer.",
+        ]
 
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
@@ -2013,23 +1759,23 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
-                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
-                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
-                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
+                [1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 7062, 465],
+                [5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256, 50256],
+                [679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 878, 514],
+                [679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287]
             ]
 
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        torch.testing.assert_close(generated_ids, EXPECTED_LOGITS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            " Mr. Quilter is the apostle of the middle classes, and we are glad to",
+            " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast beef looming",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can",
+            " He tells us that at this festive season of the year, with Christmas and roast beef looming before us",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in",
         ]
         # fmt: on
 
@@ -2049,9 +1795,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
+        # fmt: off
+        EXPECTED_OUTPUT = torch.tensor([
+            [50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50364, 393, 4411, 13, 50514]
+        ])
+        # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -2060,7 +1810,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season"
                     " of the year, with Christmas and roast beef looming before us, similarly drawn from eating and"
                     " its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins'"
-                    " work is really Greek after all, and"
+                    " work is really Greek after all, and can discover."
                 ),
                 "offsets": [
                     {
@@ -2092,12 +1842,233 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                         ),
                         "timestamp": (23.76, 29.44),
                     },
+                    {
+                        "text": " can discover.",
+                        "timestamp": (29.44, 32.44),
+                    },
                 ],
             }
         ]
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_distil_token_timestamp_generation(self):
+        # we actually just want to check that returning segments with distil model works
+        processor = WhisperProcessor.from_pretrained("distil-whisper/distil-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("distil-whisper/distil-large-v3")
+        model.to(torch_device)
+
+        input_speech = np.concatenate(self._load_datasamples(4))
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        _ = model.generate(
+            input_features, max_length=448, return_timestamps=True, return_token_timestamps=True, return_segments=True
+        )
+
+    @slow
+    def test_tiny_longform_timestamps_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(
+            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+        )
+        input_features = input_features.to(torch_device)
+
+        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
+
+        EXPECTED_TRANSCRIPT = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.5600000000000005),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.5600000000000005, 11.24),
+            },
+            {
+                "text": " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+                "timestamp": (11.24, 16.88),
+            },
+            {
+                "text": " before us, similarly drawn from eating and its results occur most readily to the mind.",
+                "timestamp": (16.88, 23.76),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and",
+                "timestamp": (23.76, 29.44),
+            },
+            {"text": " can discover in it but little of rocky ithaka.", "timestamp": (29.44, 33.72)},
+            {
+                "text": " Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite itals",
+                "timestamp": (33.72, 40.32),
+            },
+            {"text": " are as national as a jingo poem.", "timestamp": (40.32, 44.72)},
+            {
+                "text": " Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used",
+                "timestamp": (44.72, 50.400000000000006),
+            },
+            {"text": " to flash his teeth.", "timestamp": (50.400000000000006, 52.96)},
+            {
+                "text": " And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like",
+                "timestamp": (52.96, 58.68000000000001),
+            },
+            {"text": " a shampoo and a Turkish bath next man.", "timestamp": (58.68, 61.96)},
+        ]
+
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_small_longform_timestamps_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-small.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]["array"]
+        sampling_rate = dataset[0]["audio"]["sampling_rate"]
+
+        sample = [*sample[: 15 * sampling_rate], *np.zeros(16 * sampling_rate).tolist(), *sample[15 * sampling_rate :]]
+        sample = np.array(sample)
+
+        input_features = processor(
+            sample,
+            sampling_rate=16_000,
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            return_tensors="pt",
+        ).input_features
+
+        input_features = input_features.to(torch_device)
+        generated_ids = model.generate(input_features, return_timestamps=True, return_segments=True)
+        # fmt: off
+        EXPECTED_CUDA = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.38),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.38, 11.32),
+            },
+            {
+                "text": " He tells us that at this festive season of the year,",
+                "timestamp": (11.32, 15.0),
+            },
+            {
+                "text": " With Christmas and roast beef looming before us, similes drawn from eating and its results",
+                "timestamp": (30.0, 36.76),
+            },
+            {
+                "text": " occur most readily to the mind.",
+                "timestamp": (36.76, 39.80),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
+                "timestamp": (39.80, 45.36),
+            },
+            {
+                "text": " can discover in it but little of rocky Ithaca.",
+                "timestamp": (45.36, 49.0),
+            },
+            {
+                "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
+                "timestamp": (49.0, 56.28),
+            },
+            {
+                "text": " are as national as a jingo poem. Mr. Burkett fosters landscape's smile at one much in",
+                "timestamp": (56.28, 64.12),
+            },
+            {
+                "text": " the same way that Mr. Karker used to flash his teeth. And Mr. John Collier gives his",
+                "timestamp": (64.12, 70.76),
+            },
+            {
+                "text": " sitter a cheerful slap on the back before he says, like a shampoo or in a Turkish bath,",
+                "timestamp": (70.76, 77.16),
+            },
+            {
+                "text": " Next Man",
+                "timestamp": (77.16, 78.16),
+            },
+        ]
+        EXPECTED_ROCM = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.38),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.38, 11.32),
+            },
+            {
+                "text": " He tells us that at this festive season of the year,",
+                "timestamp": (11.32, 15.0),
+            },
+            {
+                "text": " With Christmas and roast beef looming before us, similes drawn from eating and its results",
+                "timestamp": (30.0, 36.76),
+            },
+            {
+                "text": " occur most readily to the mind.",
+                "timestamp": (36.76, 39.8),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
+                "timestamp": (39.8, 45.38),
+            },
+            {
+                "text": " can discover in it but little of rocky Ithaca.",
+                "timestamp": (45.38, 49.0),
+            },
+            {
+                "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
+                "timestamp": (49.0, 56.28),
+            },
+            {
+                "text": " are as national as a jingo poem. Mr. Burkett fosters landscape's smile at one much in",
+                "timestamp": (56.28, 64.12),
+            },
+            {
+                "text": " the same way that Mr. Karker used to flash his teeth. And Mr. John Collier gives his",
+                "timestamp": (64.12, 70.76),
+            },
+            {
+                "text": " sitter a cheerful slap on the back before he says, like a shampoo or in a Turkish bath,",
+                "timestamp": (70.76, 77.16),
+            },
+            {
+                "text": " Next Man",
+                "timestamp": (77.16, 78.16),
+            },
+        ]
+        # fmt: on
+
+        expected_output = Expectations(
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+        ).get_expectation()
+
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], expected_output)
+
+        transcript_segments = [
+            {
+                "text": processor.decode(seg["tokens"], skip_special_tokens=True),
+                "timestamp": (seg["start"].item(), seg["end"].item()),
+            }
+            for seg in generated_ids["segments"][0]
+        ]
+        self.assertEqual(transcript_segments, expected_output)
 
     @slow
     def test_large_timestamp_generation(self):
@@ -2108,16 +2079,22 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = np.concatenate(self._load_datasamples(4))
         input_features = processor(
-            input_speech, return_tensors="pt", sampling_rate=16_000, return_token_timestamps=True
+            input_speech,
+            return_tensors="pt",
+            sampling_rate=16_000,
         ).input_features
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
+        generated_ids = model.generate(
+            input_features, max_length=448, return_timestamps=True, condition_on_prev_tokens=True
+        ).to("cpu")
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702,  1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264,  1064,  11, 365,  5272,   293, 12904,  9256, 450, 10539, 949, 505, 11, 51245, 51287,  1034, 4680, 10117, 490, 3936, 293, 1080,  3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968,  6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50257])
+        EXPECTED_OUTPUT = torch.tensor([
+            [50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50431]
+        ])
         # fmt: on
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -2126,7 +2103,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive"
                     " season of the year, with Christmas and roast beef looming before us, similes drawn from eating"
                     " and its results occur most readily to the mind. He has grave doubts whether Sir Frederick "
-                    "Leighton's work is really Greek after all,"
+                    "Leighton's work is really Greek after all, and can discover"
                 ),
                 "offsets": [
                     {
@@ -2155,6 +2132,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                         ),
                         "timestamp": (23.16, 28.68),
                     },
+                    {
+                        "text": (" and can discover"),
+                        "timestamp": (28.68, 30.0),
+                    },
                 ],
             }
         ]
@@ -2178,24 +2159,24 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
         )
 
-        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+        self.assertEqual(generate_outputs["sequences"].shape, generate_outputs["token_timestamps"].shape)
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [ 0.0000, 0.0000, 0.0000, 0.0000, 0.4800, 0.8200, 0.9600, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0000, 2.3400, 2.5000, 2.6600, 3.1800, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 12.4200, 12.8400, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9400, 26.9400, 26.9400, 26.9400, 29.8400 ],
-            [ 0.0000, 0.0000, 0.0000, 0.0000, 0.5200, 0.9000, 1.1400, 1.4200, 1.5200, 1.6800, 1.6800, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.3000, 17.3000, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 28.0000 ],
-            [ 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9200, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0600, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 15.6800, 15.6800],
-            [ 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7400, 1.0400, 1.3200, 1.6800, 2.1400, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4200, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4200, 15.8200, 15.8200, 29.6400, 29.6600, 29.6600, 29.6600, 29.6600, 29.7600]
+            [0.0000, 0.8200, 0.9800, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 1.9800, 2.3400, 2.5000, 2.6600, 3.2000, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000],
+            [0.0000, 0.9000, 1.1400, 1.4200, 1.5200, 1.6600, 1.6600, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9400, 4.4000, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600],
+            [0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9400, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0800, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 16.6000, 16.6000],
+            [0.0000, 0.7400, 1.0400, 1.3000, 1.6800, 2.1200, 2.4800, 2.7600, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4000, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4000, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200]
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
+        torch.testing.assert_close(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT)
 
     @slow
-    def test_large_token_timestamp_generation(self):
+    def test_small_token_timestamp_generation(self):
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-small")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
@@ -2208,18 +2189,18 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             **input_features, max_length=448, return_timestamps=True, return_token_timestamps=True
         )
 
-        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+        self.assertEqual(generate_outputs["sequences"].shape, generate_outputs["token_timestamps"].shape)
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [ 0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.6200,  0.7400,  0.8600, 1.0000,  1.0400,  1.3000,  1.4400,  1.7800,  2.1800,  2.2800,  2.5000, 2.9200,  3.0000,  3.3800,  3.5000,  3.6000,  3.8400,  4.1000,  4.4000, 4.6800,  5.1400,  5.3600,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200, 5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200, 5.8200],
-            [ 0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.6000,  0.9200,  1.2200, 1.3400,  1.4200,  1.5400,  1.5800,  1.7400,  2.0600,  2.3800,  3.0400, 3.3800,  3.6400,  4.1200,  4.3600,  4.7800,  4.7800,  4.7800,  4.7800, 4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800, 4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800, 4.7800],
-            [ 0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.5400,  0.8200,  1.1600, 1.4600,  1.7400,  1.8800,  2.3400,  2.7400,  3.1400,  3.2200,  3.5400, 4.2800,  4.5600,  4.8200,  5.0600,  5.3200,  5.6600,  5.9600,  6.1400, 6.4000,  6.8400,  7.8800,  8.0200,  8.3600,  8.7000,  9.0200,  9.3200, 9.5000,  9.8400, 10.3000, 10.6600, 11.0800, 11.3600, 11.4600, 11.8000, 12.4600],
-            [ 0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.5600,  0.7600,  1.0600, 1.4000,  1.8800,  2.2600,  2.6200,  2.8000,  2.9600,  3.0000,  3.2000, 3.4400,  3.6800,  4.0000,  4.6000,  5.0000,  5.3200,  5.4800,  6.0600, 6.0600,  6.1000,  6.3200,  6.7400,  7.0000,  7.2200,  7.4000,  7.7600, 8.0600,  8.5600,  8.8600,  8.9400,  9.1000,  9.3400,  9.8800,  9.8800, 9.8800]
+            [0.0000, 0.7400, 0.8000, 0.9800, 1.0200, 1.1400, 1.4000, 1.5200, 1.9200, 2.2600, 2.3800, 2.5400, 2.8600, 3.2600, 3.3400, 3.4400, 3.6000, 3.6800, 3.9200, 4.2000, 4.4800, 4.7800, 5.2600, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200],
+            [0.0000, 0.7600, 0.9800, 1.3000, 1.3800, 1.5200, 1.5800, 1.7000, 1.8400, 2.1000, 2.5000, 3.1400, 3.4400, 3.7400, 4.2000, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800],
+            [0.0000, 0.6600, 0.9000, 1.2200, 1.5200, 1.7600, 2.0200, 2.4000, 2.9200, 3.1800, 3.3200, 3.6200, 4.1000, 4.3600, 4.7800, 5.1200, 5.3400, 5.7200, 6.0600, 6.2000, 6.2000, 6.2000, 6.5000, 6.9000, 7.6400, 8.0000, 8.2400, 8.5200, 8.7400, 9.0800, 9.4000, 9.5400, 9.9400, 10.4200, 10.7600, 11.1200, 11.4400, 11.5800, 11.8600, 12.4600, 12.4600],
+            [0.0000, 0.6600, 0.8600, 1.1400, 1.5000, 1.9600, 2.3600, 2.6400, 2.9800, 3.1200, 3.2400, 3.4800, 3.7800, 4.1600, 4.6400, 5.0800, 5.4400, 6.2200, 6.2200, 6.2200, 6.4000, 6.8400, 7.1200, 7.2600, 7.4800, 7.8200, 8.1400, 8.7000, 9.0200, 9.0200, 9.2000, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800]
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
+        torch.testing.assert_close(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT)
 
     @slow
     def test_tiny_token_timestamp_batch_generation(self):
@@ -2246,9 +2227,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         # task id and lang id prompts should not have timestamp tokens
-        self.assertEqual(generate_outputs.sequences.shape[-1] - 2, generate_outputs.token_timestamps.shape[-1])
-
-        self.assertEqual(len(generate_outputs.sequences), num_return_sequences * num_samples)
+        self.assertEqual(len(generate_outputs["sequences"]), num_return_sequences * num_samples)
 
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
@@ -2269,7 +2248,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         inputs = inputs.to(torch_device)
-        generate_outputs = model.generate(**inputs, return_segments=True, return_token_timestamps=True)
+        generate_outputs = model.generate(
+            **inputs, return_segments=True, return_token_timestamps=True, return_timestamps=True
+        )
 
         token_timestamps_shape = [
             [segment["token_timestamps"].shape for segment in segment_list]
@@ -2282,23 +2263,23 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = [
-            torch.tensor([0.0000, 0.4200, 0.8200, 0.9400, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0400, 2.3400, 2.5200, 2.6600, 3.2000, 3.4400, 3.5600, 3.6800, 3.8200, 4.1000, 4.3000, 4.5800, 4.9400, 5.4000, 6.3600]),
-            torch.tensor([ 6.5400,  6.5400,  6.7400,  6.9600,  7.2600,  7.3400,  7.5800,  7.5800, 7.6400,  7.8400,  8.1000,  8.5000,  9.0000,  9.4800,  9.7200, 10.2600, 11.1000]),
-            torch.tensor([11.2200, 11.2200, 11.4200, 11.6600, 12.0800, 12.4400, 12.5800, 12.8400, 13.1800, 13.6800, 14.0000, 14.2200, 14.6200, 14.9800, 15.2200, 15.6000, 15.9400, 16.2000, 16.5600, 16.8400, 16.9800]),
-            torch.tensor([16.9800, 16.9800, 17.3200, 18.1600, 18.6400, 18.8600, 19.2800, 19.5600, 19.8800, 20.1800, 20.3800, 20.7200, 21.1600, 21.5400, 21.9000, 22.2000, 22.4200, 22.8600, 23.7000]),
-            torch.tensor([23.7000, 23.7000, 23.9400, 24.1800, 24.3800, 24.8400, 25.2800, 25.6600, 25.9200, 26.2600, 26.4000, 26.5800, 26.7600, 27.1400, 27.3800, 28.0400, 28.3800, 28.8200, 29.3400, 29.5200]),
-            torch.tensor([29.4400, 29.4400, 29.7000, 30.0800, 30.3800, 30.5400, 30.8200, 31.0600, 31.6600, 31.9200, 32.3000, 32.4800, 32.6200, 33.6800]),
-            torch.tensor([33.8000, 33.8000, 33.9800, 33.9800, 34.1800, 34.4400, 34.6200, 35.0000, 35.2200, 35.3200, 35.5600, 35.9200, 36.3800, 36.6200, 36.6600, 36.9600, 37.3400, 37.9800, 38.5800, 38.7200, 38.9800, 39.4400, 39.5800, 39.8000, 40.1200, 40.2600]),
-            torch.tensor([40.5200, 40.5200, 40.6200, 41.1000, 41.5400, 41.9200, 42.1000, 42.3200, 42.3200, 43.0600, 44.6000]),
-            torch.tensor([44.7000, 44.7000, 44.8600, 44.9400, 45.1400, 45.1400, 45.2800, 45.6200, 45.9000, 46.2600, 47.1600, 47.4800, 47.7400, 48.1000, 48.2800, 48.4000, 48.6200, 48.8400, 49.0400, 49.2800, 49.4800, 49.6600, 49.9400, 50.5400]),
-            torch.tensor([50.5400, 50.5400, 50.6600, 50.8800, 51.2400, 51.7200, 52.8400]),
-            torch.tensor([52.9600, 52.9600, 53.0400, 53.2600, 53.4200, 53.5800, 53.9200, 54.1200, 54.7200, 54.9400, 55.2600, 55.6200, 55.9800, 56.5600, 56.8000, 56.9200, 57.3600, 57.9200, 58.1800, 58.5000, 58.6400, 58.8200]),
-            torch.tensor([58.6800, 58.6800, 59.1400, 59.5400, 59.9200, 60.1600, 60.3800, 60.8200, 61.6200, 62.2600, 75.2000]),
+            torch.tensor([0.0000, 0.8200, 0.9400, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0400, 2.3400, 2.5000, 2.6600, 3.2000, 3.4400, 3.5600, 3.6800, 3.8200, 4.1000, 4.3000, 4.5800, 4.9400, 5.4000, 6.3600, 6.5400]),
+            torch.tensor([6.5400, 6.7400, 6.9600, 7.2600, 7.3400, 7.5800, 7.5800, 7.6400, 7.8400, 8.1000, 8.5000, 9.0000, 9.4800, 9.7200, 10.2600, 11.1000, 11.2200]),
+            torch.tensor([11.2200, 11.4200, 11.6600, 12.0800, 12.4400, 12.5800, 12.8400, 13.1600, 13.6800, 14.0000, 14.2200, 14.6200, 14.9800, 15.2200, 15.6000, 15.9400, 16.2000, 16.5600, 16.8400, 16.9800, 16.9800]),
+            torch.tensor([16.9800, 17.3200, 18.1800, 18.6400, 18.8600, 19.2800, 19.5600, 19.8800, 20.1800, 20.3800, 20.7200, 21.1600, 21.5400, 21.9000, 22.2000, 22.4200, 22.8400, 23.7000, 23.7000]),
+            torch.tensor([23.7000, 23.9400, 24.1800, 24.3800, 24.8400, 25.2800, 25.6600, 25.9200, 26.2600, 26.3800, 26.5800, 26.7600, 27.1600, 27.3800, 28.0400, 28.3800, 28.8200, 29.3400, 29.5200, 29.9800, 29.9800]),
+            torch.tensor([29.4400, 29.7000, 30.0600, 30.3800, 30.5400, 30.8200, 31.0600, 31.6600, 31.9200, 32.3000, 32.5000, 32.6200, 33.6800, 33.8000]),
+            torch.tensor([33.8000, 33.9800, 33.9800, 34.1800, 34.4400, 34.6200, 35.0000, 35.2200, 35.3200, 35.5600, 35.9200, 36.3800, 36.6200, 36.6600, 36.9600, 37.3400, 37.9800, 38.5800, 38.7200, 38.9800, 39.4400, 39.5800, 39.8000, 40.1200, 40.2600, 40.5200]),
+            torch.tensor([40.5200, 40.6200, 41.1000, 41.5400, 41.9200, 42.1000, 42.3200, 42.3200, 43.0600, 44.6000, 44.7000]),
+            torch.tensor([44.7000, 44.8600, 44.9400, 45.1400, 45.1400, 45.2800, 45.6200, 45.9000, 46.2600, 47.1600, 47.4800, 47.7400, 48.1000, 48.2800, 48.4000, 48.6200, 48.8400, 49.0400, 49.2800, 49.4800, 49.6600, 49.9400, 50.5400, 50.5400]),
+            torch.tensor([50.5400, 50.6600, 50.8800, 51.2400, 51.7200, 52.8400, 52.9600]),
+            torch.tensor([52.9600, 53.0400, 53.2600, 53.4200, 53.5800, 53.9200, 54.1200, 54.7200, 54.9400, 55.2600, 55.6200, 55.9800, 56.5600, 56.8000, 56.9200, 57.3600, 57.9200, 58.1600, 58.5200, 58.6400, 58.8200, 59.4200, 59.4200]),
+            torch.tensor([58.6800, 59.1400, 59.5400, 59.9200, 60.1400, 60.3800, 60.8400, 61.6000, 62.2400, 62.3800, 62.4400])
         ]
         # fmt: on
 
         for segment, exp_segment in zip(generate_outputs["segments"][0], EXPECTED_OUTPUT):
-            self.assertTrue(torch.allclose(segment["token_timestamps"], exp_segment))
+            torch.testing.assert_close(segment["token_timestamps"], exp_segment)
 
     @slow
     def test_tiny_specaugment_librispeech(self):
@@ -2333,7 +2314,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_with_prompt_ids(self):
@@ -2348,14 +2329,70 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to(torch_device)
         output_with_prompt = model.generate(input_features, prompt_ids=prompt_ids)
 
-        expected_without_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
-        expected_with_prompt = "<|startofprev|> Leighton<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
+        expected_without_prompt = " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca."
+        expected_with_prompt = " He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca."
 
         output_without_prompt = processor.decode(output_without_prompt[0])
         output_with_prompt = processor.decode(output_with_prompt[0])
 
         self.assertEqual(output_without_prompt, expected_without_prompt)
         self.assertEqual(output_with_prompt, expected_with_prompt)
+
+    @slow
+    def test_generate_with_forced_decoder_ids(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        forced_decoder_ids = processor.get_decoder_prompt_ids(
+            task="transcribe",
+            language="german",
+        )
+
+        generated_ids = model.generate(input_features, do_sample=False, language="<|de|>", task="transcribe")
+        generated_ids_forced = model.generate(input_features, do_sample=False, forced_decoder_ids=forced_decoder_ids)
+
+        self.assertListEqual(generated_ids.tolist()[0], generated_ids_forced.tolist()[0])
+
+    @slow
+    def test_generate_with_prompt_ids_task_language(self):
+        EXPECTED_TEXT = " Mr. Kilter is the apostle of the middle classes and we are glad to welcome his gospel."
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to(torch_device)
+
+        prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        input_speech = ds[0]["audio"]["array"]
+
+        input_features = processor(
+            input_speech, return_tensors="pt", truncation=False, padding="longest", sampling_rate=16_000
+        )["input_features"]
+        input_features = input_features.to(device=torch_device)
+
+        gen_kwargs = {
+            "do_sample": False,
+            "return_timestamps": True,
+            "language": "english",
+            "task": "transcribe",
+            "prompt_ids": prompt_ids,
+        }
+
+        generated_ids = model.generate(input_features, **gen_kwargs)
+        transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+
+        self.assertEqual(transcription, EXPECTED_TEXT)
 
     @slow
     def test_language_detection(self):
@@ -2370,7 +2407,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         ids_to_lang = {v: k for k, v in model.generation_config.lang_to_id.items()}
 
-        assert ids_to_lang[lang_id] == "<|en|>"
+        self.assertEqual(ids_to_lang[lang_id], "<|en|>")
 
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
@@ -2382,7 +2419,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         lang_id = model.detect_language(input_features)[0].item()
 
-        assert ids_to_lang[lang_id] == "<|hi|>"
+        self.assertEqual(ids_to_lang[lang_id], "<|hi|>")
 
     @slow
     def test_default_multilingual_transcription_short_form(self):
@@ -2403,19 +2440,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert (
-            transcription
-            == "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>"
-        )
+        self.assertEqual(transcription, " Mirchi mein ki tene vibinda prajatiya hai")
 
         # set task to translate
         sequences = model.generate(input_features, task="translate")
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert (
-            transcription
-            == "<|startoftranscript|><|hi|><|translate|><|notimestamps|> How much is the difference between the girls?<|endoftext|>"
-        )
+        self.assertEqual(transcription, " How much is the difference between the girls?")
 
     @slow
     def test_default_multilingual_transcription_long_form(self):
@@ -2434,76 +2465,33 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features.to(torch_device)
 
         # task defaults to transcribe
-        sequences = model.generate(input_features)
+        sequences = model.generate(input_features, return_timestamps=True)
 
-        transcription = processor.batch_decode(sequences)[0]
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
+        self.assertEqual(transcription, " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?")
 
         # set task to translate
-        sequences = model.generate(input_features, task="translate")
-        transcription = processor.batch_decode(sequences)[0]
+        sequences = model.generate(input_features, task="translate", return_timestamps=True)
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        assert (
-            transcription
-            == " How many different species are there in the chilli? How many different species are there in the chilli?"
+        self.assertEqual(
+            transcription,
+            " How many different species are there in the chilli? How many different species are there in the chilli?",
         )
 
     @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
-
-        output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all(token in text for token in expected_tokens))
-
-    @slow
-    def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device)
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
-
-        model.generation_config.forced_decoder_ids = None
-        model.config.forced_decoder_ids = None
-
-        output = model.generate(input_features, prompt_ids=prompt_ids, return_timestamps=True)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-
-    @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_speculative_decoding_distil(self):
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "distil-whisper/distil-large-v2"
-        assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-        )
+        assistant_model = WhisperForCausalLM.from_pretrained(assistant_model_id, dtype=dtype, use_safetensors=True)
         assistant_model.to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -2531,27 +2519,26 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
-        assert transcription_ass == transcription_non_ass
-        assert transcription_ass == [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
-        ]
-        assert total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster"
+        self.assertEqual(transcription_ass, transcription_non_ass)
+        self.assertEqual(
+            transcription_ass,
+            [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
+        )
+        self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_speculative_decoding_non_distil(self):
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, dtype=dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -2580,11 +2567,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
-        assert transcription_ass == transcription_non_ass
-        assert transcription_ass == [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
-        ]
-        assert total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster"
+        self.assertEqual(transcription_ass, transcription_non_ass)
+        self.assertEqual(
+            transcription_ass,
+            [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
+        )
+        self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
 
     @slow
     def test_whisper_longform_single_batch(self):
@@ -2607,13 +2595,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(input_features, return_timestamps=True)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
 
-        assert decoded == EXPECTED_TEXT
+        self.assertEqual(decoded, EXPECTED_TEXT)
 
         decoded_with_timestamps = processor.batch_decode(result, skip_special_tokens=True, decode_with_timestamps=True)
 
         no_timestamp_matches = re.split(r"<\|[\d\.]+\|>", decoded_with_timestamps[0])
 
-        assert ["".join(no_timestamp_matches)] == EXPECTED_TEXT
+        self.assertEqual(["".join(no_timestamp_matches)], EXPECTED_TEXT)
 
         timestamp_matches = re.findall(r"<\|[\d\.]+\|>", decoded_with_timestamps[0])
 
@@ -2621,7 +2609,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         is_increasing = all(timestamp_floats[i] <= timestamp_floats[i + 1] for i in range(len(timestamp_floats) - 1))
 
-        assert is_increasing
+        self.assertTrue(is_increasing)
 
     @slow
     def test_whisper_longform_prompt_ids(self):
@@ -2662,16 +2650,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_all_segments = processor.batch_decode(result, skip_special_tokens=True)
 
         # show that first segment has quilter and last segment has brion
-        assert "quilter" in first_text
-        assert "brion" in last_text
+        self.assertIn("quilter", first_text)
+        self.assertIn("brion", last_text)
 
         # condition on first segment correctly changes to kilter in first segment, but does not transcribe "brianno" correctly
-        assert "kilter" in decoded_first_segment[0][: len(first_text)].lower()
-        assert "brionno" not in decoded_first_segment[0][-len(last_text) :].lower()
+        self.assertIn("kilter", decoded_first_segment[0][: len(first_text)].lower())
+        self.assertNotIn("brionno", decoded_first_segment[0][-len(last_text) :].lower())
 
         # condition on all-segment correctly changes to kilter in first segment and correctly transcribes "brianno"
-        assert "kilter" in decoded_all_segments[0][: len(first_text)].lower()
-        assert "brionno" in decoded_all_segments[0][-len(last_text) :].lower()
+        self.assertIn("kilter", decoded_all_segments[0][: len(first_text)].lower())
+        self.assertIn("brionno", decoded_all_segments[0][-len(last_text) :].lower())
 
     @slow
     def test_whisper_longform_single_batch_prev_cond(self):
@@ -2704,14 +2692,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(input_features, **gen_kwargs)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
 
-        assert decoded == EXPECTED_TEXT
+        self.assertEqual(decoded, EXPECTED_TEXT)
 
     @slow
     def test_whisper_shortform_single_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing and the most topical antilock breaks and power steering pain, Stakingly stitching, leather seating so soft, it would make JD power and her associate blush. If you were to create the luxury sedan that is my nightly model, but sometimes— you're sometimes, folks— I lurched the consciousness and the back of an abandoned school bus"]
-        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there night after night after, actually. Carefully selecting for you the day's noisiest, most aerodynamic headlines, stress testing, and the most topical, anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school"]
+        cuda_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
+        cuda_expectation2 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
+        rocm_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
         # fmt: on
+        expected_output = Expectations(
+            {("cuda", None): cuda_expectation, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
+        expected_output2 = Expectations(
+            {("cuda", None): cuda_expectation2, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -2736,9 +2731,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
-
-        assert decoded == EXPECTED_TEXT
+        decoded = processor.batch_decode(result, skip_special_tokens=True)
+        self.assertEqual(decoded, expected_output)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2751,14 +2745,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
-        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
-
-        assert decoded == EXPECTED_TEXT1
+        decoded = processor.batch_decode(result, skip_special_tokens=True)
+        self.assertEqual(decoded, expected_output2)
 
     @slow
     def test_whisper_longform_single_batch_beam(self):
         # fmt: off
-        EXPECTED_TEXT = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of rocky Ithaca. Linnell's pictures are a sort of up-gards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Burkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. When Mr. John Collier gives his sitter a cheerful slap in the back, before he says, like a shampooer and a Turkish bath, next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate an expression. On the general principles of art, Mr. Quilter writes with equal lucidity. He tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, there are two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures. Mix a customary appeal to the last judgment and reminds us that in the great days of art with Michelangelo was the furnishing upholsterer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man, and remarks was pleasing courtesy in felicitous grace that many faces are feeling. Only, unfortunately, his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the topper of painting. By Harry Quilter, M.A., because he was sleeping instead of conquering, the lovely rose princess has become a fiddle without a bow, while poor Shaggy sits there, accooing dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has flooded this grace, and your friends are asking for you. I begged Ruggado long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our gnomes, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, inquired Shaggy. In the metal forest. Where is that? The metal forest is in the great domed cavern, the largest in all our dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked Betsy thoughtfully. I don't believe and knew any magic, or she'd have worked it before. I do not know, confessed Shaggy. True, a great Calico. Calico went to the big gong and pounded on it, just as Ruggado used to do, but no one answered the summons. Having returned to the Royal Cavern, Calico first pounded the gong and then sat in the throne, wearing Ruggado's discarded ruby crown, and holding in his hand to scepter which Ruggado had so often thrown at his head. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-laying cloth that was the only german who wore. The cut on his chest was still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators, retrovealities not worth thinking about. His instant panic was followed by a small, sharp, blow high on his chest. One minute, a voice said, and a time buzzer sounded, a minute is not a very large measure of time, and his body needed every fraction of it. The buzzers were, triggered his muscles into complete relaxation. Oli's heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the twenties needed undisturbed rest. Therefore, nights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The twenties, he must have drawn his gun because the intruder said quickly, but that away you're being a fool. Out there was silence then, and still wondering, Breon was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man with an apparently inexhaustible store of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Every man who entered the twenties had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported except at two points, the head and heels. This is physically impossible when conscious. Breon's head died before during the twenties and death during the last round was, in some ways, easier than defeat. Breeding deeply, Breon's softly spoke the auto-hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. Our role looked amazed at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Breon saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our rogue. Breon sensed it and knew the fifth point was his. In the powerful twist that's rest of the side, in and under the guard."]
+        EXPECTED_TEXT = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of rocky Ithaca. Linnell's pictures are a sort of up-gards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Burkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. When Mr. John Collier gives his sitter a cheerful slap in the back, before he says, like a shampooer and a Turkish bath, next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate an expression. On the general principles of art, Mr. Quilter writes with equal lucidity. He tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, there are two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures. Mix a customary appeal to the last judgment and reminds us that in the great days of art with Michelangelo was the furnishing upholsterer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man, and remarks was pleasing courtesy in felicitous grace that many faces are feeling. Only, unfortunately, his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the topper of painting. By Harry Quilter, M.A. Because he was sleeping instead of conquering, the lovely rose princess has become a fiddle without a bow, while poor Shaggy sits there, accooing dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled and disgraced, and your friends are asking for you. I begged Ruggado long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there is nothing he can do in these dominions, as well as our gnomes, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, inquired Shaggy. In the metal forest. Where is that? The metal forest is in the great domed cavern, the largest in all our dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked Betsy thoughtfully. I don't believe and knew any magic, or she'd have worked it before. I do not know, confessed Shaggy. True, a great Calico. Calico went to the big gong and pounded on it, just as Ruggado used to do, but no one answered the summons. Having returned to the Royal Cavern, Calico first pounded the gong and then sat in the throne, wearing Ruggado's discarded ruby crown, and holding in his hand to scepter which Ruggado had so often thrown at his head. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-laying cloth that was the only germany war. The cut on his chest, still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators, retrovealities not worth thinking about. His instant panic was followed by a small sharp blow high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzers were, triggered his muscles into complete relaxation. Oli's heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the 20s needed undisturbed rest, therefore nights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The 20s, he must have drawn his gun because the intruder said quickly, but that away, there'd be no fool. Out, there was silence then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man with an apparently inexhaustible store of energy. There could be little art in this last and final round of fencing, just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported except at two points, the head and heels. This is physically impossible when conscious. This had died before during the 20s and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the auto-hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. Our role looked amazed at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our rogue. Brienne sensed it and knew the fifth point was his. In the powerful twist that's rest of the side, in and under the guard."]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -2781,18 +2774,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": True,
             "logprob_threshold": -1.0,
+            "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
-
-        def check_gen_kwargs(inputs, generation_config, *args, **kwargs):
-            assert generation_config.num_beams == gen_kwargs["num_beams"]
-
-        self._patch_generation_mixin_generate(check_args_fn=check_gen_kwargs)
 
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
 
-        assert decoded == EXPECTED_TEXT
+        self.assertEqual(decoded, EXPECTED_TEXT)
 
     @slow
     def test_whisper_longform_multi_batch(self):
@@ -2837,16 +2826,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         # make sure single & batch is exactly the same
-        assert decoded_all[0:1] == decoded_single[0]
-        assert decoded_all[1:2] == decoded_single[1]
-        assert decoded_all[2:3] == decoded_single[2]
-        assert decoded_all[3:4] == decoded_single[3]
+        self.assertEqual(decoded_all[0:1], decoded_single[0])
+        self.assertEqual(decoded_all[1:2], decoded_single[1])
+        self.assertEqual(decoded_all[2:3], decoded_single[2])
+        self.assertEqual(decoded_all[3:4], decoded_single[3])
 
         # exact match
-        assert decoded_all[0:1] == EXPECTED_TEXT_1
-        assert decoded_all[1:2] == EXPECTED_TEXT_2
-        assert decoded_all[2:3] == EXPECTED_TEXT_3
-        assert decoded_all[3:4] == EXPECTED_TEXT_4
+        self.assertEqual(decoded_all[0:1], EXPECTED_TEXT_1)
+        self.assertEqual(decoded_all[1:2], EXPECTED_TEXT_2)
+        self.assertEqual(decoded_all[2:3], EXPECTED_TEXT_3)
+        self.assertEqual(decoded_all[3:4], EXPECTED_TEXT_4)
 
     @slow
     def test_whisper_longform_multi_batch_prev_cond(self):
@@ -2887,15 +2876,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
 
         # exact match
-        assert decoded_single[0] == EXPECTED_TEXT_1
-        assert decoded_single[1] == EXPECTED_TEXT_2
-        assert decoded_single[2] == EXPECTED_TEXT_3
-        assert decoded_single[3] == EXPECTED_TEXT_4
+        self.assertEqual(decoded_single[0], EXPECTED_TEXT_1)
+        self.assertEqual(decoded_single[1], EXPECTED_TEXT_2)
+        self.assertEqual(decoded_single[2], EXPECTED_TEXT_3)
+        self.assertEqual(decoded_single[3], EXPECTED_TEXT_4)
 
     @slow
     def test_whisper_longform_multi_batch_hard(self):
         # fmt: off
-        EXPECTED_TEXT = [
+        EXPECTED_CUDA = [
             " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile.",
             " Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school and slap myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen moon, render a gas tank out of an empty big gulp, fill with white claw and denatured alcohol, then light a match and let her rip and the demented one man soapbox derby of news that is my segment. Me, Guadalupe! No!",
             " Ladies and gentlemen, you know, I spent a lot of time right over there Raising the finest Holstein news cattle firmly yet tenderly milking the latest headlines from their jokes swollen teats Churning the daily stories into the decadent proven-style style triple cream breed that is my nightly monologue But sometimes sometimes folks I stagger home hungry after being released by the police and Root around in the neighbor's trash can for an old milk carton scrape out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-donned street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire then hunker down and hallucinate while eating the listeria laden demon custard of news that is my segment. You mean one of them.",
@@ -2905,7 +2894,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's Newsiest most topical flower eggs milk and butter and Stranding into a fine batter to make delicate and informative comedy pancakes Then I glaze them in the juice and zest of the most relevant midnight Valencia oranges and douse it all and a fine Dela main de voyage cognac Before prom baying and basting them tables. I deserve for you the James Beard award worthy crepe suzzette That is my nightly monologue, but sometimes just sometimes folks. I wake up in the baggage hold of Greyhound bus. It's being hoisted by the scrap yard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps and busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strain, pair of sweatpants and as oven mitts to extract and serve the demented transience poundcake of news that is my segment. Me, Guadalupe!",
             " Folks, if you watched the show and I hope you do, I spent a lot of time right over there. Tiredlessly studying the lineage of the days most important thoroughbred stories and whole-stiner headlines, working with the best trainers, money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen. That is my nightly monologue, but sometimes, sometimes, folks, I break into an unincorporated veterinary genetics lab and grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pilfered DNA of a horse and whatever was in a tube labeled Keith Colan extra. Slurrying the concoction with caffeine pills and a microwave red bull, I screamed, sang a prayer to Janice, initiator of human life and God of transformation as a half horse, half man, freak. Seizes to life before me and the hideous collection of loose animal parts and corrupted man tissue that is my segment. Meanwhile!"
         ]
+        EXPECTED_ROCM = [
+            " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting of classics, Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lipnitsky attack that culminates in the elegant lethal slow-played It's an all-passant checkmate that is my nightly monologue, but sometimes sometimes folks, I... APPLAUSE Sometimes I... Startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs, rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the wharf and challenged toothless drifters to the godless, bug-house blitz of tournament that is my segment. Meanwhile!",
+            " Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen moon, render a gas tank out of an empty big gulp, fill with white claw and denatured alcohol, then light a match and let her rip and the demented one man soapboxed her be of news that is my segment. We need one!",
+            " Ladies and gentlemen, you know, I spent a lot of time right over there Raising the finest Holstein news cattle firmly yet tenderly milking the latest headlines from their jokes swollen teats Churning the daily stories into the decadent proven-style style triple cream breed that is my nightly monologue But sometimes sometimes folks I stagger home hungry after being released by the police and Root around in the neighbor's trash can for an old milk carton scrape out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-donned street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire then hunker down and hallucinate while eating the listeria laden demon custard of news that is my segment. You mean one of them.",
+            " Folks, if you watch this show, you know I spend most of my time right over there carefully sorting through the day's biggest stories and selecting only the most subtle and unblemished ostrich and crocodile news leather, which I then entrust to artisan graduates of the Ichol Gregoire Ferrandi, who carefully dye them in a palette of bright zesty shades and adorn them in the finest and most topical inlay work using hand tools and double magnifying glasses, then assemble them according to now classic and elegant geometry using our signature saddles stitching. In line it with bees, wax coated linen, finely attached a mallet hammer strap, pearl hardware, and close shed to create for you the one of a kind hoke couture, Erme's Birkin bag that is my monologue, but sometimes, sometimes folks, sometimes. Sometimes I wake up in the last car of an abandoned roller coaster at Coney Island where I'm I'm hiding from the triads. I have some engine lubricants out of a safe way bag and stagger down the shore to tear the sail off a beach schooner. Then I rip the coaxial cable out of an RV and elderly couple from Utah, Hank, and Mabel lovely folks. And use it to stitch the sail into a loose pouch like a rock sack. And I stow away in the back of a garbage truck to the junkyard where I pick through to the debris for only the broken toys that make me the saddest until I have loaded for you. The Hobo Fugitives bug out, bindle of news that is my segment. Me one!",
+            " You know, folks, I spent a lot of time crafting for you a bespoke playlist of the day's biggest stories right over there. Meticulously selecting the most topical chakra affirming scented candles, and using Feng Shui to perfectly align the joke energy in the exclusive boutique yoga retreat that is my monologue. But sometimes just sometimes I go to the dumpster behind the waffle house at three in the morning, take off my shirt, cover myself, and used fry oil, wrap my hands with some double-duct tape by stole from the broken car window. Pound a six-pack of blueberry hard-seltzer and a sack of pills I stole from a parked ambulance. Then arm wrestle a raccoon in the back alley vision quest of news that is my segment. Meanwhile!",
+            " You know, folks, I spend most of my time right over there. Mining the day's biggest, most important stories, collecting the finest, most topical iron or hand hammering it into joke panels. Then I craft sheets of bronze and blazing with patterns that tell an epic tale of conquest and glory. Then, using the Germanic tradition press black process, I place thin sheets of foil against the scenes and by hammering or otherwise applying pressure from the back, I project these scenes into a pair of cheat cards in a faceplate and finally using fluted strips of white alloyed molding, I divide the designs into framed panels and hold it all together using bronze rivets to create the beautiful and intimidating, Anglo-Saxon battle helm that is my nightly monologue. Sometimes, sometimes folks. Sometimes, just sometimes, I come into my sense as fully naked on the deck of a pirate-be-seag'd, melee container ship that picked me up floating on the detached door of a portapotty in the Indian Ocean. Then after a sun stroke-induced realization of the crew of this ship plans to sell me an exchange for a bag of oranges to fight off scurvy, I lead a mutiny using only a PVC pipe at a pool chain that accepting my new role as Captain and declaring myself king of the windarc seas. I grab a dirty mop bucket covered in barnacles and adorn it with the teeth of the vanquished to create the sopping wet pirate crown of news that is my segment. Meanwhile!",
+            " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's Newsiest most topical flower eggs milk and butter and Stranding into a fine batter to make delicate and informative comedy pancakes Then I glaze them in the juice and zest of the most relevant midnight Valencia oranges and douse it all and a fine Dela main de voyage cognac Before from bang and basting them tables. I deserve for you the James Beard award worthy crepe suzzette That is my nightly monologue, but sometimes just sometimes folks. I wake up in the baggage hold of Greyhound bus. It's being hoisted by the scrap yard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps and busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strain, pair of sweatpants and as oven mitts to extract and serve the demented transience poundcake of news that is my segment. Me, Guadalupe!",
+            " Folks, if you watched the show and I hope you do, I spent a lot of time right over there. Tiredlessly studying the lineage of the days most important thoroughbred stories and wholesome or headlines, working with the best trainers, money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen. That is my nightly monologue, but sometimes, sometimes, folks, I break into an unincorporated veterinary genetics lab, and grab whatever test tubes I can find, and then under a grow light I got from a discarded chia pet. I mixed the pilfer DNA of a horse and whatever was in a tube labeled Keith Colan extra. Slurrying the concoction with caffeine pills and a microwave red bull, I screamed, sing a prayer to Janice, initiator of human life and God of transformation as a half horse, half man, freak. Seasons to life before me and the hideous collection of loose animal parts and corrupted man tissue that is my segment. Meanwhile!",
+        ]
         # fmt: on
+
+        expected_output = Expectations(
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+        ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -2919,12 +2922,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         audio = ds[:num_samples]["audio"]
         audios = [x["array"] for x in audio]
 
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,  # necessary to trigger no speech detection
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": False,
+            "logprob_threshold": -2.0,  # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
+        }
+
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
             inputs = inputs.to(device=torch_device)
 
-            result = model.generate(**inputs, return_timestamps=True)
+            result = model.generate(**inputs, **gen_kwargs)
             decoded_single += processor.batch_decode(result, skip_special_tokens=True)
 
         inputs = processor(
@@ -2940,28 +2952,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        for i in range(num_samples):
-            assert decoded_all[i] == decoded_single[i]
-            assert decoded_all[i] == EXPECTED_TEXT[i]
+        self.assertListEqual(decoded_all, decoded_single)
+        self.assertListEqual(decoded_all, expected_output)
 
     @slow
     def test_whisper_longform_multi_batch_hard_prev_cond(self):
-        # Without this set here, this test may fail if it is run with other tests (say, `test_tiny_*`). It's unclear
-        # why other tests may affect this tests: it seems some random operations are beyond the scene.
-        set_seed(0)
         # fmt: off
         EXPECTED_TEXT = [
-            " Folks, if you watch the show, you know I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories, developing the central headline pawns, definitely maneuvering an oh-so-topical night to F6, faming of classic Sicilian, named or variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a Fisher shows in lip-nitsky attack that culminates in the elegant lethal slow-played, all-pass on checkmate that is my nightly monologue, but sometimes sometimes folks I sometimes I start to the wake-up side down in the monkey bars of a condemned playground on a super fun site, get all hepped up on goofballs, rummage that would discard a tag bag of defective toys, yank out a fistball of disembodied doll limbs, toss them on a stain kid's place mad from a defunct denies, set up a table inside a rusty cargo container down by the warf and challenge toothless drifters to the godless bughouse blitz of tournament that is my segment, meanwhile.",
-            " Folks, I spent a lot of time right over there night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing on those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush. To create the luxury sedan that is my nightly monologue, but sometimes I just sometimes focus. I lurched to consciousness in the back of an abandoned school bus and slapped myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen-moon render a gas tank out of an empty big gulp, filled with white claw and de-natured alcohol, then light a match and let her rip in the dis-mented one man, soapbox derby of news that is my segment.",
-            " Ladies and gentlemen, you know, I spent a lot of time right over there, raising the finest hosting news cattle firmly, yet tenderly milking the latest headlines from their jokes, swollen teats, churning the daily stories into the decadent Provincil style triple cream-breed. It is my nightly monologue, but sometimes sometimes I stagger home hungry after being released by the police and root around in the neighbor's trash can for an old milk carton scrape out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-drawn street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire than a hunker down in hallucinate while eating the Listeria latent demon custard of news that is my segment.",
-            " Folks, you watched this show, you know I spend most of my time right over there, carefully sorting through the days, big stories, and selecting only the most subtle, and unblemished ostrich and crocodile news leather, which I then entrust to artisan graduates of the Ickel Greg Waferandi, who carefully died them in a pallet of bright, zesty shades, and adorn them in the finest most topical inlay work, using hand tools and double magnifying glasses, then assemble them according to now classic and elegant geometry using our signature saddle stitching, and line it with bees, wax, coated linen, and finally attach a mallet hammered strap, purled hardware, and close-shet to create for you the one of a kind hope kutur, Ernme, is burkin bag that is my monologue, but sometimes, sometimes folks, sometimes. Sometimes I wake up in the last car of an abandoned rollercoaster at Coney Island where I'm hiding from the triads, I have some engine lubricants out of a safe way bag and staggered down the shore to tear the sail off a beach skoener, then I ripped the coaxial cable out of an RV and elderly couple from Utah, Hank, and Mabel, lovely folks, and use it to stitch the sail into a loose pouch-like rock sack, and I stow in the back of a garbage truck to the junkyard, where I pick through to the debris for only the broken toys that make me the saddest, until I have loaded for you, the hobo fugitives bug out bindle of news that",
+            " Folks, if you watch the show, you know I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories, developing the central headline pawns, definitely maneuvering an oh-so-topical night to F6, faming of classic Sicilian, named or variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher shows in lip-nitsky attack that culminates in the elegant lethal slow-played all-pass on checkmate that is my nightly monologue, but sometimes sometimes, sometimes folks I sometimes I start a little wake-up side down in the monkey bars of a condemned play ground on a super fun site, get all hept up on goofballs, rummage that would discard a tag bag of defective toys, yank out a fistball of disembodied doll limbs, toss them on a stain kid's place mad from a defunct denies, set up a table inside a rusty cargo container down by the warf and challenge toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!",
+            " Folks, I spent a lot of time right over there night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing on those topical anti-lock breaks and power steering, painstakingly stitching, leather-seeding, so soft, it would make JD power and her associates blush. To create the luxury sedan that is my nightly monologue, but sometimes I'm just sometimes folks. I lurched to consciousness in the back of an abandoned school bus and slapped myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen-moon render a gas tank out of an empty big gulp, filled with white claw and de-natured alcohol, then light a match, and letter-rip, and the dis-mented one-man, soapbox derby of news that is my segment. Meanwhile.",
+            " Ladies and gentlemen, you know, I spent a lot of time right over there, raising the finest hosting news cattle firmly, yet tenderly milking the latest headlines from their jokes, swollen teats, churning the daily stories into the decadent Provincil style triple cream-breed. It is my nightly monologue, but sometimes sometimes I stagger home hungry after being released by the police and root around in the neighbor's trash can for an old milk carton scraped out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-dawn street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire than a hunker down in hallucinate while eating the Listeria latent demon custard of news that is my segment.",
+            " Folks, you watched this show, you know I spend most of my time right over there, carefully sorting through the days, big stories, and selecting only the most subtle and unblemished ostrich and crocodile news leather, which I then entrust to artisan graduates of the Ickel Greg Waferandi, who carefully died them in a pallet of bright, zesty shades, and adorn them in the finest most topical inlay work, using hand tools and double magnifying glasses, then assemble them according to now classic and elegant geometry using our signature saddle stitching, and line it with bees, wax, coated linen, and finally attach a mallet hammered strap, purled hardware, and close-shet to create for you the one of a kind hot couture, earn-may's burkin bag that is my monologue, but sometimes, sometimes folks, sometimes. Sometimes I wake up in the last car of an abandoned roller coaster at Coney Island where I'm hiding from the triads, I huff some engine lubricants out of a safe way bag and staggered down the shore to tear the sail off a beach skoener, then I ripped the coaxial cable out of an RV and elderly couple from Utah, Hank, and Mabel, lovely folks, and use it to stitch the sail into a loose pouch-like rock sack, and I stow in the back of a garbage truck to the junkyard, where I pick through to the debris for only the broken toys that make me the saddest, until I have loaded for you the hobo fugitives bug out bindle of news that is my segment.",
             " You know, folks, I spent a lot of time crafting for you a bespoke playlist of the day's big stories right over there. meticulously selecting the most topical chakra affirming scented candles, using Feng Shui, to perfectly align the joke energy in the exclusive boutique yoga retreat that is my monologue, but sometimes just sometimes, I go to the dumpster behind the waffle house at three in the morning, take off my shirt, cover myself and use fry oil, wrap my hands and some old duct tape I stole from a broken car window, pound a six pack of blueberry hard-seller and a second pill, as I stole from a parked ambulance, then arm wrestle a raccoon in the back alley vision quest of news that is my segment.",
-            " You know, folks, I spend most of my time right over there. Mining the days, biggest, most important stories, collecting the finest, most topical iron or hand hammering it into joke panels, then I craft sheets of bronze and blazing with patterns that tell an epic tale of conquest and glory. Then, using the Germanic tradition press, black process, I place thin sheets of foil against the scenes and by hammering or otherwise applying pressure from the back, I project these scenes into a pair of cheat cards and a face plate, and finally using fluted strips of white, alloyed molding, I divide the designs into framed panels and hold it all together using bronze rivets to create the beautiful and intimidating, Anglo-Saxon battle helm that is my nightly monologue. But sometimes, sometimes, folks. Sometimes, just sometimes, I come to my senses fully naked on the deck of a pirate-be-seed, melee, container ship that picked me up floating on the detached door of a porta-potty in the Indian Ocean. Then, after a sunstroke induced realization of the crew of this ship plans to sell me an exchange for a bag of oranges to fight off scurvy, I lead a mutiny using only a PVC pipe and a pool chain that accepting my new role as captain and declaring myself King of the Windark Seas. I grab a dirty mop bucket covered in barnacles and adorn it with the teeth of the vanquished to create these shopping wet pirate crown of news that is my segment. Me wild!",
-            " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's newsiest, most topical flower eggs, milk and butter. And straining into a fine batter to make delicate and informative comedy pancakes, then I glaze them in the juice and zest of the most relevant midnight valencio oranges. And doubts at all, and I find delimane de voyage cognac, before from bang and basting them tables, I deserve you the James Beard Award worthy creeps to ZET. That is my nightly monologue, but sometimes sometimes folks, I wake up in the baggage hole of Greyhound bus, it's being hoisted by the scrapyard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps, busted up in bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strained pair of sweatpants and as ovenmets to extract and serve the demented transients pound cake of news that is my segment.",
-            (
-                " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labeled Keith Cohen-Extra. Slurring the concoction with caffeine pills and a microwave bread bowl, I scream sing a prayer to Janice initiator of human life and God of Transformation as a half horse, half man freak ceases to life before me and the hideous collection of loose animal parts and corrupted men tissue that is my segment. Meanwhile!",
-                " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labeled Keith Cohen-Extra. Slurring the concoction with caffeine pills and a microwave bread bowl, I screamed sing a prayer to Janice initiator of human life and God of Transformation as a half horse, half man freak ceases to life before me and the hideous collection of loose animal parts and corrupted men tissue that is my segment. Meanwhile!",
-            )
+            ' You know, folks, I spend most of my time right over there. Mining the days, biggest, most important stories, collecting the finest, most topical iron or hand hammering it into joke panels, then I craft sheets of bronze and blazing with patterns that tell an epic tale of conquest and glory. Then, using the Germanic tradition press, black process, I place thin sheets of foil against the scenes and by hammering or otherwise applying pressure from the back, I project these scenes into a pair of cheat cards and a face plate, and finally using fluted strips of white alloyed molding I divide the designs into framed panels and hold it all together using bronze rivets to create the beautiful and intimidating Anglo-Saxon battle helm that is my nightly monologue. Sometimes, sometimes, folks. Sometimes, just sometimes, I come to my senses fully naked on the deck of a pirate, besieged, melee, container ship that picked me up floating on the detached door of a port of potty in the Indian Ocean. Then, after a sunstroke induced realization of the crew of this ship plans to sell me and exchange for a bag of oranges to fight off scurvy, I lead a mutiny using only a PVC pipe and a pool chain that accepting my new role as captain and declaring myself King of the Windark Seas. I grab a dirty mop bucket covered in barnacles and adorn it with the teeth of the vanquished to create these shopping wet pirate crown of news that is my segment. Meanwhile, young man.',
+            " Folks, if you watch this show, you know I spend most of my time right over there, carefully blending for you the day's newsiest, most topical flower eggs, milk and butter. And straining into a fine batter to make delicate and informative comedy pancakes, then I glaze them in the juice and zest of the most relevant midnight valencio oranges. And doubts at all, and I find delimane de voyage cognac, before from bang and basting them tables, I deserve you the James Beard Award worthy creeps to ZET. That is my nightly monologue, but sometimes sometimes folks, I wake up in the baggage hole of Greyhound bus. It's being hoisted by the scrapyard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps, busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strained pair of sweat pants. As ovenmets to extract and serve the demented transience pound cake of news that is my segment.",
+            " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labelled Keith Cole and extra. Slurring the concoction with caffeine pills and a microwave bread bowl, I screamed sing a prayer to Janice initiator of human life and God of transformation as a half horse, half man freak, seizes to life before me and the hideous collection of loose animal parts and corrupted men tissue that is my segment. Meanwhile!",
         ]
         # fmt: on
 
@@ -2993,18 +2998,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": True,
-            "logprob_threshold": -1.0,
+            "logprob_threshold": -2.0,  # necessary to avoid triggering temp fallback that will introduce randomness since we are comparing to openai EXTECTED_TEXT
             "num_beams": 5,
+            "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
+        set_seed(0)
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        for i in range(num_samples):
-            if isinstance(EXPECTED_TEXT[i], str):
-                assert decoded_all[i] == EXPECTED_TEXT[i]
-            elif isinstance(EXPECTED_TEXT[i], tuple):
-                assert decoded_all[i] in EXPECTED_TEXT[i]
+        self.assertListEqual(decoded_all, EXPECTED_TEXT)
 
     @slow
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
@@ -3013,14 +3016,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         # fmt: off
         EXPECTED_TEXT = [
-            ' Mr. Kfilter is the apostle of the Middle Classes and we are glad to welcome his gospel.',
-            " Nor is Mr. Qilter's manner less interesting than his matter.",
-            ' He tells us that at this festive season of the year, with Christmas and roce beef, looming before us, similarly drawn from eating and its results occur most readily to the mind.',
-            ' He has grabbed those with her surfered trigger late and his work is really a great after all, and can discover it in it but little of Rocky Ithaka.',
-            " L'Neile's pictures are a sort of upguards and add-um paintings, and Maessin's exquisite Itals are a national as a jingo poem. Mr. Birkett Foster's landscapes smiled at one much in the same way that Mr. Carcher used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slapper in the back, before he says,",
-            ' It is obviously unnecessary for us, to point out how luminous these criticisms are, how delicate and expression.',
-            ' On the general principles of art and Mr. Kriltor rights with equal lucidity.',
-            ' Painting, he tells us is of a different quality to mathematics and finish in art is adding more effect.',
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+            " Nor is Mr. Quilters' manner less interesting than his matter.",
+            " He tells us that at this festive season of the year with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind.",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.",
+            " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his visitor a cheerful slap on the back before he says like a shampoo or a turkish bath. Next man!",
+            " It is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression.",
+            " On the general principles of art and Mr. Quilter writes with equal lucidity.",
+            " Painting he tells us is of a different quality to mathematics and finish in art is adding more effect.",
         ]
         # fmt: on
 
@@ -3051,11 +3054,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         }
 
         result = model.generate(**inputs, **gen_kwargs)
-        decoded_all = processor.batch_decode(result.sequences, skip_special_tokens=True)
+        decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        for i in range(num_samples):
-            if isinstance(EXPECTED_TEXT[i], str):
-                assert decoded_all[i] == EXPECTED_TEXT[i]
+        self.assertListEqual(decoded_all, EXPECTED_TEXT)
 
     @slow
     def test_whisper_longform_no_speech_detection(self):
@@ -3112,10 +3113,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        for i in range(num_samples):
-            assert decoded_all[i] == EXPECTED_TEXT[i]
+        self.assertListEqual(decoded_all, EXPECTED_TEXT)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_whisper_empty_longform(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3148,12 +3148,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 5,
             "language": "fr",
             "task": "transcribe",
+            "return_timestamps": True,
         }
 
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_whisper_empty_longform_multi_gpu(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -3185,6 +3186,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 5,
             "language": "fr",
             "task": "transcribe",
+            "return_timestamps": True,
         }
 
         torch.manual_seed(0)
@@ -3201,12 +3203,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(torch_device)
         eager_generated_ids = model.generate(input_features, max_new_tokens=64)
 
+        # Using statiic cache compiles forward for each decoding step, so we don't have to manually compile
         model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
         # compile the forward pass and assert equivalence
         static_generated_ids = model.generate(input_features, max_new_tokens=64)
-        assert (eager_generated_ids == static_generated_ids).all()
+        self.assertTrue((eager_generated_ids == static_generated_ids).all())
 
         # check the compiled graph can be re-used and that the cache is correctly reset
         # reverse the ordering of the input features
@@ -3216,7 +3218,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features[permutation_idx, ...]
         static_generated_ids = model.generate(input_features, max_new_tokens=64)
         # assert re-ordered generations match those from eager
-        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+        self.assertTrue((eager_generated_ids[permutation_idx, :] == static_generated_ids).all())
 
     @slow
     def test_tiny_static_generation_long_form(self):
@@ -3224,6 +3226,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
         torch._dynamo.config.cache_size_limit = 4
+        torch._dynamo.reset()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -3256,13 +3259,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(42)
         eager_generated_ids = model.generate(**inputs, **gen_kwargs)
 
-        # compile the forward pass and assert equivalence
+        # Using statiic cache compiles forward for each decoding step, so we don't have to manually compile
         model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 
         set_seed(42)
         static_generated_ids = model.generate(**inputs, **gen_kwargs)
-        assert (eager_generated_ids == static_generated_ids).all()
+        self.assertTrue((eager_generated_ids == static_generated_ids).all())
 
         # check the compiled graph can be re-used and that the cache is correctly reset
         # reverse the ordering of the input features
@@ -3276,13 +3278,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(42)
         static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
         # assert re-ordered generations match those from eager
-        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
-
-
-def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    return {"input_features": input_features, "head_mask": head_mask}
+        self.assertTrue((eager_generated_ids[permutation_idx, :] == static_generated_ids).all())
 
 
 @require_torch
@@ -3358,10 +3354,7 @@ class WhisperEncoderModelTester:
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length])
 
         config = self.get_config()
-        inputs_dict = prepare_whisper_encoder_inputs_dict(
-            config,
-            input_features=input_features,
-        )
+        inputs_dict = {"input_features": input_features}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -3396,14 +3389,12 @@ class WhisperEncoderModelTester:
 
 
 @require_torch
-class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = False
     test_pruning = False
     test_missing_keys = False
-
-    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = WhisperEncoderModelTester(self)
@@ -3433,22 +3424,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
 
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
-
     @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):
         # input embeds is meaningless for an encoder-only acoustic model
@@ -3473,8 +3448,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             encoder_inputs = {"input_features": inputs["input_features"]}
             del inputs["input_features"]
 
-            if "head_mask" in inputs:
-                encoder_inputs["head_mask"] = inputs["head_mask"]
             if "attention_mask" in inputs:
                 encoder_inputs["attention_mask"] = inputs["attention_mask"]
             if "output_attentions" in inputs:
@@ -3501,157 +3474,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(reason="Model has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
-
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="Flax model does not exist")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("Flax model does not exist")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                # send pytorch model to the correct device
-                pt_model_loaded.to(torch_device)
-                pt_model_loaded.eval()
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
 
 
 class WhisperStandaloneDecoderModelTester:
@@ -3720,9 +3542,6 @@ class WhisperStandaloneDecoderModelTester:
         )
 
         inputs_dict.pop("input_features")
-        inputs_dict.pop("head_mask")
-        inputs_dict.pop("decoder_head_mask")
-        inputs_dict.pop("cross_attn_head_mask")
 
         inputs_dict["attention_mask"] = inputs_dict.pop("decoder_attention_mask")
         inputs_dict["input_ids"] = inputs_dict.pop("decoder_input_ids")
@@ -3766,13 +3585,6 @@ class WhisperStandaloneDecoderModelTester:
 
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_decoder(self):
-        config, input_features = self.prepare_config_and_inputs()
-        input_ids = input_features["input_ids"]
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-
-        return (config, input_ids, encoder_hidden_states)
-
     def create_and_check_decoder_model_past(self, config, input_ids):
         config.use_cache = True
         model = WhisperDecoder(config=config).to(torch_device).eval()
@@ -3801,7 +3613,7 @@ class WhisperStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_decoder_model_attention_mask_past(self, config, input_ids):
         model = WhisperDecoder(config=config).to(torch_device).eval()
@@ -3842,13 +3654,12 @@ class WhisperStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForCausalLM,) if is_torch_available() else ()
     fx_comptatible = False
     test_pruning = False
     is_encoder_decoder = False
@@ -3875,48 +3686,10 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-    @unittest.skip(reason="Tested implicitly through the encoder-decoder tests")
-    def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(reason="Generate needs input ids")
-    def test_generate_without_input_ids(self):
-        # generate only works with input ids for whisper
-        pass
-
-    @unittest.skip(reason="Generate needs input ids")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        # generate only works with input ids for whisper
-        pass
-
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip(reason="The model doesn't support fast init from base")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_generate_reuse_cache(self):
-        pass
-
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_generate_padding_right(self):
-        pass
-
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference(self):
-        pass
-
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference_padding_right(self):
-        pass
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
+        return

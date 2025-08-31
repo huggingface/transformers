@@ -13,13 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-10-16 and added to Hugging Face Transformers on 2022-09-30.*
 
 # MarkupLM
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
 The MarkupLM model was proposed in [MarkupLM: Pre-training of Text and Markup Language for Visually-rich Document
-Understanding](https://arxiv.org/abs/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei. MarkupLM is BERT, but
+Understanding](https://huggingface.co/papers/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei. MarkupLM is BERT, but
 applied to HTML pages instead of raw text documents. The model incorporates additional embedding layers to improve
 performance, similar to [LayoutLM](layoutlm).
 
@@ -51,7 +56,7 @@ These are the XPATH tags and subscripts respectively for each token in the input
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
 alt="drawing" width="600"/> 
 
-<small> MarkupLM architecture. Taken from the <a href="https://arxiv.org/abs/2110.08518">original paper.</a> </small>
+<small> MarkupLM architecture. Taken from the <a href="https://huggingface.co/papers/2110.08518">original paper.</a> </small>
 
 ## Usage: MarkupLMProcessor
 

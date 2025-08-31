@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,11 @@
 
 import copy
 import unittest
+import warnings
 
 import numpy as np
 
+from transformers import Trainer, TrainingArguments
 from transformers.data.data_collator import default_data_collator
 from transformers.testing_utils import require_accelerate, require_torch
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
@@ -162,7 +163,7 @@ class TrainerUtilsTest(unittest.TestCase):
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
         # With a few -100 labels
         random_labels[0, 1] = -100
@@ -178,7 +179,7 @@ class TrainerUtilsTest(unittest.TestCase):
         log_probs[2, 1] = 0.0
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
     def test_group_by_length(self):
         # Get some inputs of random lengths
@@ -243,6 +244,33 @@ class TrainerUtilsTest(unittest.TestCase):
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
+
+    def test_get_parameter_names_rmsnorm(self):
+        class RMSNorm(nn.Module):
+            def __init__(self, hidden_size):
+                super().__init__()
+                self.weight = nn.Parameter(torch.ones(hidden_size))
+                self.bias = nn.Parameter(torch.zeros(hidden_size))
+
+        class ModelWithRMSNorm(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(128, 128)
+                self.rmsnorm = RMSNorm(128)
+                self.bias = nn.Parameter(torch.zeros(128))
+
+        model = ModelWithRMSNorm()
+        # Test both type-based and name-based filtering
+        decay_parameters = get_parameter_names(model, [], ["bias", "rmsnorm"])
+
+        # Parameters that should be in weight decay
+        self.assertIn("linear.weight", decay_parameters)
+
+        # Parameters that should NOT be in weight decay
+        self.assertNotIn("linear.bias", decay_parameters)
+        self.assertNotIn("rmsnorm.weight", decay_parameters)
+        self.assertNotIn("rmsnorm.bias", decay_parameters)
+        self.assertNotIn("bias", decay_parameters)
 
     def test_distributed_sampler_with_loop(self):
         batch_size = 16
@@ -438,7 +466,7 @@ class TrainerUtilsTest(unittest.TestCase):
                 raise RuntimeError("CUDA out of memory.")
 
         mock_training_loop_function()
-        self.assertEqual(batch_sizes, [64, 32, 16])
+        self.assertEqual(batch_sizes, [64, 57, 51, 45, 40, 36, 32, 28, 25, 22, 19, 17, 15])
 
     @require_accelerate
     def test_executable_batch_size_no_search(self):
@@ -587,3 +615,41 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))
         self.assertEqual(arrays[2][1].shape, (8, 2))
+
+    def test_label_smoothing_multi_label_incompatibility(self):
+        """Test that Trainer warns and disables label smoothing for multi-label classification"""
+
+        # Mock model config with multi-label classification
+        class MockConfig:
+            problem_type = "multi_label_classification"
+
+        class MockModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = MockConfig()
+                self.linear = nn.Linear(10, 3)
+
+            def forward(self, **kwargs):
+                return {"logits": torch.randn(2, 3)}
+
+        model = MockModel()
+
+        # Create training args with label smoothing
+        training_args = TrainingArguments(
+            output_dir="./test-trainer",
+            label_smoothing_factor=0.1,
+            per_device_train_batch_size=2,
+            num_train_epochs=1,
+        )
+
+        # Should warn and disable label smoothing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            trainer = Trainer(model=model, args=training_args)
+
+            # Check warning was issued
+            self.assertEqual(len(w), 1)
+            self.assertIn("Label smoothing is not compatible with multi-label classification", str(w[0].message))
+
+            # Check label_smoother was disabled
+            self.assertIsNone(trainer.label_smoother)

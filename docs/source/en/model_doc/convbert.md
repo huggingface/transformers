@@ -13,21 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-08-06 and added to Hugging Face Transformers on 2021-01-27.*
 
 # ConvBERT
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=convbert">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-convbert-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/conv-bert-base">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
-The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
+The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://huggingface.co/papers/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
 Yan.
 
 The abstract from the paper is the following:
@@ -75,9 +71,6 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertTokenizerFast
 
-<frameworkcontent>
-<pt>
-
 ## ConvBertModel
 
 [[autodoc]] ConvBertModel
@@ -107,39 +100,3 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFConvBertModel
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM
-
-[[autodoc]] TFConvBertForMaskedLM
-    - call
-
-## TFConvBertForSequenceClassification
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

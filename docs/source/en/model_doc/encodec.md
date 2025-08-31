@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-10-24 and added to Hugging Face Transformers on 2023-06-14.*
 
 # EnCodec
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The EnCodec neural codec model was proposed in [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438) by Alexandre Défossez, Jade Copet, Gabriel Synnaeve, Yossi Adi.
+The EnCodec neural codec model was proposed in [High Fidelity Neural Audio Compression](https://huggingface.co/papers/2210.13438) by Alexandre Défossez, Jade Copet, Gabriel Synnaeve, Yossi Adi.
 
 The abstract from the paper is the following:
 
@@ -43,7 +48,8 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
 
 >>> encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
->>> audio_values = model.decode(encoder_outputs.audio_codes, encoder_outputs.audio_scales, inputs["padding_mask"])[0]
+>>> # `encoder_outputs.audio_codes` contains discrete codes
+>>> audio_values = model.decode(**encoder_outputs, padding_mask=inputs["padding_mask"])[0]
 >>> # or the equivalent with a forward pass
 >>> audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
 ```

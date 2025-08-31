@@ -78,6 +78,9 @@ class MyTestTrainerCallback(TrainerCallback):
     def on_step_begin(self, args, state, control, **kwargs):
         self.events.append("on_step_begin")
 
+    def on_pre_optimizer_step(self, args, state, control, **kwargs):
+        self.events.append("on_pre_optimizer_step")
+
     def on_optimizer_step(self, args, state, control, **kwargs):
         self.events.append("on_optimizer_step")
 
@@ -151,7 +154,7 @@ class TrainerCallbackTest(unittest.TestCase):
             expected_events.append("on_epoch_begin")
             for _ in range(train_dl_len):
                 step += 1
-                expected_events += ["on_step_begin", "on_optimizer_step", "on_step_end"]
+                expected_events += ["on_step_begin", "on_pre_optimizer_step", "on_optimizer_step", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
@@ -422,3 +425,21 @@ class TrainerCallbackTest(unittest.TestCase):
         trainer.state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
         trainer._load_callback_state()
         assert trainer.control.should_training_stop
+
+    def test_no_duplicate_save_on_epoch_save_strategy(self):
+        times_saved = 0
+
+        class OnEndCallback(TrainerCallback):
+            def on_step_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
+                nonlocal times_saved
+                if control.should_save:
+                    times_saved += 1
+
+            def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
+                nonlocal times_saved
+                if control.should_save:
+                    times_saved += 1
+
+        trainer = self.get_trainer(max_steps=2, save_strategy="epoch", callbacks=[OnEndCallback])
+        trainer.train()
+        assert times_saved == 1

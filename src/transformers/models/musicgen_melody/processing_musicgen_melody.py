@@ -16,14 +16,16 @@
 Text/audio processor class for MusicGen Melody
 """
 
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...utils import to_numpy
+from ...utils.import_utils import requires
 
 
+@requires(backends=("torchaudio",))
 class MusicgenMelodyProcessor(ProcessorMixin):
     r"""
     Constructs a MusicGen Melody processor which wraps a Wav2Vec2 feature extractor - for raw audio waveform processing - and a T5 tokenizer into a single processor
@@ -54,13 +56,13 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to MusicgenMelodyFeatureExtractor's [`~MusicgenMelodyFeatureExtractor.__call__`] if `audio` is not
         `None` to pre-process the audio. It also forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
+        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be a mono-stereo signal of shape (T), where T is the sample length of the audio.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -112,16 +114,8 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         else:
             return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor._decode_audio with padding_mask->attention_mask
-    def _decode_audio(self, audio_values, attention_mask: Optional = None) -> List[np.ndarray]:
+    def _decode_audio(self, audio_values, attention_mask: Optional = None) -> list[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """
@@ -173,3 +167,6 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         inputs["attention_mask"][:] = 0
 
         return inputs
+
+
+__all__ = ["MusicgenMelodyProcessor"]

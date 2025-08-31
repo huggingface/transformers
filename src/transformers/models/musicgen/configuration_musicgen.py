@@ -60,7 +60,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(hidden_size).
@@ -76,6 +76,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
     """
 
     model_type = "musicgen_decoder"
+    base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -189,7 +190,12 @@ class MusicgenConfig(PretrainedConfig):
     ```"""
 
     model_type = "musicgen"
-    is_composition = True
+    sub_configs = {
+        "text_encoder": AutoConfig,
+        "audio_encoder": AutoConfig,
+        "decoder": MusicgenDecoderConfig,
+    }
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -208,6 +214,7 @@ class MusicgenConfig(PretrainedConfig):
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         self.decoder = MusicgenDecoderConfig(**decoder_config)
         self.is_encoder_decoder = True
+        self.initializer_factor = self.decoder.initializer_factor
 
     @classmethod
     def from_sub_models_config(
@@ -237,19 +244,5 @@ class MusicgenConfig(PretrainedConfig):
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
 
-    @property
-    def _attn_implementation(self):
-        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
-        if hasattr(self, "_attn_implementation_internal"):
-            if self._attn_implementation_internal is None:
-                # `config.attn_implementation` should never be None, for backward compatibility.
-                return "eager"
-            else:
-                return self._attn_implementation_internal
-        else:
-            return "eager"
 
-    @_attn_implementation.setter
-    def _attn_implementation(self, value):
-        self._attn_implementation_internal = value
-        self.decoder._attn_implementation = value
+__all__ = ["MusicgenConfig", "MusicgenDecoderConfig"]

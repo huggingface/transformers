@@ -18,7 +18,7 @@ Utility that checks whether the copies defined in the library match the original
 - The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
-This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+This also checks the list of models in the README is complete (has all models) and adds a line to complete if there is
 a model missing.
 
 Use from the root of the repo with:
@@ -42,7 +42,7 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.utils import direct_transformers_import
 
@@ -245,7 +245,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
             ["block_without_name", "block_with_name"],
         ]:
             raise ValueError(
-                f"""Class defined in {filename} doesn't have the expected stucture.
+                f"""Class defined in {filename} doesn't have the expected structure.
                 See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`""",
             )
 
@@ -253,7 +253,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
-def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
+def find_block_end(lines: list[str], start_index: int, indent: int) -> int:
     """
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
 
@@ -282,8 +282,8 @@ def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
 
 
 def split_code_into_blocks(
-    lines: List[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
-) -> List[Tuple[str, int, int]]:
+    lines: list[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
+) -> list[tuple[str, int, int]]:
     """
     Split the class/func block starting at `start_index` in a source code (defined by `lines`) into *inner blocks*.
 
@@ -390,8 +390,8 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: str = None, return_indices: bool = False
-) -> Union[str, Tuple[List[str], int, int]]:
+    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
+) -> Union[str, tuple[list[str], int, int]]:
     """
     Find and return the source code of an object.
 
@@ -420,7 +420,7 @@ def find_code_in_transformers(
 
     # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
     # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
-    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement starting with
     # `tests.models.` and change it to `tests` here.
     if base_path == MODEL_TEST_PATH:
         base_path = "tests"
@@ -491,7 +491,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -638,7 +638,9 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
+) -> Optional[list[tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -652,7 +654,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
     Returns:
         `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
-        with the name of the object having a diff and the line number where theere is the first diff.
+        with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
 
@@ -672,9 +674,13 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         indent, object_name, replace_pattern = search.groups()
 
         # Find the file lines, the object's code, and its blocks
-        target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
-            object_name, base_path, buffer=buffer
-        )
+        try:
+            target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
+                object_name, base_path, buffer=buffer
+            )
+        except Exception as exc:
+            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
+            raise
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -725,8 +731,8 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
         # Below, we change some names in `theoretical_code_blocks` and `observed_code_blocks`. These mappings map the
         # original names to the modified names: this is used to restore the original order of the code blocks.
-        name_mappings_1 = {k: k for k in theoretical_code_blocks.keys()}
-        name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
+        name_mappings_1 = {k: k for k in theoretical_code_blocks}
+        name_mappings_2 = {k: k for k in observed_code_blocks}
 
         # Update code blocks' name and content:
         #   If `"# Ignore copy"` is found in a block of the observed code:
@@ -827,7 +833,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: str = None):
+def check_copies(overwrite: bool = False, file: Optional[str] = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -930,7 +936,7 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     return "".join(result)
 
 
-def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> tuple[bool, str]:
     """
     Compare the model list from the main README to the one in a localized README.
 
@@ -1017,41 +1023,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
-
-
-def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
-    """
-    Find the text in a file between two prompts.
-
-    Args:
-        filename (`str`): The name of the file to look into.
-        start_prompt (`str`): The string to look for that introduces the content looked for.
-        end_prompt (`str`): The string to look for that ends the content looked for.
-
-    Returns:
-        Tuple[str, int, int, List[str]]: The content between the two prompts, the index of the start line in the
-        original file, the index of the end line in the original file and the list of lines of that file.
-    """
-    with open(filename, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    # Find the start prompt.
-    start_index = 0
-    while not lines[start_index].startswith(start_prompt):
-        start_index += 1
-    start_index += 1
-
-    end_index = start_index
-    while not lines[end_index].startswith(end_prompt):
-        end_index += 1
-    end_index -= 1
-
-    while len(lines[start_index]) <= 1:
-        start_index += 1
-    while len(lines[end_index]) <= 1:
-        end_index -= 1
-    end_index += 1
-    return "".join(lines[start_index:end_index]), start_index, end_index, lines
+    return readmes_match, "\n".join(x[1] for x in sorted_index) + "\n"
 
 
 # Map a model name with the name it has in the README for the check_readme check
@@ -1068,6 +1040,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
+    "SAM_HQ": "Segment Anything High Quality",
     "ViT": "Vision Transformer (ViT)",
 }
 
@@ -1088,6 +1061,7 @@ MODELS_NOT_IN_README = [
     "CLIPVisionModel",
     "SiglipVisionModel",
     "ChineseCLIPVisionModel",
+    "VitPoseBackbone",
 ]
 
 # Template for new entries to add in the main README when we have missing models.

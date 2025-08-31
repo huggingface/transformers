@@ -21,10 +21,10 @@ que podem ser carregados usando os métodos `from_pretrained` da biblioteca.
 
 <Tip>
 
-A partir da versão 2.3.0 o script de conversão agora faz parte do transformers CLI (**transformers-cli**) disponível em qualquer instalação
+A partir da versão 2.3.0 o script de conversão agora faz parte do transformers CLI (**transformers**) disponível em qualquer instalação
 transformers >= 2.3.0.
 
-A documentação abaixo reflete o formato do comando **transformers-cli convert**.
+A documentação abaixo reflete o formato do comando **transformers convert**.
 
 </Tip>
 
@@ -49,7 +49,7 @@ Aqui está um exemplo do processo de conversão para um modelo `BERT-Base Uncase
 ```bash
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-transformers-cli convert --model_type bert \
+transformers convert --model_type bert \
   --tf_checkpoint $BERT_BASE_DIR/bert_model.ckpt \
   --config $BERT_BASE_DIR/bert_config.json \
   --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
@@ -71,7 +71,7 @@ Aqui está um exemplo do processo de conversão para o modelo `ALBERT Base` pré
 ```bash
 export ALBERT_BASE_DIR=/path/to/albert/albert_base
 
-transformers-cli convert --model_type albert \
+transformers convert --model_type albert \
   --tf_checkpoint $ALBERT_BASE_DIR/model.ckpt-best \
   --config $ALBERT_BASE_DIR/albert_config.json \
   --pytorch_dump_output $ALBERT_BASE_DIR/pytorch_model.bin
@@ -88,7 +88,7 @@ foi salvo com o mesmo formato do modelo pré-treinado OpenAI (veja [aqui](https:
 ```bash
 export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
 
-transformers-cli convert --model_type gpt \
+transformers convert --model_type gpt \
   --tf_checkpoint $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
   [--config OPENAI_GPT_CONFIG] \
@@ -102,7 +102,7 @@ Aqui está um exemplo do processo de conversão para um modelo OpenAI GPT-2 pré
 ```bash
 export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/openai-community/gpt2/pretrained/weights
 
-transformers-cli convert --model_type gpt2 \
+transformers convert --model_type gpt2 \
   --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
   [--config OPENAI_GPT2_CONFIG] \
@@ -117,7 +117,7 @@ Aqui está um exemplo do processo de conversão para um modelo XLNet pré-treina
 export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
 export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
 
-transformers-cli convert --model_type xlnet \
+transformers convert --model_type xlnet \
   --tf_checkpoint $TRANSFO_XL_CHECKPOINT_PATH \
   --config $TRANSFO_XL_CONFIG_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
@@ -131,7 +131,7 @@ Aqui está um exemplo do processo de conversão para um modelo XLM pré-treinado
 ```bash
 export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
 
-transformers-cli convert --model_type xlm \
+transformers convert --model_type xlm \
   --tf_checkpoint $XLM_CHECKPOINT_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT
  [--config XML_CONFIG] \
@@ -145,7 +145,7 @@ Aqui está um exemplo do processo de conversão para um modelo T5 pré-treinado:
 ```bash
 export T5=/path/to/t5/uncased_L-12_H-768_A-12
 
-transformers-cli convert --model_type t5 \
+transformers convert --model_type t5 \
   --tf_checkpoint $T5/t5_model.ckpt \
   --config $T5/t5_config.json \
   --pytorch_dump_output $T5/pytorch_model.bin

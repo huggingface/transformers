@@ -15,15 +15,29 @@
 import inspect
 import json
 import re
+import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+from inspect import isfunction
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packaging import version
 
-from .import_utils import is_jinja_available
+from . import logging
+from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
+
+logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
@@ -31,6 +45,12 @@ if is_jinja_available():
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
     jinja2 = None
+
+if is_vision_available():
+    from PIL.Image import Image
+
+if is_torch_available():
+    from torch import Tensor
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -64,18 +84,23 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> Dict[str, str]:
+def _get_json_schema_type(param_type: type) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        type(None): {"type": "null"},
         Any: {},
     }
+    if is_vision_available():
+        type_mapping[Image] = {"type": "image"}
+    if is_torch_available():
+        type_mapping[Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
-def _parse_type_hint(hint: str) -> Dict:
+def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
@@ -87,7 +112,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
         subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
@@ -102,6 +127,20 @@ def _parse_type_hint(hint: str) -> Dict:
         if type(None) in args:
             return_dict["nullable"] = True
         return return_dict
+
+    elif origin is Literal and len(args) > 0:
+        LITERAL_TYPES = (int, float, str, bool, type(None))
+        args_types = []
+        for arg in args:
+            if type(arg) not in LITERAL_TYPES:
+                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+            arg_type = _get_json_schema_type(type(arg)).get("type")
+            if arg_type is not None and arg_type not in args_types:
+                args_types.append(arg_type)
+        return {
+            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
+            "enum": list(args),
+        }
 
     elif origin is list:
         if not args:
@@ -118,13 +157,13 @@ def _parse_type_hint(hint: str) -> Dict:
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
-                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "using a list[] type instead, or if it really is a single element, remove the tuple[] wrapper and just "
                 "pass the element directly."
             )
         if ... in args:
             raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length"
+                "Use list[] types for variable-length"
                 " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
@@ -140,7 +179,7 @@ def _parse_type_hint(hint: str) -> Dict:
     raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
-def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
+def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
     required = []
@@ -161,7 +200,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -194,7 +233,7 @@ def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Option
     return description, args_dict, returns
 
 
-def get_json_schema(func: Callable) -> Dict:
+def get_json_schema(func: Callable) -> dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
@@ -351,6 +390,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}
@@ -381,7 +425,7 @@ def _compile_jinja_template(chat_template):
             return self._rendered_blocks or self._generation_indices
 
         @contextmanager
-        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+        def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
             try:
                 if self.is_active():
                     raise ValueError("AssistantTracker should not be reused before closed")
@@ -395,7 +439,7 @@ def _compile_jinja_template(chat_template):
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
-            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
         )
 
     def raise_exception(message):
@@ -416,3 +460,97 @@ def _compile_jinja_template(chat_template):
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)
+
+
+def render_jinja_template(
+    conversations: list[list[dict[str, str]]],
+    tools: Optional[list[Union[dict, Callable]]] = None,
+    documents: Optional[list[dict[str, str]]] = None,
+    chat_template: Optional[str] = None,
+    return_assistant_tokens_mask: Optional[bool] = False,
+    continue_final_message: Optional[bool] = False,
+    add_generation_prompt: Optional[bool] = False,
+    **kwargs,
+) -> str:
+    if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
+        logger.warning_once(
+            "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
+        )
+
+    # Compilation function uses a cache to avoid recompiling the same template
+    compiled_template = _compile_jinja_template(chat_template)
+
+    # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
+    if tools is not None:
+        tool_schemas = []
+        for tool in tools:
+            if isinstance(tool, dict):
+                tool_schemas.append(tool)
+            elif isfunction(tool):
+                tool_schemas.append(get_json_schema(tool))
+            else:
+                raise ValueError(
+                    "Tools should either be a JSON schema, or a callable function with type hints "
+                    "and a docstring suitable for auto-conversion to a schema."
+                )
+    else:
+        tool_schemas = None
+
+    if documents is not None:
+        for document in documents:
+            if not isinstance(document, dict):
+                raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
+
+    rendered = []
+    all_generation_indices = []
+    for chat in conversations:
+        if hasattr(chat, "messages"):
+            # Indicates it's a Conversation object
+            chat = chat.messages
+        if return_assistant_tokens_mask:
+            rendered_chat, generation_indices = _render_with_assistant_indices(
+                compiled_template=compiled_template,
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+            all_generation_indices.append(generation_indices)
+        else:
+            rendered_chat = compiled_template.render(
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+        if continue_final_message:
+            final_message = chat[-1]["content"]
+            if isinstance(final_message, (list, tuple)):
+                for content_block in reversed(final_message):
+                    if "text" in content_block:
+                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                        final_message = content_block["text"]
+                        break
+                else:
+                    raise ValueError(
+                        "continue_final_message is set but we could not find any text to continuein the final message!"
+                    )
+            if final_message.strip() not in rendered_chat:
+                raise ValueError(
+                    "continue_final_message is set but the final message does not appear in the chat after "
+                    "applying the chat template! This can happen if the chat template deletes portions of "
+                    "the final message. Please verify the chat template and final message in your chat to "
+                    "ensure they are compatible."
+                )
+            final_msg_loc = rendered_chat.rindex(final_message.strip())
+            if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
+                # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
+                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
+            else:
+                # The message has trailing spacing that was trimmed, so we must be more cautious
+                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
+        rendered.append(rendered_chat)
+
+    return rendered, all_generation_indices

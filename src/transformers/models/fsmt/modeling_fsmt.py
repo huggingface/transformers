@@ -23,18 +23,20 @@
 # - David Grangier
 # - Kyra Yee
 #
-# Paper: Facebook FAIR's WMT19 News Translation Task Submission https://arxiv.org/abs/1907.06616
+# Paper: Facebook FAIR's WMT19 News Translation Task Submission https://huggingface.co/papers/1907.06616
 #
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -43,21 +45,12 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from .configuration_fsmt import FSMTConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
-_CONFIG_FOR_DOC = "FSMTConfig"
 
 # See all FSMT models at https://huggingface.co/models?filter=fsmt
 
@@ -111,6 +104,7 @@ _CONFIG_FOR_DOC = "FSMTConfig"
 """
 
 Here is how to compare BLEU scores against fairseq implementation:
+(don't forget to install sacrebleu: `pip install sacrebleu`)
 
 # en-ru
 
@@ -178,124 +172,6 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 """
 
 
-FSMT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FSMTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-
-"""
-FSMT_GENERATION_EXAMPLE = r"""
-    Translation example::
-
-    ```python
-    >>> from transformers import AutoTokenizer, FSMTForConditionalGeneration
-
-    >>> mname = "facebook/wmt19-ru-en"
-    >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
-    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
-
-    >>> src_text = "Машинное обучение - это здорово, не так ли?"
-    >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
-    >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
-    >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-    "Machine learning is great, isn't it?"
-    ```
-
-"""
-
-FSMT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`FSTMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`Tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden-states at
-            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`Tuple(torch.FloatTensor)` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 def invert_mask(attention_mask):
     """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask.dim() == 2
@@ -339,8 +215,9 @@ def _prepare_fsmt_decoder_inputs(
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
 
+@auto_docstring
 class PretrainedFSMTModel(PreTrainedModel):
-    config_class = FSMTConfig
+    config: FSMTConfig
     base_model_prefix = "model"
 
     def _init_weights(self, module):
@@ -350,7 +227,10 @@ class PretrainedFSMTModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, SinusoidalPositionalEmbedding):
-            pass
+            weight = module.get_embedding(*module.weight.shape, module.padding_idx)
+            weight = nn.Parameter(weight, requires_grad=False)
+            weight.detach_()
+            module.weight = weight
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -472,13 +352,13 @@ class FSMTEncoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])  # type: List[EncoderLayer]
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])  # type: list[EncoderLayer]
 
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -538,15 +418,15 @@ class FSMTEncoder(nn.Module):
         all_attentions = () if output_attentions else None
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size()[0] == (len(self.layers)), (
+                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 x = x.transpose(0, 1)  # T x B x C -> B x T x C
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
@@ -573,7 +453,7 @@ class FSMTEncoder(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, config: FSMTConfig):
+    def __init__(self, config: FSMTConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -581,6 +461,7 @@ class DecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            layer_idx=layer_idx,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -592,6 +473,7 @@ class DecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
+            layer_idx=layer_idx,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -609,11 +491,9 @@ class DecoderLayer(nn.Module):
         cross_attn_layer_head_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
+        cache_position=None,
     ):
         residual = x
-
-        if layer_state is None:
-            layer_state = {}
 
         # Self Attention
         x, self_attn_weights = self.self_attn(
@@ -624,6 +504,7 @@ class DecoderLayer(nn.Module):
             attn_mask=causal_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -639,6 +520,7 @@ class DecoderLayer(nn.Module):
             layer_state=layer_state,  # mutates layer state
             layer_head_mask=cross_attn_layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -655,9 +537,8 @@ class DecoderLayer(nn.Module):
         return (
             x,
             self_attn_weights,
-            layer_state,
             cross_attn_weights,
-        )  # layer_state = cache for decoding
+        )
 
 
 class FSMTDecoder(nn.Module):
@@ -680,7 +561,7 @@ class FSMTDecoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])  # type: List[DecoderLayer]
+        self.layers = nn.ModuleList([DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])  # type: list[DecoderLayer]
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -705,11 +586,12 @@ class FSMTDecoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        use_cache: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -766,6 +648,17 @@ class FSMTDecoder(nn.Module):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
+        # initialize `past_key_values`
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and isinstance(past_key_values, tuple):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
         x += positions
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
@@ -777,7 +670,6 @@ class FSMTDecoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attns = () if output_attentions else None
-        next_decoder_cache = []
 
         # check if head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -787,7 +679,7 @@ class FSMTDecoder(nn.Module):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
@@ -797,22 +689,18 @@ class FSMTDecoder(nn.Module):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_state = past_key_values[idx] if past_key_values is not None else None
-
-            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
+            x, layer_self_attn, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
                 decoder_padding_mask=decoder_padding_mask,
-                layer_state=layer_state,
+                layer_state=past_key_values,
                 causal_mask=decoder_causal_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
-
-            if use_cache:
-                next_decoder_cache.append(layer_past.copy())
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
@@ -830,15 +718,13 @@ class FSMTDecoder(nn.Module):
 
         x = self.output_projection(x)
 
-        next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(
-                v for v in [x, next_cache, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
+                v for v in [x, past_key_values, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=x,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attns,
@@ -862,6 +748,7 @@ class Attention(nn.Module):
         dropout=0.0,
         bias=True,
         encoder_decoder_attention=False,  # otherwise self_attention
+        layer_idx=None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -870,6 +757,7 @@ class Attention(nn.Module):
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim**-0.5
+        self.layer_idx = layer_idx
 
         self.encoder_decoder_attention = encoder_decoder_attention
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -878,64 +766,65 @@ class Attention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
-    def _shape(self, tensor, seq_len, bsz):
-        return tensor.contiguous().view(seq_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-
     def forward(
         self,
         query,
         key: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
+        layer_state: Optional[Cache] = None,
         attn_mask: Optional[Tensor] = None,
         layer_head_mask: Optional[Tensor] = None,
-        output_attentions=False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
+    ) -> tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv: bool = self.encoder_decoder_attention
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state and static_kv:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                key = None
-        else:
-            saved_state = None
-            layer_state = {}
 
-        q = self.q_proj(query) * self.scaling
-        if static_kv:
-            if key is None:
-                k = v = None
+        if layer_state is not None:
+            if isinstance(layer_state, EncoderDecoderCache):
+                is_updated = layer_state.is_updated.get(self.layer_idx)
+                if self.encoder_decoder_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = layer_state.cross_attention_cache
+                else:
+                    curr_past_key_value = layer_state.self_attention_cache
             else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
+                curr_past_key_value = layer_state
+
+        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
+        current_states = key if self.encoder_decoder_attention else query
+        if self.encoder_decoder_attention and layer_state is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            key_states = key_states.view(-1, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
+            value_states = value_states.view(-1, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
 
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-        if v is not None:
-            v = self._shape(v, -1, bsz)
+            if layer_state is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not self.encoder_decoder_attention else None
+                key_states, value_states = curr_past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if self.encoder_decoder_attention:
+                    layer_state.is_updated[self.layer_idx] = True
 
-        if saved_state is not None:
-            k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
+        query_states = self.q_proj(query) * self.scaling
 
-        # Update cache
-        layer_state[self.cache_key] = {
-            "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
-        }
+        # Reshape back to 3D tensors for `bmm`
+        query_states = query_states.view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        key_states = key_states.reshape(bsz * self.num_heads, -1, self.head_dim)
+        value_states = value_states.reshape(bsz * self.num_heads, -1, self.head_dim)
 
-        assert k is not None
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        assert key_states is not None
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -959,9 +848,9 @@ class Attention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -978,44 +867,13 @@ class Attention(nn.Module):
             training=self.training,
         )
 
-        assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
+        assert value_states is not None
+        attn_output = torch.bmm(attn_probs, value_states)
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped
-
-    def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        if "prev_key" in saved_state:
-            _prev_key = saved_state["prev_key"]
-            assert _prev_key is not None
-            prev_key = _prev_key.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                k = prev_key
-            else:
-                assert k is not None
-                k = torch.cat([prev_key, k], dim=1)
-        if "prev_value" in saved_state:
-            _prev_value = saved_state["prev_value"]
-            assert _prev_value is not None
-            prev_value = _prev_value.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                v = prev_value
-            else:
-                assert v is not None
-                v = torch.cat([prev_value, v], dim=1)
-        assert k is not None and v is not None
-        prev_key_padding_mask: Optional[Tensor] = saved_state.get("prev_key_padding_mask", None)
-        if prev_key_padding_mask is not None:
-            if static_kv:
-                new_key_padding_mask = prev_key_padding_mask
-            else:
-                new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
-        else:
-            new_key_padding_mask = key_padding_mask
-        return k, v, new_key_padding_mask
 
 
 def fill_with_neg_inf(t):
@@ -1028,10 +886,7 @@ def _get_shape(t):
     return getattr(t, "shape", None)
 
 
-@add_start_docstrings(
-    "The bare FSMT Model outputting raw hidden-states without any specific head on top.",
-    FSMT_START_DOCSTRING,
-)
+@auto_docstring
 class FSMTModel(PretrainedFSMTModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
@@ -1051,20 +906,12 @@ class FSMTModel(PretrainedFSMTModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
             self._tie_or_clone_weights(self.decoder.output_projection, self.get_input_embeddings())
 
-    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1074,15 +921,37 @@ class FSMTModel(PretrainedFSMTModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+        cache_position: Optional[torch.Tensor] = None,
+    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        """
         if decoder_input_ids is None:
             use_cache = False
 
@@ -1141,6 +1010,7 @@ class FSMTModel(PretrainedFSMTModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1170,10 +1040,12 @@ class FSMTModel(PretrainedFSMTModel):
         self.decoder.embed_tokens = value
 
 
-@add_start_docstrings(
-    "The FSMT Model with a language modeling head. Can be used for summarization.", FSMT_START_DOCSTRING
+@auto_docstring(
+    custom_intro="""
+    The FSMT Model with a language modeling head. Can be used for summarization.
+    """
 )
-class FSMTForConditionalGeneration(PretrainedFSMTModel):
+class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
@@ -1185,20 +1057,18 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1206,15 +1076,48 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+        cache_position: Optional[torch.Tensor] = None,
+    ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        Returns:
+        Example Translation:
 
+        ```python
+        >>> from transformers import AutoTokenizer, FSMTForConditionalGeneration
+
+        >>> mname = "facebook/wmt19-ru-en"
+        >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = AutoTokenizer.from_pretrained(mname)
+
+        >>> src_text = "Машинное обучение - это здорово, не так ли?"
+        >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
+        >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
+        >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+        "Machine learning is great, isn't it?"
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1237,6 +1140,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         lm_logits = outputs[0]
 
@@ -1262,43 +1166,8 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = []
-        for layer_past in past_key_values:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
-        return reordered_past
 
     def get_encoder(self):
         return self.model.encoder
@@ -1325,17 +1194,13 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_positions, embedding_dim, padding_idx):
-        self.make_weight(num_positions, embedding_dim, padding_idx)
+        super().__init__(num_positions, embedding_dim, padding_idx)
 
     def make_weight(self, num_positions, embedding_dim, padding_idx):
         weight = self.get_embedding(num_positions, embedding_dim, padding_idx)
-        if not hasattr(self, "weight"):
-            # in ___init__
-            super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
-        else:
-            # in forward put the weights on the correct dtype and device of the param
-            weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
-            self.weight = nn.Parameter(weight)
+        # in forward put the weights on the correct dtype and device of the param
+        weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
+        self.weight = nn.Parameter(weight)
         self.weight.detach_()
         self.weight.requires_grad = False
 
@@ -1387,3 +1252,6 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
         positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
+
+
+__all__ = ["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"]

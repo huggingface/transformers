@@ -21,7 +21,7 @@ from transformers import (
     TFPreTrainedModel,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY
@@ -32,8 +32,24 @@ class SummarizationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
+        summarizer = SummarizationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            dtype=dtype,
+            max_new_tokens=20,
+        )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
 
     def run_pipeline_test(self, summarizer, _):
@@ -70,26 +86,14 @@ class SummarizationPipelineTests(unittest.TestCase):
                 and len(summarizer.model.trainable_weights) > 0
                 and "GPU" in summarizer.model.trainable_weights[0].device
             ):
-                with self.assertRaises(Exception):
-                    outputs = summarizer("This " * 1000)
+                if str(summarizer.device) == "cpu":
+                    with self.assertRaises(Exception):
+                        outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch
     def test_small_model_pt(self):
-        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
-        outputs = summarizer("This is a small test")
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "summary_text": "เข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไป"
-                }
-            ],
-        )
-
-    @require_tf
-    def test_small_model_tf(self):
-        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="tf")
+        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt", max_new_tokens=19)
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

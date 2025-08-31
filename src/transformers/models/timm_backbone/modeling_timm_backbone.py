@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -40,7 +40,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    config_class = TimmBackboneConfig
+    config: TimmBackboneConfig
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -49,11 +49,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
-
-        # Certain timm models have the structure `model_name.version` e.g. vit_large_patch14_dinov2.lvd142m
-        base_backbone_model = config.backbone.split(".")[0]
-        if base_backbone_model not in timm.list_models():
-            raise ValueError(f"backbone {base_backbone_model} is not supported by timm.")
 
         if hasattr(config, "out_features") and config.out_features is not None:
             raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
@@ -131,7 +126,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
+    ) -> Union[BackboneOutput, tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -161,3 +156,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             return output
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
+
+
+__all__ = ["TimmBackbone"]

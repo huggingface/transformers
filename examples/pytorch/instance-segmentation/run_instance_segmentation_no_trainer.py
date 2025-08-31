@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for instance segmentation with Accelerate 🚀."""
 
 import argparse
@@ -21,9 +31,10 @@ import logging
 import math
 import os
 import sys
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import albumentations as A
 import datasets
@@ -52,7 +63,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
@@ -714,9 +725,6 @@ def main():
 
     logger.info(f"Test metrics: {metrics}")
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -738,6 +746,9 @@ def main():
                     token=args.hub_token,
                     ignore_patterns=["epoch_*"],
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

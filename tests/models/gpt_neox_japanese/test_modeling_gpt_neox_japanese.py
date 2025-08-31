@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ from transformers import GPTNeoXJapaneseConfig, is_torch_available
 from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -56,6 +56,8 @@ class GPTNeoXJapaneseModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        bos_token_id=1,
+        eos_token_id=0,
         scope=None,
     ):
         self.parent = parent
@@ -81,6 +83,8 @@ class GPTNeoXJapaneseModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -112,6 +116,8 @@ class GPTNeoXJapaneseModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -189,9 +195,8 @@ class GPTNeoXJapaneseModelTester:
 
 
 @require_torch
-class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (GPTNeoXJapaneseForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
         if is_torch_available()
@@ -218,7 +223,6 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None
@@ -257,3 +261,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    @unittest.skip("GPTNeoXJapanese applies bias to attention scores")
+    def test_custom_4d_attention_mask(self):
+        pass

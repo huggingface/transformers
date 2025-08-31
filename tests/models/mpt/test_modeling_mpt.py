@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,15 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_bitsandbytes,
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -287,14 +294,6 @@ class MptModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
-        model = MptForQuestionAnswering(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -311,7 +310,7 @@ class MptModelTester:
     def create_and_check_mpt_weight_initialization(self, config, *args):
         model = MptModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -354,7 +353,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
 
-    all_generative_model_classes = (MptForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
@@ -434,7 +432,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
@@ -442,14 +440,17 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_text = "Hello"
-        expected_output = "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
+        expected_outputs = Expectations({
+            (None, None): "Hello, I'm a new user of the forum. I have a question about the \"Solaris",
+            ("cuda", 8): "Hello, I'm a new user of the forum. I have a question. I have a problem with",
+            ("rocm", (9, 5)): "Hello, I'm a newbie to the forum. I have a question about the \"B\" in",
+        })  # fmt: off
+        expected_output = expected_outputs.get_expectation()
 
-        inputs = tokenizer(input_text, return_tensors="pt")
+        inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -460,27 +461,30 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_text = "Hello"
-        expected_output = "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n"
+        expected_outputs = Expectations({
+            (None, None): "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n",
+            ("rocm", (9, 5)): "Hello and welcome to the first day of the new release at The Stamp Man!\nToday we are",
+            ("xpu", 3): "Hello and welcome to the first ever episode of the new and improved, and hopefully improved, podcast.\n",
+            ("cuda", 8): "Hello and welcome to the first ever episode of the new and improved, and hopefully improved, podcast.\n",
+        })  # fmt: off
+        expected_output = expected_outputs.get_expectation()
 
-        inputs = tokenizer(input_text, return_tensors="pt")
+        inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @require_deterministic_for_xpu
     def test_generation_batched(self):
         model_id = "mosaicml/mpt-7b"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_texts = ["Hello my name is", "Today I am going at the gym and"]
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -488,10 +492,27 @@ class MptIntegrationTests(unittest.TestCase):
 
         inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
 
-        expected_output = [
-            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
-            "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
-        ]
+        expected_outputs = Expectations(
+            {
+                (None, None): [
+                    "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
+                    "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
+                ],
+                ("xpu", 3): [
+                    "Hello my name is Tiffany. I am a mother of two beautiful children. I have been a nanny for over",
+                    "Today I am going at the gym and then I am going to go to the mall with my mom. I am going to go to the",
+                ],
+                ("cuda", 8): [
+                    "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for over",
+                    "Today I am going at the gym and then I am going to go to the grocery store. I am going to make a list of things",
+                ],
+                ("rocm", (9, 5)): [
+                    "Hello my name is Jasmine and I am a very sweet and loving dog. I am a very playful dog and I",
+                    "Today I am going at the gym and then I am going to go to the mall. I am going to buy a new pair of jeans",
+                ],
+            }
+        )
+        expected_output = expected_outputs.get_expectation()
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -502,15 +523,21 @@ class MptIntegrationTests(unittest.TestCase):
         model_id = "mosaicml/mpt-7b"
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
 
         outputs = model(dummy_input, output_hidden_states=True)
 
-        expected_slice = torch.Tensor([-0.2520, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
+        expected_slices = Expectations(
+            {
+                (None, None): torch.Tensor([-0.2520, -0.2178, -0.1953]),
+                ("xpu", 3): torch.Tensor([-0.2090, -0.2061, -0.1465]),
+                ("cuda", 8): torch.Tensor([-0.2559, -0.2227, -0.2217]),
+                # TODO: This is quite a bit off, check BnB
+                ("rocm", (9, 5)): torch.Tensor([-0.3008, -0.1309, -0.1562]),
+            }
+        )
+        expected_slice = expected_slices.get_expectation().to(torch_device, torch.bfloat16)
         predicted_slice = outputs.hidden_states[-1][0, 0, :3]
-
-        self.assertTrue(torch.allclose(expected_slice, predicted_slice, atol=1e-3, rtol=1e-3))
+        torch.testing.assert_close(expected_slice, predicted_slice, rtol=1e-3, atol=1e-3)

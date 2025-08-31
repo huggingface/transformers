@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,11 +19,12 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
 from . import __version__
@@ -34,6 +34,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -71,6 +72,7 @@ TASK_MAPPING = {
     "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     "automatic-speech-recognition": {**MODEL_FOR_CTC_MAPPING_NAMES, **MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES},
     "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "image-text-to-text": MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)
@@ -82,7 +84,7 @@ class ModelCard:
 
     Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
     Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
+    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://huggingface.co/papers/1810.03993
 
     Note: A model card can be loaded and saved to disk.
     """
@@ -91,7 +93,7 @@ class ModelCard:
         warnings.warn(
             "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
         )
-        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recommended attributes from https://huggingface.co/papers/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})
@@ -196,7 +198,7 @@ class ModelCard:
                 # Load model card
                 modelcard = cls.from_json_file(resolved_model_card_file)
 
-            except (EnvironmentError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError):
                 # We fall back on creating an empty model card
                 modelcard = cls()
 
@@ -223,7 +225,7 @@ class ModelCard:
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `ModelCard` from a json file of parameters."""
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         dict_obj = json.loads(text)
         return cls(**dict_obj)
@@ -320,7 +322,7 @@ def infer_metric_tags_from_eval_results(eval_results):
     if eval_results is None:
         return {}
     result = {}
-    for key in eval_results.keys():
+    for key in eval_results:
         if key.lower().replace(" ", "_") in METRIC_TAGS:
             result[key.lower().replace(" ", "_")] = key
         elif key.lower() == "rouge1":
@@ -357,18 +359,18 @@ def _get_mapping_values(mapping):
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[Union[str, List[str]]] = None
+    language: Optional[Union[str, list[str]]] = None
     license: Optional[str] = None
-    tags: Optional[Union[str, List[str]]] = None
+    tags: Optional[Union[str, list[str]]] = None
     finetuned_from: Optional[str] = None
-    tasks: Optional[Union[str, List[str]]] = None
-    dataset: Optional[Union[str, List[str]]] = None
-    dataset_tags: Optional[Union[str, List[str]]] = None
-    dataset_args: Optional[Union[str, List[str]]] = None
-    dataset_metadata: Optional[Dict[str, Any]] = None
-    eval_results: Optional[Dict[str, float]] = None
-    eval_lines: Optional[List[str]] = None
-    hyperparameters: Optional[Dict[str, Any]] = None
+    tasks: Optional[Union[str, list[str]]] = None
+    dataset: Optional[Union[str, list[str]]] = None
+    dataset_tags: Optional[Union[str, list[str]]] = None
+    dataset_args: Optional[Union[str, list[str]]] = None
+    dataset_metadata: Optional[dict[str, Any]] = None
+    eval_results: Optional[dict[str, float]] = None
+    eval_lines: Optional[list[str]] = None
+    hyperparameters: Optional[dict[str, Any]] = None
     source: Optional[str] = "trainer"
 
     def __post_init__(self):
@@ -384,7 +386,12 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError):
+            except (
+                requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError,
+                HFValidationError,
+                OfflineModeIsEnabled,
+            ):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -489,7 +496,7 @@ class TrainingSummary:
                 f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
             )
 
-        if self.dataset is None:
+        if self.dataset is None or (isinstance(self.dataset, list) and len(self.dataset) == 0):
             model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):
@@ -832,7 +839,7 @@ def make_markdown_table(lines):
     """
     if lines is None or len(lines) == 0:
         return ""
-    col_widths = {key: len(str(key)) for key in lines[0].keys()}
+    col_widths = {key: len(str(key)) for key in lines[0]}
     for line in lines:
         for key, value in line.items():
             if col_widths[key] < len(_maybe_round(value)):
@@ -874,13 +881,17 @@ def extract_hyperparameters_from_trainer(trainer):
     if total_eval_batch_size != hyperparameters["eval_batch_size"]:
         hyperparameters["total_eval_batch_size"] = total_eval_batch_size
 
-    if trainer.args.adafactor:
-        hyperparameters["optimizer"] = "Adafactor"
-    else:
-        hyperparameters["optimizer"] = (
-            f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
-            f" epsilon={trainer.args.adam_epsilon}"
-        )
+    if trainer.args.optim:
+        optimizer_name = trainer.args.optim
+        optimizer_args = trainer.args.optim_args if trainer.args.optim_args else "No additional optimizer arguments"
+
+        if "adam" in optimizer_name.lower():
+            hyperparameters["optimizer"] = (
+                f"Use {optimizer_name} with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+                f" epsilon={trainer.args.adam_epsilon} and optimizer_args={optimizer_args}"
+            )
+        else:
+            hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:

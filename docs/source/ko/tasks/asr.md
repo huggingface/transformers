@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="TksaY_FDgnk"/>
 
-자동 음성 인식(Automatic Speech Recognition, ASR)은 음성 신호를 텍스트로 변환하여 음성 입력 시퀀스를 텍스트 출력에 매핑합니다. 
+자동 음성 인식(Automatic Speech Recognition, ASR)은 음성 신호를 텍스트로 변환하여 음성 입력 시퀀스를 텍스트 출력에 매핑합니다.
 Siri와 Alexa와 같은 가상 어시스턴트는 ASR 모델을 사용하여 일상적으로 사용자를 돕고 있으며, 회의 중 라이브 캡션 및 메모 작성과 같은 유용한 사용자 친화적 응용 프로그램도 많이 있습니다.
 
 이 가이드에서 소개할 내용은 아래와 같습니다:
@@ -50,7 +50,7 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 
 ## MInDS-14 데이터 세트 가져오기[[load-minds-14-dataset]]
 
-먼저, 🤗 Datasets 라이브러리에서 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트의 일부분을 가져오세요. 
+먼저, 🤗 Datasets 라이브러리에서 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트의 일부분을 가져오세요.
 이렇게 하면 전체 데이터 세트에 대한 훈련에 시간을 들이기 전에 모든 것이 작동하는지 실험하고 검증할 수 있습니다.
 
 ```py
@@ -172,7 +172,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = "longest"
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         # 입력과 레이블을 분할합니다
 ...         # 길이가 다르고, 각각 다른 패딩 방법을 사용해야 하기 때문입니다
 ...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]
@@ -198,7 +198,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 
 ## 평가하기[[evaluate]]
 
-훈련 중에 평가 지표를 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다. 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하면 평가 방법을 빠르게 불러올 수 있습니다. 
+훈련 중에 평가 지표를 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다. 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하면 평가 방법을 빠르게 불러올 수 있습니다.
 이 작업에서는 [단어 오류율(Word Error Rate, WER)](https://huggingface.co/spaces/evaluate-metric/wer) 평가 지표를 가져옵니다.
 (평가 지표를 불러오고 계산하는 방법은 🤗 Evaluate [둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요):
 
@@ -285,7 +285,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor.feature_extractor,
+...     processing_class=processor.feature_extractor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

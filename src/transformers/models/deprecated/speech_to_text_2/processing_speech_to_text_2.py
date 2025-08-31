@@ -50,7 +50,7 @@ class Speech2Text2Processor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
         [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Speech2Text2Processor.as_target_processor`] this method forwards all its arguments to
-        Speech2Text2Tokenizer's [`~Speech2Text2Tokenizer.__call__`]. Please refer to the doctsring of the above two
+        Speech2Text2Tokenizer's [`~Speech2Text2Tokenizer.__call__`]. Please refer to the docstring of the above two
         methods for more information.
         """
         # For backward compatibility
@@ -84,20 +84,6 @@ class Speech2Text2Processor(ProcessorMixin):
             inputs["labels"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Speech2Text2Tokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Speech2Text2Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @contextmanager
     def as_target_processor(self):
         """
@@ -114,3 +100,6 @@ class Speech2Text2Processor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+
+__all__ = ["Speech2Text2Processor"]

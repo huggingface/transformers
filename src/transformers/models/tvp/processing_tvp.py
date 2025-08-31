@@ -51,16 +51,16 @@ class TvpProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `videos` and `kwargs` arguments to
-        TvpImageProcessor's [`~TvpImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring of
+        TvpImageProcessor's [`~TvpImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring of
         the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarrray]]`,:
-                `List[List[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
+            videos (`list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[PIL.Image.Image]]`, `list[list[np.ndarray]]`,:
+                `list[list[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
                 of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/PyTorch tensors,
                 each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
                 channels.
@@ -108,20 +108,6 @@ class TvpProcessor(ProcessorMixin):
 
         return BatchEncoding(data=encoding, tensor_type=return_tensors)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def post_process_video_grounding(self, logits, video_durations):
         """
         Compute the time of the video.
@@ -145,9 +131,5 @@ class TvpProcessor(ProcessorMixin):
 
         return start, end
 
-    @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+__all__ = ["TvpProcessor"]

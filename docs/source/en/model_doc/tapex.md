@@ -13,8 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-07-16 and added to Hugging Face Transformers on 2023-06-20.*
 
 # TAPEX
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 <Tip warning={true}>
 
@@ -27,11 +32,11 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/abs/2107.07653) by Qian Liu,
+The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://huggingface.co/papers/2107.07653) by Qian Liu,
 Bei Chen, Jiaqi Guo, Morteza Ziyadi, Zeqi Lin, Weizhu Chen, Jian-Guang Lou. TAPEX pre-trains a BART model to solve synthetic SQL queries, after
-which it can be fine-tuned to answer natural language questions related to tabular data, as well as performing table fact checking. 
+which it can be fine-tuned to answer natural language questions related to tabular data, as well as performing table fact checking.
 
-TAPEX has been fine-tuned on several datasets: 
+TAPEX has been fine-tuned on several datasets:
 - [SQA](https://www.microsoft.com/en-us/download/details.aspx?id=54253) (Sequential Question Answering by Microsoft)
 - [WTQ](https://github.com/ppasupat/WikiTableQuestions) (Wiki Table Questions by Stanford University)
 - [WikiSQL](https://github.com/salesforce/WikiSQL) (by Salesforce)
@@ -51,12 +56,12 @@ and to achieve new state-of-the-art results on various downstream tasks.*
 
 ## Usage tips
 
-- TAPEX is a generative (seq2seq) model. One can directly plug in the weights of TAPEX into a BART model. 
+- TAPEX is a generative (seq2seq) model. One can directly plug in the weights of TAPEX into a BART model.
 - TAPEX has checkpoints on the hub that are either pre-trained only, or fine-tuned on WTQ, SQA, WikiSQL and TabFact.
-- Sentences + tables are presented to the model as `sentence + " " + linearized table`. The linearized table has the following format: 
+- Sentences + tables are presented to the model as `sentence + " " + linearized table`. The linearized table has the following format:
   `col: col1 | col2 | col 3 row 1 : val1 | val2 | val3 row 2 : ...`.
 - TAPEX has its own tokenizer, that allows to prepare all data for the model easily. One can pass Pandas DataFrames and strings to the tokenizer,
-  and it will automatically create the `input_ids` and `attention_mask` (as shown in the usage examples below). 
+  and it will automatically create the `input_ids` and `attention_mask` (as shown in the usage examples below).
 
 ### Usage: inference
 
@@ -135,10 +140,10 @@ benchmark for table fact checking (it achieves 84% accuracy). The code example b
 Refused
 ```
 
-<Tip> 
+<Tip>
 
-TAPEX architecture is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on 
-configuration classes and their parameters. TAPEX-specific tokenizer is documented below.  
+TAPEX architecture is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on
+configuration classes and their parameters. TAPEX-specific tokenizer is documented below.
 
 </Tip>
 

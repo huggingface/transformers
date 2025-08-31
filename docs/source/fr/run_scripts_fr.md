@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 En plus des [notebooks](./notebooks) de 🤗 Transformers, il existe également des exemples de scripts démontrant comment entraîner un modèle pour une tâche avec [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow) ou [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
 
-Vous trouverez également des scripts que nous avons utilisé dans nos [projets de recherche](https://github.com/huggingface/transformers/tree/main/examples/research_projects) et des [exemples "legacy"](https://github.com/huggingface/transformers/tree/main/examples/legacy) qui sont des contributions de la communauté. Ces scripts ne sont pas activement maintenus et nécessitent une version spécifique de 🤗 Transformers qui sera probablement incompatible avec la dernière version de la librairie.
+Vous trouverez également des scripts que nous avons utilisé dans nos [projets de recherche](https://github.com/huggingface/transformers-research-projects/) et des [exemples "legacy"](https://github.com/huggingface/transformers/tree/main/examples/legacy) qui sont des contributions de la communauté. Ces scripts ne sont pas activement maintenus et nécessitent une version spécifique de 🤗 Transformers qui sera probablement incompatible avec la dernière version de la librairie.
 
 Les exemples de scripts ne sont pas censés fonctionner immédiatement pour chaque problème, et il se peut que vous ayez besoin d'adapter le script au problème que vous essayez de résoudre. Pour vous aider dans cette tâche, la plupart des scripts exposent entièrement la manière dont les données sont prétraitées, vous permettant de les modifier selon vos besoins.
 
@@ -327,7 +327,7 @@ python examples/pytorch/summarization/run_summarization.py
 Tous les scripts peuvent télécharger votre modèle final sur le Model Hub. Assurez-vous que vous êtes connecté à Hugging Face avant de commencer :
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Ensuite, ajoutez l'argument `push_to_hub` au script. Cet argument créera un dépôt avec votre nom d'utilisateur Hugging Face et le nom du dossier spécifié dans `output_dir`.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_bs4_available():
     from transformers import MarkupLMFeatureExtractor
 
 
-class MarkupLMFeatureExtractionTester(unittest.TestCase):
+class MarkupLMFeatureExtractionTester:
     def __init__(self, parent):
         self.parent = parent
 

@@ -37,7 +37,7 @@ python utils/check_dummies.py --fix_and_overwrite
 import argparse
 import os
 import re
-from typing import Dict, List, Optional
+from typing import Optional
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -92,7 +92,7 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def read_init() -> Dict[str, List[str]]:
+def read_init() -> dict[str, list[str]]:
     """
     Read the init and extract backend-specific objects.
 
@@ -156,7 +156,7 @@ def create_dummy_object(name: str, backend_name: str) -> str:
         return DUMMY_CLASS.format(name, backend_name)
 
 
-def create_dummy_files(backend_specific_objects: Optional[Dict[str, List[str]]] = None) -> Dict[str, str]:
+def create_dummy_files(backend_specific_objects: Optional[dict[str, list[str]]] = None) -> dict[str, str]:
     """
     Create the content of the dummy files.
 
@@ -199,8 +199,7 @@ def check_dummies(overwrite: bool = False):
     # Locate actual dummy modules and read their content.
     path = os.path.join(PATH_TO_TRANSFORMERS, "utils")
     dummy_file_paths = {
-        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py")
-        for backend in dummy_files.keys()
+        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py") for backend in dummy_files
     }
 
     actual_dummies = {}
@@ -212,7 +211,7 @@ def check_dummies(overwrite: bool = False):
             actual_dummies[backend] = ""
 
     # Compare actual with what they should be.
-    for backend in dummy_files.keys():
+    for backend in dummy_files:
         if dummy_files[backend] != actual_dummies[backend]:
             if overwrite:
                 print(
@@ -222,10 +221,30 @@ def check_dummies(overwrite: bool = False):
                 with open(dummy_file_paths[backend], "w", encoding="utf-8", newline="\n") as f:
                     f.write(dummy_files[backend])
             else:
+                # Temporary fix to help people identify which objects introduced are not correctly protected.
+                found = False
+                for _actual, _dummy in zip(
+                    actual_dummies["torch"].split("class"), dummy_files["torch"].split("class")
+                ):
+                    if _actual != _dummy:
+                        actual_broken = _actual
+                        dummy_broken = _dummy
+                        found = True
+                        break
+
+                if not found:
+                    print("A transient error was found with the dummies, please investigate.")
+                    continue
+
                 raise ValueError(
                     "The main __init__ has objects that are not present in "
-                    f"transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py. Run `make fix-copies` "
-                    "to fix this."
+                    f"transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py.\n"
+                    f" It is likely the following objects are responsible, see these excerpts: \n"
+                    f"---------------------------------- Actual -------------------------------------\n"
+                    f" \n {actual_broken} \n"
+                    f"---------------------------------- Dummy -------------------------------------\n"
+                    f" \n {dummy_broken} \n"
+                    "Run `make fix-copies` to fix this."
                 )
 
 

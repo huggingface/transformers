@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-05-28 and added to Hugging Face Transformers on 2023-02-20.*
 
 # EfficientNet
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The EfficientNet model was proposed in [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://arxiv.org/abs/1905.11946) 
+The EfficientNet model was proposed in [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://huggingface.co/papers/1905.11946) 
 by Mingxing Tan and Quoc V. Le. EfficientNets are a family of image classification models, which achieve state-of-the-art accuracy, yet being an order-of-magnitude smaller and faster than previous models.
 
 The abstract from the paper is the following:
@@ -37,6 +42,11 @@ The original code can be found [here](https://github.com/tensorflow/tpu/tree/mas
 ## EfficientNetImageProcessor
 
 [[autodoc]] EfficientNetImageProcessor
+    - preprocess
+
+## EfficientNetImageProcessorFast
+
+[[autodoc]] EfficientNetImageProcessorFast
     - preprocess
 
 ## EfficientNetModel

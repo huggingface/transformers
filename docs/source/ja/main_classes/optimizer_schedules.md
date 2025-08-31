@@ -22,10 +22,6 @@ rendered properly in your Markdown viewer.
 - `_LRSchedule` から継承するスケジュール オブジェクトの形式のいくつかのスケジュール:
 - 複数のバッチの勾配を累積するための勾配累積クラス
 
-## AdamW (PyTorch)
-
-[[autodoc]] AdamW
-
 ## AdaFactor (PyTorch)
 
 [[autodoc]] Adafactor

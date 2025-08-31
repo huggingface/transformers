@@ -13,13 +13,13 @@
 # limitations under the License.
 
 import dataclasses
-import io
 import itertools
 import json
 import os
 import unittest
 from copy import deepcopy
 from functools import partial
+from typing import Optional
 
 import datasets
 from parameterized import parameterized
@@ -45,12 +45,14 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
+    require_torch_fp16,
     require_torch_multi_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device
+from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 
 if is_torch_available():
@@ -150,10 +152,12 @@ optims = [HF_OPTIM, DS_OPTIM]
 schedulers = [HF_SCHEDULER, DS_SCHEDULER]
 
 stages = [ZERO2, ZERO3]
+
+dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
+    dtypes.append(BF16)
+if is_torch_fp16_available_on_device(torch_device):
+    dtypes.append(FP16)
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -170,7 +174,6 @@ params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optim
 
 
 @require_deepspeed
-@require_torch_accelerator
 class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     """
     Testing non-Trainer DeepSpeed integration
@@ -194,12 +197,52 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # reset the ds config global so that tests state doesn't leak
         unset_hf_deepspeed_config()
 
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+    @require_torch_fp16
+    @require_torch_accelerator
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
             "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
+            },
+            "fp16": {
+                "enabled": True,
             },
         }
 
@@ -360,14 +403,14 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             model.config.max_position_embeddings, model.config.rotary_dim
         )
         self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
-        self.assertTrue(torch.allclose(good_torch_sin_cos, good_deepspeed_sin_cos.cpu()))
+        torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demostrating that this issue is
+        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
         # exclusive to DeepSpeed
         bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
         )
-        self.assertTrue(torch.allclose(bad_torch_sin_cos, good_torch_sin_cos))
+        torch.testing.assert_close(bad_torch_sin_cos, good_torch_sin_cos)
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
@@ -393,9 +436,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
         }
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
@@ -418,6 +461,7 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
 
 
 @require_deepspeed
+@require_torch_fp16
 @require_torch_accelerator
 class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, TrainerIntegrationCommon):
     """
@@ -482,6 +526,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 max_grad_norm=max_grad_norm,
                 adam_beta1=adam_beta1,
                 adam_beta2=adam_beta2,
+                output_dir=self.get_auto_remove_tmp_dir(),
             )
             with self.assertRaises(Exception) as context:
                 trainer.train()
@@ -506,7 +551,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(
+                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+            )
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -518,7 +565,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(
+                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+            )
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -530,7 +579,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(
+                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+            )
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -546,7 +597,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
-            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict)
+            trainer = get_regression_trainer(
+                local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict, output_dir=self.get_auto_remove_tmp_dir()
+            )
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
@@ -567,6 +620,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 fp16=True,
                 model_init=model_init,
                 deepspeed=ds_config_zero3_dict,
+                output_dir=self.get_auto_remove_tmp_dir(),
             )
 
             n_trials = 3
@@ -574,7 +628,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
-            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #
@@ -588,7 +642,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
         ds_config_dict["zero_force_ds_cpu_optimizer"] = False  # offload is not efficient w/o CPUAdam
         with mockenv_context(**self.dist_env_1_gpu):
-            kwargs = {"local_rank": 0, "deepspeed": ds_config_dict}
+            kwargs = {"local_rank": 0, "deepspeed": ds_config_dict, "output_dir": self.get_auto_remove_tmp_dir()}
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
             with CaptureLogger(deepspeed_logger) as cl:
@@ -604,7 +658,11 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
-            kwargs = {"local_rank": 0, "deepspeed": self.get_config_dict(stage)}
+            kwargs = {
+                "local_rank": 0,
+                "deepspeed": self.get_config_dict(stage),
+                "output_dir": self.get_auto_remove_tmp_dir(),
+            }
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
 
@@ -630,6 +688,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 "deepspeed": self.get_config_dict(stage),
                 "per_device_train_batch_size": 8,
                 "logging_steps": 1,
+                "output_dir": self.get_auto_remove_tmp_dir(),
             }
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
@@ -661,7 +720,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # dynamic loss scale value set to:
         #   "fp16.initial_scale_power": 1
         # plus having the same WarmupLR's warmup_min_lr == warmup_max_lr in the config file
-        # but for some reason going to train_len=64 the weights, weights start to mismatch with this setup.
+        # but for some reason going to train_len=64, the weights start to mismatch with this setup.
         # the culprit seems to be `initial_scale_power` - putting it back to its default 32 keeps the weights identical
 
         train_len = 64
@@ -673,6 +732,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             "local_rank": 0,
             "train_len": train_len,
             "deepspeed": self.get_config_dict(stage),
+            "output_dir": self.get_auto_remove_tmp_dir(),
         }
         kwargs[dtype] = True
 
@@ -703,8 +763,12 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         # training with half the batch size but accumulation steps as 2 should give the same
         # weights, but sometimes get a slight difference still of 1e-6
-        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
-        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
+        if torch_device == "hpu":
+            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
+        else:
+            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
+            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
@@ -882,7 +946,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.check_trainer_state_are_the_same(state, state1)
 
             # Finally, should be able to resume with the same trainer/same deepspeed engine instance
-            # XXX: but currently this not possible due DS bug: https://github.com/microsoft/DeepSpeed/issues/1612
+            # XXX: but currently this not possible due DS bug: https://github.com/deepspeedai/DeepSpeed/issues/1612
             # trainer.train(resume_from_checkpoint=checkpoint)
             # a workaround needs to be used that re-creates the deepspeed engine
 
@@ -959,7 +1023,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     def test_load_best_model(self, stage, dtype):
         # Test that forced deepspeed reinit doesn't break the model. the forced re-init after
         # loading the best model in Trainer is there to workaround this bug in Deepspeed
-        # https://github.com/microsoft/DeepSpeed/issues/1612
+        # https://github.com/deepspeedai/DeepSpeed/issues/1612
         #
         # The test is derived from a repro script submitted in this Issue:
         # https://github.com/huggingface/transformers/issues/17114
@@ -1010,10 +1074,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             def _convert_to_features(example_batch):
                 input_encodings = tokenizer.batch_encode_plus(
-                    example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+                    example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
                 target_encodings = tokenizer.batch_encode_plus(
-                    example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+                    example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 
                 encodings = {
@@ -1036,7 +1100,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             trainer = Trainer(
                 model=model,
-                tokenizer=tokenizer,
+                processing_class=tokenizer,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
@@ -1046,6 +1110,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
 
 @slow
+@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedWithLauncher(TestCasePlus):
@@ -1069,9 +1134,12 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     def test_basic_distributed(self, stage, dtype):
         self.run_and_check(stage=stage, dtype=dtype, distributed=True)
 
+    @require_torch_fp16
+    @run_first
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
@@ -1084,6 +1152,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_fp32_non_distributed(self, stage, dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -1100,6 +1169,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     def test_fp32_distributed(self, stage, dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -1115,6 +1185,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_resume_train_not_from_ds_checkpoint(self, stage, dtype):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
         # the saved model dir
@@ -1141,16 +1212,20 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(["bf16", "fp16", "fp32"])
     @require_torch_multi_accelerator
+    @run_first
     def test_inference(self, dtype):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(reason="test requires bfloat16 hardware support")
 
+        if dtype == "fp16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(reason="test requires fp16 hardware support")
+
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
-        fp32 = True if dtype == "fp32" else False
+        fp32 = dtype == "fp32"
         self.run_and_check(
             stage=ZERO3,
-            dtype=FP16,
+            dtype=dtype,
             model_name=T5_TINY,
             distributed=True,
             do_train=False,
@@ -1184,8 +1259,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
@@ -1217,8 +1292,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         distributed: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         max_len = 32
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
@@ -1262,13 +1337,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         if do_eval:
             actions += 1
-            args.extend(
-                """
-            --do_eval
-            --max_eval_samples 16
-            --per_device_eval_batch_size 2
-            """.split()
-            )
+            args.extend(["--do_eval", "--max_eval_samples", "16", "--per_device_eval_batch_size", "2"])
 
         assert actions > 0, "need at least do_train or do_eval for the test to run"
 
@@ -1292,6 +1361,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         return output_dir
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_clm(self, stage, dtype):
         # this test exercises model.resize_token_embeddings() which requires param gathering outside
         # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
@@ -1327,6 +1397,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
+    @require_torch_fp16
+    @run_first
     def test_clm_from_config_zero3_fp16(self):
         # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
 

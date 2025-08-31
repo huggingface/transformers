@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,22 @@
 
 import unittest
 
+import pytest
 from datasets import load_dataset
-from packaging import version
 
 from transformers import BeitConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    cached_property,
+    is_torch_available,
+    is_vision_available,
+)
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -44,7 +53,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
     from transformers import BeitImageProcessor
@@ -74,6 +82,8 @@ class BeitModelTester:
         scope=None,
         out_indices=[1, 2, 3, 4],
         out_features=["stage1", "stage2", "stage3", "stage4"],
+        attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -100,6 +110,9 @@ class BeitModelTester:
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.mask_length = self.seq_length - 1
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -131,6 +144,7 @@ class BeitModelTester:
             initializer_range=self.initializer_range,
             out_indices=self.out_indices,
             out_features=self.out_features,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -249,6 +263,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BeitModelTester(self)
@@ -268,6 +283,11 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="BEiT can't compile dynamic")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -352,13 +372,13 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -425,7 +445,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2))
+        torch.testing.assert_close(logits[bool_masked_pos][:3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
@@ -446,7 +466,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 281
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -472,7 +492,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([1.6881, -0.2787, 0.5901]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 2396
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -484,8 +504,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        image = Image.open(ds[0]["file"])
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
@@ -497,28 +517,15 @@ class BeitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 150, 160, 160))
         self.assertEqual(logits.shape, expected_shape)
 
-        is_pillow_less_than_9 = version.parse(PIL.__version__) < version.parse("9.0.0")
-
-        if is_pillow_less_than_9:
-            expected_slice = torch.tensor(
-                [
-                    [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
-                    [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
-                    [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
-                ],
-                device=torch_device,
-            )
-        else:
-            expected_slice = torch.tensor(
-                [
-                    [[-4.8960, -2.3688, -3.0355], [-2.8478, -0.9836, -1.7418], [-2.9449, -1.3332, -2.1456]],
-                    [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
-                    [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
-                ],
-                device=torch_device,
-            )
-
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor(
+            [
+                [[-4.8960, -2.3688, -3.0355], [-2.8479, -0.9836, -1.7418], [-2.9449, -1.3333, -2.1456]],
+                [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
+                [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):
@@ -527,8 +534,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        image = Image.open(ds[0]["file"])
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
@@ -555,19 +562,14 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
-        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
-        # images than what the model supports.
-        self.assertFalse(processor.do_center_crop)
-        with torch.no_grad():
-            with self.assertRaises(ValueError, msg="doesn't match model"):
-                model(pixel_values, interpolate_pos_encoding=False)
-
         # with interpolate_pos_encoding being True the model should process the higher resolution image
         # successfully and produce the expected output.
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 1 + 30 * 30 = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 

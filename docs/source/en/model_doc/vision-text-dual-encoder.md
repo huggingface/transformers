@@ -13,8 +13,15 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-11-15 and added to Hugging Face Transformers on 2021-11-30.*
 
 # VisionTextDualEncoder
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
@@ -24,7 +31,7 @@ to a shared latent space. The projection layers are randomly initialized so the 
 downstream task. This model can be used to align the vision-text embeddings using CLIP like contrastive image-text
 training and then can be used for zero-shot vision tasks such image-classification or retrieval.
 
-In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
+In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
 leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement on
 new zero-shot vision tasks such as image classification or retrieval.
 
@@ -36,29 +43,7 @@ new zero-shot vision tasks such as image classification or retrieval.
 
 [[autodoc]] VisionTextDualEncoderProcessor
 
-<frameworkcontent>
-<pt>
-
 ## VisionTextDualEncoderModel
 
 [[autodoc]] VisionTextDualEncoderModel
     - forward
-
-</pt>
-<tf>
-
-## FlaxVisionTextDualEncoderModel
-
-[[autodoc]] FlaxVisionTextDualEncoderModel
-    - __call__
-
-</tf>
-<jax>
-
-## TFVisionTextDualEncoderModel
-
-[[autodoc]] TFVisionTextDualEncoderModel
-    - call
-
-</jax>
-</frameworkcontent>

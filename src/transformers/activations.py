@@ -16,10 +16,10 @@ import math
 from collections import OrderedDict
 
 import torch
-from packaging import version
 from torch import Tensor, nn
 
 from .utils import logging
+from .utils.import_utils import is_torchdynamo_compiling
 
 
 logger = logging.get_logger(__name__)
@@ -28,19 +28,11 @@ logger = logging.get_logger(__name__)
 class PytorchGELUTanh(nn.Module):
     """
     A fast C implementation of the tanh approximation of the GeLU activation function. See
-    https://arxiv.org/abs/1606.08415.
+    https://huggingface.co/papers/1606.08415.
 
     This implementation is equivalent to NewGELU and FastGELU but much faster. However, it is not an exact numerical
     match due to rounding errors.
     """
-
-    def __init__(self):
-        super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.12.0"):
-            raise ImportError(
-                f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
-                "PytorchGELUTanh. Please upgrade torch."
-            )
 
     def forward(self, input: Tensor) -> Tensor:
         return nn.functional.gelu(input, approximate="tanh")
@@ -49,7 +41,7 @@ class PytorchGELUTanh(nn.Module):
 class NewGELUActivation(nn.Module):
     """
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
-    the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
     """
 
     def forward(self, input: Tensor) -> Tensor:
@@ -61,7 +53,7 @@ class GELUActivation(nn.Module):
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
     information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
     torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
-    Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    Also see the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
     """
 
     def __init__(self, use_gelu_python: bool = False):
@@ -100,13 +92,13 @@ class ClippedGELUActivation(nn.Module):
     """
     Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
     it allows mapping negatives values in the GeLU spectrum. For more information on this trick, please refer to
-    https://arxiv.org/abs/2004.09602.
+    https://huggingface.co/papers/2004.09602.
 
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created.
 
     For information: OpenAI GPT's gelu is slightly different (and gives slightly different results): 0.5 * x * (1 +
-    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://arxiv.org/abs/1606.08415
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://huggingface.co/papers/1606.08415
     """
 
     def __init__(self, min: float, max: float):
@@ -139,16 +131,13 @@ class AccurateGELUActivation(nn.Module):
 
 class MishActivation(nn.Module):
     """
-    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://arxiv.org/abs/1908.08681). Also
+    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://huggingface.co/papers/1908.08681). Also
     visit the official repository for the paper: https://github.com/digantamisra98/Mish
     """
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.9.0"):
-            self.act = self._mish_python
-        else:
-            self.act = nn.functional.mish
+        self.act = nn.functional.mish
 
     def _mish_python(self, input: Tensor) -> Tensor:
         return input * torch.tanh(nn.functional.softplus(input))
@@ -169,7 +158,7 @@ class LinearActivation(nn.Module):
 class LaplaceActivation(nn.Module):
     """
     Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See
-    https://arxiv.org/abs/2209.10655
+    https://huggingface.co/papers/2209.10655
 
     Inspired by squared relu, but with bounded range and gradient for better stability
     """
@@ -181,7 +170,7 @@ class LaplaceActivation(nn.Module):
 
 class ReLUSquaredActivation(nn.Module):
     """
-    Applies the relu^2 activation introduced in https://arxiv.org/abs/2109.08668v2
+    Applies the relu^2 activation introduced in https://huggingface.co/papers/2109.08668v2
     """
 
     def forward(self, input):
@@ -195,6 +184,100 @@ class ClassInstantier(OrderedDict):
         content = super().__getitem__(key)
         cls, kwargs = content if isinstance(content, tuple) else (content, {})
         return cls(**kwargs)
+
+
+class XIELUActivation(nn.Module):
+    """
+    Applies the xIELU activation function introduced in https://arxiv.org/abs/2411.13010
+
+    If the user has installed the nickjbrowning/XIELU wheel, we import xIELU CUDA
+    Otherwise, we emit a single warning and use xIELU Python
+    """
+
+    def __init__(
+        self,
+        alpha_p_init=0.8,
+        alpha_n_init=0.8,
+        beta=0.5,
+        eps=-1e-6,
+        dtype=torch.bfloat16,
+        with_vector_loads=False,
+    ):
+        super().__init__()
+        self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
+        self.alpha_n = nn.Parameter(
+            torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0)
+        )
+        self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
+        self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
+        self.with_vector_loads = with_vector_loads
+        # Temporary until xIELU CUDA fully implemented
+        self._beta_scalar = float(self.beta.detach().cpu().float().item())
+        self._eps_scalar = float(self.eps.detach().cpu().float().item())
+
+        self._xielu_cuda_obj = None
+        try:
+            import xielu.ops  # noqa: F401
+
+            self._xielu_cuda_obj = torch.classes.xielu.XIELU()
+            msg = "Using experimental xIELU CUDA."
+            try:
+                from torch._dynamo import allow_in_graph
+
+                self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
+                msg += " Enabled torch._dynamo for xIELU CUDA."
+            except Exception as err:
+                msg += f" Could not enable torch._dynamo for xIELU ({err}) - this may result in slower performance."
+                self._xielu_cuda_fn = self._xielu_cuda
+            logger.warning_once(msg)
+        except Exception as err:
+            logger.warning_once(
+                "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
+                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`",
+                str(err),
+            )
+
+    def _xielu_python(self, x: Tensor) -> Tensor:
+        alpha_p = nn.functional.softplus(self.alpha_p)
+        alpha_n = self.beta + nn.functional.softplus(self.alpha_n)
+        return torch.where(
+            x > 0,
+            alpha_p * x * x + self.beta * x,
+            (torch.expm1(torch.min(x, self.eps)) - x) * alpha_n + self.beta * x,
+        )
+
+    def _xielu_cuda(self, x: Tensor) -> Tensor:
+        """Firewall function to prevent torch.compile from seeing .item() calls"""
+        original_shape = x.shape
+        # CUDA kernel expects 3D tensors, reshape if needed
+        while x.dim() < 3:
+            x = x.unsqueeze(0)
+        if x.dim() > 3:
+            x = x.view(-1, 1, x.size(-1))
+        if original_shape != x.shape:
+            logger.warning_once(
+                "Warning: xIELU input tensor expects 3 dimensions but got (shape: %s). Reshaping to (shape: %s).",
+                original_shape,
+                x.shape,
+            )
+        result = self._xielu_cuda_obj.forward(
+            x,
+            self.alpha_p,
+            self.alpha_n,
+            # Temporary until xIELU CUDA fully implemented -> self.{beta,eps}.item()
+            self._beta_scalar,
+            self._eps_scalar,
+            self.with_vector_loads,
+        )
+        return result.view(original_shape)
+
+    def forward(self, input: Tensor) -> Tensor:
+        if self._xielu_cuda_obj is not None and input.is_cuda:
+            if not is_torchdynamo_compiling():
+                return self._xielu_cuda_fn(input)
+            else:
+                logger.warning_once("torch._dynamo is compiling, using Python version of xIELU.")
+        return self._xielu_python(input)
 
 
 ACT2CLS = {
@@ -217,6 +300,8 @@ ACT2CLS = {
     "silu": nn.SiLU,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
+    "prelu": nn.PReLU,
+    "xielu": XIELUActivation,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 

@@ -13,73 +13,97 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-20 and added to Hugging Face Transformers on 2021-10-18.*
+
+<div style="float: right;">
+   <div class="flex flex-wrap space-x-1">
+      <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+   </div>
+</div>
 
 # BARTpho
 
-## Overview
+[BARTpho](https://huggingface.co/papers/2109.09701) is a large-scale Vietnamese sequence-to-sequence model. It offers a word-based and syllable-based version. This model is built on the [BART](./bart) large architecture with its denoising pretraining.
 
-The BARTpho model was proposed in [BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese](https://arxiv.org/abs/2109.09701) by Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.
+You can find all the original checkpoints under the [VinAI](https://huggingface.co/vinai/models?search=bartpho) organization.
 
-The abstract from the paper is the following:
+> [!TIP]
+> This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen).
+> Check out the right sidebar for examples of how to apply BARTpho to different language tasks.
 
-*We present BARTpho with two versions -- BARTpho_word and BARTpho_syllable -- the first public large-scale monolingual
-sequence-to-sequence models pre-trained for Vietnamese. Our BARTpho uses the "large" architecture and pre-training
-scheme of the sequence-to-sequence denoising model BART, thus especially suitable for generative NLP tasks. Experiments
-on a downstream task of Vietnamese text summarization show that in both automatic and human evaluations, our BARTpho
-outperforms the strong baseline mBART and improves the state-of-the-art. We release BARTpho to facilitate future
-research and applications of generative Vietnamese NLP tasks.*
+The example below demonstrates how to summarize text with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The original code can be found [here](https://github.com/VinAIResearch/BARTpho).
 
-## Usage example
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
 
->>> bartpho = AutoModel.from_pretrained("vinai/bartpho-syllable")
-
->>> tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable")
-
->>> line = "Chúng tôi là những nghiên cứu viên."
-
->>> input_ids = tokenizer(line, return_tensors="pt")
-
->>> with torch.no_grad():
-...     features = bartpho(**input_ids)  # Models outputs are now tuples
-
->>> # With TensorFlow 2.0+:
->>> from transformers import TFAutoModel
-
->>> bartpho = TFAutoModel.from_pretrained("vinai/bartpho-syllable")
->>> input_ids = tokenizer(line, return_tensors="tf")
->>> features = bartpho(**input_ids)
-```
-
-## Usage tips
-
-- Following mBART, BARTpho uses the "large" architecture of BART with an additional layer-normalization layer on top of
-  both the encoder and decoder. Thus, usage examples in the [documentation of BART](bart), when adapting to use
-  with BARTpho, should be adjusted by replacing the BART-specialized classes with the mBART-specialized counterparts.
-  For example:
 
 ```python
->>> from transformers import MBartForConditionalGeneration
+import torch
+from transformers import pipeline
 
->>> bartpho = MBartForConditionalGeneration.from_pretrained("vinai/bartpho-syllable")
->>> TXT = "Chúng tôi là <mask> nghiên cứu viên."
->>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
->>> logits = bartpho(input_ids).logits
->>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
->>> probs = logits[0, masked_index].softmax(dim=0)
->>> values, predictions = probs.topk(5)
->>> print(tokenizer.decode(predictions).split())
+pipeline = pipeline(
+   task="summarization",
+   model="vinai/bartpho-word",
+   dtype=torch.float16,
+   device=0
+)
+
+text = """
+Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
+"""
+pipeline(text)
 ```
 
-- This implementation is only for tokenization: "monolingual_vocab_file" consists of Vietnamese-specialized types
-  extracted from the pre-trained SentencePiece model "vocab_file" that is available from the multilingual XLM-RoBERTa.
-  Other languages, if employing this pre-trained multilingual SentencePiece model "vocab_file" for subword
-  segmentation, can reuse BartphoTokenizer with their own language-specialized "monolingual_vocab_file".
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import BartForConditionalGeneration, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "vinai/bartpho-word",
+)
+model = BartForConditionalGeneration.from_pretrained(
+    "vinai/bartpho-word",
+    dtype=torch.float16,
+    device_map="auto",
+)
+
+text = """
+Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
+"""
+inputs = tokenizer(text, return_tensors="pt").to(model.device)
+
+outputs = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
+tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ" | \
+transformers run --task summarization --model vinai/bartpho-word --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+
+
+## Notes
+
+- BARTpho uses the large architecture of BART with an additional layer-normalization layer on top of the encoder and decoder. The BART-specific classes should be replaced with the mBART-specific classes.
+- This implementation only handles tokenization through the `monolingual_vocab_file` file. This is a Vietnamese-specific subset of token types taken from that multilingual vocabulary. If you want to use this tokenizer for another language, replace the `monolingual_vocab_file` with one specialized for your target language.
 
 ## BartphoTokenizer
 

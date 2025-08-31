@@ -63,7 +63,7 @@ Wenn Sie sich vergewissert haben, dass der Fehler noch nicht gemeldet wurde, geb
 Um das Betriebssystem und die Softwareversionen automatisch auszugeben, führen Sie den folgenden Befehl aus:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 Sie können denselben Befehl auch im Hauptverzeichnis des Repositorys ausführen:
@@ -112,7 +112,7 @@ Bevor Sie irgendwelchen Code schreiben, empfehlen wir Ihnen dringend, die besteh
 
 Sie benötigen grundlegende `git`-Kenntnisse, um zu 🤗 Transformers beizutragen. Obwohl `git` nicht das einfachste Werkzeug ist, hat es ein sehr gutes Handbuch. Geben Sie `git --help` in eine Shell ein und genießen Sie es! Wenn Sie Bücher bevorzugen, ist [Pro Git](https://git-scm.com/book/en/v2) eine gute Anlaufstelle.
 
-Sie benötigen **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** oder höher, um zu 🤗 Transformers beizutragen. Folgen Sie den nachstehenden Schritten, um mit dem Beitrag zu beginnen:
+Sie benötigen **[Python 3.9](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** oder höher, um zu 🤗 Transformers beizutragen. Folgen Sie den nachstehenden Schritten, um mit dem Beitrag zu beginnen:
 
 1. Forken Sie das [Repository](https://github.com/huggingface/transformers), indem Sie auf den **[Fork](https://github.com/huggingface/transformers/fork)**-Button auf der Seite des Repositorys klicken. Dadurch wird eine Kopie des Codes auf Ihrem GitHub-Account erstellt.
 
@@ -283,8 +283,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 Wie bei den langsamen Tests gibt es auch andere Umgebungsvariablen, die standardmäßig beim Testen nicht gesetzt sind:
 
 * `RUN_CUSTOM_TOKENIZERS`: Aktiviert Tests für benutzerdefinierte Tokenizer.
-* `RUN_PT_FLAX_CROSS_TESTS`: Aktiviert Tests für die Integration von PyTorch + Flax.
-* `RUN_PT_TF_CROSS_TESTS`: Aktiviert Tests für die Integration von TensorFlow + PyTorch.
 
 Weitere Umgebungsvariablen und zusätzliche Informationen finden Sie in der [testing_utils.py](src/transformers/testing_utils.py).
 

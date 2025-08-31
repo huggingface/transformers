@@ -19,7 +19,6 @@ from __future__ import annotations
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -88,11 +87,11 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    logits: tf.Tensor | None = None
+    cls_logits: tf.Tensor | None = None
+    distillation_logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 class TFDeiTEmbeddings(keras.layers.Layer):
@@ -290,7 +289,7 @@ class TFDeiTSelfAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
@@ -388,7 +387,7 @@ class TFDeiTAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
@@ -488,7 +487,7 @@ class TFDeiTLayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in DeiT, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states, training=training),
@@ -550,7 +549,7 @@ class TFDeiTEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -630,12 +629,12 @@ class TFDeiTMainLayer(keras.layers.Layer):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
+    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor, ...]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -780,12 +779,12 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
+    ) -> tuple | TFBaseModelOutputWithPooling:
         outputs = self.deit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -813,9 +812,9 @@ class TFDeiTPooler(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.pooler_output_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
+            activation=config.pooler_act,
             name="dense",
         )
         self.config = config
@@ -892,7 +891,7 @@ class TFDeitDecoder(keras.layers.Layer):
 
 @add_start_docstrings(
     "DeiT Model with a decoder on top for masked image modeling, as proposed in"
-    " [SimMIM](https://arxiv.org/abs/2111.09886).",
+    " [SimMIM](https://huggingface.co/papers/2111.09886).",
     DEIT_START_DOCSTRING,
 )
 class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
@@ -910,12 +909,12 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         bool_masked_pos: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[tuple, TFMaskedImageModelingOutput]:
+    ) -> tuple | TFMaskedImageModelingOutput:
         r"""
         bool_masked_pos (`tf.Tensor` of type bool and shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1046,12 +1045,12 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         pixel_values: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[tf.Tensor, TFImageClassifierOutput]:
+    ) -> tf.Tensor | TFImageClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1171,12 +1170,12 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
         self,
         pixel_values: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[tuple, TFDeiTForImageClassificationWithTeacherOutput]:
+    ) -> tuple | TFDeiTForImageClassificationWithTeacherOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(
@@ -1222,3 +1221,12 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
         if getattr(self, "distillation_classifier", None) is not None:
             with tf.name_scope(self.distillation_classifier.name):
                 self.distillation_classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFDeiTForImageClassification",
+    "TFDeiTForImageClassificationWithTeacher",
+    "TFDeiTForMaskedImageModeling",
+    "TFDeiTModel",
+    "TFDeiTPreTrainedModel",
+]

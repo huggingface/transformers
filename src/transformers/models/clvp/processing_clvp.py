@@ -48,7 +48,7 @@ class ClvpProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the `text`
-        argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        argument to [`~ClvpTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
 
@@ -73,18 +73,5 @@ class ClvpProcessor(ProcessorMixin):
             inputs["attention_mask"] = encodings["attention_mask"]
             return inputs
 
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode with Whisper->Clvp
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+__all__ = ["ClvpProcessor"]

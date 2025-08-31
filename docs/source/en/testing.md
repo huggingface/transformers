@@ -220,7 +220,7 @@ Just run the following line to automatically test every docstring example in the
 ```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
+If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
 
@@ -428,7 +428,7 @@ pytest --instafail
 
 ### To GPU or not to GPU
 
-On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""`:
+On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""` for CUDA GPUs:
 
 ```bash
 CUDA_VISIBLE_DEVICES="" pytest tests/utils/test_logging.py
@@ -441,10 +441,12 @@ second gpu if you have gpus `0` and `1`, you can run:
 CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 ```
 
+For Intel GPUs, use `ZE_AFFINITY_MASK` instead of `CUDA_VISIBLE_DEVICES` in the above example.
+
 This is handy when you want to run different tasks on different GPUs.
 
 Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip
-decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+decorators are used to set the requirements of tests CPU/GPU/XPU/TPU-wise:
 
 - `require_torch` - this test will run only under torch
 - `require_torch_gpu` - as `require_torch` plus requires at least 1 GPU
@@ -470,13 +472,6 @@ For example, here is a test that must be run only when there are 2 or more GPUs 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
-```
-
-If a test requires `tensorflow` use the `require_tf` decorator. For example:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
 ```
 
 These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
@@ -507,7 +502,7 @@ Inside tests:
 ```python
 from transformers.testing_utils import get_gpu_count
 
-n_gpu = get_gpu_count()  # works with torch and tf
+n_gpu = get_gpu_count()
 ```
 
 ### Testing with a specific PyTorch backend or device
@@ -1224,9 +1219,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-tf.random.set_seed(seed)
 ```
 
 ### Debugging tests

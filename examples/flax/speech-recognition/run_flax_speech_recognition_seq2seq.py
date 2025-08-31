@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import time
 from dataclasses import field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import datasets
 import evaluate
@@ -60,7 +59,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.45.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
@@ -100,7 +99,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "help": "Will use the token generated when running `transformers login` (necessary to use this script "
             "with private models)."
         },
     )
@@ -265,7 +264,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor ([`Wav2Vec2Processor`])
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         decoder_start_token_id (:obj: `int`)
             The begin-of-sentence of the decoder.
         input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
@@ -303,7 +302,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     pad_input_to_multiple_of: Optional[int] = None
     pad_target_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+    def __call__(self, features: list[dict[str, Union[list[int], np.ndarray]]]) -> dict[str, np.ndarray]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -669,7 +668,7 @@ def main():
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}

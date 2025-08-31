@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,23 +175,15 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -369,6 +360,7 @@ class GitModelTester:
             attention_mask=None,
             pixel_values=pixel_values,
             do_sample=False,
+            min_length=20,
             max_length=20,
             num_beams=2,
             num_return_sequences=2,
@@ -398,9 +390,13 @@ class GitModelTester:
 @require_torch
 class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": GitModel, "image-to-text": GitForCausalLM, "text-generation": GitForCausalLM}
+        {
+            "feature-extraction": GitModel,
+            "image-to-text": GitForCausalLM,
+            "text-generation": GitForCausalLM,
+            "image-text-to-text": GitForCausalLM,
+        }
         if is_torch_available()
         else {}
     )
@@ -449,6 +445,28 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+    ):
+        # GIT attention shape depends on image inputs, overwrite
+        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+        prompt_length += image_length
+        output_length += image_length
+        super()._check_attentions_for_generate(
+            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        )
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+    ):
+        # GIT attention shape depends on image inputs, overwrite
+        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+        prompt_length += image_length
+        output_length += image_length
+        super()._check_hidden_states_for_generate(
+            batch_size, hidden_states, prompt_length, output_length, config, use_cache=use_cache
+        )
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/git-base"
@@ -465,6 +483,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_contrastive_generate_low_memory(self):
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
@@ -494,7 +516,7 @@ class GitModelIntegrationTest(unittest.TestCase):
             [[-0.9514, -0.9512, -0.9507], [-0.5454, -0.5453, -0.5453], [-0.8862, -0.8857, -0.8848]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_image_captioning(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base")
@@ -514,8 +536,8 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
-        expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor([-0.8805, -0.8803, -0.8799], device=torch_device)
+        torch.testing.assert_close(outputs.scores[-1][0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_visual_question_answering(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base-textvqa")
@@ -558,3 +580,38 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # CLIP family models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = GitModel.from_pretrained("microsoft/git-base").to(torch_device)
+
+        processor = GitProcessor.from_pretrained(
+            "microsoft/git-base", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 130, 768))
+
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-1.0296, 2.5960, 0.8703], [1.7027, 1.3302, -0.4543], [-1.4932, -0.1084, 0.0502]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

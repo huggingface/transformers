@@ -13,8 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-04-18 and added to Hugging Face Transformers on 2024-04-24.*
 
 # Llama3
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+</div>
 
 ```py3
 import transformers
@@ -22,13 +28,13 @@ import torch
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 
-pipeline = transformers.pipeline("text-generation", model=model_id, model_kwargs={"torch_dtype": torch.bfloat16}, device_map="auto")
+pipeline = transformers.pipeline("text-generation", model=model_id, model_kwargs={"dtype": torch.bfloat16}, device_map="auto")
 pipeline("Hey how are you doing today?")
 ```
 
 ## Overview
 
-The Llama3 model was proposed in [Introducing Meta Llama 3: The most capable openly available LLM to date](https://ai.meta.com/blog/meta-llama-3/) by the meta AI team.
+The [Llama3](https://huggingface.co/papers/2407.21783) model was proposed in [Introducing Meta Llama 3: The most capable openly available LLM to date](https://ai.meta.com/blog/meta-llama-3/) by the meta AI team.
 
 The abstract from the blogpost is the following:
 
@@ -41,10 +47,10 @@ The original code of the authors can be found [here](https://github.com/meta-lla
 
 <Tip warning={true}>
 
-The `Llama3` models were trained using `bfloat16`, but the original inference uses `float16`. The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+The `Llama3` models were trained using `bfloat16`, but the original inference uses `float16`. The checkpoints uploaded on the Hub use `dtype = 'float16'`, which will be
+used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
 
-The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+The `dtype` of the online weights is mostly irrelevant unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `dtype` or `torch_dtype` provided in the config, it will be used.
 
 Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
 
@@ -58,24 +64,25 @@ Tips:
 - The original model uses `pad_id = -1` which means that there is no padding token. We can't have the same logic, make sure to add a padding token using `tokenizer.add_special_tokens({"pad_token":"<pad>"})` and resize the token embedding accordingly. You should also set the `model.config.pad_token_id`. The `embed_tokens` layer of the model is initialized with `self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.config.padding_idx)`, which makes sure that encoding the padding token will output zeros, so passing it when initializing is recommended.
 - The original checkpoint can be converted using the [conversion script](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/convert_llama_weights_to_hf.py). The script can be called with the following (example) command:
 
-```bash
-python src/transformers/models/llama/convert_llama_weights_to_hf.py \
-    --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path --llama_version 3
-```
+    ```bash
+    python src/transformers/models/llama/convert_llama_weights_to_hf.py \
+        --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path --llama_version 3
+    ```
 
 - After conversion, the model and tokenizer can be loaded via:
 
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+    ```python
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("/output/path")
-model = AutoModelForCausalLM.from_pretrained("/output/path")
-```
+    tokenizer = AutoTokenizer.from_pretrained("/output/path")
+    model = AutoModelForCausalLM.from_pretrained("/output/path")
+    ```
 
-Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
+    Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
+    come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
 
-- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
+- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
 
 ## Resources
+
 A ton of cool resources are already available on the documentation page of [Llama2](./llama2), inviting contributors to add new resources curated for Llama3 here! 🤗

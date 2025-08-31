@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,7 +18,7 @@ import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from filelock import FileLock
 
@@ -42,8 +41,8 @@ class InputExample:
     """
 
     guid: str
-    words: List[str]
-    labels: Optional[List[str]]
+    words: list[str]
+    labels: Optional[list[str]]
 
 
 @dataclass
@@ -53,10 +52,10 @@ class InputFeatures:
     Property names are the same names as the corresponding inputs to a model.
     """
 
-    input_ids: List[int]
-    attention_mask: List[int]
-    token_type_ids: Optional[List[int]] = None
-    label_ids: Optional[List[int]] = None
+    input_ids: list[int]
+    attention_mask: list[int]
+    token_type_ids: Optional[list[int]] = None
+    label_ids: Optional[list[int]] = None
 
 
 class Split(Enum):
@@ -67,17 +66,17 @@ class Split(Enum):
 
 class TokenClassificationTask:
     @staticmethod
-    def read_examples_from_file(data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(data_dir, mode: Union[Split, str]) -> list[InputExample]:
         raise NotImplementedError
 
     @staticmethod
-    def get_labels(path: str) -> List[str]:
+    def get_labels(path: str) -> list[str]:
         raise NotImplementedError
 
     @staticmethod
     def convert_examples_to_features(
-        examples: List[InputExample],
-        label_list: List[str],
+        examples: list[InputExample],
+        label_list: list[str],
         max_seq_length: int,
         tokenizer: PreTrainedTokenizer,
         cls_token_at_end=False,
@@ -91,7 +90,7 @@ class TokenClassificationTask:
         pad_token_label_id=-100,
         sequence_a_segment_id=0,
         mask_padding_with_zero=True,
-    ) -> List[InputFeatures]:
+    ) -> list[InputFeatures]:
         """Loads a data file into a list of `InputFeatures`
         `cls_token_at_end` define the location of the CLS token:
             - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
@@ -214,7 +213,7 @@ if is_torch_available():
         soon.
         """
 
-        features: List[InputFeatures]
+        features: list[InputFeatures]
         pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
         # Use cross entropy ignore_index as padding label id so that only
         # real label ids contribute to the loss later.
@@ -224,7 +223,7 @@ if is_torch_available():
             token_classification_task: TokenClassificationTask,
             data_dir: str,
             tokenizer: PreTrainedTokenizer,
-            labels: List[str],
+            labels: list[str],
             model_type: str,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
@@ -233,7 +232,7 @@ if is_torch_available():
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
                 data_dir,
-                "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+                f"cached_{mode.value}_{tokenizer.__class__.__name__}_{str(max_seq_length)}",
             )
 
             # Make sure only the first process in distributed training processes the dataset,
@@ -242,7 +241,7 @@ if is_torch_available():
             with FileLock(lock_path):
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
-                    self.features = torch.load(cached_features_file)
+                    self.features = torch.load(cached_features_file, weights_only=True)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
                     examples = token_classification_task.read_examples_from_file(data_dir, mode)
@@ -283,7 +282,7 @@ if is_tf_available():
         soon.
         """
 
-        features: List[InputFeatures]
+        features: list[InputFeatures]
         pad_token_label_id: int = -100
         # Use cross entropy ignore_index as padding label id so that only
         # real label ids contribute to the loss later.
@@ -293,7 +292,7 @@ if is_tf_available():
             token_classification_task: TokenClassificationTask,
             data_dir: str,
             tokenizer: PreTrainedTokenizer,
-            labels: List[str],
+            labels: list[str],
             model_type: str,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,

@@ -13,160 +13,137 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2018-04-01 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # MarianMT
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=marian">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-marian-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/opus-mt-zh-en">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+
+
+[MarianMT](https://huggingface.co/papers/1804.00344) is a machine translation model trained with the Marian framework which is written in pure C++. The framework includes its own custom auto-differentiation engine and efficient meta-algorithms to train encoder-decoder models like BART.
+
+All MarianMT models are transformer encoder-decoders with 6 layers in each component, use static sinusoidal positional embeddings, don't have a layernorm embedding, and the model starts generating with the prefix `pad_token_id` instead of `<s/>`.
+
+
+
+You can find all the original MarianMT checkpoints under the [Language Technology Research Group at the University of Helsinki](https://huggingface.co/Helsinki-NLP/models?search=opus-mt) organization.
+
+
+> [!TIP]
+> This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
+>
+> Click on the MarianMT models in the right sidebar for more examples of how to apply MarianMT to translation tasks.
+
+
+The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+
+import torch
+from transformers import pipeline
+
+pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, device=0)
+pipeline("Hello, how are you?")
+
+```
+
+</hfoption>
+
+<hfoption id="AutoModel">
+
+```python
+
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
+
+inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
+```
+
+</hfoption>
+</hfoptions>
+
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```python
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("Helsinki-NLP/opus-mt-en-de")
+visualizer("Hello, how are you?")
+```
+<div class="flex justify-center">
+   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/marianmt-attn-mask.png"/>
 </div>
 
-## Overview
+## Notes
 
-A framework for translation models, using the same models as BART. Translations should be similar, but not identical to output in the test set linked to in each model card.
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
-
-
-## Implementation Notes
-
-- Each model is about 298 MB on disk, there are more than 1,000 models.
-- The list of supported language pairs can be found [here](https://huggingface.co/Helsinki-NLP).
-- Models were originally trained by [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann) using the [Marian](https://marian-nmt.github.io/) C++ library, which supports fast training and translation.
-- All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented
-  in a model card.
-- The 80 opus models that require BPE preprocessing are not supported.
-- The modeling code is the same as [`BartForConditionalGeneration`] with a few minor modifications:
-
-  - static (sinusoid) positional embeddings (`MarianConfig.static_position_embeddings=True`)
-  - no layernorm_embedding (`MarianConfig.normalize_embedding=False`)
-  - the model starts generating with `pad_token_id` (which has 0 as a token_embedding) as the prefix (Bart uses
-    `<s/>`),
-- Code to bulk convert models can be found in `convert_marian_to_pytorch.py`.
-
-
-## Naming
-
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`
-- The language codes used to name models are inconsistent. Two digit codes can usually be found [here](https://developers.google.com/admin-sdk/directory/v1/languages), three digit codes require googling "language
-  code {code}".
-- Codes formatted like `es_AR` are usually `code_{region}`. That one is Spanish from Argentina.
-- The models were converted in two stages. The first 1000 models use ISO-639-2 codes to identify languages, the second
-  group use a combination of ISO-639-5 codes and ISO-639-2 codes.
-
-
-## Examples
-
-- Since Marian models are smaller than many other translation models available in the library, they can be useful for
-  fine-tuning experiments and integration tests.
-- [Fine-tune on GPU](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq/train_distil_marian_enro.sh)
-
-## Multilingual Models
-
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`:
-- If a model can output multiple languages, and you should specify a language code by prepending the desired output
-  language to the `src_text`.
-- You can see a models's supported language codes in its model card, under target constituents, like in [opus-mt-en-roa](https://huggingface.co/Helsinki-NLP/opus-mt-en-roa).
-- Note that if a model is only multilingual on the source side, like `Helsinki-NLP/opus-mt-roa-en`, no language
-  codes are required.
-
-New multi-lingual models from the [Tatoeba-Challenge repo](https://github.com/Helsinki-NLP/Tatoeba-Challenge)
-require 3 character language codes:
+- MarianMT models are ~298MB on disk and there are more than 1000 models. Check this [list](https://huggingface.co/Helsinki-NLP) for supported language pairs. The language codes may be inconsistent. Two digit codes can be found [here](https://developers.google.com/admin-sdk/directory/v1/languages) while three digit codes may require further searching.
+- Models that require BPE preprocessing are not supported.
+- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`. Language codes formatted like `es_AR` usually refer to the `code_{region}`. For example, `es_AR` refers to Spanish from Argentina.
+- If a model can output multiple languages, prepend the desired output language to `src_txt` as shown below. New multilingual models from the [Tatoeba-Challenge](https://github.com/Helsinki-NLP/Tatoeba-Challenge) require 3 character language codes.
 
 ```python
->>> from transformers import MarianMTModel, MarianTokenizer
 
->>> src_text = [
-...     ">>fra<< this is a sentence in english that we want to translate to french",
-...     ">>por<< This should go to portuguese",
-...     ">>esp<< And this to Spanish",
-... ]
+from transformers import MarianMTModel, MarianTokenizer
 
->>> model_name = "Helsinki-NLP/opus-mt-en-roa"
->>> tokenizer = MarianTokenizer.from_pretrained(model_name)
->>> print(tokenizer.supported_language_codes)
-['>>zlm_Latn<<', '>>mfe<<', '>>hat<<', '>>pap<<', '>>ast<<', '>>cat<<', '>>ind<<', '>>glg<<', '>>wln<<', '>>spa<<', '>>fra<<', '>>ron<<', '>>por<<', '>>ita<<', '>>oci<<', '>>arg<<', '>>min<<']
+# Model trained on multiple source languages → multiple target languages
+# Example: multilingual to Arabic (arb)
+model_name = "Helsinki-NLP/opus-mt-mul-mul"  # Tatoeba Challenge model
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
 
->>> model = MarianMTModel.from_pretrained(model_name)
->>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français",
- 'Isto deve ir para o português.',
- 'Y esto al español']
+# Prepend the desired output language code (3-letter ISO 639-3)
+src_texts = ["arb>> Hello, how are you today?"]
+
+# Tokenize and translate
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+translated = model.generate(**inputs)
+
+# Decode and print result
+translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
+print(translated_texts[0])
+
 ```
 
-Here is the code to see all available pretrained models on the hub:
+- Older multilingual models use 2 character language codes.
 
 ```python
-from huggingface_hub import list_models
 
-model_list = list_models()
-org = "Helsinki-NLP"
-model_ids = [x.id for x in model_list if x.id.startswith(org)]
-suffix = [x.split("/")[1] for x in model_ids]
-old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
+from transformers import MarianMTModel, MarianTokenizer
+
+# Example: older multilingual model (like en → many)
+model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"  # English → French, Spanish, Italian, etc.
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
+
+# Prepend the 2-letter ISO 639-1 target language code (older format)
+src_texts = [">>fr<< Hello, how are you today?"]
+
+# Tokenize and translate
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+translated = model.generate(**inputs)
+
+# Decode and print result
+translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
+print(translated_texts[0])
+
 ```
-
-## Old Style Multi-Lingual Models
-
-These are the old style multi-lingual models ported from the OPUS-MT-Train repo: and the members of each language
-group:
-
-```python no-style
-['Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU',
- 'Helsinki-NLP/opus-mt-ROMANCE-en',
- 'Helsinki-NLP/opus-mt-SCANDINAVIA-SCANDINAVIA',
- 'Helsinki-NLP/opus-mt-de-ZH',
- 'Helsinki-NLP/opus-mt-en-CELTIC',
- 'Helsinki-NLP/opus-mt-en-ROMANCE',
- 'Helsinki-NLP/opus-mt-es-NORWAY',
- 'Helsinki-NLP/opus-mt-fi-NORWAY',
- 'Helsinki-NLP/opus-mt-fi-ZH',
- 'Helsinki-NLP/opus-mt-fi_nb_no_nn_ru_sv_en-SAMI',
- 'Helsinki-NLP/opus-mt-sv-NORWAY',
- 'Helsinki-NLP/opus-mt-sv-ZH']
-GROUP_MEMBERS = {
- 'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
- 'ROMANCE': ['fr', 'fr_BE', 'fr_CA', 'fr_FR', 'wa', 'frp', 'oc', 'ca', 'rm', 'lld', 'fur', 'lij', 'lmo', 'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI', 'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE', 'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec', 'sc', 'ro', 'la'],
- 'NORTH_EU': ['de', 'nl', 'fy', 'af', 'da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
- 'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
- 'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
- 'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
- 'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
-}
-```
-
-Example of translating english to many romance languages, using old-style 2 character language codes
-
-
-```python
->>> from transformers import MarianMTModel, MarianTokenizer
-
->>> src_text = [
-...     ">>fr<< this is a sentence in english that we want to translate to french",
-...     ">>pt<< This should go to portuguese",
-...     ">>es<< And this to Spanish",
-... ]
-
->>> model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"
->>> tokenizer = MarianTokenizer.from_pretrained(model_name)
-
->>> model = MarianMTModel.from_pretrained(model_name)
->>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français", 
- 'Isto deve ir para o português.',
- 'Y esto al español']
-```
-
-## Resources
-
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
-- [Causal language modeling task guide](../tasks/language_modeling)
 
 ## MarianConfig
 
@@ -176,9 +153,6 @@ Example of translating english to many romance languages, using old-style 2 char
 
 [[autodoc]] MarianTokenizer
     - build_inputs_with_special_tokens
-
-<frameworkcontent>
-<pt>
 
 ## MarianModel
 
@@ -194,32 +168,3 @@ Example of translating english to many romance languages, using old-style 2 char
 
 [[autodoc]] MarianForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFMarianModel
-
-[[autodoc]] TFMarianModel
-    - call
-
-## TFMarianMTModel
-
-[[autodoc]] TFMarianMTModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxMarianModel
-
-[[autodoc]] FlaxMarianModel
-    - __call__
-
-## FlaxMarianMTModel
-
-[[autodoc]] FlaxMarianMTModel
-    - __call__
-
-</jax>
-</frameworkcontent>

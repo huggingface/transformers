@@ -14,7 +14,7 @@
 # limitations under the License.
 """TensorFlow RegNet model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -170,7 +170,7 @@ class TFRegNetShortCut(keras.layers.Layer):
 
 class TFRegNetSELayer(keras.layers.Layer):
     """
-    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
+    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://huggingface.co/papers/1709.01507).
     """
 
     def __init__(self, in_channels: int, reduced_channels: int, **kwargs):
@@ -311,7 +311,7 @@ class TFRegNetStage(keras.layers.Layer):
         self.layers = [
             # downsampling is done in the first layer with stride of 2
             layer(config, in_channels, out_channels, stride=stride, name="layers.0"),
-            *[layer(config, out_channels, out_channels, name=f"layers.{i+1}") for i in range(depth - 1)],
+            *[layer(config, out_channels, out_channels, name=f"layers.{i + 1}") for i in range(depth - 1)],
         ]
 
     def call(self, hidden_state):
@@ -346,7 +346,7 @@ class TFRegNetEncoder(keras.layers.Layer):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for i, ((in_channels, out_channels), depth) in enumerate(zip(in_out_channels, config.depths[1:])):
-            self.stages.append(TFRegNetStage(config, in_channels, out_channels, depth=depth, name=f"stages.{i+1}"))
+            self.stages.append(TFRegNetStage(config, in_channels, out_channels, depth=depth, name=f"stages.{i + 1}"))
 
     def call(
         self, hidden_state: tf.Tensor, output_hidden_states: bool = False, return_dict: bool = True
@@ -415,7 +415,7 @@ class TFRegNetMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -505,7 +505,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -568,7 +568,7 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -606,3 +606,6 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier[1].name):
                 self.classifier[1].build([None, None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFRegNetForImageClassification", "TFRegNetModel", "TFRegNetPreTrainedModel"]

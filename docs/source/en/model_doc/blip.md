@@ -13,31 +13,77 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-01-28 and added to Hugging Face Transformers on 2022-12-21.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # BLIP
 
-## Overview
+[BLIP](https://huggingface.co/papers/2201.12086) (Bootstrapped Language-Image Pretraining) is a vision-language pretraining (VLP) framework designed for *both* understanding and generation tasks. Most existing pretrained models are only good at one or the other. It uses a captioner to generate captions and a filter to remove the noisy captions. This increases training data quality and more effectively uses the messy web data.
 
-The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
 
-BLIP is a model that is able to perform various multi-modal tasks including:
-- Visual Question Answering 
-- Image-Text retrieval (Image-text matching)
-- Image Captioning
+You can find all the original BLIP checkpoints under the [BLIP](https://huggingface.co/collections/Salesforce/blip-models-65242f40f1491fbf6a9e9472) collection.
 
-The abstract from the paper is the following:
+> [!TIP]
+> This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
+>
+> Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-*Vision-Language Pre-training (VLP) has advanced the performance for many vision-language tasks. 
-However, most existing pre-trained models only excel in either understanding-based tasks or generation-based tasks. Furthermore, performance improvement has been largely achieved by scaling up the dataset with noisy image-text pairs collected from the web, which is a suboptimal source of supervision. In this paper, we propose BLIP, a new VLP framework which transfers flexibly to both vision-language understanding and generation tasks. BLIP effectively utilizes the noisy web data by bootstrapping the captions, where a captioner generates synthetic captions and a filter removes the noisy ones. We achieve state-of-the-art results on a wide range of vision-language tasks, such as image-text retrieval (+2.7% in average recall@1), image captioning (+2.8% in CIDEr), and VQA (+1.6% in VQA score). BLIP also demonstrates strong generalization ability when directly transferred to videolanguage tasks in a zero-shot manner. Code, models, and datasets are released.*
+The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
 
-![BLIP.gif](https://cdn-uploads.huggingface.co/production/uploads/1670928184033-62441d1d9fdefb55a0b7d12c.gif)
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
-The original code can be found [here](https://github.com/salesforce/BLIP).
+```python
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="visual-question-answering",
+    model="Salesforce/blip-vqa-base",
+    dtype=torch.float16,
+    device=0
+)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+pipeline(question="What is the weather in this image?", image=url)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import requests
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
+
+processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
+model = AutoModelForVisualQuestionAnswering.from_pretrained(
+    "Salesforce/blip-vqa-base",
+    dtype=torch.float16,
+    device_map="auto"
+)
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+question = "What is the weather in this image?"
+inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
+
+output = model.generate(**inputs)
+processor.batch_decode(output, skip_special_tokens=True)[0]
+```
+
+</hfoption>
+</hfoptions>
 
 ## Resources
 
-- [Jupyter notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_blip.ipynb) on how to fine-tune BLIP for image captioning on a custom dataset
+Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_blip.ipynb) to learn how to fine-tune BLIP for image captioning on a custom dataset.
 
 ## BlipConfig
 
@@ -61,8 +107,10 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] BlipImageProcessor
     - preprocess
 
-<frameworkcontent>
-<pt>
+## BlipImageProcessorFast
+
+[[autodoc]] BlipImageProcessorFast
+    - preprocess
 
 ## BlipModel
 
@@ -77,6 +125,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] BlipTextModel
     - forward
+
+## BlipTextLMHeadModel
+
+[[autodoc]] BlipTextLMHeadModel
+- forward
 
 ## BlipVisionModel
 
@@ -97,40 +150,3 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] BlipForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFBlipModel
-
-[[autodoc]] TFBlipModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFBlipTextModel
-
-[[autodoc]] TFBlipTextModel
-    - call
-
-## TFBlipVisionModel
-
-[[autodoc]] TFBlipVisionModel
-    - call
-
-## TFBlipForConditionalGeneration
-
-[[autodoc]] TFBlipForConditionalGeneration
-    - call
-
-## TFBlipForImageTextRetrieval
-
-[[autodoc]] TFBlipForImageTextRetrieval
-    - call
-
-## TFBlipForQuestionAnswering
-
-[[autodoc]] TFBlipForQuestionAnswering
-    - call
-</tf>
-</frameworkcontent>

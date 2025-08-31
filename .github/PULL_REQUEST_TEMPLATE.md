@@ -40,25 +40,26 @@ members/contributors who may be interested in your PR.
 Models:
 
 - text models: @ArthurZucker
-- vision models: @amyeroberts
-- speech models: @sanchit-gandhi
+- vision models: @amyeroberts, @qubvel
+- speech models: @eustlb
 - graph models: @clefourrier
 
 Library:
 
-- flax: @sanchit-gandhi
+- flax: @gante and @Rocketknight1
 - generate: @zucchini-nlp (visual-language models) or @gante (all others)
-- pipelines: @Narsil
+- pipelines: @Rocketknight1
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerzr and @SunMarc
+- trainer: @zach-huggingface, @SunMarc and @qgallouedec
+- chat templates: @Rocketknight1
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @muellerzr
+- deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc
+- quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
 
 Documentation: @stevhliu
 
@@ -71,7 +72,7 @@ HF projects:
 
 Maintained examples (not research project or legacy):
 
-- Flax: @sanchit-gandhi
+- Flax: @Rocketknight1
 - PyTorch: See Models above and tag the person corresponding to the modality of the example.
 - TensorFlow: @Rocketknight1
 

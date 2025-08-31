@@ -168,29 +168,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
-### Contrastive search
-
-コントラスティブ検索デコーディング戦略は、2022年の論文[A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417)で提案されました。
-これは、非反復的でありながら一貫性のある長い出力を生成するために優れた結果を示しています。コントラスティブ検索の動作原理を学ぶには、[このブログポスト](https://huggingface.co/blog/introducing-csearch)をご覧ください。
-コントラスティブ検索の動作を有効にし、制御する2つの主要なパラメータは「penalty_alpha」と「top_k」です：
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-
->>> prompt = "Hugging Face Company is"
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
-in the business and our customer service is second to none.\n\nIf you have any questions about our
-products or services, feel free to contact us at any time. We look forward to hearing from you!']
-```
-
 ### Multinomial sampling
 
 常に最高確率のトークンを次のトークンとして選択する貪欲検索とは異なり、多項分布サンプリング（または祖先サンプリングとも呼ばれます）はモデルによって提供される語彙全体の確率分布に基づいて次のトークンをランダムに選択します。ゼロ以外の確率を持つすべてのトークンには選択される可能性があり、これにより繰り返しのリスクが減少します。
@@ -218,9 +195,13 @@ that\'s a terrible feeling."']
 
 貪欲探索とは異なり、ビームサーチデコーディングは各時間ステップでいくつかの仮説を保持し、最終的にシーケンス全体で最も確率が高い仮説を選択します。これにより、貪欲探索では無視されてしまう初期トークンの確率が低い高確率のシーケンスを特定する利点があります。
 
-このデコーディング戦略を有効にするには、`num_beams`（追跡する仮説の数）を1よりも大きな値に指定します。
+<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
+    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
+</a>
 
-希望されるテキストの翻訳がお手伝いできて嬉しいです！もしさらなる質問やサポートが必要な場合は、お気軽にお知らせください。
+ビームサーチデコーディングの動作を[このインタラクティブデモ](https://huggingface.co/spaces/m-ric/beam_search_visualizer)で確認することができます。文章を入力し、パラメータをいじることでデコーディングビームがどのように変化するかを知ることができます。
+
+このデコーディング戦略を有効にするには、`num_beams`（追跡する仮説の数）を1よりも大きな値に指定します。
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -262,7 +243,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 
 ### Diverse beam search decoding
 
-多様なビームサーチデコーディング戦略は、ビームサーチ戦略の拡張であり、選択肢からより多様なビームシーケンスを生成できるようにします。この仕組みの詳細については、[Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf) をご参照ください。このアプローチには、`num_beams`、`num_beam_groups`、および `diversity_penalty` という3つの主要なパラメータがあります。多様性ペナルティは、出力がグループごとに異なることを保証し、ビームサーチは各グループ内で使用されます。
+多様なビームサーチデコーディング戦略は、ビームサーチ戦略の拡張であり、選択肢からより多様なビームシーケンスを生成できるようにします。この仕組みの詳細については、[Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) をご参照ください。このアプローチには、`num_beams`、`num_beam_groups`、および `diversity_penalty` という3つの主要なパラメータがあります。多様性ペナルティは、出力がグループごとに異なることを保証し、ビームサーチは各グループ内で使用されます。
 
 
 ```python
@@ -303,7 +284,7 @@ culture, and they allow us to design the'
 
 アシストデコーディングを有効にするには、`assistant_model` 引数をモデルで設定します。
 
-このガイドは、さまざまなデコーディング戦略を可能にする主要なパラメーターを説明しています。さらに高度なパラメーターは [`generate`] メソッドに存在し、[`generate`] メソッドの動作をさらに制御できます。使用可能なパラメーターの完全なリストについては、[APIドキュメント](./main_classes/text_generation.md) を参照してください。
+このガイドは、さまざまなデコーディング戦略を可能にする主要なパラメーターを説明しています。さらに高度なパラメーターは [`generate`] メソッドに存在し、[`generate`] メソッドの動作をさらに制御できます。使用可能なパラメーターの完全なリストについては、[APIドキュメント](./main_classes/text_generation) を参照してください。
 
 
 ```python

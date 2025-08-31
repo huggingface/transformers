@@ -13,72 +13,116 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-02-27 and added to Hugging Face Transformers on 2023-03-16.*
 
-# LLaMA
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
 
-## Overview
+# Llama
 
-The LLaMA model was proposed in [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971) by Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, Guillaume Lample. It is a collection of foundation language models ranging from 7B to 65B parameters.
+[Llama](https://huggingface.co/papers/2302.13971) is a family of large language models ranging from 7B to 65B parameters. These models are focused on efficient inference (important for serving language models) by training a smaller model on more tokens rather than training a larger model on fewer tokens. The Llama model is based on the GPT architecture, but it uses pre-normalization to improve training stability, replaces ReLU with SwiGLU to improve performance, and replaces absolute positional embeddings with rotary positional embeddings (RoPE) to better handle longer sequence lengths.
 
-The abstract from the paper is the following:
+You can find all the original Llama checkpoints under the [Huggy Llama](https://huggingface.co/huggyllama) organization.
 
-*We introduce LLaMA, a collection of foundation language models ranging from 7B to 65B parameters. We train our models on trillions of tokens, and show that it is possible to train state-of-the-art models using publicly available datasets exclusively, without resorting to proprietary and inaccessible datasets. In particular, LLaMA-13B outperforms GPT-3 (175B) on most benchmarks, and LLaMA-65B is competitive with the best models, Chinchilla-70B and PaLM-540B. We release all our models to the research community. *
+> [!TIP]
+> Click on the Llama models in the right sidebar for more examples of how to apply Llama to different language tasks.
 
-This model was contributed by [zphang](https://huggingface.co/zphang) with contributions from [BlackSamorez](https://huggingface.co/BlackSamorez). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
-## Usage tips
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- Weights for the LLaMA models can be obtained from by filling out [this form](https://docs.google.com/forms/d/e/1FAIpQLSfqNECQnMkycAp2jP4Z9TFX0cGR4uf7b_fBxjY_OjhJILlKGA/viewform?usp=send_form)
-- After downloading the weights, they will need to be converted to the Hugging Face Transformers format using the [conversion script](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/convert_llama_weights_to_hf.py). The script can be called with the following (example) command:
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="huggyllama/llama-7b",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "huggyllama/llama-7b",
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "huggyllama/llama-7b",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
 
 ```bash
-python src/transformers/models/llama/convert_llama_weights_to_hf.py \
-    --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model huggyllama/llama-7b --device 0
 ```
 
-- After conversion, the model and tokenizer can be loaded via:
+</hfoption>
+</hfoptions>
 
-```python
-from transformers import LlamaForCausalLM, LlamaTokenizer
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
-model = LlamaForCausalLM.from_pretrained("/output/path")
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+
+```py
+# pip install torchao
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+model = AutoModelForCausalLM.from_pretrained(
+    "huggyllama/llama-30b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-30b")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 65B model, it's thus 130GB of RAM needed.
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-- The LLaMA tokenizer is a BPE model based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string.
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
-This model was contributed by [zphang](https://huggingface.co/zphang) with contributions from [BlackSamorez](https://huggingface.co/BlackSamorez). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama). The Flax version of the implementation was contributed by [afmck](https://huggingface.co/afmck) with the code in the implementation based on Hugging Face's Flax GPT-Neo.
+visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
+visualizer("Plants create energy through a process known as")
+```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-attn-mask.png"/>
+</div>
 
-Based on the original LLaMA model, Meta AI has released some follow-up works:
+## Notes
 
-- **Llama2**: Llama2 is an improved version of Llama with some architectural tweaks (Grouped Query Attention), and is pre-trained on 2Trillion tokens. Refer to the documentation of Llama2 which can be found [here](llama2).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaMA. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<PipelineTag pipeline="text-classification"/>
-
-- A [notebook](https://colab.research.google.com/github/bigscience-workshop/petals/blob/main/examples/prompt-tuning-sst2.ipynb#scrollTo=f04ba4d2) on how to use prompt tuning to adapt the LLaMA model for text classification task. 🌎
-
-<PipelineTag pipeline="question-answering"/>
-
-- [StackLLaMA: A hands-on guide to train LLaMA with RLHF](https://huggingface.co/blog/stackllama#stackllama-a-hands-on-guide-to-train-llama-with-rlhf), a blog post about how to train LLaMA to answer questions on [Stack Exchange](https://stackexchange.com/) with RLHF.
-
-⚗️ Optimization
-- A [notebook](https://colab.research.google.com/drive/1SQUXq1AMZPSLD4mk3A3swUIc6Y2dclme?usp=sharing) on how to fine-tune LLaMA model using xturing library on GPU which has limited memory. 🌎 
-
-⚡️ Inference
-- A [notebook](https://colab.research.google.com/github/DominguesM/alpaca-lora-ptbr-7b/blob/main/notebooks/02%20-%20Evaluate.ipynb) on how to run the LLaMA Model using PeftModel from the 🤗 PEFT library. 🌎 
-- A [notebook](https://colab.research.google.com/drive/1l2GiSSPbajVyp2Nk3CFT4t3uH6-5TiBe?usp=sharing) on how to load a PEFT adapter LLaMA model with LangChain. 🌎
-
-🚀 Deploy
-- A [notebook](https://colab.research.google.com/github/lxe/simple-llama-finetuner/blob/master/Simple_LLaMA_FineTuner.ipynb#scrollTo=3PM_DilAZD8T) on how to fine-tune LLaMA model using LoRA method via the 🤗 PEFT library with intuitive UI. 🌎 
-- A [notebook](https://github.com/aws/amazon-sagemaker-examples/blob/main/introduction_to_amazon_algorithms/jumpstart-foundation-models/text-generation-open-llama.ipynb) on how to deploy Open-LLaMA model for text generation on Amazon SageMaker. 🌎 
+- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
 
 ## LlamaConfig
 
@@ -125,13 +169,3 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LlamaForTokenClassification
     - forward
-
-## FlaxLlamaModel
-
-[[autodoc]] FlaxLlamaModel
-    - __call__
-
-## FlaxLlamaForCausalLM
-
-[[autodoc]] FlaxLlamaForCausalLM
-    - __call__

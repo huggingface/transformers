@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -47,8 +46,8 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     via the [`~TFAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
-    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
+    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
@@ -178,9 +177,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
     def __init__(
         self,
-        config: Optional[VisionTextDualEncoderConfig] = None,
-        vision_model: Optional[TFPreTrainedModel] = None,
-        text_model: Optional[TFPreTrainedModel] = None,
+        config: VisionTextDualEncoderConfig | None = None,
+        vision_model: TFPreTrainedModel | None = None,
+        text_model: TFPreTrainedModel | None = None,
     ):
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")
@@ -351,13 +350,13 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
-        return_loss: Optional[bool] = None,
+        return_loss: bool | None = None,
         token_type_ids: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFCLIPOutput]:
+    ) -> tuple[tf.Tensor] | TFCLIPOutput:
         r"""
         Returns:
 
@@ -465,8 +464,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: str = None,
-        text_model_name_or_path: str = None,
+        vision_model_name_or_path: str | None = None,
+        text_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> TFPreTrainedModel:
@@ -491,7 +490,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                       should be set to `True` and a configuration object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -526,9 +525,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         }
 
         # remove vision, text kwargs from kwargs
-        for key in kwargs_vision.keys():
+        for key in kwargs_vision:
             del kwargs["vision_" + key]
-        for key in kwargs_text.keys():
+        for key in kwargs_text:
             del kwargs["text_" + key]
 
         # Load and initialize the vision and text model
@@ -602,7 +601,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
+            `dict[str, tf.Tensor]`: The dummy inputs.
         """
         input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         batch_size, seq_len = input_ids.shape
@@ -619,3 +618,6 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         pixel_values = tf.constant(VISION_DUMMY_INPUTS)
         dummy = {"pixel_values": pixel_values, "input_ids": input_ids}
         return dummy
+
+
+__all__ = ["TFVisionTextDualEncoderModel"]

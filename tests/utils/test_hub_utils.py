@@ -28,7 +28,6 @@ from transformers.utils import (
     TRANSFORMERS_CACHE,
     WEIGHTS_NAME,
     cached_file,
-    get_file_from_repo,
     has_file,
 )
 
@@ -87,14 +86,8 @@ class GetFromCacheTests(unittest.TestCase):
         path = cached_file(RANDOM_BERT, "conf", local_files_only=True, _raise_exceptions_for_missing_entries=False)
         self.assertIsNone(path)
 
-        response_mock = mock.Mock()
-        response_mock.status_code = 500
-        response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
-        response_mock.json.return_value = {}
-
-        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        # Under the mock environment, hf_hub_download will always raise an HTTPError
+        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=HTTPError) as mock_head:
             path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
             self.assertIsNone(path)
             # This check we did call the fake head request
@@ -117,29 +110,73 @@ class GetFromCacheTests(unittest.TestCase):
             assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
     def test_get_file_from_repo_distant(self):
-        # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("google-bert/bert-base-cased", "ahah.txt"))
+        # should return None if the file does not exist
+        self.assertIsNone(
+            cached_file(
+                "google-bert/bert-base-cased",
+                "ahah.txt",
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        )
 
         # The function raises if the repository does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-            get_file_from_repo("bert-base-case", CONFIG_NAME)
+            cached_file(
+                "bert-base-case",
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
 
         # The function raises if the revision does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME, revision="ahaha")
+            cached_file(
+                "google-bert/bert-base-cased",
+                CONFIG_NAME,
+                revision="ahaha",
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
 
-        resolved_file = get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME)
+        resolved_file = cached_file(
+            "google-bert/bert-base-cased",
+            CONFIG_NAME,
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
         # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
+        config = json.loads(open(resolved_file).read())
         self.assertEqual(config["hidden_size"], 768)
 
     def test_get_file_from_repo_local(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             filename = Path(tmp_dir) / "a.txt"
             filename.touch()
-            self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
+            self.assertEqual(
+                cached_file(
+                    tmp_dir,
+                    "a.txt",
+                    _raise_exceptions_for_gated_repo=False,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                ),
+                str(filename),
+            )
 
-            self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
+            self.assertIsNone(
+                cached_file(
+                    tmp_dir,
+                    "b.txt",
+                    _raise_exceptions_for_gated_repo=False,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                )
+            )
 
     def test_get_file_gated_repo(self):
         """Test download file from a gated repo fails with correct message when not authenticated."""
@@ -152,3 +189,12 @@ class GetFromCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "is a gated repository"):
             # All files except README.md are protected on a gated repo.
             has_file(GATED_REPO, "gated_file.txt", token=False)
+
+    def test_cached_files_exception_raised(self):
+        """Test that unhadled exceptions, e.g. ModuleNotFoundError, is properly re-raised by cached_files when hf_hub_download fails."""
+        with mock.patch(
+            "transformers.utils.hub.hf_hub_download", side_effect=ModuleNotFoundError("No module named 'MockModule'")
+        ):
+            with self.assertRaises(ModuleNotFoundError):
+                # The error should be re-raised by cached_files, not caught in the exception handling block
+                cached_file(RANDOM_BERT, "nonexistent.json")

@@ -15,7 +15,7 @@
 """MobileNetV1 model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -121,3 +121,6 @@ class MobileNetV1OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["MobileNetV1Config", "MobileNetV1OnnxConfig"]

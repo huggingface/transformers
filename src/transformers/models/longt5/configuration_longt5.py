@@ -14,7 +14,7 @@
 # limitations under the License.
 """LongT5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -54,7 +54,7 @@ class LongT5Config(PretrainedConfig):
         local_radius (`int`, *optional*, defaults to 127)
             Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
         global_block_size (`int`, *optional*, defaults to 16)
-            Lenght of blocks an input sequence is divided into for a global token representation. Used only for
+            Length of blocks an input sequence is divided into for a global token representation. Used only for
             `encoder_attention_type = "transient-global"`.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
@@ -79,7 +79,12 @@ class LongT5Config(PretrainedConfig):
 
     model_type = "longt5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "d_kv",
+    }
 
     def __init__(
         self,
@@ -170,3 +175,6 @@ class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["LongT5Config", "LongT5OnnxConfig"]

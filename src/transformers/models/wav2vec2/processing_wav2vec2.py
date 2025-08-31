@@ -18,10 +18,16 @@ Speech processor class for Wav2Vec2
 
 import warnings
 from contextlib import contextmanager
+from typing import Optional, Union
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+
+
+class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class Wav2Vec2Processor(ProcessorMixin):
@@ -51,7 +57,7 @@ class Wav2Vec2Processor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         try:
             return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except OSError:
+        except (OSError, ValueError):
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
                 " include a `tokenizer_class` attribute is deprecated and will be "
@@ -66,35 +72,53 @@ class Wav2Vec2Processor(ProcessorMixin):
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        audio: AudioInput = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
+    ):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
-        """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
+        This method forwards all arguments to [`Wav2Vec2FeatureExtractor.__call__`] and/or
+        [`PreTrainedTokenizer.__call__`] depending on the input modality and returns their outputs. If both modalities are passed, [`Wav2Vec2FeatureExtractor.__call__`] and [`PreTrainedTokenizer.__call__`] are called.
 
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                An audio input is passed to [`Wav2Vec2FeatureExtractor.__call__`].
+            text (`str`, `List[str]`, *optional*):
+                A text input is passed to [`PreTrainedTokenizer.__call__`].
+
+
+        Returns:
+            This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
+        """
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
+        output_kwargs = self._merge_kwargs(
+            Wav2Vec2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(
+                audio,
+                **output_kwargs["audio_kwargs"],
+                **output_kwargs["text_kwargs"],
+                **output_kwargs["common_kwargs"],
+            )
+
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs
@@ -106,10 +130,17 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
+        This method operates on batches of extracted features and/or tokenized text. It forwards all arguments to
+        [`Wav2Vec2FeatureExtractor.pad`] and/or [`PreTrainedTokenizer.pad`] depending on the input modality and returns their outputs. If both modalities are passed, [`Wav2Vec2FeatureExtractor.pad`] and [`PreTrainedTokenizer.pad`] are called.
+
+        Args:
+            input_features:
+                When the first argument is a dictionary containing a batch of tensors, or the `input_features` argument is present, it is passed to [`Wav2Vec2FeatureExtractor.pad`].
+            labels:
+                When the `label` argument is present, it is passed to [`PreTrainedTokenizer.pad`].
+
+        Returns:
+            This method returns the results of each `pad` method. If both are used, the output is a dictionary containing the results of both.
         """
         # For backward compatibility
         if self._in_target_context_manager:
@@ -134,19 +165,11 @@ class Wav2Vec2Processor(ProcessorMixin):
             input_features["labels"] = labels["input_ids"]
             return input_features
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        # The processor doesn't return text ids and the model seems to not need them
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
 
     @contextmanager
     def as_target_processor(self):
@@ -164,3 +187,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+
+__all__ = ["Wav2Vec2Processor"]

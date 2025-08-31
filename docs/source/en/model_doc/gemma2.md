@@ -14,30 +14,115 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-31 and added to Hugging Face Transformers on 2024-06-27.*
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
 
 # Gemma2
 
-## Overview
+[Gemma 2](https://huggingface.co/papers/2408.00118) is a family of language models with pretrained and instruction-tuned variants, available in 2B, 9B, 27B parameters. The architecture is similar to the previous Gemma, except it features interleaved local attention (4096 tokens) and global attention (8192 tokens) and grouped-query attention (GQA) to increase inference performance.
 
-The Gemma2 model was proposed in [Gemma2: Open Models Based on Gemini Technology and Research](https://blog.google/technology/developers/google-gemma-2/) by Gemma2 Team, Google.
-Two Gemma2 models are released, with parameters sizes of 9 billion (9B) and 27 billion (27B).
+The 2B and 9B models are trained with knowledge distillation, and the instruction-tuned variant was post-trained with supervised fine-tuning and reinforcement learning.
 
-The abstract from the blog post is the following:
+You can find all the original Gemma 2 checkpoints under the [Gemma 2](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315) collection.
 
-*Now we’re officially releasing Gemma 2 to researchers and developers globally. Available in both 9 billion (9B) and 27 billion (27B) parameter sizes, Gemma 2 is higher-performing and more efficient at inference than the first generation, with significant safety advancements built in. In fact, at 27B, it offers competitive alternatives to models more than twice its size, delivering the kind of performance that was only possible with proprietary models as recently as December.*
+> [!TIP]
+> Click on the Gemma 2 models in the right sidebar for more examples of how to apply Gemma to different language tasks.
 
-Tips:
+The example below demonstrates how to chat with the model with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
-- The original checkpoints can be converted using the conversion script `src/transformers/models/Gemma2/convert_Gemma2_weights_to_hf.py` 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<Tip warning={true}>
 
-- Gemma2 uses sliding window attention every second layer, which makes it unsuitable for typical kv caching with [`~DynamicCache`] or tuples of tensors. To enable caching in Gemma2 forward call, you must initialize a [`~HybridCache`] instance and pass it as `past_key_values` to the forward call. Note, that you also have to prepare `cache_position` if the `past_key_values` already contains previous keys and values.
+```python
+import torch
+from transformers import pipeline
 
-</Tip>
+pipe = pipeline(
+    task="text-generation",
+    model="google/gemma-2-9b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq) and [Tom Arsen]().
+pipe("Explain quantum computing simply. ", max_new_tokens=50)
+```
 
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-2-9b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+input_text = "Explain quantum computing simply."
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```
+echo -e "Explain quantum computing simply." | transformers run --task text-generation --model google/gemma-2-2b --device 0
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+
+```python
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b")
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-2-27b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+input_text = "Explain quantum computing simply."
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+
+```python
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+visualizer = AttentionMaskVisualizer("google/gemma-2b")
+visualizer("You are an assistant. Make sure you print me")
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-2-attn-mask.png"/>
+</div>
 
 ## Gemma2Config
 

@@ -37,7 +37,7 @@ from tests.test_pipeline_mixin import pipeline_test_mapping
 
 
 PIPELINE_TEST_MAPPING = {}
-for task, _ in pipeline_test_mapping.items():
+for task in pipeline_test_mapping:
     PIPELINE_TEST_MAPPING[task] = {"pt": None, "tf": None}
 
 

@@ -15,7 +15,7 @@
 """PyTorch EfficientNet model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -29,52 +29,11 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_efficientnet import EfficientNetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "EfficientNetConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/efficientnet-b7"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/efficientnet-b7"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-EFFICIENTNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`EfficientNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-EFFICIENTNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 def round_filters(config: EfficientNetConfig, num_channels: int):
@@ -92,7 +51,7 @@ def round_filters(config: EfficientNetConfig, num_channels: int):
     return int(new_dim)
 
 
-def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
+def correct_pad(kernel_size: Union[int, tuple], adjust: bool = True):
     r"""
     Utility function to get the tuple padding value for the depthwise convolution.
 
@@ -341,7 +300,7 @@ class EfficientNetBlock(nn.Module):
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
-        self.expand = True if self.expand_ratio != 1 else False
+        self.expand = self.expand_ratio != 1
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
@@ -383,7 +342,7 @@ class EfficientNetBlock(nn.Module):
 
 class EfficientNetEncoder(nn.Module):
     r"""
-    Forward propogates the embeddings through each EfficientNet block.
+    Forward propagates the embeddings through each EfficientNet block.
 
     Args:
         config ([`EfficientNetConfig`]):
@@ -412,10 +371,10 @@ class EfficientNetEncoder(nn.Module):
             expand_ratio = config.expand_ratios[i]
 
             for j in range(round_repeats(config.num_block_repeats[i])):
-                id_skip = True if j == 0 else False
+                id_skip = j == 0
                 stride = 1 if j > 0 else stride
                 in_dim = out_dim if j > 0 else in_dim
-                adjust_padding = False if curr_block_num in config.depthwise_padding else True
+                adjust_padding = curr_block_num not in config.depthwise_padding
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
                 block = EfficientNetBlock(
@@ -471,34 +430,24 @@ class EfficientNetEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class EfficientNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = EfficientNetConfig
+    config: EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     _no_split_modules = []
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
-@add_start_docstrings(
-    "The bare EfficientNet model outputting raw features without any specific head on top.",
-    EFFICIENTNET_START_DOCSTRING,
-)
+@auto_docstring
 class EfficientNetModel(EfficientNetPreTrainedModel):
     def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
@@ -517,20 +466,13 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(EFFICIENTNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -562,12 +504,11 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     EfficientNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g.
     for ImageNet.
-    """,
-    EFFICIENTNET_START_DOCSTRING,
+    """
 )
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     def __init__(self, config):
@@ -582,20 +523,14 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(EFFICIENTNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -642,3 +577,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+__all__ = ["EfficientNetForImageClassification", "EfficientNetModel", "EfficientNetPreTrainedModel"]

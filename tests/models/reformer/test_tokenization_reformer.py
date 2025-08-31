@@ -34,11 +34,12 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_seq2seq = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         tokenizer = ReformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -84,7 +85,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 # Simple input
                 s = "This is a simple input"
@@ -216,7 +217,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
-            " add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth"
+            " add words that should not exist and be tokenized to <unk>, such as saoneuhaoesuth"
         )
         original_tokenizer_encodings = [
             108,

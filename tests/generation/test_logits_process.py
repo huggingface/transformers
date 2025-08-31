@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,9 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Union
+from typing import Union
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -48,6 +48,7 @@ if is_torch_available():
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         SequenceBiasLogitsProcessor,
+        SynthIDTextWatermarkLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
@@ -55,7 +56,12 @@ if is_torch_available():
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
         WatermarkLogitsProcessor,
     )
-    from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
+    from transformers.generation.logits_process import (
+        BarkEosPrioritizerLogitsProcessor,
+        DiaClassifierFreeGuidanceLogitsProcessor,
+        DiaEOSChannelFilterLogitsProcessor,
+        DiaEOSDelayPatternLogitsProcessor,
+    )
 
 
 @require_torch
@@ -84,7 +90,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
     @parameterized.expand([(0,), ([0, 18],)])
-    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, list[int]]):
         vocab_size = 20
         batch_size = 4
 
@@ -164,8 +170,8 @@ class LogitsProcessorTest(unittest.TestCase):
         processed_scores = temp_dist_warper_smoother(input_ids, scores)
 
         # uniform distribution stays uniform
-        self.assertTrue(torch.allclose(probs[0, :], warped_prob_sharp[0, :], atol=1e-3))
-        self.assertTrue(torch.allclose(probs[0, :], warped_prob_smooth[0, :], atol=1e-3))
+        torch.testing.assert_close(probs[0, :], warped_prob_sharp[0, :], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(probs[0, :], warped_prob_smooth[0, :], rtol=1e-3, atol=1e-3)
 
         # sharp peaks get higher, valleys get lower
         self.assertLess(probs[1, :].max(), warped_prob_sharp[1, :].max())
@@ -191,6 +197,56 @@ class LogitsProcessorTest(unittest.TestCase):
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
 
         processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # check that values were correctly changed
+        self.assertAlmostEqual(processed_scores[0, 0].item(), -(1 / vocab_size) * 2)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), (1 / vocab_size) / 2)
+
+        self.assertAlmostEqual(processed_scores[1, 0].item(), (1 / vocab_size) / 2)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), (4 / vocab_size) / 2)
+
+        # processor should not change logits in-place
+        self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
+            penalty=2.0,
+            prompt_ignore_length=input_ids.shape[-1],
+        )
+
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # Because input IDs were provided & we call with the same input
+        # IDs that we initialize with, it should be the same as calling
+        # with no input IDs, so no scores should be penalized.
+        self.assertTrue(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_dist_process_exclusion_with_new_input_ids(self):
+        orig_input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        curr_input_ids = torch.tensor([[0, 1, 0, 1], [5, 0, 5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
+            penalty=2.0,
+            prompt_ignore_length=orig_input_ids.shape[-1],
+        )
+
+        processed_scores = rep_penalty_proc(curr_input_ids, scores)
 
         # check that values were correctly changed
         self.assertAlmostEqual(processed_scores[0, 0].item(), -(1 / vocab_size) * 2)
@@ -229,6 +285,39 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_continuous_batching(self):
+        vocab_size = 10
+
+        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], device=torch_device, dtype=torch.long)
+        scores = torch.ones((1, 6, vocab_size), device=torch_device, dtype=torch.float) / vocab_size
+
+        scores[0, 2, 1] = -2.0
+        scores[0, 2, 2] = 3.0
+        scores[0, 2, 3] = 4.0
+        scores[0, 5, 4] = -5.0
+        scores[0, 5, 5] = 6.0
+        scores[0, 5, 6] = 7.0
+
+        logits_indices = torch.tensor([2, 5], device=torch_device, dtype=torch.long)
+        cumulative_seqlens_q = torch.tensor([0, 3, 6], device=torch_device, dtype=torch.long)
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
+        rep_penalty_proc.set_continuous_batching_context(logits_indices, cumulative_seqlens_q)
+
+        original_scores = scores.clone()
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        self.assertAlmostEqual(processed_scores[0, 2, 1].item(), -2.0 * 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 2].item(), 3.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 3].item(), 4.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 4].item(), -5.0 * 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 5].item(), 6.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 6].item(), 7.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 0].item(), 1.0 / vocab_size)
+        self.assertAlmostEqual(processed_scores[0, 5, 0].item(), 1.0 / vocab_size)
+
+        self.assertFalse(torch.all(original_scores == processed_scores))
 
     def test_top_k_dist_warper(self):
         input_ids = None
@@ -286,7 +375,7 @@ class LogitsProcessorTest(unittest.TestCase):
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+        torch.testing.assert_close(filtered_dist, EXPECTED_FILTERED_DIST, rtol=1e-3, atol=1e-3)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(top_p_warp(input_ids, dist) == dist))
@@ -333,7 +422,7 @@ class LogitsProcessorTest(unittest.TestCase):
             device=torch_device,
             dtype=torch.float,
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+        torch.testing.assert_close(filtered_dist, EXPECTED_FILTERED_DIST, rtol=1e-3, atol=1e-3)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(min_p_warp(input_ids, dist) == dist))
@@ -370,7 +459,7 @@ class LogitsProcessorTest(unittest.TestCase):
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.97, 0.0, 0.0, 0.0], [0.0, 0.2, 0.2, 0.2]], device=torch_device, dtype=torch.float
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+        torch.testing.assert_close(filtered_dist, EXPECTED_FILTERED_DIST, rtol=1e-3, atol=1e-3)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(typical_warp(input_ids, dist) == dist))
@@ -420,7 +509,7 @@ class LogitsProcessorTest(unittest.TestCase):
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.87, 0, 0, 0], [0.4, 0.299, 0.101, 0.2]], device=torch_device, dtype=torch.float
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+        torch.testing.assert_close(filtered_dist, EXPECTED_FILTERED_DIST, rtol=1e-3, atol=1e-3)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(epsilon_warp(input_ids, dist) == dist))
@@ -460,7 +549,7 @@ class LogitsProcessorTest(unittest.TestCase):
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.0, 0.1, 0.8, 0.1], [0.0, 0.0, 0.9, 0.0]], device=torch_device, dtype=torch.float
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+        torch.testing.assert_close(filtered_dist, EXPECTED_FILTERED_DIST, rtol=1e-3, atol=1e-3)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(eta_warp(input_ids, dist) == dist))
@@ -597,7 +686,7 @@ class LogitsProcessorTest(unittest.TestCase):
         # check edge case
         no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[4]], eos_token_id=eos_token_id)
         filtered_scores = no_bad_words_dist_proc(input_ids, scores)
-        self.assertTrue(torch.allclose(scores, filtered_scores, atol=1e-3))
+        torch.testing.assert_close(scores, filtered_scores, rtol=1e-3, atol=1e-3)
 
     def test_bias_dist_processor(self):
         vocab_size = 5
@@ -672,7 +761,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores_comp = processor(input_ids, scores_comp)
 
         # scores should be equal
-        self.assertTrue(torch.allclose(scores, scores_comp, atol=1e-3))
+        torch.testing.assert_close(scores, scores_comp, rtol=1e-3, atol=1e-3)
 
         # input_ids should never be changed
         self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())
@@ -749,7 +838,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         processed_scores = logits_processor(input_ids, scores)
         self.assertTrue(torch.isneginf(processed_scores[:, bos_token_id + 1 :]).all())
-        # score for bos_token_id shold be zero
+        # score for bos_token_id should be zero
         self.assertListEqual(processed_scores[:, bos_token_id].tolist(), 4 * [0])
 
         # processor should not change logits in-place
@@ -970,8 +1059,335 @@ class LogitsProcessorTest(unittest.TestCase):
 
         watermark = WatermarkLogitsProcessor(vocab_size=vocab_size, device=input_ids.device)
 
-        # use fixed id for last token, needed for reprodicibility and tests
+        # use fixed id for last token, needed for reproducibility and tests
         input_ids[:, -1] = 10
         scores_wo_bias = scores[:, -1].clone()
         out = watermark(input_ids=input_ids, scores=scores)
-        self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
+        greenlist_id = 3 if torch_device == "xpu" else 1
+        self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
+
+    @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
+    def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):
+        """Test SynthID watermarked distribution bias uniformity over iterations."""
+        torch.manual_seed(0)
+        np.random.seed(0)
+        watermarking_config = {
+            "ngram_len": ngram_len,
+            "keys": np.random.randint(low=0, high=2**16, size=(num_layers,)),
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 512,
+            "device": torch_device,
+        }
+        batch_size = 100000
+        ngrams = torch.randint(
+            low=0,
+            high=vocab_size,
+            size=(batch_size, ngram_len),
+            device=torch_device,
+        )
+
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermarking_config)
+        g_values = logits_processor.compute_g_values(ngrams)
+        g_values_mean = torch.mean(torch.mean(g_values.float(), dim=0))
+        self.assertAlmostEqual(g_values_mean, 0.5, delta=0.01)
+
+    @parameterized.expand([(10000, 3), (1000, 20)])
+    def test_synthidtext_watermark_processor_bias_uniformity_across_vocab(self, vocab_size, num_layers):
+        """Test SynthID watermarked distribution bias uniformity over vocabs of the model."""
+        batch_size = 1000
+        ngram_len = 5
+        torch.manual_seed(0)
+        np.random.seed(0)
+        watermarking_config = {
+            "ngram_len": ngram_len,
+            "keys": np.random.randint(low=0, high=2**16, size=(num_layers,)),
+            "sampling_table_size": 2**16,
+            "sampling_table_seed": 0,
+            "context_history_size": 512,
+            "device": torch_device,
+        }
+        n_minus_1_grams = torch.randint(
+            low=0,
+            high=vocab_size,
+            size=(batch_size, watermarking_config["ngram_len"] - 1),
+            device=torch_device,
+        )
+
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermarking_config)
+        ngram_keys, _ = logits_processor._compute_keys(
+            n_minus_1_grams,
+            torch.stack([torch.arange(vocab_size, device=torch_device) for _ in range(batch_size)]),
+        )
+
+        g_values = logits_processor.sample_g_values(ngram_keys)
+        # g_values shape should be [batch_size, vocab_size, num_layers]
+        g_values_mean = torch.mean(torch.mean(g_values.float(), dim=1))
+        self.assertAlmostEqual(g_values_mean, 0.5, delta=0.001)
+
+    @parameterized.expand([(2, "uniform"), (10, "uniform"), (2, "random"), (10, "random")])
+    def test_synthidtext_watermark_processor_distributional_convergence(self, vocab_size, logits_type):
+        """Check if watermarked distribution converges to unwatermarked logits distribution."""
+        batch_size = 1500
+        num_keys = 1000
+
+        updated_softmaxes = 0
+        np.random.seed(0)
+        torch.manual_seed(0)
+        if logits_type == "uniform":
+            fixed_logits = torch.ones((batch_size, vocab_size), device=torch_device)
+        elif logits_type == "random":
+            fixed_logits = torch.rand(
+                (
+                    1,
+                    vocab_size,
+                ),
+                device=torch_device,
+            )
+            fixed_logits = fixed_logits.repeat(batch_size, 1)
+        else:
+            raise ValueError(f"Unrecognized logits_type {logits_type}")
+        for _ in range(num_keys):
+            watermarking_config = {
+                "ngram_len": 5,
+                "keys": np.random.randint(0, 10**9, size=(1,), dtype=np.int64),
+                "sampling_table_size": 2**16,
+                "sampling_table_seed": 0,
+                "context_history_size": 1024,
+                "device": torch_device,
+            }
+
+            logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermarking_config)
+
+            ngrams = torch.randint(
+                low=0,
+                high=vocab_size,
+                size=(batch_size, watermarking_config["ngram_len"]),
+                device=torch_device,
+            )
+
+            # Insert ngram-1 into logit_processor state.
+            for idx in range(watermarking_config["ngram_len"] - 1):
+                _ = logits_processor(ngrams[:, :idx], fixed_logits)
+
+            updated_scores = logits_processor(ngrams, fixed_logits)
+            updated_softmaxes += torch.nn.functional.softmax(updated_scores, dim=1).cpu().numpy()
+
+        updated_softmaxes = np.mean(updated_softmaxes, axis=0) / num_keys
+        is_close = torch.all(
+            torch.isclose(
+                torch.tensor(updated_softmaxes, device=torch_device),
+                torch.nn.Softmax()(fixed_logits[0]),  # Take any batch entry, all are same.
+                atol=1e-3,
+                rtol=0,
+            )
+        )
+        self.assertTrue(is_close)
+
+    @parameterized.expand([(2, 10, 1, 0.01), (100, 5, 1, 0.01), (100, 10, 2, 0.02)])
+    def test_synthidtext_watermark_processor_bias_test(self, vocab_size, ngram_len, num_layers, atol):
+        """Test SynthID watermarking bias matches theoretical value."""
+        batch_size = 20000
+        generator = torch.Generator(device=torch_device).manual_seed(0)
+        np.random.seed(0)
+
+        keys = [np.random.randint(0, 10**9) for _ in range(num_layers)]
+        # Use 10**9 rather than vocab_size to ensure variety in (n-1)-grams.
+        context = torch.randint(
+            low=0,
+            high=10**9,
+            size=(batch_size, ngram_len - 1),
+            dtype=torch.int64,
+            generator=generator,
+            device=torch_device,
+        )
+
+        context_history_size = 1024
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(
+            ngram_len=ngram_len,
+            keys=keys,
+            sampling_table_size=2**16,
+            sampling_table_seed=0,
+            context_history_size=context_history_size,
+            device=torch_device,
+        )
+
+        scores = torch.ones(
+            (batch_size, vocab_size),
+            dtype=torch.float64,
+            device=torch_device,
+        )
+        # Init state of the logits processor.
+        logits_processor(context, scores)
+        # insert context into the state.
+        for idx in range(1, ngram_len - 1):
+            _ = logits_processor(context[:, :idx], scores)
+
+        updated_scores = logits_processor(context, scores)
+
+        probs = torch.nn.functional.softmax(updated_scores, dim=1)
+        generator = torch.Generator(device=torch_device).manual_seed(0)
+        next_tokens = torch.multinomial(
+            probs,
+            num_samples=1,
+            generator=generator,
+        )
+
+        ngrams = torch.concat((context, next_tokens), dim=1)
+        g_values = logits_processor.compute_g_values(ngrams)
+        mean_g_values = g_values.mean(dtype=torch.float64, dim=(0, 1))
+
+        expected_mean_g_value = logits_processor.expected_mean_g_value(
+            vocab_size=vocab_size,
+        )
+        is_close = torch.all(
+            torch.isclose(
+                mean_g_values,
+                torch.tensor(expected_mean_g_value, dtype=torch.float64, device=torch_device),
+                atol=atol,
+                rtol=0,
+            )
+        )
+        self.assertTrue(is_close)
+
+    def test_dia_classifier_free_guidance(self):
+        input_ids = torch.LongTensor([[0]])
+        logits_uncond = torch.tensor([[1.0, 0, 1.5]])
+        logits_cond = torch.tensor([[1.0, 1.0, 1.0]])
+
+        # base cfg with conditioned as center
+        cfg = DiaClassifierFreeGuidanceLogitsProcessor(guidance_scale=1.5)
+        out = cfg(input_ids, torch.cat([logits_cond, logits_uncond], dim=0))
+
+        res = logits_cond + 1.5 * (logits_cond - logits_uncond)
+
+        self.assertAlmostEqual(out[0, 0].item(), res[0, 0].item())
+        self.assertAlmostEqual(out[0, 1].item(), res[0, 1].item())
+        self.assertAlmostEqual(out[0, 2].item(), res[0, 2].item())
+
+        # additional top k (on cond logits)
+        cfg = DiaClassifierFreeGuidanceLogitsProcessor(guidance_scale=1.5, guidance_top_k=1)
+        out = cfg(input_ids, torch.cat([logits_cond, logits_uncond], dim=0))
+
+        res = logits_cond + 1.5 * (logits_cond - logits_uncond)
+        mask = res == res.max()
+        res = logits_cond.clone()
+        res[~mask.bool()] = -float("inf")
+
+        self.assertAlmostEqual(out[0, 0].item(), res[0, 0].item())
+        self.assertAlmostEqual(out[0, 1].item(), res[0, 1].item())
+        self.assertAlmostEqual(out[0, 2].item(), res[0, 2].item())
+
+    def test_dia_channel_filter(self):
+        eos = 2
+        bsz, channels, vocab = 2, 2, 4
+
+        input_ids = torch.LongTensor([[0]])
+        logits = torch.zeros(size=(bsz, channels, vocab)).view(bsz * channels, vocab)
+        logits[0, eos] = 1  # Eos max (forced)
+        logits[1, eos] = 1  # Eos max (forced) but not channel 0
+
+        channel_filter = DiaEOSChannelFilterLogitsProcessor(num_channels=channels, eos_token_id=eos)
+        out = channel_filter(input_ids, logits).view(bsz, channels, vocab)
+
+        for i in range(vocab):
+            if i > eos:
+                # special tokens are not to be predicted
+                self.assertTrue((out[:, :, i] == -float("inf")).all())
+            elif i == eos:
+                # Eos forced on channel 0
+                self.assertTrue(out[0, 0, i] == 1)
+                # Eos suppressed on everything else (even if max before)
+                self.assertTrue(out[0, 1, i] == -float("inf"))
+                self.assertTrue((out[1, :, i] == -float("inf")).all())
+            else:
+                # Eos forced on channel 0
+                self.assertTrue(out[0, 0, i] == -float("inf"))
+                # previous values
+                self.assertTrue(out[0, 1, i] == 0)
+                self.assertTrue((out[1, :, i] == 0).all())
+
+    def test_dia_delay_pattern(self):
+        def check_eos_logits(out, logits, batch, channel, eos):
+            for i in range(vocab):
+                if i == eos:
+                    self.assertTrue(out[batch, channel, i] == 0)
+                else:
+                    self.assertTrue(out[batch, channel, i] == -float("inf"))
+
+            for c in range(channel):
+                if c != channel:
+                    self.assertTrue((out[batch, c] == logits[batch, c]).all())
+
+        eos = 2
+        delay_pattern = [0, 2, 3]
+        max_generation_len = 10
+        bsz, channels, vocab = 2, 3, 4
+
+        input_ids = torch.LongTensor([[0]])
+        logits = torch.zeros(size=(bsz, channels, vocab))
+        # Ensure that argmax can not result in eos
+        logits[:, :, eos] = -1
+
+        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(
+            delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len
+        )
+        out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
+
+        # Nothing should happen except for init of some attributes
+        self.assertTrue((out == logits).all())
+        self.assertTrue((~delay_pattern_processor.active_batches).all())
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern == torch.tensor([delay_pattern for _ in range(bsz)])).all()
+        )
+
+        # Make first batch end
+        logits[0, 0, eos] = 1
+
+        # Go through the complete delay pattern
+        for i in range(max(delay_pattern) + 1):
+            out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
+
+            # no delay should kick in
+            if i == 1:
+                self.assertTrue((out == logits).all())
+            else:
+                j = i if i == 0 else i - 1
+                check_eos_logits(out=out, logits=logits, batch=0, channel=j, eos=eos)
+                self.assertTrue((out[1] == logits[1]).all())
+                self.assertTrue(delay_pattern_processor.active_batches[0])
+                self.assertFalse(delay_pattern_processor.active_batches[1])
+                self.assertTrue(
+                    (
+                        delay_pattern_processor.delay_pattern[0]
+                        == torch.tensor([delay - (i + 1) for delay in delay_pattern])
+                    ).all()
+                )
+                self.assertTrue((delay_pattern_processor.delay_pattern[1] == torch.tensor(delay_pattern)).all())
+
+        # Make second batch end
+        logits[1, 0, eos] = 1
+
+        # Just to check if other batches could work
+        out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
+
+        self.assertTrue((out[0] == logits[0]).all())
+        self.assertTrue(delay_pattern_processor.active_batches.all())
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern[0] == torch.tensor([delay - 5 for delay in delay_pattern])).all()
+        )
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern[1] == torch.tensor([delay - 1 for delay in delay_pattern])).all()
+        )
+
+        # Last check on max generation length reached (with delay in mind until last channel produces eos)
+        input_ids = torch.LongTensor([[0] * (max_generation_len - max(delay_pattern) - 1)])
+        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(
+            delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len
+        )
+        out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
+
+        check_eos_logits(out=out, logits=logits, batch=0, channel=0, eos=eos)
+        check_eos_logits(out=out, logits=logits, batch=1, channel=0, eos=eos)
+        self.assertTrue(delay_pattern_processor.active_batches.all())
+        self.assertTrue((delay_pattern_processor.delay_pattern == torch.tensor(delay_pattern) - 1).all())

@@ -40,7 +40,7 @@ class TimmBackboneConfig(PretrainedConfig):
             Whether to output only the features or also the logits.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use a pretrained backbone.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). Will default to the last stage if unset.
         freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
@@ -81,3 +81,6 @@ class TimmBackboneConfig(PretrainedConfig):
         self.use_timm_backbone = True
         self.out_indices = out_indices if out_indices is not None else [-1]
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
+
+
+__all__ = ["TimmBackboneConfig"]

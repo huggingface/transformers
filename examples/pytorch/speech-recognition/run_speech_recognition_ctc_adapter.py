@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio] >= 1.18.0",
+#     "torch >= 1.5",
+#     "torchaudio",
+#     "librosa",
+#     "jiwer",
+#     "evaluate",
+# ]
+# ///
+
 """Fine-tuning a 🤗 Transformers CTC adapter model for automatic speech recognition"""
 
 import functools
@@ -24,7 +35,7 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import datasets
 import evaluate
@@ -53,7 +64,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -201,11 +212,11 @@ class DataTrainingArguments:
             )
         },
     )
-    chars_to_ignore: Optional[List[str]] = list_field(
+    chars_to_ignore: Optional[list[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-    eval_metrics: List[str] = list_field(
+    eval_metrics: list[str] = list_field(
         default=["wer"],
         metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
@@ -237,7 +248,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -275,7 +286,7 @@ class DataCollatorCTCWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor (:class:`~transformers.AutoProcessor`)
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -300,7 +311,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
@@ -471,7 +482,7 @@ def main():
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
     chars_to_ignore_regex = (
-        f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+        f"[{''.join(data_args.chars_to_ignore)}]" if data_args.chars_to_ignore is not None else None
     )
     text_column_name = data_args.text_column_name
 
@@ -559,7 +570,7 @@ def main():
                 )
 
                 # if we doing adapter language training, save
-                # vocab with adpter language
+                # vocab with adapter language
                 if data_args.target_language is not None:
                     vocab_dict[data_args.target_language] = lang_dict
 
@@ -747,7 +758,7 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=processor,
+        processing_class=processor,
     )
 
     # 8. Finally, we can start training
@@ -805,7 +816,7 @@ def main():
     if "common_voice" in data_args.dataset_name:
         kwargs["language"] = config_name
 
-    # make sure that adapter weights are saved seperately
+    # make sure that adapter weights are saved separately
     adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(data_args.target_language)
     adapter_file = os.path.join(training_args.output_dir, adapter_file)
     logger.info(f"Saving adapter weights under {adapter_file}...")

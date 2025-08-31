@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,20 +13,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch Granite model."""
 
-import tempfile
 import unittest
 
-import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
+from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
+    Expectations,
     require_read_token,
     require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -106,7 +101,7 @@ class GraniteModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -151,116 +146,6 @@ class GraniteModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = GraniteModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = GraniteForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = GraniteForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -286,7 +171,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GraniteForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GraniteModel,
@@ -302,9 +186,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
-
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "ibm/PowerLM-3b"
 
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
@@ -322,65 +203,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # def test_granite_sequence_classification_model(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_sequence_classification_model_for_single_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "single_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_sequence_classification_model_for_multi_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "multi_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor(
-    #         [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-    #     ).to(torch.float)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_token_classification_model(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-    #     model = GraniteForTokenClassification(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-    #     self.assertEqual(
-    #         result.logits.shape,
-    #         (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-    #     )
-
-    @unittest.skip("Granite buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
@@ -406,7 +228,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
@@ -420,7 +242,9 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -478,102 +302,16 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
 
-        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
-            load_in_4bit=True,
-            device_map={"": 0},
-            attn_implementation="flash_attention_2",
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = GraniteForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        """
-        skipping the test since mup is very flaky and gets consistently different outputs
-        """
-        self.skipTest("skipping the test since mup is very flaky and gets consistently different outputs")
-
-
-@require_torch_gpu
+@require_torch_accelerator
 class GraniteIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     @slow
     @require_read_token
     def test_model_3b_logits_bf16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "ibm/PowerLM-3b", device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -581,18 +319,31 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
 
         # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-1.8799, -3.1269, -2.8297, -2.3755, -2.7364, -2.2389, -2.5914, -2.4154]])
+        EXPECTED_MEANS = Expectations(
+            {
+                ("xpu", 3): torch.tensor([[-3.1406, -2.5469, -2.6250, -2.1250, -2.6250, -2.6562, -2.6875, -2.9688]]),
+                ("cuda", 7): torch.tensor([[-1.9798, -3.1626, -2.8062, -2.3777, -2.7091, -2.2338, -2.5924, -2.3974]]),
+                ("cuda", 8): torch.tensor([[-3.1406, -2.5469, -2.6250, -2.1250, -2.6250, -2.6562, -2.6875, -2.9688]]),
+            }
+        )
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1).float(), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.8125, -2.0156, -2.0156, -2.0000, -2.0000, -2.8438, -2.0156, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000]])
+        EXPECTED_SLICES = Expectations(
+            {
+                ("xpu", 3): torch.tensor([[2.2031, -5.0625, -5.0625, -5.0625, -5.0625, -0.9180, -5.0625, -5.0625, -5.0625, -5.0625, -5.5312, -2.1719, -1.7891, -0.4922, -2.5469]]),
+                ("cuda", 7): torch.tensor([[4.8750, -2.1875, -2.1875, -2.1875, -2.1875, -2.8438, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875, -2.1875]]),
+                ("cuda", 8): torch.tensor([[2.0938, -5.0312, -5.0312, -5.0312, -5.0312, -1.0469, -5.0312, -5.0312, -5.0312, -5.0312, -5.5625, -2.1875, -1.7891, -0.5820, -2.6250]]),
+            }
+        )
+        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
         # fmt: on
-
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
+                out.logits[0, 0, :15].float(),
                 atol=1e-3,
                 rtol=1e-3,
             )
@@ -603,13 +354,21 @@ class GraniteIntegrationTest(unittest.TestCase):
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.float16)
+        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[0.0000, 0.0000, -3.4374, -2.1636, -2.6245, -3.0029, -3.8229, -3.1158]])
+        EXPECTED_MEANS = Expectations(
+            {
+                ("xpu", 3): torch.tensor([[-3.2693, -2.5957, -2.6234, -2.1675, -2.6386, -2.6850, -2.7039, -2.9656]]),
+                ("cuda", 7): torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]]),
+                ("cuda", 8): torch.tensor([[-3.2934, -2.6019, -2.6258, -2.1691, -2.6394, -2.6876, -2.7032, -2.9688]]),
+            }
+        )
+        # fmt: on
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)

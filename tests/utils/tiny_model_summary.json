@@ -626,7 +626,7 @@
         "model_classes": [
             "Blip2ForConditionalGeneration"
         ],
-        "sha": "35e1ef43da3554af62eb29a7b3dbbef3f3bef48e"
+        "sha": "d0de11fd1f8ca481231c07ee0934924be96cb281"
     },
     "Blip2Model": {
         "tokenizer_classes": [
@@ -2896,7 +2896,7 @@
         "model_classes": [
             "IdeficsForVisionText2Text"
         ],
-        "sha": "2c2f2e2cd6b02a77d0cdd8c3767ba9a6267dbd20"
+        "sha": "a6be81294ff7a3d44f3aef0ed18e42b97c426831"
     },
     "IdeficsModel": {
         "tokenizer_classes": [

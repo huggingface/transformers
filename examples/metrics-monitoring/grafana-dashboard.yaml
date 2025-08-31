@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'Transformers Dashboards'
+    orgId: 1
+    folder: 'Transformers'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

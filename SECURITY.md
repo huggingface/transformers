@@ -14,7 +14,7 @@ Models uploaded on the Hugging Face Hub come in different formats. We heavily re
 models in the [`safetensors`](https://github.com/huggingface/safetensors) format (which is the default prioritized
 by the transformers library), as developed specifically to prevent arbitrary code execution on your system.
 
-To avoid loading models from unsafe formats(e.g. [pickle](https://docs.python.org/3/library/pickle.html), you should use the `use_safetensors` parameter. If doing so, in the event that no .safetensors file is present, transformers will error when loading the model.
+To avoid loading models from unsafe formats (e.g. [pickle](https://docs.python.org/3/library/pickle.html), you should use the `use_safetensors` parameter. If doing so, in the event that no .safetensors file is present, transformers will error when loading the model.
 
 ### Remote code
 
@@ -27,14 +27,6 @@ These models require the `trust_remote_code=True` parameter to be set when using
 the content of the modeling files when using this argument. We recommend setting a revision in order to ensure you
 protect yourself from updates on the repository.
 
-#### Tools
-
-Through the `Agent` framework, remote tools can be downloaded to be used by the Agent. You're to specify these tools
-yourself, but please keep in mind that their code will be run on your machine if the Agent chooses to run them.
-
-Please inspect the code of the tools before passing them to the Agent to protect your runtime and local setup.
-
 ## Reporting a Vulnerability
 
-🤗 Please feel free to submit vulnerability reports to our private bug bounty program at https://hackerone.com/hugging_face. You'll need to request access to the program by emailing security@huggingface.co.
-Note that you'll need to be invited to our program, so send us a quick email at security@huggingface.co if you've found a vulnerability.
+Feel free to submit vulnerability reports to [security@huggingface.co](mailto:security@huggingface.co), where someone from the HF security team will review and recommend next steps. If reporting a vulnerability specific to open source, please note [Huntr](https://huntr.com) is a vulnerability disclosure program for open source software.

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -189,7 +188,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -273,7 +272,7 @@ def main():
     data_files = {"train": data_args.train_file, "validation": data_args.validation_file, "test": data_args.test_file}
     data_files = {key: file for key, file in data_files.items() if file is not None}
 
-    for key in data_files.keys():
+    for key in data_files:
         logger.info(f"Loading a local file for {key}: {data_files[key]}")
 
     if data_args.input_file_extension == "csv":

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
 from transformers.testing_utils import (
-    is_pt_flax_cross_test,
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -55,10 +54,10 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _sample_negative_indices
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
         Wav2Vec2ConformerGumbelVectorQuantizer,
         _compute_mask_indices,
-        _sample_negative_indices,
     )
 
 
@@ -228,7 +227,7 @@ class Wav2Vec2ConformerModelTester:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = Wav2Vec2ConformerModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+            model = Wav2Vec2ConformerModel.from_pretrained(tmpdirname, dtype=torch.float16)
 
         model.to(torch_device)
         model.eval()
@@ -239,32 +238,6 @@ class Wav2Vec2ConformerModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
-
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = Wav2Vec2ConformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
         model = Wav2Vec2ConformerForCTC(config=config)
@@ -452,6 +425,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2ConformerGumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     def test_model_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -526,16 +505,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -804,7 +773,7 @@ class Wav2Vec2ConformerUtilsTest(unittest.TestCase):
 
         features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -833,7 +802,7 @@ class Wav2Vec2ConformerUtilsTest(unittest.TestCase):
 
         features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled

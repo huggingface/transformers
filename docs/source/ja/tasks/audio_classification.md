@@ -128,7 +128,7 @@ DatasetDict({
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-MInDS-14 データセットのサンプリング レートは 8000khz です (この情報は [データセット カード](https://huggingface.co/datasets/PolyAI/minds14) で確認できます)。つまり、データセットを再サンプリングする必要があります。事前トレーニングされた Wav2Vec2 モデルを使用するには、16000kHz に設定します。
+MInDS-14 データセットのサンプリング レートは 8khz です (この情報は [データセット カード](https://huggingface.co/datasets/PolyAI/minds14) で確認できます)。つまり、データセットを再サンプリングする必要があります。事前トレーニングされた Wav2Vec2 モデルを使用するには、16kHz に設定します。
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -233,7 +233,7 @@ MInDS-14 データセットのサンプリング レートは 8000khz です (�
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=feature_extractor,
+...     processing_class=feature_extractor,
 ...     compute_metrics=compute_metrics,
 ... )
 

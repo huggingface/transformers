@@ -204,7 +204,7 @@ Transformers architecture includes 3 main groups of operations grouped below by 
 
 This knowledge can be helpful to know when analyzing performance bottlenecks.
 
-This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://huggingface.co/papers/2007.00072)
 
 
 ## Anatomy of Model's Memory
@@ -233,7 +233,7 @@ Let's look at the details.
 **Optimizer States:**
 
 - 8 bytes * number of parameters for normal AdamW (maintains 2 states)
-- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes)
 - 4 bytes * number of parameters for optimizers like SGD with momentum (maintains only 1 state)
 
 **Gradients**

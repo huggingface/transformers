@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,29 +21,35 @@ import os.path
 import random
 import re
 import tempfile
-import time
+import unittest
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from contextlib import contextmanager
 
 import numpy as np
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-import transformers
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
-    AutoTokenizer,
-    GenerationConfig,
+    DataCollatorWithFlattening,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
     logging,
     set_seed,
 )
+from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepspeed import (
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+    unset_hf_deepspeed_config,
+)
+from transformers.modeling_utils import _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -54,6 +59,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -70,20 +76,33 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    backend_device_count,
+    backend_empty_cache,
+    backend_memory_allocated,
+    backend_torch_accelerator_module,
+    get_device_properties,
+    hub_retry,
     is_flaky,
-    is_pt_flax_cross_test,
-    is_pt_tf_cross_test,
     require_accelerate,
     require_bitsandbytes,
+    require_deepspeed,
     require_flash_attn,
-    require_read_token,
+    require_flash_attn_3,
+    require_kernels,
+    require_non_hpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
+    require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
-    require_torch_sdpa,
+    run_first,
+    run_test_using_subprocess,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -92,14 +111,12 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     is_accelerate_available,
-    is_flax_available,
-    is_tf_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
-    is_torch_fx_available,
-    is_torch_sdpa_available,
 )
-from transformers.utils.generic import ContextManagers, ModelOutput
+from transformers.utils.generic import ContextManagers
+
+from .generation.test_utils import GenerationTesterMixin
 
 
 if is_accelerate_available():
@@ -113,30 +130,366 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
-    from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers import MODEL_MAPPING
+    from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
+from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
-if is_tf_available():
-    import tensorflow as tf
 
-if is_flax_available():
-    import jax.numpy as jnp
+if is_deepspeed_available():
+    import deepspeed
 
-    from tests.utils.test_modeling_flax_utils import check_models_equal
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
+
+# used in other test files e.g. when overwriting the test
+TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
+    (
+        # test name for the test runner
+        f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attn_mask'}"
+        f"{'_sdpa_kernels' if enable_kernels else ''}",
+        # parameterization
+        *(dtype, padding_side, use_attention_mask, False, enable_kernels),
     )
+    for dtype in ("fp16", "fp32", "bf16")
+    for padding_side in ("left", "right")
+    for use_attention_mask in (True, False)
+    for enable_kernels in (True, False)
+    # Extra test case: `output_attentions=True` has special attention mask handling and sdpa reverts to eager
+] + [("fp32_pad_left_output_attentions", "fp32", "left", True, True, False)]
 
-if is_torch_fx_available():
-    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
+def _test_eager_matches_sdpa_inference(
+    self,
+    name,
+    dtype,
+    padding_side,
+    use_attention_mask,
+    output_attentions,
+    enable_kernels,
+    atols=None,
+    rtols=None,
+):
+    """
+    This test is written as a regular function to be able to overload it easily with different tolerances.
+    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    """
+    # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
+    # models have a custom mixin, which we detect to skip this test.
+    if any(".CLIPModelTesterMixin" in str(base) for base in self.__class__.__bases__):
+        self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
+
+    if not self.has_attentions:
+        self.skipTest(reason="Model architecture does not support attentions")
+
+    if not self.all_model_classes[0]._supports_sdpa:
+        self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+    # convert shorthand name to torch.dtype
+    if dtype == "fp16":
+        dtype = torch.float16
+    elif dtype == "bf16":
+        dtype = torch.bfloat16
+    elif dtype == "fp32":
+        dtype = torch.float32
+
+    if not is_torch_fp16_available_on_device(torch_device) and dtype == torch.float16:
+        self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+    if not is_torch_bf16_available_on_device(torch_device) and dtype == torch.bfloat16:
+        self.skipTest(
+            f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+        )
+
+    # Dictionary of tolerances for eager <> sdpa tests. Key = (device, sdpa_kernels_enabled, dtype)
+    if atols is None:
+        atols = {
+            ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-6,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-6,
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+    if rtols is None:
+        rtols = {
+            ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-4,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-4,
+            ("cuda", True, torch.bfloat16): 3e-2,  # (different from others)
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
+    set_model_tester_for_less_flaky_test(self)
+
+    for model_class in self.all_model_classes:
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
+        model = model_class(config)
+        # TODO: standardize the interfaces for musicgen models, see other todo in this test
+        if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
+            is_encoder_decoder = True
+        else:
+            is_encoder_decoder = model.config.is_encoder_decoder
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_from_pretrained_kwargs = {
+                "pretrained_model_name_or_path": tmpdirname,
+                "dtype": dtype,
+            }
+
+            if hasattr(config, "use_mask_token") or "use_mask_token" in inspect.signature(model.__init__).parameters:
+                model_from_pretrained_kwargs["use_mask_token"] = True
+
+            # TODO: remove this try/except, models should have a shared API
+            try:
+                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
+            except ValueError:
+                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
+            model_sdpa = model_sdpa.eval().to(torch_device)
+
+            model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
+            model_eager = model_eager.eval().to(torch_device)
+
+        set_model_for_less_flaky_test(model_eager)
+        set_model_for_less_flaky_test(model_sdpa)
+
+        can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+        if not (self.has_attentions and can_output_attn) and output_attentions:
+            self.skipTest(reason="Model does not support output_attentions")
+
+        # TODO: if we can also check with `batch_size=1` without being flaky?
+        for batch_size in [7]:
+            # musicgen decoder models; TODO: find better abstraction
+            if (
+                model.__class__.__name__.startswith("Musicgen")
+                and hasattr(self.model_tester, "num_codebooks")
+                and not hasattr(model_eager, "text_encoder")
+            ):
+                input_data_batch_size = batch_size * self.model_tester.num_codebooks
+            else:
+                input_data_batch_size = batch_size
+
+            processed_inputs = {}
+            processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
+
+            for key in getattr(self, "additional_model_inputs", []):
+                # Some models don't have all `additional_model_inputs`, especially when we
+                # craft cases to test model in different settings
+                if key in inputs_dict:
+                    processed_inputs[key] = inputs_dict[key]
+
+            for key, value in processed_inputs.items():
+                if torch.is_floating_point(value):
+                    value = value.to(dtype)
+
+                # extend value to have at least `input_data_batch_size` elements
+                if value.shape[0] < input_data_batch_size:
+                    size = (input_data_batch_size - value.shape[0], *value.shape[1:])
+                    if torch.is_floating_point(value):
+                        extension = torch.rand(size=size, dtype=value.dtype, device=torch_device)
+                    else:
+                        extension = torch.randint(high=5, size=size, dtype=value.dtype, device=torch_device)
+                    value = torch.cat((value, extension), dim=0).to(torch_device)
+
+                processed_inputs[key] = value[:input_data_batch_size]
+
+            if not use_attention_mask:
+                dummy_attention_mask = None
+            else:
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is None:
+                    if is_encoder_decoder:
+                        seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
+                            -1
+                        ]
+                    else:
+                        seqlen = processed_inputs[model.main_input_name].shape[-1]
+                    dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
+
+                # extend dummy_attention_mask to have at least `batch_size` elements
+                if dummy_attention_mask.shape[0] < batch_size:
+                    size = (batch_size - dummy_attention_mask.shape[0], *dummy_attention_mask.shape[1:])
+                    extension = torch.ones(size=size, dtype=dummy_attention_mask.dtype, device=torch_device)
+                    dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
+
+                dummy_attention_mask = dummy_attention_mask[:batch_size].to(torch_device)
+
+                dummy_attention_mask[:] = 1
+                if padding_side == "left":
+                    dummy_attention_mask[-1, :2] = 0
+                    dummy_attention_mask[-1, 2:] = 1
+                elif padding_side == "right":
+                    dummy_attention_mask[-1, -2:] = 0
+                    dummy_attention_mask[-1, :-2] = 1
+
+            if is_encoder_decoder:
+                # musicgen encoder-decoder models; TODO: find better abstraction
+                if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
+                    input_data_batch_size = batch_size * self.model_tester.num_codebooks
+                else:
+                    input_data_batch_size = batch_size
+
+                decoder_input_ids = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name])
+                decoder_input_ids = decoder_input_ids[:input_data_batch_size]
+                if decoder_input_ids.shape[0] != input_data_batch_size:
+                    extension = torch.ones(
+                        input_data_batch_size - decoder_input_ids.shape[0],
+                        *decoder_input_ids.shape[1:],
+                        dtype=decoder_input_ids.dtype,
+                        device=torch_device,
+                    )
+                    decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
+                    decoder_input_ids = decoder_input_ids.to(torch_device)
+
+                # TODO: never an `attention_mask` arg here?
+                processed_inputs.update(
+                    {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                )
+            else:
+                processed_inputs.update(
+                    {
+                        "output_hidden_states": True,
+                    }
+                )
+
+                # Otherwise fails for e.g. WhisperEncoderModel
+                if "attention_mask" in inspect.signature(model_eager.forward).parameters:
+                    processed_inputs["attention_mask"] = dummy_attention_mask
+
+                if self.has_attentions and "output_attentions" in inspect.signature(model_sdpa.forward).parameters:
+                    processed_inputs["output_attentions"] = output_attentions
+            if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
+                dummy_mask = torch.ones((self.model_tester.num_masks,))
+
+                # In case of additional token (like class) we define a custom `mask_length`
+                if hasattr(self.model_tester, "mask_length"):
+                    mask_length = self.model_tester.mask_length - dummy_mask.size(0)
+                else:
+                    mask_length = self.model_tester.seq_length - dummy_mask.size(0)
+                dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
+                dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+
+            if "noise" in inspect.signature(model_eager.forward).parameters:
+                np.random.seed(2)
+                num_patches = int((self.model_tester.image_size // self.model_tester.patch_size) ** 2)
+                noise = np.random.uniform(size=(batch_size, num_patches))
+                processed_inputs["noise"] = torch.from_numpy(noise)
+
+            # TODO: test gradients as well (& for FA2 as well!)
+            with torch.no_grad():
+                with sdpa_kernel(
+                    enable_flash=enable_kernels,
+                    enable_math=True,
+                    enable_mem_efficient=enable_kernels,
+                ):
+                    prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                    prepared_inputs = {
+                        k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                    }
+                    outputs_eager = model_eager(**prepared_inputs)
+                    outputs_sdpa = model_sdpa(**prepared_inputs)
+
+            if "logits_per_text" in outputs_eager:
+                key = "logits_per_text"
+            elif "vision_hidden_states" in outputs_eager:
+                key = "vision_hidden_states"
+            elif "audio_values" in outputs_eager:
+                key = "audio_values"
+            elif "decoder_hidden_states" in outputs_eager:
+                key = "decoder_hidden_states"
+            elif "logits" in outputs_eager and "Classification" in model_class.__name__:
+                key = "logits"
+            elif "language_model_outputs" in outputs_eager and "blip" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["language_model_outputs"]
+                outputs_sdpa = outputs_sdpa["language_model_outputs"]
+                key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            else:
+                key = "hidden_states"
+
+            # TODO: rename logits -> hidden_states
+            logits_eager = outputs_eager[key]
+            logits_sdpa = outputs_sdpa[key]
+
+            if key in ["vision_hidden_states", "decoder_hidden_states", "hidden_states"]:
+                logits_eager = logits_eager[-1]
+                logits_sdpa = logits_sdpa[-1]
+
+            if key == "logits_per_text":
+                nan_mask = torch.isnan(logits_eager)
+                logits_eager[nan_mask] = 0
+                logits_sdpa[nan_mask] = 0
+
+            if torch_device in ["cpu", "cuda"]:
+                atol = atols[torch_device, enable_kernels, dtype]
+                rtol = rtols[torch_device, enable_kernels, dtype]
+            elif torch_device == "hpu":
+                atol = atols["cuda", enable_kernels, dtype]
+                rtol = rtols["cuda", enable_kernels, dtype]
+            elif torch_device == "xpu":
+                # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                # which is implemented on PyTorch level using aten operators and is
+                # device agnostic with respect to implementation of each aten operator.
+                atol = atols["cuda", False, dtype]
+                rtol = rtols["cuda", False, dtype]
+            else:
+                atol = 1e-7
+                rtol = 1e-4
+
+            # Masked tokens output slightly deviates - we don't mind that.
+            if use_attention_mask:
+                _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                _logits_eager = torch.zeros_like(input=logits_eager)
+
+                _logits_sdpa[:-1] = logits_sdpa[:-1]
+                _logits_eager[:-1] = logits_eager[:-1]
+
+                if padding_side == "left":
+                    _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                    _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
+
+                elif padding_side == "right":
+                    _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                    _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
+
+                logits_sdpa = _logits_sdpa
+                logits_eager = _logits_eager
+
+            results = [
+                torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+            ]
+            # If 80% batch elements have matched results, it's fine
+            if np.mean(results) < 0.8:
+                mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
+                raise ValueError(
+                    f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
+                    f"{rtol}"
+                )
 
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -170,11 +523,35 @@ def _mock_all_init_weights(self):
         self.tie_weights()
 
 
+@contextmanager
+def _deepspeed_zero3(ds_config):
+    dschf = HfDeepSpeedConfig(ds_config)
+    try:
+        yield dschf
+    finally:
+        unset_hf_deepspeed_config()
+
+
+def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
+    if version.parse(torch.__version__).release < version.parse("2.3").release:
+        return torch.backends.cuda.sdp_kernel(
+            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
+        )
+
+    backends = []
+    if enable_flash:
+        backends += [torch.nn.attention.SDPBackend.FLASH_ATTENTION]
+    if enable_math:
+        backends += [torch.nn.attention.SDPBackend.MATH]
+    if enable_mem_efficient:
+        backends += [torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION]
+    return torch.nn.attention.sdpa_kernel(backends)
+
+
 @require_torch
 class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    all_generative_model_classes = ()
     fx_compatible = False
     test_torchscript = True
     test_pruning = True
@@ -184,9 +561,27 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    test_torch_exportable = False
+    # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
+    test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
+    _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Note: for all mixins that utilize the Hub in some way, we should ensure that
+    # they contain the `hub_retry` decorator in case of failures.
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith("test_"):
+                attr = getattr(cls, attr_name)
+                if callable(attr):
+                    setattr(cls, attr_name, hub_retry()(attr))
+
+    @property
+    def all_generative_model_classes(self):
+        return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -235,6 +630,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
@@ -256,8 +652,6 @@ class ModelTesterMixin:
         return inputs_dict
 
     def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         def check_save_load(out1, out2):
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
@@ -271,6 +665,7 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -291,6 +686,12 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
+                # Save and load second time because `from_pretrained` adds a bunch of new config fields
+                # so we need to make sure those fields can be loaded back after saving
+                # Simply init as `model(config)` doesn't add those fields
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
                     check_save_load(tensor1, tensor2)
@@ -300,7 +701,7 @@ class ModelTesterMixin:
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             state_dict = model.state_dict()
 
             new_model = model_class.from_pretrained(
@@ -315,11 +716,11 @@ class ModelTesterMixin:
             if model_class._keep_in_fp32_modules is None:
                 self.skipTest(reason="Model class has no _keep_in_fp32_modules attribute defined")
 
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
 
                 for name, param in model.named_parameters():
                     if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
@@ -331,7 +732,7 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
             if _keys_to_ignore_on_save is None:
                 continue
@@ -367,7 +768,7 @@ class ModelTesterMixin:
                 continue
 
             config.gradient_checkpointing = True
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             self.assertTrue(model.is_gradient_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
@@ -378,7 +779,7 @@ class ModelTesterMixin:
                 continue
 
             # at init model should have gradient checkpointing disabled
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             self.assertFalse(model.is_gradient_checkpointing)
 
             # check enable works
@@ -403,201 +804,122 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
-    @is_flaky(description="low likelihood of failure, reason not yet discovered")
-    def test_save_load_fast_init_from_base(self):
+    def test_peft_gradient_checkpointing_enable_disable(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
-
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
 
         for model_class in self.all_model_classes:
-            if model_class == base_class:
+            if not model_class.supports_gradient_checkpointing:
                 continue
 
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(model_class):
-                pass
+            # at init model should have gradient checkpointing disabled
+            model = model_class(copy.deepcopy(config))
+            self.assertFalse(model.is_gradient_checkpointing)
 
-            model_class_copy = CopyClass
+            # check enable works
+            model._hf_peft_config_loaded = True
+            try:
+                model.gradient_checkpointing_enable()
+            except NotImplementedError:
+                continue
 
-            # make sure that all keys are expected for test
-            model_class_copy._keys_to_ignore_on_load_missing = []
+            self.assertTrue(model.is_gradient_checkpointing)
 
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = _mock_init_weights
-            model_class_copy.init_weights = _mock_all_init_weights
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
 
-            model = base_class(config)
-            state_dict = model.state_dict()
+            # check disable works
+            model.gradient_checkpointing_disable()
+            self.assertFalse(model.is_gradient_checkpointing)
 
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
 
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+    def test_can_init_all_missing_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-                # Before we test anything
+        # This is used to get the addition year of the model
+        filename = inspect.getfile(config.__class__)
+        # No easy way to get model addition date -> check copyright year on top of file
+        with open(filename) as file:
+            source_code = file.read()
+        addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
+        if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
+            addition_year = int(match_object.group(1))
 
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
-                    else:
-                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+        for model_class in self.all_model_classes:
+            # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
+            # TODO: relax this as we patch more and more models
+            if addition_year < 2023:
+                self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
-                model_to_save.save_pretrained(saved_model_path)
+            # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
+            # `_init_weights` so that it can add the seed for composite models as well)
+            original_initialize_weights = PreTrainedModel._initialize_weights
 
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+            def seeded_initialize_weights(self, module):
+                set_seed(0)
+                original_initialize_weights(self, module)
 
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
-                model_to_save.config.save_pretrained(saved_model_path)
-                torch.save(model_to_save.state_dict(), os.path.join(saved_model_path, "pytorch_model.bin"))
+            PreTrainedModel._initialize_weights = seeded_initialize_weights
 
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+            # _init_weights() does not take all weights into account correctly
+            model_from_config = model_class(copy.deepcopy(config))
+            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+            # by _init_weights()
+            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
 
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                model_to_save = model_class(config)
+            # Back to original method to avoid issues if running several other tests
+            PreTrainedModel._initialize_weights = original_initialize_weights
 
-                model_to_save.save_pretrained(saved_model_path, safe_serialization=False)
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+            # First, check if any parameters are still on meta -> this is usually an issue with tied weights
+            params_on_meta = []
+            for k, v in model_from_pretrained.named_parameters():
+                if v.device.type == "meta":
+                    params_on_meta.append(k)
 
-    def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
-        from accelerate.utils.modeling import named_module_tensors
-
-        # Load the low usage and the normal models.
-        model_low_usage, loading_info = model_class.from_pretrained(
-            saved_model_path,
-            low_cpu_mem_usage=True,
-            output_loading_info=True,
-        )
-        model_non_low_usage = model_class.from_pretrained(saved_model_path)
-
-        # Check that there were no missing keys.
-        self.assertEqual(loading_info["missing_keys"], [])
-
-        # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
-        # subsequently loaded with the correct values and onto the correct device. We check if there are any
-        # remaining params that were not properly loaded.
-        for name, tensor in named_module_tensors(model_low_usage, recurse=True):
-            self.assertNotEqual(
-                tensor.device,
-                torch.device("meta"),
-                "Tensor '" + name + "' has not been properly loaded and has device=meta.",
+            self.assertTrue(
+                len(params_on_meta) == 0,
+                f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
             )
 
-        # Check that the parameters are equal.
-        for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
-            self.assertEqual(p1.data.ne(p2.data).sum(), 0)
+            # Everything must be exactly the same as we set the same seed for each init
+            different_weights = []
+            for (k1, v1), (k2, v2) in zip(
+                model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
+            ):
+                self.assertEqual(k1, k2, "The keys from each model should be the same")
 
-        # Check that the state dict keys are equal.
-        self.assertEqual(set(model_low_usage.state_dict().keys()), set(model_non_low_usage.state_dict().keys()))
+                # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
+                if re.search(r"\.parametrizations\..*?\.original[01]", k1):
+                    continue
 
-        # Check that the shared tensors are equal.
-        tensor_ptrs1 = collections.defaultdict(list)
-        for name, tensor in model_low_usage.state_dict().items():
-            tensor_ptrs1[id_tensor_storage(tensor)].append(name)
-        tied_params1 = [names for _, names in tensor_ptrs1.items() if len(names) > 1]
+                # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
+                # to very low std in init function)
+                if not (v1 == v2).all():
+                    different_weights.append(k1)
 
-        tensor_ptrs2 = collections.defaultdict(list)
-        for name, tensor in model_non_low_usage.state_dict().items():
-            tensor_ptrs2[id_tensor_storage(tensor)].append(name)
-        tied_params2 = [names for _, names in tensor_ptrs2.items() if len(names) > 1]
+            # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
+            buffer_names = {name for name, _ in model_from_config.named_buffers()}
+            different_weights = [k for k in different_weights if k not in buffer_names]
 
-        self.assertEqual(tied_params1, tied_params2)
-
-    def test_save_load_fast_init_to_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
-
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(base_class):
-                pass
-
-            base_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            base_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = _mock_init_weights
-            base_class_copy.init_weights = _mock_all_init_weights
-
-            model = model_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.config.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-
-                for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                        max_diff = torch.max(
-                            model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
-                        ).item()
-                    else:
-                        max_diff = torch.max(
-                            torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                        ).item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+            self.assertTrue(
+                len(different_weights) == 0,
+                f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+            )
 
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason="Model class not in MODEL_MAPPING")
+            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -623,11 +945,11 @@ class ModelTesterMixin:
             base_class_copy._init_weights = _mock_init_weights
             base_class_copy.init_weights = _mock_all_init_weights
 
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             state_dict = model.state_dict()
 
             def check_equal(loaded):
-                for key in state_dict.keys():
+                for key in state_dict:
                     max_diff = torch.max(
                         state_dict()[key] ^ loaded[key]
                         if isinstance(state_dict[key], torch.BoolTensor)
@@ -648,11 +970,19 @@ class ModelTesterMixin:
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
+            model = model_class(config=copy.deepcopy(configs_no_init))
             for name, param in model.named_parameters():
                 if param.requires_grad:
+                    data = torch.flatten(param.data)
+                    n_elements = torch.numel(data)
+                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                    data_to_check = torch.sort(data).values
+                    if n_elements_to_skip_on_each_side > 0:
+                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
                     self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
@@ -671,7 +1001,7 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -684,22 +1014,13 @@ class ModelTesterMixin:
             else:
                 check_determinism(first, second)
 
-    def test_batching_equivalence(self):
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         """
         Tests that the model supports batching and that the output is the nearly the same for the same input in
         different batch sizes.
         (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
         """
-
-        def get_tensor_equivalence_function(batched_input):
-            # models operating on continuous spaces have higher abs difference than LMs
-            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
-            if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
-                )
-            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
@@ -714,6 +1035,10 @@ class ModelTesterMixin:
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
             elif batched_object.dim() == 0:
+                return
+            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
+            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
+            elif not torch.is_floating_point(batched_object):
                 return
             else:
                 # indexing the first element does not always work
@@ -732,16 +1057,17 @@ class ModelTesterMixin:
                 self.assertFalse(
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
-                self.assertTrue(
-                    (equivalence(batched_row, single_row_object)) <= 1e-03,
-                    msg=(
-                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
-                        f"Difference={equivalence(batched_row, single_row_object)}."
-                    ),
-                )
+                try:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
+                except AssertionError as e:
+                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
+                    msg += str(e)
+                    raise AssertionError(msg)
+
+        set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        equivalence = get_tensor_equivalence_function(batched_input)
+        set_config_for_less_flaky_test(config)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
@@ -750,7 +1076,8 @@ class ModelTesterMixin:
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
-            model = model_class(config).to(torch_device).eval()
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
@@ -782,39 +1109,43 @@ class ModelTesterMixin:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
         for model_class in self.all_model_classes:
-            if (
-                model_class.__name__
-                in [
-                    *get_values(MODEL_MAPPING_NAMES),
-                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
-                ]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
+            with self.subTest(model_class.__name__):
+                if (
+                    model_class.__name__
+                    in [
+                        *get_values(MODEL_MAPPING_NAMES),
+                        *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                    ]
+                    or not model_class.supports_gradient_checkpointing
+                ):
+                    # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
+                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-            model = model_class(config)
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                config.use_cache = False
+                config.return_dict = True
+                model = model_class(config)
 
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
-            model.train()
+                model.to(torch_device)
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.train()
 
-            # unfreeze additional layers
-            for p in model.parameters():
-                p.requires_grad_(True)
+                # unfreeze additional layers
+                for p in model.parameters():
+                    p.requires_grad_(True)
 
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-            optimizer.step()
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                loss = model(**inputs).loss
+                loss.backward()
+                optimizer.step()
 
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -837,6 +1168,41 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_causal_lm_can_accept_kwargs(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        valid_model_class = False
+        incompatible_models = (
+            "MusicgenForCausalLM",
+            "MusicgenMelodyForCausalLM",
+            "MllamaForCausalLM",
+            "CpmAntForCausalLM",
+            "GotOcr2ForConditionalGeneration",
+        )
+        for model_class in self.all_model_classes:
+            if (
+                model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+                and model_class.__name__ not in incompatible_models
+            ):
+                valid_model_class = True
+        if not valid_model_class:
+            self.skipTest(reason="No causal lm model classes found")
+        for model_class in self.all_model_classes:
+            model_name = model_class.__name__
+            if model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES) and model_name not in incompatible_models:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    with torch.device(torch_device):
+                        model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
+
+                    model_eager.save_pretrained(tmpdir)
+                    model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
+                    inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
+                    inputs_dict["labels"] = inputs_dict["input_ids"]
+                    _ = model(**inputs_dict, return_dict=False)
+
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
         self.check_training_gradient_checkpointing()
@@ -857,6 +1223,8 @@ class ModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
@@ -871,7 +1239,8 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -882,6 +1251,9 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            for k in config.sub_configs:
+                getattr(config, k).output_attentions = True
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -972,17 +1344,20 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
     @slow
     def test_torchscript_simple(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
     @slow
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @unittest.skip("many failing tests after #39120. Will fix when the community ask for it.")
     @slow
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1005,7 +1380,7 @@ class ModelTesterMixin:
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
             for attn_implementation in ["eager", "sdpa"]:
-                if attn_implementation == "sdpa" and (not model_class._supports_sdpa or not is_torch_sdpa_available()):
+                if attn_implementation == "sdpa" and not model_class._supports_sdpa or config.output_attentions:
                     continue
 
                 configs_no_init._attn_implementation = attn_implementation
@@ -1023,7 +1398,14 @@ class ModelTesterMixin:
                         attention_mask = inputs["attention_mask"]
                         decoder_input_ids = inputs["decoder_input_ids"]
                         decoder_attention_mask = inputs["decoder_attention_mask"]
-                        model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        # `torchscript` doesn't work with outputs containing `Cache` object. However, #35235 makes
+                        # several models to use `Cache` by default instead of the legacy cache (tuple), and
+                        # their `torchscript` tests are failing. We won't support them anyway, but we still want to keep
+                        # the tests for encoder models like `BERT`. So we skip the checks if the model's output contains
+                        # a `Cache` object.
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                         )
@@ -1031,14 +1413,18 @@ class ModelTesterMixin:
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
                         image = inputs["image"].tensor
-                        model(input_ids, bbox, image)
+                        outputs = model(input_ids, bbox, image)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox, image), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
                     elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
-                        model(input_ids, bbox)
+                        outputs = model(input_ids, bbox)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1048,27 +1434,22 @@ class ModelTesterMixin:
                         pixel_values = inputs["pixel_values"]
                         prompt_pixel_values = inputs["prompt_pixel_values"]
                         prompt_masks = inputs["prompt_masks"]
-                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        outputs = model(pixel_values, prompt_pixel_values, prompt_masks)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif "Siglip2" in model_class.__name__:
+                        outputs = model(**inputs)
+                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
+                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
-
-                        if model.config._attn_implementation == "sdpa":
-                            trace_input = {main_input_name: main_input}
-
-                            if "attention_mask" in inputs:
-                                trace_input["attention_mask"] = inputs["attention_mask"]
-                            else:
-                                self.skipTest(reason="testing SDPA without attention_mask is not supported")
-
-                            model(main_input, attention_mask=inputs["attention_mask"])
-                            # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
-                            traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
-                        else:
-                            model(main_input)
-                            traced_model = torch.jit.trace(model, (main_input,))
+                        outputs = model(main_input)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
+                        traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
 
@@ -1095,8 +1476,8 @@ class ModelTesterMixin:
                 loaded_model_state_dict = loaded_model.state_dict()
 
                 non_persistent_buffers = {}
-                for key in loaded_model_state_dict.keys():
-                    if key not in model_state_dict.keys():
+                for key in loaded_model_state_dict:
+                    if key not in model_state_dict:
                         non_persistent_buffers[key] = loaded_model_state_dict[key]
 
                 loaded_model_state_dict = {
@@ -1134,14 +1515,14 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict)
 
     def test_torch_fx_output_loss(self):
+        if self.all_model_classes[0].__name__ == "BloomModel":
+            self.skipTest(reason="Bloom currently has issues, @michaelbenayoun")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(
-                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
-            )
+        if not self.fx_compatible:
+            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -1177,6 +1558,7 @@ class ModelTesterMixin:
                     "input_values",
                     "inputs_embeds",
                     "pixel_values",
+                    "pixel_values_videos",
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
@@ -1203,13 +1585,7 @@ class ModelTesterMixin:
                         head_dim = model.config.hidden_size // model.config.num_attention_heads
 
                         cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = tuple(
-                            (
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                            )
-                            for i in range(model.config.num_hidden_layers)
-                        )
+                        empty_pkv = DynamicCache(config=model.config)
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -1220,6 +1596,7 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
+                        non_empty_pkv = DynamicCache.from_legacy_cache(non_empty_pkv)
 
                         inps = copy.deepcopy(inputs_to_test[0])
 
@@ -1314,6 +1691,7 @@ class ModelTesterMixin:
         inputs_dict["output_attentions"] = True
         config.output_hidden_states = True
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init._attn_implementation = "eager"  # head mask works only in eager mode and will be removed soon
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
@@ -1334,7 +1712,7 @@ class ModelTesterMixin:
             if model.config.is_encoder_decoder:
                 signature = inspect.signature(model.forward)
                 arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                if "decoder_head_mask" in arg_names:  # necessary differentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
                 if "cross_attn_head_mask" in arg_names:
                     inputs["cross_attn_head_mask"] = head_mask
@@ -1391,6 +1769,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
                 -1: [0],
@@ -1424,6 +1803,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
                 -1: [0],
@@ -1432,7 +1812,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -1468,6 +1848,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -1500,6 +1881,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -1510,7 +1892,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -1534,7 +1916,7 @@ class ModelTesterMixin:
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             model.to(torch_device)
             model.eval()
 
@@ -1582,17 +1964,29 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            for k in config.sub_configs:
+                getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for k in config.sub_configs:
+            getattr(config, k).output_hidden_states = True
+
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
 
+        for k in config.sub_configs:
+            getattr(config, k).output_attentions = self.has_attentions
+
+        # force eager attention to support output attentions
+        if self.has_attentions:
+            config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
-        model = model_class(config)
+        model = model_class._from_config(config, attn_implementation="eager")
         model.to(torch_device)
 
         inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -1651,21 +2045,20 @@ class ModelTesterMixin:
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
+            model = model_class(copy.deepcopy(original_config))
             model.to(torch_device)
             model.eval()
 
             hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             torch.manual_seed(0)
-            config.chunk_size_feed_forward = 1
-            model = model_class(config)
+            original_config.chunk_size_feed_forward = 1
+            model = model_class(copy.deepcopy(original_config))
             model.to(torch_device)
             model.eval()
 
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-3, atol=1e-3)
 
     def test_resize_position_vector_embeddings(self):
         if not self.test_resize_position_embeddings:
@@ -1696,7 +2089,7 @@ class ModelTesterMixin:
                 cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the position embeddings with a larger max_position_embeddings increases
-            # the model's postion embeddings size
+            # the model's position embeddings size
             model.resize_position_embeddings(max_position_embeddings + 10)
             self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
 
@@ -1747,51 +2140,62 @@ class ModelTesterMixin:
             self.assertTrue(models_equal)
 
     def test_resize_tokens_embeddings(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
         (
             original_config,
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            self.skipTest(reason="test_resize_embeddings is set to `False`")
+        inputs_dict.pop("labels", None)
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
             model_embed_pre_resize = model.get_input_embeddings()
             type_model_embed_pre_resize = type(model_embed_pre_resize)
 
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check to make sure the type of embeddings returned post resizing is same as type of input
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
@@ -1801,9 +2205,12 @@ class ModelTesterMixin:
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
 
             # make sure that decoder_input_ids are resized as well
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                model(**model_inputs)
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
@@ -1813,25 +2220,24 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
+            del model
+            del config
+            # Copy again. config changed with embedding resizing (`vocab_size` changed)
             config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
 
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
@@ -1851,15 +2257,74 @@ class ModelTesterMixin:
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
+            # Test when `vocab_size` is smaller than `hidden_size`.
+            del model
+            del config
+            # Copy again. config changed with embedding resizing (`vocab_size` changed)
+            config = copy.deepcopy(original_config)
+            config.vocab_size = 4
+            config.pad_token_id = 3
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
+            model_vocab_size = config.get_text_config().vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+
+    @require_deepspeed
+    @require_torch_accelerator
+    def test_resize_tokens_embeddings_with_deepspeed(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {"device": "cpu", "pin_memory": True},
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_tokens_embeddings()
+
+    @require_deepspeed
+    @require_torch_multi_accelerator
+    def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_tokens_embeddings()
+
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
 
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
@@ -1867,20 +2332,20 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
-            model = model_class(config).to(torch_device)
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config).to(torch_device)
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
@@ -1888,15 +2353,37 @@ class ModelTesterMixin:
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Test multivariate resizing.
+            model.resize_token_embeddings(model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            # Check that added embeddings mean is close to the old embeddings mean
+            if is_deepspeed_zero3_enabled():
+                with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                    old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                    new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+            else:
+                old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+            # check if the old bias mean close to added bias mean.
+            if output_embeds.bias is not None:
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                        old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                        new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+                else:
+                    old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                    new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+
+                torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = (
-                model.config.text_config.vocab_size
-                if hasattr(model.config, "text_config")
-                else model.config.vocab_size
-            )
+            new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
@@ -1910,14 +2397,39 @@ class ModelTesterMixin:
             if "decoder_input_ids" in inputs_dict:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not is_deepspeed_zero3_enabled():
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @require_deepspeed
+    @require_torch_accelerator
+    def test_resize_embeddings_untied_with_deepspeed(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {"device": "cpu", "pin_memory": True},
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_embeddings_untied()
+
+    @require_deepspeed
+    @require_torch_multi_accelerator
+    def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+        with _deepspeed_zero3(ds_config):
+            self.test_resize_embeddings_untied()
 
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            model = model_class(copy.deepcopy(config))
+            self.assertIsInstance(model.get_input_embeddings(), nn.Embedding)
 
             new_input_embedding_layer = nn.Embedding(10, 10)
             model.set_input_embeddings(new_input_embedding_layer)
@@ -1936,9 +2448,9 @@ class ModelTesterMixin:
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             self.skipTest(reason="test_missing_keys is set to `False`")
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             base_model_prefix = model.base_model_prefix
 
@@ -1951,9 +2463,7 @@ class ModelTesterMixin:
                         extra_params.pop(key, None)
 
                 if not extra_params:
-                    # In that case, we *are* on a head model, but every
-                    # single key is not actual parameters and this is
-                    # tested in `test_tied_model_weights_key_ignore` test.
+                    # In that case, we *are* on a head model, but every single key is not actual parameters
                     continue
 
                 with tempfile.TemporaryDirectory() as temp_dir_name:
@@ -1976,7 +2486,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config.torchscript = True
-            model_not_tied = model_class(config)
+            model_not_tied = model_class(copy.deepcopy(config))
             if model_not_tied.get_output_embeddings() is None:
                 continue
 
@@ -1988,15 +2498,15 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            vocab_size = config.get_text_config().vocab_size
             model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
     @require_safetensors
     def test_can_use_safetensors(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
@@ -2022,7 +2532,7 @@ class ModelTesterMixin:
 
                 shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
 
-                for _, shared_names in shared_ptrs.items():
+                for shared_names in shared_ptrs.values():
                     reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
                     self.assertEqual(
                         len(reloaded_ptrs),
@@ -2031,9 +2541,9 @@ class ModelTesterMixin:
                     )
 
     def test_load_save_without_tied_weights(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config.tie_word_embeddings = False
             model = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
@@ -2050,10 +2560,17 @@ class ModelTesterMixin:
                 self.assertEqual(infos["missing_keys"], [])
 
     def test_tied_weights_keys(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = True
+        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model_tied = model_class(config)
+            copied_config = copy.deepcopy(original_config)
+            copied_config.get_text_config().tie_word_embeddings = True
+            model_tied = model_class(copied_config)
+
+            tied_weight_keys = _get_tied_weight_keys(model_tied)
+            # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
+            # does not tie them
+            if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
+                continue
 
             ptrs = collections.defaultdict(list)
             for name, tensor in model_tied.state_dict().items():
@@ -2062,7 +2579,6 @@ class ModelTesterMixin:
             # These are all the pointers of shared tensors.
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
@@ -2081,8 +2597,8 @@ class ModelTesterMixin:
             )
 
     def test_model_weights_reload_no_missing_tied_weights(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
@@ -2093,10 +2609,9 @@ class ModelTesterMixin:
                 safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
-                prefix = f"{model_reloaded.base_model_prefix}."
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
-                param_names = {k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys()}
+                param_names = set(params.keys())
 
                 missing_keys = set(infos["missing_keys"])
 
@@ -2108,9 +2623,8 @@ class ModelTesterMixin:
                     ptrs[id_tensor_storage(tensor)].append(name)
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:
-                    group = {k[len(prefix) :] if k.startswith(prefix) else k for k in group}
                     # We remove the group from extra_missing if not all weights from group are in it
-                    if len(group - extra_missing) > 0:
+                    if len(set(group) - extra_missing) > 0:
                         extra_missing = extra_missing - set(group)
 
                 self.assertEqual(
@@ -2124,15 +2638,14 @@ class ModelTesterMixin:
                 # Remove nonpersistent buffers from missed_missing
                 buffers = [n for n, _ in model_reloaded.named_buffers()]
                 nonpersistent_buffers = {n for n in buffers if n not in model_reloaded.state_dict()}
-                nonpersistent_buffers = {
-                    k[len(prefix) :] if k.startswith(prefix) else k for k in nonpersistent_buffers
-                }
                 missed_missing = missed_missing - nonpersistent_buffers
 
                 if model_reloaded._keys_to_ignore_on_load_missing is None:
                     expected_missing = set()
                 else:
-                    expected_missing = set(model_reloaded._keys_to_ignore_on_load_missing)
+                    expected_missing = set()
+                    for pattern in model_reloaded._keys_to_ignore_on_load_missing:
+                        expected_missing.update({k for k in param_names if re.search(pattern, k) is not None})
                 self.assertEqual(
                     missed_missing,
                     expected_missing,
@@ -2154,17 +2667,18 @@ class ModelTesterMixin:
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    else:
+                    # model might return non-tensors objects (e.g. Cache class)
+                    elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
@@ -2180,7 +2694,7 @@ class ModelTesterMixin:
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             model.to(torch_device)
             model.eval()
 
@@ -2274,478 +2788,6 @@ class ModelTesterMixin:
 
         return new_tf_outputs, new_pt_outputs
 
-    # Copied from tests.test_modeling_tf_common.TFModelTesterMixin.check_pt_tf_outputs
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
-
-        Args:
-            model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
-                error messages.
-            name (`str`): The name of the output. For example, `output.hidden_states`, `output.attentions`, etc.
-            attributes (`Tuple[str]`): The names of the output's element if the output is a tuple/list with each element
-                being a named field in the output.
-        """
-
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(tf_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
-            )
-
-            # Don't copy this block to model specific test file!
-            # TODO: remove this method and this line after issues are fixed
-            tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
-
-            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
-            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
-
-            self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `name`
-            attributes = tuple([f"{name}.{k}" for k in tf_keys])
-            self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(tf_outputs) in [tuple, list]:
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{name}: Output lengths differ between TF and PyTorch")
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(tf_outputs),
-                    f"{name}: The tuple `attributes` should have the same length as `tf_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `name`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
-
-            for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(tf_outputs, tf.Tensor):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `tf_outputs` is"
-            )
-
-            tf_outputs = tf_outputs.numpy()
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                tf_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between TF and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(tf_outputs):
-                tf_outputs = np.array([tf_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            tf_nans = np.isnan(tf_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[tf_nans] = 0
-            tf_outputs[tf_nans] = 0
-            pt_outputs[pt_nans] = 0
-            tf_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}).")
-        else:
-            raise ValueError(
-                "`tf_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `tf.Tensor`. Got"
-                f" {type(tf_outputs)} instead."
-            )
-
-    def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-        tf_inputs_dict = {}
-        for key, tensor in pt_inputs_dict.items():
-            # skip key that does not exist in tf
-            if isinstance(tensor, bool):
-                tf_inputs_dict[key] = tensor
-            elif key == "input_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            elif key == "pixel_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            elif key == "input_features":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            # other general float inputs
-            elif tensor.is_floating_point():
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            else:
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
-
-        return tf_inputs_dict
-
-    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-        tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-
-        # send pytorch inputs to the correct device
-        pt_inputs_dict = {
-            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-        }
-
-        # send pytorch model to the correct device
-        pt_model.to(torch_device)
-
-        # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-        pt_model.eval()
-
-        with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs_dict)
-        tf_outputs = tf_model(tf_inputs_dict)
-
-        # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
-        # Change it here to a scalar to match PyTorch models' loss
-        tf_loss = getattr(tf_outputs, "loss", None)
-        if tf_loss is not None:
-            tf_outputs.loss = tf.math.reduce_mean(tf_loss)
-
-        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        import transformers
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
-            if not hasattr(transformers, tf_model_class_name):
-                self.skipTest(reason="transformers does not have TF version of this model yet")
-
-            # Output all for aggressive testing
-            config.output_hidden_states = True
-            config.output_attentions = self.has_attentions
-
-            # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
-            # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
-            # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
-            self._make_attention_mask_non_null(inputs_dict)
-
-            tf_model_class = getattr(transformers, tf_model_class_name)
-
-            pt_model = model_class(config)
-            tf_model = tf_model_class(config)
-
-            pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            pt_inputs_dict_with_labels = self._prepare_for_class(
-                inputs_dict,
-                model_class,
-                # Not all models accept "labels" in the forward pass (yet :) )
-                return_labels=True if "labels" in inspect.signature(model_class.forward).parameters.keys() else False,
-            )
-
-            # make sure only tf inputs are forward that actually exist in function args
-            tf_input_keys = set(inspect.signature(tf_model.call).parameters.keys())
-
-            # remove all head masks
-            tf_input_keys.discard("head_mask")
-            tf_input_keys.discard("cross_attn_head_mask")
-            tf_input_keys.discard("decoder_head_mask")
-
-            pt_inputs_dict = {k: v for k, v in pt_inputs_dict.items() if k in tf_input_keys}
-            pt_inputs_dict_with_labels = {k: v for k, v in pt_inputs_dict_with_labels.items() if k in tf_input_keys}
-
-            # For some models (e.g. base models), there is no label returned.
-            # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if not set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
-                pt_inputs_dict_with_labels = None
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-            # Here requires `tf_inputs_dict` to build `tf_model`
-            tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
-            )
-            pt_model = transformers.load_tf2_model_in_pytorch_model(
-                pt_model, tf_model, allow_missing_keys=allow_missing_keys
-            )
-
-            # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
-            # check with `labels`
-            if pt_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
-
-            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
-                torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
-                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
-                )
-
-                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
-                tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
-                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
-                )
-
-            # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
-            # check with `labels`
-            if pt_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
-
-    def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
-
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """
-        Args:
-            model_class: The class of the model that is currently testing. For example, ..., etc.
-            Currently unused, but it could make debugging easier and faster.
-
-            names: A string, or a list of strings. These specify what fx_outputs/pt_outputs represent in the model outputs.
-                Currently unused, but in the future, we could use this information to make the error message clearer
-                by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
-        """
-
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(fx_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `fx_outputs` is",
-            )
-
-            fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-            self.assertEqual(fx_keys, pt_keys, f"{name}: Output keys differ between Flax and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `name`
-            attributes = tuple([f"{name}.{k}" for k in fx_keys])
-            self.check_pt_flax_outputs(
-                fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(fx_outputs) in [tuple, list]:
-            self.assertEqual(
-                type(fx_outputs), type(pt_outputs), f"{name}: Output types differ between Flax and PyTorch"
-            )
-            self.assertEqual(
-                len(fx_outputs), len(pt_outputs), f"{name}: Output lengths differ between Flax and PyTorch"
-            )
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(fx_outputs),
-                    f"{name}: The tuple `attributes` should have the same length as `fx_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `name`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(fx_outputs))])
-
-            for fx_output, pt_output, attr in zip(fx_outputs, pt_outputs, attributes):
-                self.check_pt_flax_outputs(fx_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(fx_outputs, jnp.ndarray):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `fx_outputs` is"
-            )
-
-            # Using `np.asarray` gives `ValueError: assignment destination is read-only` at the line `fx_outputs[fx_nans] = 0`.
-            fx_outputs = np.array(fx_outputs)
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                fx_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between Flax and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(fx_outputs):
-                fx_outputs = np.array([fx_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            fx_nans = np.isnan(fx_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[fx_nans] = 0
-            fx_outputs[fx_nans] = 0
-            pt_outputs[pt_nans] = 0
-            fx_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
-            self.assertLessEqual(
-                max_diff, tol, f"{name}: Difference between PyTorch and Flax is {max_diff} (>= {tol})."
-            )
-        else:
-            raise ValueError(
-                "`fx_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `jnp.ndarray`. Got"
-                f" {type(fx_outputs)} instead."
-            )
-
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(
-                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
-                    )
-
-                # send pytorch model to the correct device
-                pt_model_loaded.to(torch_device)
-                pt_model_loaded.eval()
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2753,6 +2795,10 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "inputs_embeds" not in model_forward_args:
+                self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
@@ -2790,7 +2836,9 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+            pad_token_id = (
+                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
+            )
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
@@ -2818,59 +2866,9 @@ class ModelTesterMixin:
                     out_embeds = model(
                         inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
                     )[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            model_forward_args = inspect.signature(model.forward).parameters
-            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
-                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
-            has_inputs_embeds_forwarding = "inputs_embeds" in set(
-                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
-            )
-            if not has_inputs_embeds_forwarding:
-                self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                # some models infer position ids/attn mask differently when input ids
-                # by check if pad_token let's make sure no padding is in input ids
-                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-                input_ids[input_ids == pad_token_id] = not_pad_token_id
-                del inputs["input_ids"]
-                inputs_embeds = wte(input_ids)
-                out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)[:, -2:]
-                out_embeds = model.generate(inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-                inputs_embeds = wte(encoder_input_ids)
-                decoder_inputs_embeds = wte(decoder_input_ids)
-                out_ids = model.generate(
-                    input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs, max_new_tokens=2
-                )[:, -2:]
-                out_embeds = model.generate(
-                    inputs_embeds=inputs_embeds,
-                    decoder_inputs_embeds=decoder_inputs_embeds,
-                    **inputs,
-                    max_new_tokens=2,
-                )
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
-
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2881,7 +2879,7 @@ class ModelTesterMixin:
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
-        # move input tensors to cuda:O
+        # move input tensors to accelerator O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
                 inputs_dict[k] = v.to(0)
@@ -2896,6 +2894,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
@@ -2903,12 +2902,12 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of VRAM allocations per GPU in MBs"""
 
             per_device_memory = []
-            for id in range(torch.cuda.device_count()):
-                with torch.cuda.device(id):
-                    per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+            for id in range(backend_device_count(torch_device)):
+                with backend_torch_accelerator_module(torch_device).device(id):
+                    per_device_memory.append(backend_memory_allocated(torch_device) >> 20)
 
             return per_device_memory
 
@@ -2916,7 +2915,7 @@ class ModelTesterMixin:
         config = self.model_tester.get_large_model_config()
 
         for model_class in self.all_parallelizable_model_classes:
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 1. single gpu memory load + unload + memory measurements
             # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
@@ -2924,7 +2923,7 @@ class ModelTesterMixin:
 
             # Put model on device 0 and take a memory snapshot
             model = model_class(config)
-            model.to("cuda:0")
+            model.to(f"{torch_device}:0")
             memory_after_model_load = get_current_gpu_memory_use()
 
             # The memory use on device 0 should be higher than it was initially.
@@ -2932,7 +2931,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 2. MP test
             # it's essential to re-calibrate the usage before the next stage
@@ -2956,8 +2955,9 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
@@ -2983,14 +2983,14 @@ class ModelTesterMixin:
 
             model.parallelize()
 
-            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
+            parallel_output = model(**cast_to_device(inputs_dict, f"{torch_device}:0"))
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
-                    self.assertTrue(torch.allclose(value, parallel_value.to("cpu"), atol=1e-7))
-                elif isinstance(value, (Tuple, List)):
+                    torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
+                elif isinstance(value, (tuple, list)):
                     for value_, parallel_value_ in zip(value, parallel_value):
-                        self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
+                        torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
 
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():
@@ -3006,12 +3006,12 @@ class ModelTesterMixin:
             elif param_device in ["mps"]:
                 self.assertEqual(param.device, torch.device("mps"))
             else:
-                # when loaded with device_map, `param_device` are integer values for cuda/xpu/npu/mlu
+                # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
                 self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3020,7 +3020,7 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -3046,13 +3046,16 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3061,7 +3064,7 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
@@ -3081,13 +3084,16 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3096,7 +3102,7 @@ class ModelTesterMixin:
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
+            model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
 
             torch.manual_seed(0)
@@ -3120,10 +3126,14 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
-                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
@@ -3158,9 +3168,12 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
-                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3276,6 +3289,8 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "MetaClip2ForImageClassification",
+                "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
                 "UniSpeechSatForSequenceClassification",
@@ -3293,6 +3308,12 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "ModernBertForSequenceClassification",
+                "ModernBertForTokenClassification",
+                "TimmWrapperForImageClassification",
+                "ModernBertForQuestionAnswering",
+                "ModernBertDecoderForSequenceClassification",
+                "ModernBertDecoderForCausalLM",
             ]
             special_param_names = [
                 r"^bit\.",
@@ -3313,6 +3334,7 @@ class ModelTesterMixin:
                 r"^swiftformer\.",
                 r"^swinv2\.",
                 r"^transformers\.models\.swiftformer\.",
+                r"^timm_model\.",
                 r"^unispeech\.",
                 r"^unispeech_sat\.",
                 r"^vision_model\.",
@@ -3394,7 +3416,7 @@ class ModelTesterMixin:
         # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
         # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
         # for `linear` part.
-        with ContextManagers([no_init_weights(True)]):
+        with ContextManagers([no_init_weights()]):
             target_model = MyClass(config=config)
         target_model.apply(target_model._initialize_weights)
 
@@ -3408,7 +3430,7 @@ class ModelTesterMixin:
             set_seed(0)
             new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
 
-            for key in new_model.state_dict().keys():
+            for key in new_model.state_dict():
                 # check weight values for weights with matched shapes are identical
                 # (i.e. correctly loaded from the checkpoint)
                 if key not in ["linear.weight", "linear.bias"]:
@@ -3438,39 +3460,151 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(copy.deepcopy(config))
             num_params = model.num_parameters()
-            assert (
-                num_params < 1000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+            assert num_params < 1000000, (
+                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+            )
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_conversion(self):
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+        r"""
+        Tests the equivalence between the eager and flash attention implementations.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+            # Custom kernel which needs the mask interface to be properly usable on these models
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # flash attention variants does not always support arbitrary headim
+            config = self._prepare_config_headdim(config, 16)
+
+            # forcing the prefill size to go over sliding window size to check for SWA correctness
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
+            # TODO it is unclear why saving and reloading with dtype works while
+            # casting with `.to(dtype=..., device=...)` does not.
+            # Discovered on tests with `Bart` models.
             model = model_class(config)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                ).to(torch_device)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model.to(torch_device)
 
-                for _, module in model.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        return
+                # Some models have support for FA but not SDPA - making sure we have a valid attention
+                initial_attention_implementation = "sdpa"
+                if model.config._attn_implementation != "sdpa":
+                    initial_attention_implementation = "eager"
 
-                self.assertTrue(False, "FlashAttention2 modules not found in model")
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, :1] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1:] = 0
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, output_hidden_states=True)
+
+                model.set_attn_implementation(initial_attention_implementation)
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
+
+                model.set_attn_implementation(initial_attention_implementation)
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                if padding_side == "left":
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                    # check with inference + dropout
+                    model.train()
+                    model.set_attn_implementation(attn_implementation)
+                    _ = model(dummy_input, **other_inputs)
+                else:
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
+    @require_kernels
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_kernels_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
+
+    @require_torch_mps
+    @require_kernels
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_kernels_mps_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(
+            attn_implementation="kernels-community/metal-flash-sdpa", padding_side="left"
+        )
 
     @require_flash_attn
     @require_torch_gpu
@@ -3478,96 +3612,7 @@ class ModelTesterMixin:
     @slow
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(dummy_input, **other_inputs)
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
 
     @require_flash_attn
     @require_torch_gpu
@@ -3575,502 +3620,197 @@ class ModelTesterMixin:
     @slow
     @is_flaky()
     def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_3", padding_side="left")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_3", padding_side="right")
+
+    def test_attn_implementation_composite_models(self):
+        """
+        Tests if composite models can receive a dict object as attn_implementation, where each key should be
+        one of the sub-configs from the model's config.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            if not self._is_composite:
+                self.skipTest("Model is not a composite model.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
 
+            # set eager as it will be the one supported in all models
+            # we just need to test if passing 'attn_implementation' as a dict fails or not
+            attn_implementation_per_subconfig = {"": "eager"}
+            for key in config.sub_configs:
+                attn_implementation_per_subconfig[key] = "eager"
+
+            config._attn_implementation = attn_implementation_per_subconfig
+            model = model_class(config)
+            for key in config.sub_configs:
+                sub_config = getattr(model.config, key)
+                self.assertTrue(sub_config._attn_implementation == "eager")
+
+            for name, submodule in model.named_modules():
+                class_name = submodule.__class__.__name__
+                if (
+                    class_name.endswith("Attention")
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation != "eager"
+                ):
+                    raise ValueError(
+                        f"The eager model should not have SDPA/FA2 attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                    )
+
+            # Set the attention to default `None` but the text config to `eager`
+            # The model should load encoders in SDPA but not the text attention
+            config._attn_implementation = None
+            config.get_text_config(decoder=True)._attn_implementation = "eager"
+            model = model_class(config)
+            self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
+
+            # Test that using `dict` atttention implementation works with `from_pretrained`
+            #  Set all backbones to "eager" because "eager" attention is always available
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
+                new_model = model.from_pretrained(tmpdirname, attn_implementation=attn_implementation_per_subconfig)
+                self.assertTrue(new_model.config._attn_implementation == "eager")
+                for submodule in new_model.modules():
+                    if (
+                        submodule is not new_model
+                        and isinstance(submodule, PreTrainedModel)
+                        and submodule.config.__class__ != new_model.config.__class__
+                    ):
+                        self.assertTrue(submodule.config._attn_implementation == "eager")
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    dummy_attention_mask[:, :-1] = 1
-                    dummy_attention_mask[:, -1:] = 0
-
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_generate_left_padding(self):
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        """
+        Tests if non-composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
-                dummy_attention_mask[:, :-1] = 0
-                dummy_attention_mask[:, -1:] = 1
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @is_flaky()
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do right padding
-                dummy_attention_mask[:, :-1] = 1
-                dummy_attention_mask[:, -1:] = 0
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self.all_model_classes[0]._supports_sdpa:
+        if not self.all_model_classes[0]._supports_sdpa or self._is_composite:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
-            self.skipTest(
-                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
-            )
-
-        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
-        if torch_dtype == "float16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bfloat16":
-            torch_dtype = torch.bfloat16
-        elif torch_dtype == "float32":
-            torch_dtype = torch.float32
-
-        atols = {
-            ("cpu", False, torch.float32): 1e-6,
-            ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-6,
-            ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-6,
-            ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-6,
-            ("cuda", True, torch.bfloat16): 1e-2,
-            ("cuda", True, torch.float16): 5e-3,
-        }
-        rtols = {
-            ("cpu", False, torch.float32): 1e-4,
-            ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-4,
-            ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-4,
-            ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-4,
-            ("cuda", True, torch.bfloat16): 3e-2,
-            ("cuda", True, torch.float16): 5e-3,
-        }
-
-        def get_mean_reldiff(failcase, x, ref, atol, rtol):
-            return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
-            # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
-            # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
-            # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
-            # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
-            deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
-
-            is_encoder_decoder = model.config.is_encoder_decoder
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch_dtype,
-                    attn_implementation="eager",
-                )
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
+                        raise ValueError(
+                            f"The eager model should not have SDPA attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                        )
+
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+                language_model_names = {"language_model", "model", "text_model"}
+                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
+                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
+
+                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                language_model_sdpa = getattr(model_sdpa, language_model_name)
+                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
+                vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
+                self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        _test_eager_matches_sdpa_inference(
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        )
 
-                # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
-                # but it would be nicer to have an efficient way to use parameterized.expand
-                fail_cases = []
-                for padding_side in ["left", "right"]:
-                    for use_mask in [False, True]:
-                        for output_attentions in [True, False]:
-                            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                            if not (self.has_attentions and can_output_attn) and output_attentions:
-                                continue
-                            for batch_size in [1, 5]:
-                                dummy_input = inputs_dict[model.main_input_name]
-
-                                if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                    dummy_input = dummy_input.to(torch_dtype)
-
-                                dummy_input = dummy_input[:batch_size]
-                                if dummy_input.shape[0] != batch_size:
-                                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                        extension = torch.rand(
-                                            batch_size - dummy_input.shape[0],
-                                            *dummy_input.shape[1:],
-                                            dtype=torch_dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                                    else:
-                                        extension = torch.randint(
-                                            high=5,
-                                            size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                            dtype=dummy_input.dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-
-                                if not use_mask:
-                                    dummy_attention_mask = None
-                                else:
-                                    dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                                    if dummy_attention_mask is None:
-                                        if is_encoder_decoder:
-                                            seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
-                                        else:
-                                            seqlen = dummy_input.shape[-1]
-                                        dummy_attention_mask = (
-                                            torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-                                        )
-
-                                    dummy_attention_mask = dummy_attention_mask[:batch_size]
-                                    if dummy_attention_mask.shape[0] != batch_size:
-                                        extension = torch.ones(
-                                            batch_size - dummy_attention_mask.shape[0],
-                                            *dummy_attention_mask.shape[1:],
-                                            dtype=dummy_attention_mask.dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                                        dummy_attention_mask = dummy_attention_mask.to(torch_device)
-
-                                    dummy_attention_mask[:] = 1
-                                    if padding_side == "left":
-                                        dummy_attention_mask[-1, :-1] = 1
-                                        dummy_attention_mask[-1, -4:] = 0
-                                    elif padding_side == "right":
-                                        dummy_attention_mask[-1, 1:] = 1
-                                        dummy_attention_mask[-1, :3] = 0
-
-                                for enable_kernels in [False, True]:
-                                    failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
-                                    if is_encoder_decoder:
-                                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
-                                            :batch_size
-                                        ]
-                                        if decoder_input_ids.shape[0] != batch_size:
-                                            extension = torch.ones(
-                                                batch_size - decoder_input_ids.shape[0],
-                                                *decoder_input_ids.shape[1:],
-                                                dtype=decoder_input_ids.dtype,
-                                                device=torch_device,
-                                            )
-                                            decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                                            decoder_input_ids = decoder_input_ids.to(torch_device)
-
-                                        # TODO: never an `attention_mask` arg here?
-                                        processed_inputs = {
-                                            model.main_input_name: dummy_input,
-                                            "decoder_input_ids": decoder_input_ids,
-                                            "decoder_attention_mask": dummy_attention_mask,
-                                            "output_hidden_states": True,
-                                        }
-                                    else:
-                                        processed_inputs = {
-                                            model.main_input_name: dummy_input,
-                                            "output_hidden_states": True,
-                                        }
-
-                                        # Otherwise fails for e.g. WhisperEncoderModel
-                                        if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                                            processed_inputs["attention_mask"] = dummy_attention_mask
-
-                                        if (
-                                            self.has_attentions
-                                            and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                                        ):
-                                            processed_inputs["output_attentions"] = output_attentions
-                                    if not deactivate_mask and (
-                                        "bool_masked_pos" in inspect.signature(model_eager.forward).parameters
-                                    ):
-                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
-
-                                        # In case of additional token (like class) we define a custom `mask_length`
-                                        if hasattr(self.model_tester, "mask_length"):
-                                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
-                                        else:
-                                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
-                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
-
-                                    if "noise" in inspect.signature(model_eager.forward).parameters:
-                                        np.random.seed(2)
-                                        num_patches = int(
-                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
-                                        )
-                                        noise = np.random.uniform(size=(batch_size, num_patches))
-                                        processed_inputs["noise"] = torch.from_numpy(noise)
-
-                                    # TODO: test gradients as well (& for FA2 as well!)
-                                    with torch.no_grad():
-                                        with torch.backends.cuda.sdp_kernel(
-                                            enable_flash=enable_kernels,
-                                            enable_math=True,
-                                            enable_mem_efficient=enable_kernels,
-                                        ):
-                                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                                            outputs_eager = model_eager(**prepared_inputs)
-                                            outputs_sdpa = model_sdpa(**prepared_inputs)
-
-                                    logits_eager = (
-                                        outputs_eager.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_eager.decoder_hidden_states[-1]
-                                    )
-                                    logits_sdpa = (
-                                        outputs_sdpa.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_sdpa.decoder_hidden_states[-1]
-                                    )
-
-                                    if torch_device in ["cpu", "cuda"]:
-                                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                                    else:
-                                        atol = 1e-7
-                                        rtol = 1e-4
-
-                                    # Masked tokens output slightly deviates - we don't mind that.
-                                    if use_mask:
-                                        if padding_side == "left":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            sub_sdpa = logits_sdpa[-1, :-4]
-                                            sub_eager = logits_eager[-1, :-4]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, -4:]
-                                            # sub_eager = logits_eager[-1, -4:]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-                                        elif padding_side == "right":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            sub_sdpa = logits_sdpa[-1, 3:]
-                                            sub_eager = logits_eager[-1, 3:]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, :3]
-                                            # sub_eager = logits_eager[-1, :3]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                    else:
-                                        if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                            )
-
-                self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
-
-    @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
+        device_type, major, minor = get_device_properties()
+        if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type not in ["cuda", "rocm", "xpu"]:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -4078,21 +3818,53 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
-                self.skipTest(
-                    reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
-                )
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
-            if config.model_type in ["idefics"]:
+            if config.model_type in [
+                "modernbert",
+                "gemma3",
+                "t5gemma",
+                "diffllama",
+                "dpr",
+                "eomt",
+                "gpt_bigcode",
+                "jamba",
+                "kosmos-2",
+                "mllama",
+                "pixtral",
+                "sam",
+                "sam_hq",
+                "zamba2",
+                "sam_vision_model",
+                "sam2_vision_model",
+                "sam_hq_vision_model",
+            ]:
+                self.skipTest(
+                    reason=f"{config.model_type} currently (transformers==4.52.0) automatically adds an attention_mask input"
+                )
+            if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            if config.model_type in ["sam"]:
+                self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
+
             model = model_class(config)
+
+            sub_models_supporting_sdpa = [
+                module._supports_sdpa
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_sdpa_all_modules = (
+                all(sub_models_supporting_sdpa) if len(sub_models_supporting_sdpa) > 0 else model._supports_sdpa
+            )
+            if not supports_sdpa_all_modules:
+                self.skipTest(reason="This models' submodels does not support sdpa")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 inputs_dict.pop("attention_mask", None)
@@ -4102,21 +3874,25 @@ class ModelTesterMixin:
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
-    @require_torch_sdpa
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-        if "cuda" in torch_device:
-            compute_capability = torch.cuda.get_device_capability()
-            major, _ = compute_capability
 
-            if not torch.version.cuda or major < 8:
-                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        device_type, major, minor = get_device_properties()
+        if device_type == "cuda" and major < 8:
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type not in ["cuda", "rocm", "xpu"]:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -4128,11 +3904,28 @@ class ModelTesterMixin:
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )
+            if getattr(config, "cache_implementation", None) == "hybrid":
+                self.skipTest(
+                    "Cannot compile forward without an existing cache with Hybrid, as `torch._dynamo.mark_static_address` "
+                    "is a forbidden call."
+                )
+
             model = model_class(config)
+
+            sub_models_supporting_sdpa = [
+                module._supports_sdpa
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_sdpa_all_modules = (
+                all(sub_models_supporting_sdpa) if len(sub_models_supporting_sdpa) > 0 else model._supports_sdpa
+            )
+            if not supports_sdpa_all_modules:
+                self.skipTest(reason="This models' submodels does not support sdpa")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
@@ -4149,91 +3942,18 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     _ = model(**inputs_dict)
 
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        max_new_tokens = 30
-
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                    attn_implementation="eager",
-                ).to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa:
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
-                # Just test that a large cache works as expected
-                res_eager = model_eager.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                res_sdpa = model_sdpa.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(res_eager, res_sdpa))
-
-    @require_torch_sdpa
     def test_sdpa_matches_eager_sliding_window(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        WINDOW_ATTENTION_MODELS = ["mistral", "mixtral", "qwen2", "qwen_moe", "starcoder2"]
+        WINDOW_ATTENTION_MODELS = ["mistral", "mixtral", "minimax", "qwen2", "qwen_moe", "starcoder2"]
 
         if len(self.all_generative_model_classes) == 0:
             self.skipTest(f"No generative model classes for {self.__class__.__name__}")
 
         for model_class in self.all_generative_model_classes:
+            if model_class._supports_sdpa:
+                self.skipTest(reason="Model architecture does not support attentions")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             if config.model_type not in WINDOW_ATTENTION_MODELS:
@@ -4250,25 +3970,21 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdir:
                 with torch.device(torch_device):
                     model_eager = AutoModelForCausalLM.from_config(
-                        config, attn_implementation="eager", torch_dtype=torch.float32
+                        config, attn_implementation="eager", dtype=torch.float32
                     )
 
                 model_eager.save_pretrained(tmpdir)
 
                 with torch.device(torch_device):
                     model_sdpa = AutoModelForCausalLM.from_pretrained(
-                        tmpdir, attn_implementation="sdpa", torch_dtype=torch.float32
+                        tmpdir, attn_implementation="sdpa", dtype=torch.float32
                     )
 
                 model_eager = model_eager.eval()
                 model_sdpa = model_sdpa.eval()
 
                 with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=False,
-                        enable_math=True,
-                        enable_mem_efficient=False,
-                    ):
+                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                         res_eager = model_eager(**inputs_dict, return_dict=False)[0]
                         res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 
@@ -4277,120 +3993,79 @@ class ModelTesterMixin:
                     torch.allclose(res_eager[attention_mask == 1], res_sdpa[attention_mask == 1], rtol=1e-4, atol=1e-4)
                 )
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
+    def flash_attn_can_dispatch_composite_models(self, attn_implementation: str):
+        """
+        Tests if composite models can dispatch on flash attention if the sub-models support it.
+        The tests is needed as we handle differently composite models and we cannot check them
+        with above tests. If any of the sub-models does not support flash attention, we'll raise an error when dispatching
+        that particular sub-model. Otherwise we dispatch safely in all sub-models, where "sub-models" are specific
+        backbone models (LM/vision/audio/etc)
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        max_new_tokens = 30
+        if not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
+        dtype = torch.bfloat16
+        for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
             model = model_class(config)
+            if not self._is_composite:
+                self.skipTest("This model is not a composite model!")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
+                sub_models_supporting_fa = [
+                    module._supports_flash_attn
+                    for name, module in model.named_modules()
+                    if isinstance(module, PreTrainedModel) and name != ""
+                ]
+                supports_fa_all_modules = (
+                    all(sub_models_supporting_fa) if len(sub_models_supporting_fa) > 0 else model._supports_flash_attn
                 )
+                if not supports_fa_all_modules:
+                    with self.assertRaises(ValueError):
+                        model_fa = model_class.from_pretrained(
+                            tmpdirname,
+                            dtype=dtype,
+                            attn_implementation=attn_implementation,
+                        )
+                else:
+                    model_fa = model_class.from_pretrained(
+                        tmpdirname, dtype=dtype, attn_implementation=attn_implementation
+                    )
+                    for key in model_fa.config:
+                        if isinstance(getattr(model_fa.config, key), PretrainedConfig):
+                            sub_config = getattr(model_fa.config, key)
+                            self.assertTrue(sub_config._attn_implementation == attn_implementation)
 
-                # Generate with one batch only to test generation when attention mask will be None
-                # when real inputs are used, because there is no padding. See issue #32237 for more
-                dummy_input = dummy_input[:1, ...]
-                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
+                    has_fa = False
+                    for name, submodule in model_fa.named_modules():
+                        class_name = submodule.__class__.__name__
+                        if (
+                            "Attention" in class_name
+                            and getattr(submodule, "config", None)
+                            and submodule.config._attn_implementation == attn_implementation
+                        ):
+                            has_fa = True
+                            break
+                    if not has_fa:
+                        raise ValueError(f"The {attn_implementation} model should have {attn_implementation} layers")
 
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_reuse_cache(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_2")
 
-        max_new_tokens = 2
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # run generate once to get filled cache
-                output = model.generate(
-                    dummy_input,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    return_dict_in_generate=True,
-                )
-                past_key_values = output.past_key_values
-
-                # Try to continue generation from where we left, given that we have more than 1 new token to process
-                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
-                dummy_input_updated = torch.cat([dummy_input, output.sequences], dim=-1)
-                _ = model.generate(
-                    dummy_input_updated,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    past_key_values=past_key_values,
-                )
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    def test_flash_attn_3_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
     @require_flash_attn
     @require_torch_gpu
@@ -4402,7 +4077,7 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -4421,9 +4096,8 @@ class ModelTesterMixin:
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
 
@@ -4452,170 +4126,329 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @pytest.mark.torch_compile_test
     @slow
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        if not hasattr(self, "_torch_compile_train_cls"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        torch.compiler.reset()
+        dtype = torch.float16
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
+
+        inputs = {
+            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+        }
+
+        model = torch.compile(model, fullgraph=True)
+        # forward compilation
+        set_seed(42)
+        loss = model(**inputs).loss
+        # backward compilation
+        loss.backward()
+
+        assert not loss.isnan().any()
+
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        """
+        Tests that the given attention implementation can work with packed sequences and infers the mask
+        from position ids. This test requires the model to use new attention mask API which handles packing.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
         max_new_tokens = 30
+        support_flag = {
+            "sdpa": "_supports_sdpa",
+            "flash_attention_2": "_supports_flash_attn",
+            "flash_attention_3": "_supports_flash_attn",
+        }
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # can't infer if new attn mask API is supported by assume that only model with attention backend support it
+            if not model_class._supports_attention_backend:
+                self.skipTest(f"{model_class.__name__} does not support new attention mask API")
+
+            if model_class._is_stateful:  # non-transformer models most probably have no packing support
+                self.skipTest(f"{model_class.__name__} doesn't support packing!")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
             if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
                 self.skipTest("Model dummy inputs should contain padding in their attention mask")
 
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
 
             # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
             if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # ensure left padding, to adapt for some models
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
+
+                # Ensure left padding, to adapt for some models
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
 
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.float16,
-                        attn_implementation="flash_attention_2",
-                        low_cpu_mem_usage=True,
+                        dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
                     )
                     .to(torch_device)
                     .eval()
                 )
 
-                # flatten
-                padfree_inputs_dict = {
-                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
-                    for k, v in inputs_dict.items()
-                    if not k == "attention_mask"
-                }
-                # add position_ids
-                padfree_inputs_dict["position_ids"] = (
-                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
-                    .long()
-                    .unsqueeze(0)
-                    .to(torch_device)
-                )
+                if fa_kwargs:
+                    # flatten
+                    features = [
+                        {"input_ids": i[a.bool()].tolist()} for i, a in zip(dummy_input_ids, dummy_attention_mask)
+                    ]
 
-                res_padded = model(**inputs_dict)
-                res_padfree = model(**padfree_inputs_dict)
+                    # add position_ids + fa_kwargs
+                    data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+                    batch = data_collator(features)
+                    padfree_inputs_dict = {
+                        k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
+                    }
+                else:
+                    # create packed position_ids
+                    position_ids = (
+                        torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                        .long()
+                        .unsqueeze(0)
+                        .to(torch_device)
+                    )
+                    padfree_inputs_dict = {
+                        "input_ids": dummy_input_ids[dummy_attention_mask.bool()].unsqueeze(0),
+                        "position_ids": position_ids,
+                    }
 
-                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                # We need to do simple forward without cache in order to trigger packed SDPA/flex/eager attention path
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[dummy_attention_mask.bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), atol=0, rtol=0)
                 # acceptable numerical instability
-                tol = torch.finfo(torch.float16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @is_pt_tf_cross_test
-    def test_tf_from_pt_safetensors(self):
-        for model_class in self.all_model_classes:
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
+
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_2", fa_kwargs=True
+        )
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_3")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attention_2_continue_generate_with_position_ids(self):
+        """
+        Tests whether flash attention can continue its generation from given position ids.
+
+        NOTE: This serves as regression check as we had instances where flash attention entered the varlen
+        path here. It should now always enter the base `flash_fn`.
+        """
+
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention.")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
 
-            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
-            if not hasattr(transformers, tf_model_class_name):
-                self.skipTest(reason="transformers does not have this model in TF version yet")
+            if not hasattr(config.get_text_config(), "use_cache"):
+                self.skipTest(f"{model_class.__name__} doesn't support caching")
 
-            tf_model_class = getattr(transformers, tf_model_class_name)
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
 
-            pt_model = model_class(config)
+            # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
-                tf_model_1 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
+                model.save_pretrained(tmpdirname)
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation="flash_attention_2",
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
 
-                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
-                tf_model_2 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
+                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals/head_mask/etc
+                dummy_input_ids = inputs_dict["input_ids"]
+                dummy_position_ids = torch.arange(dummy_input_ids.shape[1], device=torch_device)
+                dummy_position_ids = dummy_position_ids.unsqueeze(0).repeat(dummy_input_ids.shape[0], 1)
 
-                # Check models are equal
-                for p1, p2 in zip(tf_model_1.weights, tf_model_2.weights):
-                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+                # Store cache for the input prompt
+                output = model(dummy_input_ids, position_ids=dummy_position_ids, use_cache=True)
+                if "past_key_values" not in output:
+                    self.skipTest("This model doesn't return `past_key_values`")
 
-    @is_pt_flax_cross_test
-    def test_flax_from_pt_safetensors(self):
-        for model_class in self.all_model_classes:
+                # create new input_ids and position_ids to continue generation re-using the cache
+                new_input_ids = output.logits[:, -1, :].float().argmax(-1)[:, None]
+                past_length = dummy_input_ids.shape[1]
+                position_ids = torch.arange(past_length, past_length + new_input_ids.shape[1], device=torch_device)
+                position_ids = position_ids.unsqueeze(0).repeat(new_input_ids.shape[0], 1)
+
+                output = model(
+                    input_ids=new_input_ids,
+                    past_key_values=output.past_key_values,
+                    position_ids=position_ids,
+                    use_cache=True,
+                )
+                next_token_logits = output.logits[:, -1, :].float()
+
+                generate_kwargs = {
+                    "pad_token_id": -1,
+                    "eos_token_id": -1,
+                    "forced_eos_token_id": None,
+                    "use_cache": True,
+                    "do_sample": False,
+                    "return_dict_in_generate": True,
+                    "output_logits": True,
+                    "max_new_tokens": max_new_tokens,
+                }
+                generation_out = model.generate(dummy_input_ids, **generate_kwargs)
+                next_token_logits_from_generate = generation_out.logits[-1]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(next_token_logits_from_generate, next_token_logits, rtol=tol, atol=tol)
+
+    def flash_attn_from_config(self, attn_implementation: str):
+        r"""
+        Tests if the model can be loaded with `attn_implementation` from the config and if the
+        weights are not randomly initialized.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO: to change it in the future with other relevant auto classes
+            fa_model = model_class._from_config(
+                config, attn_implementation=attn_implementation, dtype=torch.bfloat16
+            ).to(torch_device)
 
-            flax_model_class_name = "Flax" + model_class.__name__  # Add the "Flax at the beginning
-            if not hasattr(transformers, flax_model_class_name):
-                self.skipTest(reason="transformers does not have this model in Flax version yet")
+            dummy_input = inputs_dict[fa_model.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.float16]:
+                dummy_input = dummy_input.to(torch.bfloat16)
+            dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
-            flax_model_class = getattr(transformers, flax_model_class_name)
-
-            pt_model = model_class(config)
+            if fa_model.config.is_encoder_decoder:
+                dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+                _ = fa_model(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    decoder_input_ids=dummy_decoder_input_ids,
+                    decoder_attention_mask=dummy_decoder_attention_mask,
+                )
+            else:
+                _ = fa_model(dummy_input, attention_mask=dummy_attention_mask)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
-                flax_model_1 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
-                flax_model_2 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                # Check models are equal
-                self.assertTrue(check_models_equal(flax_model_1, flax_model_2))
+                fa_model.save_pretrained(tmpdirname)
+                model_from_pretrained = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(model_from_pretrained.config._attn_implementation != attn_implementation)
 
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
+        self.flash_attn_from_config(attn_implementation="flash_attention_2")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            # TODO: to change it in the future with other relevant auto classes
-            fa2_model = AutoModelForCausalLM.from_config(
-                config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
-            ).to(torch_device)
-
-            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
-
-            fa2_correctly_converted = False
-
-            for _, module in fa2_model.named_modules():
-                if "FlashAttention" in module.__class__.__name__:
-                    fa2_correctly_converted = True
-                    break
-
-            self.assertTrue(fa2_correctly_converted)
-
-            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                fa2_model.save_pretrained(tmpdirname)
-
-                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
-
-                self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
-
-                fa2_correctly_converted = False
-
-                for _, module in model_from_pretrained.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        fa2_correctly_converted = True
-                        break
-
-                self.assertFalse(fa2_correctly_converted)
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_3")
 
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same
@@ -4652,6 +4485,60 @@ class ModelTesterMixin:
 
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
+    def test_sliding_window_mask(self):
+        """Tests that we can control the sliding window attention behavior of a model."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not support output_attentions")
+
+        if not (hasattr(config, "sliding_window") and hasattr(config, "use_sliding_window")):
+            self.skipTest(reason="Model does not support sliding window mask")
+
+        seq_len = self.model_tester.seq_length
+        batch_size = self.model_tester.batch_size
+        sliding_window = 3  # set to arbitrary small number
+
+        sliding_mask = torch.zeros((seq_len, seq_len), dtype=torch.bool)
+        for i in range(seq_len):
+            start = max(0, i - sliding_window + 1)
+            sliding_mask[i, start : i + 1] = True
+        sliding_mask = sliding_mask.to(torch_device)
+
+        config.sliding_window = sliding_window
+        inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
+        for model_class in self.all_model_classes:
+            # Set sliding window to `True` and check that all tokens beyond window size are masked
+            config.use_sliding_window = True
+            config_dict = config.to_diff_dict()
+            if hasattr(config, "layer_types"):
+                del config_dict["layer_types"]
+            new_config = config.__class__(**config_dict)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
+            model.eval()
+            layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
+            attentions = model(**inputs, output_attentions=True).attentions
+            for layer_attention, layer_type in zip(attentions, layer_types):
+                if layer_type == "sliding_attention":
+                    self.assertTrue((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+                else:
+                    self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+
+            # Set sliding window to `False` while keeping `sliding_window=3`
+            # Check that all tokens beyond window size are not masked
+            config.use_sliding_window = False
+            config_dict = config.to_diff_dict()
+            if hasattr(config, "layer_types"):
+                del config_dict["layer_types"]
+            new_config = config.__class__(**config_dict)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
+            model.eval()
+            attentions_not_sliding = model(**inputs, output_attentions=True).attentions
+            for layer_attention in attentions_not_sliding:
+                self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+
     def test_custom_4d_attention_mask(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -4661,13 +4548,22 @@ class ModelTesterMixin:
                 reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
             )
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
+            if not model_class._can_compile_fullgraph:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            set_config_for_less_flaky_test(config)
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model = model_class(config).to(device=torch_device, dtype=torch.float32).eval()
+            set_model_for_less_flaky_test(model)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # model doesn't accept position ids and probably has special way to model positions
+
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
 
             (
                 input_ids,
@@ -4691,159 +4587,527 @@ class ModelTesterMixin:
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
 
             # comparing softmax-normalized logits:
-            normalized_0 = F.softmax(out_last_tokens)
-            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
-            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+            normalized_0 = F.softmax(out_last_tokens, dim=-1)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 
-    def test_static_cache_matches_dynamic(self):
-        """
-        Tests that generating with static cache give almost same results as with dynamic cache.
-        This test does not compile the model and check only logits similarity for numerical precision
-        errors.
-        """
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(
-                reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
-            )
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
-                self.skipTest(f"{model_class.__name__} does not support static cache")
-
-            if not model_class._supports_cache_class:
-                self.skipTest(f"{model_class.__name__} does not support cache class")
-
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
-                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
-            model.eval()
-
-            dynamic_out = model.generate(
-                **inputs, do_sample=False, max_new_tokens=10, output_logits=True, return_dict_in_generate=True
-            )
-            static_out = model.generate(
-                **inputs,
-                do_sample=False,
-                max_new_tokens=10,
-                cache_implementation="static",
-                output_logits=True,
-                return_dict_in_generate=True,
-            )
-            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
-
-    # For now, Let's focus only on GPU for `torch.compile`
     @slow
-    @require_torch_gpu
-    @require_read_token
-    def test_torch_compile(self):
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        if not hasattr(self, "_torch_compile_test_ckpt"):
-            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
-        ckpt = self._torch_compile_test_ckpt
+        if getattr(self, "_torch_compile_train_cls", None) is None:
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        cls = self._torch_compile_train_cls
+        attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
+        if attn_implementation is not None:
+            config._attn_implementation = attn_implementation
 
-        batch_size = 1
-        n_iter = 3
+        model = cls(config).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+        inputs = {
+            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "attention_mask": torch.tensor(
+                [[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+                dtype=torch.int64,
+                device=torch_device,
+            ),
+            "position_ids": torch.arange(0, 10, device=torch_device).unsqueeze(0),
+            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "use_cache": False,
+        }
 
-        model.generation_config.max_new_tokens = 4
+        # eager backward
+        set_seed(42)
+        loss = model(**inputs).loss
+        loss.backward()
 
-        model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        params = {name: param.grad.detach().to(device="cpu", copy=True) for name, param in model.named_parameters()}
+        model.zero_grad()
+        del loss
 
-        input_text = "Why dogs are cute?"
-        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
+        model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
 
-        for i in range(n_iter):
-            _ = model.generate(**input_ids, do_sample=False)
+        # forward compilation
+        set_seed(42)
+        loss = model(**inputs).loss
+        # backward compilation
+        loss.backward()
+        # check grad matches
+        for name, param in model._orig_mod.named_parameters():
+            torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
-    @slow
-    @require_torch_gpu  # Testing cuda graphs.
-    @require_read_token
-    def test_compile_cuda_graph_time(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        # TODO felix: All models supporting `StaticCache` or `torch.compile` should be tested.
-        # At the moment, only llama, gemma and gemma2 are tested here!
-        if not hasattr(self, "_torch_compile_test_ckpt"):
-            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
-        ckpt = self._torch_compile_test_ckpt
-
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
-
-        cache_implementation = "static"
-        if model.config.model_type == "gemma2":
-            cache_implementation = "hybrid"
-
-        new_tokens = 50
-        gen_config = GenerationConfig(
-            max_new_tokens=new_tokens,
-            min_new_tokens=new_tokens,
-            use_cache=True,
-            pad_token_id=tokenizer.pad_token_id,
-            num_beams=1,
-            do_sample=False,
-            eos_token_id=None,  # This is required for min_new_tokens to actually have an effect.
-        )
-        model.generation_config.eos_token_id = None  # greedy_search falls back on this eos_token_id that we need to set to None as well for min_new_tokens to have an effect.
-
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-
-        inp = tokenizer("Why cats are cute?", return_tensors="pt").to(torch_device)
-
-        # First run: the first run warms up each graph, which does things like CuBlas or Triton benchmarking
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        graph_warmup_time = end - start
-
-        # Second run: CUDA Graph recording, and replays it
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        record_time = end - start
-
-        # Finally: we hit the optimized, CUDA Graph replay path
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        opt_time = end - start
-
-        # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
-        self.assertTrue(record_time < 0.15 * graph_warmup_time)
-        self.assertTrue(opt_time < record_time)
-
-    def test_forward_with_num_logits_to_keep(self):
+    def test_forward_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            batch_size, sequence_length = inputs["input_ids"].shape
-            vocab_size = config.vocab_size
+            batch_size, sequence_length = inputs["input_ids"].shape[:2]
+            vocab_size = config.get_text_config().vocab_size
             model = model_class(config).to(device=torch_device).eval()
+            # some models have labels but `logits_to_keep` should not be used in train mode
+            _ = inputs.pop("labels", None)
 
-            # num_logits_to_keep=0 is a special case meaning "keep all logits"
-            all_logits = model(**inputs, num_logits_to_keep=0).logits
-            last_token_logits = model(**inputs, num_logits_to_keep=1).logits
+            # logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, logits_to_keep=0).logits
+            last_token_logits = model(**inputs, logits_to_keep=1).logits
 
             # Assert all shapes are correct
             self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))
             self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
-            self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+            torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
+
+    @slow
+    @require_torch_greater_or_equal("2.5")
+    @pytest.mark.torch_export_test
+    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
+        """
+        Test if model can be exported with torch.export.export()
+
+        Args:
+            config (PretrainedConfig):
+                Config to use for the model, if None, use default config from model_tester
+            inputs_dict (dict):
+                Inputs to use for the model, if None, use default inputs from model_tester
+            tolerance (float):
+                `atol` for torch.allclose(), defined in signature for test overriding
+        """
+        if not self.test_torch_exportable:
+            self.skipTest(reason="test_torch_exportable=False for this model.")
+
+        def recursively_check(eager_outputs, exported_outputs):
+            is_tested = False
+            if isinstance(eager_outputs, torch.Tensor):
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
+                return True
+            elif isinstance(eager_outputs, (tuple, list)):
+                for eager_output, exported_output in zip(eager_outputs, exported_outputs):
+                    is_tested = is_tested or recursively_check(eager_output, exported_output)
+                return is_tested
+            elif isinstance(eager_outputs, dict):
+                for key in eager_outputs:
+                    is_tested = is_tested or recursively_check(eager_outputs[key], exported_outputs[key])
+                return is_tested
+            return is_tested
+
+        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config = config or default_config
+        inputs_dict = inputs_dict or default_inputs_dict
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__.endswith("ForPreTraining"):
+                continue
+
+            with self.subTest(model_class.__name__):
+                model = model_class(config).eval().to(torch_device)
+
+                # Export model
+                exported_model = torch.export.export(
+                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
+                )
+
+                # Run exported model and eager model
+                with torch.no_grad():
+                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
+                    torch.manual_seed(1234)
+                    eager_outputs = model(**inputs_dict)
+                    torch.manual_seed(1234)
+                    exported_outputs = exported_model.module().forward(**inputs_dict)
+
+                # Check if outputs are close:
+                # is_tested is a boolean flag indicating if we compare any outputs,
+                # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
+                # In case of outputs are different the error will be raised in `recursively_check` function.
+                is_tested = recursively_check(eager_outputs, exported_outputs)
+                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        This method allows to update the head dim for all model types including
+        composite models and models that do not support head dim by themselves.
+
+        Why? A lot of kernels including flex attention rely on triton for compilation.
+        However, triton cannot handle hidden dimensions of less than 16 for example.
+        (There are many more examples especially now that the `kernels` library is
+        supported)
+        """
+        config = copy.deepcopy(config)
+
+        def update_config_headdim(config, requested_dim):
+            # Flex Attention cannot use dropout
+            if hasattr(config, "attention_dropout"):
+                config.attention_dropout = 0
+            if hasattr(config, "attention_probs_dropout_prob"):
+                config.attention_probs_dropout_prob = 0
+
+            # Update the head dim and try to update hidden size as well if present in config
+            # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
+            head_dim = None
+            if hasattr(config, "head_dim") and config.head_dim is not None:
+                head_dim = config.head_dim
+                config.head_dim = max(requested_dim, config.head_dim)
+
+            cross_head_dim = None
+            if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
+                cross_head_dim = config.cross_head_dim
+                config.cross_head_dim = max(requested_dim, config.cross_head_dim)
+
+            if (
+                getattr(config, "hidden_size", None) is not None
+                and getattr(config, "num_attention_heads", None) is not None
+            ):
+                head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+                config.hidden_size *= max(requested_dim // head_dim, 1)
+
+            if (
+                getattr(config, "decoder_hidden_size", None) is not None
+                and getattr(config, "decoder_num_attention_heads", None) is not None
+            ):
+                decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
+                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+
+            if (
+                getattr(config, "cross_hidden_size", None) is not None
+                and getattr(config, "cross_num_attention_heads", None) is not None
+            ):
+                cross_head_dim = (
+                    cross_head_dim
+                    if cross_head_dim is not None
+                    else config.cross_hidden_size // config.cross_num_attention_heads
+                )
+                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+
+            # 3d rope also depends on the head dim
+            # (we assume easy shapes here where we get to the requested head dim at least)
+            if hasattr(config, "rope_scaling") and len(config.rope_scaling.get("mrope_section", None)) > 0:
+                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
+                config.rope_scaling["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                ]
+
+        # Update config values
+        update_config_headdim(config, requested_dim)
+        for key in config.sub_configs:
+            sub_config = getattr(config, key)
+            update_config_headdim(sub_config, requested_dim)
+
+        return config
+
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).to(device=torch_device)
+
+            # If not all sub-models support flex, skip the test
+            if not all(
+                submodel._supports_flex_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flex attention")
+
+            # Set default attention to flex and update config values
+            config = self._prepare_config_headdim(config, 16)  # specific to triton
+
+            if model_class._can_set_attn_implementation():
+                model = model_class(config).to(device=torch_device)
+                model.set_attn_implementation("flex_attention")
+                self.assertTrue(model.config._attn_implementation == "flex_attention")
+            else:
+                config._attn_implementation = "flex_attention"
+                model = model_class(config).to(device=torch_device)
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            for key in getattr(self, "additional_model_inputs", []):
+                # Some models don't have all `additional_model_inputs`, especially when we
+                # craft cases to test model in different settings
+                if key in inputs_dict:
+                    dummy_inputs[key] = inputs_dict[key].to(torch_device)
+
+            if config.get_text_config(decoder=True).is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
+
+    def test_generation_tester_mixin_inheritance(self):
+        """
+        Ensures that we have the generation tester mixin if the model can generate. The test will fail otherwise,
+        forcing the mixin to be added -- and ensuring proper test coverage
+        """
+        if len(self.all_generative_model_classes) > 0:
+            self.assertTrue(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can call `generate` from `GenerationMixin`, so one of two things must happen: 1) the "
+                    "tester must inherit from `GenerationTesterMixin` to run `generate` tests, or 2) if the model "
+                    "doesn't fully support the original `generate` or has a custom `generate` with partial feature "
+                    "support, the tester must overwrite `all_generative_model_classes` to skip the failing classes "
+                    "(make sure to comment why). If `all_generative_model_classes` is overwritten as `()`, then we "
+                    "need to remove the `GenerationTesterMixin` inheritance -- no `generate` tests are being run."
+                ),
+            )
+        else:
+            self.assertFalse(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can't call `generate`, so its tester can't inherit `GenerationTesterMixin`. (If you "
+                    "think the model should be able to `generate`, the model may be missing the `GenerationMixin` "
+                    "inheritance)"
+                ),
+            )
+
+    def test_can_be_initialized_on_meta(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # If it does not raise here, the test passes
+            with torch.device("meta"):
+                _ = model_class(copy.deepcopy(config))
+
+    @require_torch_accelerator
+    def test_can_load_with_device_context_manager(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # Need to specify index 0 here, as `torch_device` is simply the str of the type, e.g. "cuda"
+        device = torch.device(torch_device, index=0)
+        for model_class in self.all_model_classes:
+            # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
+            # is not supported for e.g. dpt_hybrid)
+            model = model_class(copy.deepcopy(config))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                with device:
+                    new_model = model_class.from_pretrained(tmpdirname)
+                unique_devices = {param.device for param in new_model.parameters()} | {
+                    buffer.device for buffer in new_model.buffers()
+                }
+
+            self.assertEqual(
+                unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
+            )
+
+    # Here we need to run with a subprocess as otherwise setting back the default device to the default value ("cpu")
+    # may bring unwanted consequences on other tests. See PR #37553
+    @run_first
+    @run_test_using_subprocess
+    @require_torch_accelerator
+    def test_can_load_with_global_device_set(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # Need to specify index 0 here, as `torch_device` is simply the str of the type, e.g. "cuda"
+        device = torch.device(torch_device, index=0)
+        default_device = torch.get_default_device()
+        for model_class in self.all_model_classes:
+            # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
+            # is not supported for e.g. dpt_hybrid)
+            model = model_class(copy.deepcopy(config))
+
+            # set a global gpu device
+            torch.set_default_device(device)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                new_model = model_class.from_pretrained(tmpdirname)
+                unique_devices = {param.device for param in new_model.parameters()} | {
+                    buffer.device for buffer in new_model.buffers()
+                }
+
+            # set back the correct device
+            torch.set_default_device(default_device)
+
+            self.assertEqual(
+                unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
+            )
+
+    def test_can_load_with_meta_device_context_manager(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
+            # is not supported for e.g. dpt_hybrid)
+            model = model_class(copy.deepcopy(config))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                with torch.device("meta"):
+                    new_model = model_class.from_pretrained(tmpdirname)
+                unique_devices = {param.device for param in new_model.parameters()} | {
+                    buffer.device for buffer in new_model.buffers()
+                }
+
+            self.assertEqual(
+                unique_devices,
+                {torch.device("meta")},
+                f"All parameters should be on meta device, but found {unique_devices}.",
+            )
+
+    def test_config_attn_implementation_setter(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+            if not config._attn_implementation == attn_implementation:
+                raise ValueError(
+                    f"Unexpected attn_implementation for config {config.__class__.__name__}: "
+                    f"{config._attn_implementation} != {attn_implementation}"
+                )
+            for attribute_value in config.__dict__.values():
+                if isinstance(attribute_value, PretrainedConfig):
+                    check_attn_implementation_setter(attribute_value, attn_implementation)
+
+        config._attn_implementation = "eager"
+        check_attn_implementation_setter(config, "eager")
+
+        config._attn_implementation = "sdpa"
+        check_attn_implementation_setter(config, "sdpa")
+
+    def test_internal_model_config_and_subconfig_are_same(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        subconfig_keys = list(config.sub_configs.keys())
+        for model_class in self.all_model_classes:
+            if len(config.sub_configs) == 0:
+                self.skipTest(reason="No subconfigs so the test does not make sense")
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model = model_class(copy.deepcopy(config))
+
+            for submodule in model.modules():
+                # This is a submodel
+                if isinstance(submodule, PreTrainedModel) and submodule.config.__class__ != model.config.__class__:
+                    subconfig_from_model_internal = submodule.config
+                    matching_sub_configs = []
+                    for subconfig_key in subconfig_keys:
+                        # Get the subconfig from the model config
+                        subconfig_from_model_config = getattr(model.config, subconfig_key)
+                        if subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__:
+                            # Since some composite models have different submodels parameterized by 2 of the same config
+                            # class instances, we need to check against a list of matching classes, and check that at least
+                            # 1 is the exact object (instead of checking immediately for similar object)
+                            matching_sub_configs.append(subconfig_from_model_config)
+
+                    # Both should be exactly the same object, that is when instantiating the submodel when should
+                    # absolutely not copy the subconfig
+                    if len(matching_sub_configs) > 0:
+                        self.assertTrue(
+                            any(
+                                subconfig_from_model_config is subconfig_from_model_internal
+                                for subconfig_from_model_config in matching_sub_configs
+                            )
+                        )
+
+    def test_can_set_attention_dynamically(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if not model_class._can_set_attn_implementation():
+                self.skipTest(reason="This model does not support setting its attention dynamically")
+
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model_config = copy.deepcopy(config)
+            # Set eager everywhere (it sets it recursively on subconfigs)
+            model_config._attn_implementation = "eager"
+            model = model_class(model_config)
+
+            # sanity check to make sure everything is correctly eager
+            self.assertTrue(model.config._attn_implementation == "eager")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+            if not all(
+                submodule._can_set_attn_implementation()
+                for submodule in model.modules()
+                if isinstance(submodule, PreTrainedModel)
+            ):
+                self.skipTest(reason="Parts of this model cannot set attention dynamically")
+            # Some old models technically should support switching, but don't have the flags active...
+            if not all(
+                submodule._supports_sdpa for submodule in model.modules() if isinstance(submodule, PreTrainedModel)
+            ):
+                self.skipTest(reason="Parts of this model don't support sdpa")
+
+            # Now, set it to sdpa
+            model.set_attn_implementation("sdpa")
+
+            # Check everything was correctly changed
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+
+            # Check we cannot set it to random values, and it raises an error
+            with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
+                model.set_attn_implementation("foo")
+
+            # Should still be sdpa everywhere
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+
+    def test_can_set_attention_dynamically_composite_model(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if not model_class._can_set_attn_implementation():
+                self.skipTest(reason="This model does not support setting its attention dynamically")
+            if not self._is_composite:
+                self.skipTest(reason="This model is not composite")
+
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model_config = copy.deepcopy(config)
+            # Set eager everywhere (it sets it recursively on subconfigs)
+            model_config._attn_implementation = "eager"
+            model = model_class(model_config)
+
+            # sanity check to make sure everything is correctly eager
+            self.assertTrue(model.config._attn_implementation == "eager")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+            if not all(
+                submodule._can_set_attn_implementation()
+                for submodule in model.modules()
+                if isinstance(submodule, PreTrainedModel)
+            ):
+                self.skipTest(reason="Parts of this model cannot set attention dynamically")
+
+            # Now, set only top-most to sdpa (should support it if it supports the dynamic switch)
+            model.set_attn_implementation({"": "sdpa"})
+
+            # Check only top-most was correctly changed
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+    @require_torch
+    def test_bc_torch_dtype(self):
+        """
+        Test that we can still use `torch_dtype` argument correctly, for BC.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if "TimmBackbone" in model_class.__name__:
+                self.skipTest("TimmBackbone should not run this test")
+            # First check that it works correctly
+            model = model_class(copy.deepcopy(config))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Check that it works for all dtypes
+                for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                    model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
+                    model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                    for (k1, v1), (k2, v2) in zip(
+                        model_torch_dtype.named_parameters(), model_dtype.named_parameters()
+                    ):
+                        self.assertEqual(k1, k2)
+                        self.assertEqual(v1.dtype, v2.dtype)
+                        self.assertTrue((v1 == v2).all())
 
 
 global_rng = random.Random()

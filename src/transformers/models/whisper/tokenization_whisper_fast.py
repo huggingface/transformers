@@ -19,10 +19,10 @@ import os
 import re
 import warnings
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
-from tokenizers import AddedToken, pre_tokenizers, processors
+from tokenizers import AddedToken, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -128,19 +128,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
         if normalizer_file is not None:
             with open(normalizer_file, encoding="utf-8") as vocab_handle:
                 self.english_spelling_normalizer = json.load(vocab_handle)
         else:
             self.english_spelling_normalizer = None
 
-        self.add_prefix_space = add_prefix_space
         self.timestamp_pat = re.compile(r"<\|(\d+\.\d+)\|>")
 
         self.language = language
@@ -169,7 +162,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
+    def _decode_with_timestamps(
+        self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500
+    ) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -179,15 +174,25 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
+        penultimate_timestamp = 0.0
 
-        for token in token_ids:
+        for i, token in enumerate(token_ids):
             if token >= timestamp_begin:
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    last_was_single_ending = i >= 2 and not (
+                        token_ids[i - 1] >= timestamp_begin and token_ids[i - 2] >= timestamp_begin
+                    )
+                    if last_was_single_ending:
+                        prev_segments_len += time_precision * segment_size
+                    else:
+                        cur_max_timestamp = penultimate_timestamp
+                        prev_segments_len += penultimate_timestamp
+                        outputs = outputs[:-2]
 
+                penultimate_timestamp = cur_max_timestamp
                 cur_max_timestamp = timestamp
 
                 outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
@@ -200,15 +205,17 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):
         """
         Compute offsets for a given tokenized input
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
+            segment_size (`int`, *optional*, defaults to 1500):
+                The number of features in the input mel spectrogram.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -229,11 +236,26 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
+        cur_max_timestamp = 0
+        prev_segments_len = 0
         for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+
+                if start_timestamp_position < cur_max_timestamp:
+                    # next segment has started
+                    is_single_ending = last_slice >= 2 and not (
+                        token_ids[last_slice - 2] >= timestamp_begin and token_ids[last_slice - 1] >= timestamp_begin
+                    )
+                    if is_single_ending:
+                        prev_segments_len += segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = end_timestamp_position
+
                 # strip timestamp tokens from the text output
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
@@ -242,8 +264,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                     {
                         "text": text,
                         "timestamp": (
-                            start_timestamp_position * time_precision,
-                            end_timestamp_position * time_precision,
+                            start_timestamp_position * time_precision + prev_segments_len * time_precision,
+                            end_timestamp_position * time_precision + prev_segments_len * time_precision,
                         ),
                     }
                 )
@@ -269,7 +291,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
@@ -291,7 +313,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -307,16 +329,18 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
+                if present.
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
-                timestamps.
+                timestamps. If there are previous tokens (pre-prompt) to decode, they will only appear in the decoded
+                text if they contain timestamp tokens.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
@@ -396,7 +420,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -406,13 +430,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
 
         normalizer_file = os.path.join(
@@ -427,7 +451,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         return tuple(files) + (normalizer_file,)
 
-    def set_prefix_tokens(self, language: str = None, task: str = None, predict_timestamps: bool = None):
+    def set_prefix_tokens(
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+    ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
         update the prefix tokens as required when fine-tuning. Example:
@@ -467,7 +493,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.prefix_tokens
-    def prefix_tokens(self) -> List[int]:
+    def prefix_tokens(self) -> list[int]:
         bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
         translate_token_id = self.convert_tokens_to_ids("<|translate|>")
         transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
@@ -501,7 +527,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return bos_sequence
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
@@ -510,22 +536,22 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -575,7 +601,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return batch_encoding["input_ids"]
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
-    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+    def _strip_prompt(self, token_ids: list[int], prompt_token_id: int, decoder_start_token_id: int):
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
 
@@ -602,7 +628,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+
+__all__ = ["WhisperTokenizerFast"]

@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-03-02 and added to Hugging Face Transformers on 2020-11-16.*
 
 # PhoBERT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://www.aclweb.org/anthology/2020.findings-emnlp.92.pdf) by Dat Quoc Nguyen, Anh Tuan Nguyen.
+The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://huggingface.co/papers/2003.00744) by Dat Quoc Nguyen, Anh Tuan Nguyen.
 
 The abstract from the paper is the following:
 
@@ -46,16 +51,12 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 
 >>> with torch.no_grad():
 ...     features = phobert(input_ids)  # Models outputs are now tuples
-
->>> # With TensorFlow 2.0+:
->>> # from transformers import TFAutoModel
->>> # phobert = TFAutoModel.from_pretrained("vinai/phobert-base")
 ```
 
-<Tip> 
+<Tip>
 
-PhoBERT implementation is the same as BERT, except for tokenization. Refer to [EART documentation](bert) for information on 
-configuration classes and their parameters. PhoBERT-specific tokenizer is documented below.  
+PhoBERT implementation is the same as BERT, except for tokenization. Refer to [BERT documentation](bert) for information on
+configuration classes and their parameters. PhoBERT-specific tokenizer is documented below.
 
 </Tip>
 

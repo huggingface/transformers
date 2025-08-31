@@ -14,9 +14,9 @@
 # limitations under the License.
 """Chinese-CLIP model configuration"""
 
-import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 
 if TYPE_CHECKING:
@@ -79,9 +79,9 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -102,6 +102,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "chinese_clip_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -140,24 +141,6 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from ChineseCLIPConfig
-        if config_dict.get("model_type") == "chinese_clip":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class ChineseCLIPVisionConfig(PretrainedConfig):
@@ -215,6 +198,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "chinese_clip_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -248,24 +232,6 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from ChineseCLIPConfig
-        if config_dict.get("model_type") == "chinese_clip":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class ChineseCLIPConfig(PretrainedConfig):
@@ -316,6 +282,7 @@ class ChineseCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "chinese_clip"
+    sub_configs = {"text_config": ChineseCLIPTextConfig, "vision_config": ChineseCLIPVisionConfig}
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
@@ -406,18 +373,6 @@ class ChineseCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
-        Chinese-CLIP vision model configuration. Returns:
-            [`ChineseCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 class ChineseCLIPOnnxConfig(OnnxConfig):
     @property
@@ -463,3 +418,6 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+
+__all__ = ["ChineseCLIPConfig", "ChineseCLIPOnnxConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]

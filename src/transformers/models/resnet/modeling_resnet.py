@@ -30,29 +30,12 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "ResNetConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
 class ResNetConvLayer(nn.Module):
@@ -261,13 +244,9 @@ class ResNetEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class ResNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = ResNetConfig
+    config: ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
@@ -287,35 +266,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-RESNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ResNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-RESNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`ConvNextImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare ResNet model outputting raw features without any specific head on top.",
-    RESNET_START_DOCSTRING,
-)
+@auto_docstring
 class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -326,14 +277,7 @@ class ResNetModel(ResNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BaseModelOutputWithPoolingAndNoAttention:
@@ -362,12 +306,11 @@ class ResNetModel(ResNetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ResNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    RESNET_START_DOCSTRING,
+    """
 )
 class ResNetForImageClassification(ResNetPreTrainedModel):
     def __init__(self, config):
@@ -382,13 +325,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -439,13 +376,14 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ResNet backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    RESNET_START_DOCSTRING,
+    """
 )
 class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -457,14 +395,11 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
@@ -515,3 +450,6 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["ResNetForImageClassification", "ResNetModel", "ResNetPreTrainedModel", "ResNetBackbone"]

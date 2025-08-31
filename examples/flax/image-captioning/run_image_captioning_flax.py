@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,7 +186,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -833,8 +832,7 @@ def main():
             # No need to shuffle here
             loader = data_loader(rng, _ds, batch_size=batch_size, shuffle=False)
 
-            for batch in loader:
-                yield batch
+            yield from loader
 
     # Metric
     metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
@@ -908,7 +906,7 @@ def main():
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}

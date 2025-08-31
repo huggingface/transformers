@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 
@@ -53,6 +53,20 @@ class EetqHfQuantizer(HfQuantizer):
                 "Please install the latest version of eetq from : https://github.com/NetEase-FuXi/EETQ"
             )
 
+        try:
+            import eetq  # noqa: F401
+        except ImportError as exc:
+            if "shard_checkpoint" in str(exc):
+                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
+                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
+                # TODO: Update message once eetq releases a fix
+                raise ImportError(
+                    "You are using a version of EETQ that is incompatible with the current transformers version. "
+                    "Either downgrade transformers to <= v4.46.3 or, if available, upgrade EETQ to > v1.0.0."
+                ) from exc
+            else:
+                raise
+
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
@@ -65,7 +79,7 @@ class EetqHfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an EETQ model on CPU and have a CUDA device available, make sure to set "
@@ -78,26 +92,26 @@ class EetqHfQuantizer(HfQuantizer):
                     " This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.float16` due to "
+                "Overriding dtype=%s with `dtype=torch.float16` due to "
                 "requirements of `eetq` to enable model loading in 8-bit. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.float16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.float16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with EETQ.")
-        return torch_dtype
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
+        return dtype
 
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ):
         from eetq import EetqLinear
@@ -121,8 +135,8 @@ class EetqHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         quantizes weights into qweight and weight_scales
@@ -141,16 +155,14 @@ class EetqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_eetq_linear
+        from ..integrations import replace_with_eetq_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model = replace_with_eetq_linear(
             model,
@@ -161,8 +173,7 @@ class EetqHfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    @property
-    def is_serializable(self):
+    def is_serializable(self, safe_serialization=None):
         return True
 
     @property

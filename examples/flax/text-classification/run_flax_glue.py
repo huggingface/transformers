@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import datasets
 import evaluate
@@ -56,7 +55,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.57.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -108,7 +107,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -250,7 +249,7 @@ def create_train_state(
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
@@ -572,8 +571,8 @@ def main():
 
     # define step functions
     def train_step(
-        state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
-    ) -> Tuple[train_state.TrainState, float]:
+        state: train_state.TrainState, batch: dict[str, Array], dropout_rng: PRNGKey
+    ) -> tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         targets = batch.pop("labels")

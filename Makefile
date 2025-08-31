@@ -8,13 +8,19 @@ check_dirs := examples tests src utils
 exclude_folders :=  ""
 
 modified_only_fixup:
-	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
-	@if test -n "$(modified_py_files)"; then \
-		echo "Checking/fixing $(modified_py_files)"; \
-		ruff check $(modified_py_files) --fix --exclude $(exclude_folders); \
-		ruff format $(modified_py_files) --exclude $(exclude_folders);\
+	@current_branch=$$(git branch --show-current); \
+	if [ "$$current_branch" = "main" ]; then \
+		echo "On main branch, running 'style' target instead..."; \
+		$(MAKE) style; \
 	else \
-		echo "No library .py files were modified"; \
+		modified_py_files=$$(python utils/get_modified_files.py $(check_dirs)); \
+		if [ -n "$$modified_py_files" ]; then \
+			echo "Checking/fixing files: $${modified_py_files}"; \
+			ruff check $${modified_py_files} --fix --exclude $(exclude_folders); \
+			ruff format $${modified_py_files} --exclude $(exclude_folders); \
+		else \
+			echo "No library .py files were modified"; \
+		fi; \
 	fi
 
 # Update src/transformers/dependency_versions_table.py
@@ -36,16 +42,17 @@ autogenerate_code: deps_table_update
 
 repo-consistency:
 	python utils/check_copies.py
-	python utils/check_table.py
+	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/check_pipeline_typing.py
 	python utils/check_config_docstrings.py
 	python utils/check_config_attributes.py
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
-	python utils/check_support_list.py
+	python utils/add_dates.py
 
 # this target runs checks on all files
 
@@ -53,7 +60,6 @@ quality:
 	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	python utils/check_doc_toc.py
 	python utils/check_docstrings.py --check_all
@@ -62,7 +68,6 @@ quality:
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 extra_style_checks:
-	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
 	python utils/check_doc_toc.py --fix_and_overwrite
 
@@ -82,8 +87,9 @@ fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
-	python utils/check_table.py --fix_and_overwrite
+	python utils/check_modular_conversion.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
+	python utils/check_pipeline_typing.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
 

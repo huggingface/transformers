@@ -16,27 +16,41 @@ Generic utilities
 """
 
 import inspect
+import json
+import os
 import tempfile
 import warnings
-from collections import OrderedDict, UserDict
-from collections.abc import MutableMapping
-from contextlib import ExitStack, contextmanager
-from dataclasses import fields, is_dataclass
+from collections import OrderedDict, UserDict, defaultdict
+from collections.abc import Iterable, MutableMapping
+from contextlib import AbstractContextManager, ExitStack, contextmanager
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Optional, TypedDict
 
 import numpy as np
-from packaging import version
 
+from ..utils import logging
 from .import_utils import (
-    get_torch_version,
     is_flax_available,
     is_mlx_available,
     is_tf_available,
     is_torch_available,
     is_torch_fx_proxy,
+    requires,
 )
+
+
+_CAN_RECORD_REGISTRY = {}
+
+
+logger = logging.get_logger(__name__)
+
+if is_torch_available():
+    # required for @can_return_tuple decorator to work with torchdynamo
+    import torch  # noqa: F401
+
+    from ..model_debugging_utils import model_addition_debugger_context
 
 
 class cached_property(property):
@@ -255,18 +269,25 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+    if isinstance(obj, (int, float)):
+        return obj
+    elif isinstance(obj, (dict, UserDict)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        try:
+            arr = np.array(obj)
+            if np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating):
+                return arr.tolist()
+        except Exception:
+            pass
+        return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
-        "pt": lambda obj: obj.detach().cpu().tolist(),
+        "pt": lambda obj: obj.tolist(),
         "tf": lambda obj: obj.numpy().tolist(),
         "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),
     }
-
-    if isinstance(obj, (dict, UserDict)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
 
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(obj)
@@ -328,19 +349,14 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            if version.parse(get_torch_version()) >= version.parse("2.2"):
-                _torch_pytree.register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                    serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-                )
-            else:
-                _torch_pytree._register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                )
+            from torch.utils._pytree import register_pytree_node
+
+            register_pytree_node(
+                cls,
+                _model_output_flatten,
+                partial(_model_output_unflatten, output_type=cls),
+                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+            )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -353,7 +369,7 @@ class ModelOutput(OrderedDict):
 
         if is_modeloutput_subclass and not is_dataclass(self):
             raise TypeError(
-                f"{self.__module__}.{self.__class__.__name__} is not a dataclasss."
+                f"{self.__module__}.{self.__class__.__name__} is not a dataclass."
                 " This is a subclass of ModelOutput and so must use the @dataclass decorator."
             )
 
@@ -388,11 +404,7 @@ class ModelOutput(OrderedDict):
             # set the associated fields
             if first_field_iterator:
                 for idx, element in enumerate(iterator):
-                    if (
-                        not isinstance(element, (list, tuple))
-                        or not len(element) == 2
-                        or not isinstance(element[0], str)
-                    ):
+                    if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
                             # If we do not have an iterator of key/values, set it as attribute
                             self[class_fields[0].name] = first_field
@@ -451,7 +463,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
@@ -461,7 +473,7 @@ class ModelOutput(OrderedDict):
 if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
@@ -471,19 +483,12 @@ if is_torch_available():
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 
-    if version.parse(get_torch_version()) >= version.parse("2.2"):
-        _torch_pytree.register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-            serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-        )
-    else:
-        _torch_pytree._register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-        )
+    _torch_pytree.register_pytree_node(
+        ModelOutput,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=ModelOutput),
+        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
+    )
 
 
 class ExplicitEnum(str, Enum):
@@ -528,7 +533,7 @@ class ContextManagers:
     in the `fastcore` library.
     """
 
-    def __init__(self, context_managers: List[ContextManager]):
+    def __init__(self, context_managers: list[AbstractContextManager]):
         self.context_managers = context_managers
         self.stack = ExitStack()
 
@@ -709,32 +714,6 @@ def tensor_size(array):
         raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
 
 
-def add_model_info_to_auto_map(auto_map, repo_id):
-    """
-    Adds the information of the repo_id to a given auto map.
-    """
-    for key, value in auto_map.items():
-        if isinstance(value, (tuple, list)):
-            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
-        elif value is not None and "--" not in value:
-            auto_map[key] = f"{repo_id}--{value}"
-
-    return auto_map
-
-
-def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
-    """
-    Adds the information of the repo_id to a given custom pipeline.
-    """
-    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
-    for task in custom_pipeline.keys():
-        if "impl" in custom_pipeline[task]:
-            module = custom_pipeline[task]["impl"]
-            if "--" not in module:
-                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
-    return custom_pipeline
-
-
 def infer_framework(model_class):
     """
     Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
@@ -749,8 +728,7 @@ def infer_framework(model_class):
             return "pt"
         elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
             return "flax"
-    else:
-        raise TypeError(f"Could not infer framework from class {model_class}.")
+    raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def torch_int(x):
@@ -831,7 +809,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message
@@ -854,3 +832,301 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
         return wrapper
 
     return decorator
+
+
+class TransformersKwargs(TypedDict, total=False):
+    """
+    Keyword arguments to be passed to the loss function
+
+    Attributes:
+        num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
+            Number of items in the batch. It is recommended to pass it when
+            you are doing gradient accumulation.
+        output_hidden_states (`Optional[bool]`, *optional*):
+            Most of the models support outputting all hidden states computed during the forward pass.
+        output_attentions (`Optional[bool]`, *optional*):
+            Turn this on to return the intermediary attention scores.
+        output_router_logits (`Optional[bool]`, *optional*):
+            For MoE models, this allows returning the router logits to compute the loss.
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length for query state.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length for key state.
+    """
+
+    num_items_in_batch: Optional["torch.Tensor"]
+    output_hidden_states: Optional[bool]
+    output_attentions: Optional[bool]
+    output_router_logits: Optional[bool]
+    cu_seq_lens_q: Optional["torch.LongTensor"]
+    cu_seq_lens_k: Optional["torch.LongTensor"]
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]
+
+
+def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
+    """Checks whether a config dict is a timm config dict."""
+    return "pretrained_cfg" in config_dict
+
+
+def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
+    """
+    Checks whether a checkpoint is a timm model checkpoint.
+    """
+    if pretrained_model_path is None:
+        return False
+
+    # in case it's Path, not str
+    pretrained_model_path = str(pretrained_model_path)
+
+    is_file = os.path.isfile(pretrained_model_path)
+    is_dir = os.path.isdir(pretrained_model_path)
+
+    # pretrained_model_path is a file
+    if is_file and pretrained_model_path.endswith(".json"):
+        with open(pretrained_model_path) as f:
+            config_dict = json.load(f)
+        return is_timm_config_dict(config_dict)
+
+    # pretrained_model_path is a directory with a config.json
+    if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
+        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+            config_dict = json.load(f)
+        return is_timm_config_dict(config_dict)
+
+    return False
+
+
+def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
+    """
+    Set a value to a module and all submodules.
+    """
+    setattr(module, key, value)
+    for submodule in module.children():
+        set_attribute_for_modules(submodule, key, value)
+
+
+def del_attribute_from_modules(module: "torch.nn.Module", key: str):
+    """
+    Delete a value from a module and all submodules.
+    """
+    # because we might remove it previously in case it's a shared module, e.g. activation function
+    if hasattr(module, key):
+        delattr(module, key)
+
+    for submodule in module.children():
+        del_attribute_from_modules(submodule, key)
+
+
+def can_return_tuple(func):
+    """
+    Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
+    use_return_dict=False is set in the config.
+
+    Note:
+        output.to_tuple() convert output to tuple skipping all `None` values.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        return_dict = self.config.return_dict if hasattr(self, "config") else True
+        return_dict_passed = kwargs.pop("return_dict", return_dict)
+        if return_dict_passed is not None:
+            return_dict = return_dict_passed
+        output = func(self, *args, **kwargs)
+        if not return_dict and not isinstance(output, tuple):
+            output = output.to_tuple()
+        return output
+
+    return wrapper
+
+
+# if is_torch_available():
+# @torch._dynamo.disable
+@dataclass
+@requires(backends=("torch",))
+class OutputRecorder:
+    """
+    Configuration for recording outputs from a model via hooks.
+
+    Attributes:
+        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
+        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
+        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
+    """
+
+    target_class: "type[torch.nn.Module]"
+    index: Optional[int] = 0
+    layer_name: Optional[str] = None
+    class_name: Optional[str] = None
+
+
+def check_model_inputs(func):
+    """
+    Decorator to intercept specific layer outputs without using hooks.
+    Compatible with torch.compile (Dynamo tracing).
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        use_cache = (
+            kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
+        )
+        if use_cache is not None:
+            if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                )
+                use_cache = False
+
+            kwargs["use_cache"] = use_cache
+
+        return_dict = kwargs.pop("return_dict", None)
+        if return_dict is None:
+            return_dict = getattr(self.config, "return_dict", True)
+
+        all_args = kwargs.copy()
+        if "kwargs" in all_args:
+            for k, v in all_args["kwargs"].items():
+                all_args[k] = v
+
+        capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
+        recordable_keys = {
+            f"output_{k}": all_args.get(
+                f"output_{k}",
+                getattr(
+                    self.config,
+                    f"output_{k}",
+                    all_args.get("output_attentions", getattr(self.config, "output_attentions", False)),
+                ),
+            )
+            for k in capture_flags
+        }
+        collected_outputs = defaultdict(tuple)
+        monkey_patched_layers = []
+
+        def make_capture_wrapper(module, orig_forward, key, index):
+            @wraps(orig_forward)
+            def wrapped_forward(*args, **kwargs):
+                if key == "hidden_states" and len(collected_outputs[key]) == 0:
+                    collected_outputs[key] += (args[0],)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
+                    ):
+                        output = orig_forward(*args, **kwargs)
+                else:
+                    output = orig_forward(*args, **kwargs)
+                if not isinstance(output, tuple):
+                    collected_outputs[key] += (output,)
+                elif output[index] is not None:
+                    if key not in collected_outputs:
+                        collected_outputs[key] = (output[index],)
+                    else:
+                        collected_outputs[key] += (output[index],)
+                return output
+
+            return wrapped_forward
+
+        if any(recordable_keys.values()):
+            capture_tasks = []
+            for key, layer_specs in capture_flags.items():
+                if not recordable_keys.get(f"output_{key}", False):
+                    continue
+                if not isinstance(layer_specs, list):
+                    layer_specs = [layer_specs]
+                for specs in layer_specs:
+                    if not isinstance(specs, OutputRecorder):
+                        index = 0 if "hidden_states" in key else 1
+                        class_name = None if not isinstance(specs, str) else specs
+                        target_class = specs if not isinstance(specs, str) else None
+                        specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
+                    capture_tasks.append((key, specs))
+
+            for name, module in self.named_modules():
+                for key, specs in capture_tasks:
+                    # The second check is for multimodals where only backbone layer suffix is available
+                    if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
+                        specs.class_name is not None and name.endswith(specs.class_name)
+                    ):
+                        if specs.layer_name is not None and specs.layer_name not in name:
+                            continue
+                        # Monkey patch forward
+                        original_forward = module.forward
+                        module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
+                        monkey_patched_layers.append((module, original_forward))
+
+        outputs = func(self, *args, **kwargs)
+        # Restore original forward methods
+        for module, original_forward in monkey_patched_layers:
+            module.forward = original_forward
+
+        # Inject collected outputs into model output
+        for key in collected_outputs:
+            if key == "hidden_states":
+                collected_outputs[key] = collected_outputs[key][:-1]
+                if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] += (outputs.vision_hidden_states,)
+                elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] += (outputs.last_hidden_state,)
+
+                outputs[key] = collected_outputs[key]
+            elif key == "attentions":
+                if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
+                    outputs[key] = collected_outputs[key][0::2]
+                    outputs["cross_" + key] = collected_outputs[key][1::2]
+                else:
+                    outputs[key] = collected_outputs[key]
+            else:
+                outputs[key] = collected_outputs[key]
+        if return_dict is False:
+            outputs = outputs.to_tuple()
+        return outputs
+
+    return wrapper
+
+
+class GeneralInterface(MutableMapping):
+    """
+    Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
+    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    """
+
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {}
+
+    def __init__(self):
+        self._local_mapping = {}
+
+    def __getitem__(self, key):
+        # First check if instance has a local override
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter({**self._global_mapping, **self._local_mapping})
+
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def valid_keys(self) -> list[str]:
+        return list(self.keys())

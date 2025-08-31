@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,9 +20,8 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -189,7 +187,7 @@ class TableTransformerModelTester:
 
 
 @require_torch
-class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,
@@ -209,6 +207,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -294,7 +293,8 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -477,10 +477,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -509,10 +509,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -591,13 +591,18 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         expected_shape = (1, 15, 3)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_logits = torch.tensor(
-            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
-            device=torch_device,
-        )
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        expected_logits_data = Expectations({
+            ("cuda", None): [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            ("rocm", (9, 4)): [[-6.7668, -16.9917, 6.7738], [-8.0046, -22.2668, 6.9491], [-7.2834, -21.0321, 7.3785]],
+        }).get_expectation()  # fmt: skip
 
-        expected_boxes = torch.tensor(
-            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
-        )
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
+        expected_logits = torch.tensor(expected_logits_data, device=torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+
+        expected_boxes_data = Expectations({
+            ("cuda", None): [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]],
+            ("rocm", (9, 4)): [[0.4868, 0.1766, 0.6732], [0.6686, 0.4526, 0.3859], [0.4717, 0.1760, 0.6362]],
+        }).get_expectation()  # fmt: skip
+
+        expected_boxes = torch.tensor(expected_boxes_data, device=torch_device)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3)

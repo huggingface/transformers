@@ -181,7 +181,7 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = "longest"
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         # split inputs and labels since they have to be of different lengths and need
 ...         # different padding methods
 ...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]
@@ -298,7 +298,7 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor,
+...     processing_class=processor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

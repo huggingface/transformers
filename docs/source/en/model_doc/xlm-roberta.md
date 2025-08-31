@@ -13,47 +13,114 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-11-05 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # XLM-RoBERTa
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=xlm-roberta">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/xlm-roberta-base">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
+[XLM-RoBERTa](https://huggingface.co/papers/1911.02116) is a large multilingual masked language model trained on 2.5TB of filtered CommonCrawl data across 100 languages. It shows that scaling the model provides strong performance gains on high-resource and low-resource languages. The model uses the [RoBERTa](./roberta) pretraining objectives on the [XLM](./xlm) model.
 
-## Overview
+You can find all the original XLM-RoBERTa checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI) organization.
 
-The XLM-RoBERTa model was proposed in [Unsupervised Cross-lingual Representation Learning at Scale](https://arxiv.org/abs/1911.02116) by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume
-Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov. It is based on Facebook's
-RoBERTa model released in 2019. It is a large multi-lingual language model, trained on 2.5TB of filtered CommonCrawl
-data.
+> [!TIP]
+> Click on the XLM-RoBERTa models in the right sidebar for more examples of how to apply XLM-RoBERTa to different cross-lingual tasks like classification, translation, and question answering.
 
-The abstract from the paper is the following:
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-*This paper shows that pretraining multilingual language models at scale leads to significant performance gains for a
-wide range of cross-lingual transfer tasks. We train a Transformer-based masked language model on one hundred
-languages, using more than two terabytes of filtered CommonCrawl data. Our model, dubbed XLM-R, significantly
-outperforms multilingual BERT (mBERT) on a variety of cross-lingual benchmarks, including +13.8% average accuracy on
-XNLI, +12.3% average F1 score on MLQA, and +2.1% average F1 score on NER. XLM-R performs particularly well on
-low-resource languages, improving 11.8% in XNLI accuracy for Swahili and 9.2% for Urdu over the previous XLM model. We
-also present a detailed empirical evaluation of the key factors that are required to achieve these gains, including the
-trade-offs between (1) positive transfer and capacity dilution and (2) the performance of high and low resource
-languages at scale. Finally, we show, for the first time, the possibility of multilingual modeling without sacrificing
-per-language performance; XLM-Ris very competitive with strong monolingual models on the GLUE and XNLI benchmarks. We
-will make XLM-R code, data, and models publicly available.*
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/xlmr).
+```python
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipeline = pipeline(
+    task="fill-mask",
+    model="FacebookAI/xlm-roberta-base",
+    dtype=torch.float16,
+    device=0
+)
+# Example in French
+pipeline("Bonjour, je suis un modèle <mask>.")
+```
 
-- XLM-RoBERTa is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does
-  not require `lang` tensors to understand which language is used, and should be able to determine the correct
-  language from the input ids.
-- Uses RoBERTa tricks on the XLM approach, but does not use the translation language modeling objective. It only uses masked language modeling on sentences coming from one language.
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "FacebookAI/xlm-roberta-base"
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "FacebookAI/xlm-roberta-base",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+# Prepare input
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model FacebookAI/xlm-roberta-base --device 0
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) the quantive the weights to 4 bits
+
+```python
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16
+    bnb_4bit_quant_type="nf4",  # or "fp4" for float 4-bit quantization
+    bnb_4bit_use_double_quant=True,  # use double quantization for better performance
+)
+tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-large")
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-large",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="flash_attention_2",
+    quantization_config=quantization_config
+)
+
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- Unlike some XLM models, XLM-RoBERTa doesn't require `lang` tensors to understand what language is being used. It automatically determines the language from the input IDs
 
 ## Resources
 
@@ -62,17 +129,13 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="text-classification"/>
 
 - A blog post on how to [finetune XLM RoBERTa for multiclass classification with Habana Gaudi on AWS](https://www.philschmid.de/habana-distributed-training)
-- [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
-- [`TFXLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
-- [`FlaxXLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
+- [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
 - [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
 - [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
 - [`XLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [`TFXLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-- [`FlaxXLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Token classification task guide](../tasks/token_classification)
 
@@ -85,30 +148,25 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="fill-mask"/>
 
 - [`XLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFXLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxXLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Masked language modeling](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
 - [`XLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [`TFXLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-- [`FlaxXLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Question answering task guide](../tasks/question_answering)
 
 **Multiple choice**
 
 - [`XLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-- [`TFXLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
 - [Multiple choice task guide](../tasks/multiple_choice)
 
 🚀 Deploy
 
 - A blog post on how to [Deploy Serverless XLM RoBERTa on AWS Lambda](https://www.philschmid.de/multilingual-serverless-xlm-roberta-with-huggingface).
 
-<Tip> 
+<Tip>
 
 This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
 </Tip>
@@ -128,9 +186,6 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 ## XLMRobertaTokenizerFast
 
 [[autodoc]] XLMRobertaTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## XLMRobertaModel
 
@@ -166,82 +221,3 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 
 [[autodoc]] XLMRobertaForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLMRobertaModel
-
-[[autodoc]] TFXLMRobertaModel
-    - call
-
-## TFXLMRobertaForCausalLM
-
-[[autodoc]] TFXLMRobertaForCausalLM
-    - call
-
-## TFXLMRobertaForMaskedLM
-
-[[autodoc]] TFXLMRobertaForMaskedLM
-    - call
-
-## TFXLMRobertaForSequenceClassification
-
-[[autodoc]] TFXLMRobertaForSequenceClassification
-    - call
-
-## TFXLMRobertaForMultipleChoice
-
-[[autodoc]] TFXLMRobertaForMultipleChoice
-    - call
-
-## TFXLMRobertaForTokenClassification
-
-[[autodoc]] TFXLMRobertaForTokenClassification
-    - call
-
-## TFXLMRobertaForQuestionAnswering
-
-[[autodoc]] TFXLMRobertaForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxXLMRobertaModel
-
-[[autodoc]] FlaxXLMRobertaModel
-    - __call__
-
-## FlaxXLMRobertaForCausalLM
-
-[[autodoc]] FlaxXLMRobertaForCausalLM
-    - __call__
-
-## FlaxXLMRobertaForMaskedLM
-
-[[autodoc]] FlaxXLMRobertaForMaskedLM
-    - __call__
-
-## FlaxXLMRobertaForSequenceClassification
-
-[[autodoc]] FlaxXLMRobertaForSequenceClassification
-    - __call__
-
-## FlaxXLMRobertaForMultipleChoice
-
-[[autodoc]] FlaxXLMRobertaForMultipleChoice
-    - __call__
-
-## FlaxXLMRobertaForTokenClassification
-
-[[autodoc]] FlaxXLMRobertaForTokenClassification
-    - __call__
-
-## FlaxXLMRobertaForQuestionAnswering
-
-[[autodoc]] FlaxXLMRobertaForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

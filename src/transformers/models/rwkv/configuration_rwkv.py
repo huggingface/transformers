@@ -57,7 +57,7 @@ class RwkvConfig(PretrainedConfig):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer as
             GPTNeoX.
         rescale_every (`int`, *optional*, defaults to 6):
-            At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
+            At inference, the hidden states (and weights of the corresponding output layers) are divided by 2 every
             `rescale_every` layer. If set to 0 or a negative number, no rescale is done.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the word embeddings with the input token embeddings.
@@ -115,3 +115,6 @@ class RwkvConfig(PretrainedConfig):
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
         )
+
+
+__all__ = ["RwkvConfig"]

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for DAC"""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -59,7 +59,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
@@ -70,7 +70,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
@@ -108,7 +108,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -150,10 +150,11 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             padding=padding,
-            return_attention_mask=False,
+            return_attention_mask=padding,
             pad_to_multiple_of=self.hop_length,
         )
-
+        if padding:
+            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
         if padding:
             padded_inputs.input_values = padded_inputs.input_values[:, np.newaxis, :]
 
@@ -168,3 +169,6 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["DacFeatureExtractor"]

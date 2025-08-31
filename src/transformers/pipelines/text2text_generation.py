@@ -1,6 +1,8 @@
 import enum
 import warnings
+from typing import Any, Union
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -26,6 +28,11 @@ class ReturnType(enum.Enum):
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Example:
 
@@ -59,6 +66,17 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator = pipeline("text2text-generation")
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
+
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+    # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=4,
+    )
 
     # Used in the return key of the pipeline.
     return_name = "generated"
@@ -106,6 +124,12 @@ class Text2TextGenerationPipeline(Pipeline):
                 )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
@@ -115,7 +139,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return True
 
     def _parse_and_tokenize(self, *args, truncation):
-        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+        prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
             if self.tokenizer.pad_token_id is None:
                 raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
@@ -126,7 +150,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args = (prefix + args[0],)
             padding = False
         else:
-            raise ValueError(
+            raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
         inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
@@ -135,12 +159,12 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> list[dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Input text for the encoder.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -154,7 +178,7 @@ class Text2TextGenerationPipeline(Pipeline):
                 max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -185,9 +209,14 @@ class Text2TextGenerationPipeline(Pipeline):
 
         self.check_inputs(
             input_length,
-            generate_kwargs.get("min_length", self.model.config.min_length),
-            generate_kwargs.get("max_length", self.model.config.max_length),
+            generate_kwargs.get("min_length", self.generation_config.min_length),
+            generate_kwargs.get("max_length", self.generation_config.max_length),
         )
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
@@ -227,6 +256,11 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
     Usage:
 
     ```python
@@ -247,7 +281,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Summarize the text(s) given as inputs.
 
         Args:
-            documents (*str* or `List[str]`):
+            documents (*str* or `list[str]`):
                 One or several articles (or one list of articles) to summarize.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs
@@ -257,7 +291,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -279,7 +313,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             logger.warning(
                 f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
                 "a summarization task, where outputs shorter than the input are typically wanted, you might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length // 2})"
             )
 
 
@@ -295,6 +329,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
     For a list of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 
@@ -343,7 +382,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         Translate the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Texts to be translated.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -359,7 +398,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:

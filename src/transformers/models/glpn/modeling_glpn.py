@@ -15,7 +15,7 @@
 """PyTorch GLPN model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,25 +25,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from .configuration_glpn import GLPNConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "GLPNConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
-_EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -79,7 +65,7 @@ class GLPNDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
@@ -111,7 +97,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
 # Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://arxiv.org/abs/2102.12122)."""
+    paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
@@ -140,11 +126,6 @@ class GLPNEfficientSelfAttention(nn.Module):
             )
             self.layer_norm = nn.LayerNorm(hidden_size)
 
-    def transpose_for_scores(self, hidden_states):
-        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        hidden_states = hidden_states.view(new_shape)
-        return hidden_states.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states,
@@ -152,7 +133,12 @@ class GLPNEfficientSelfAttention(nn.Module):
         width,
         output_attentions=False,
     ):
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         if self.sr_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
@@ -164,8 +150,16 @@ class GLPNEfficientSelfAttention(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -331,7 +325,7 @@ class GLPNEncoder(nn.Module):
         self.config = config
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
 
         # patch embeddings
         embeddings = []
@@ -413,13 +407,9 @@ class GLPNEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class GLPNPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = GLPNConfig
+    config: GLPNConfig
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
     _no_split_modules = []
@@ -437,44 +427,12 @@ class GLPNPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
 
-GLPN_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`GLPNConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-GLPN_INPUTS_DOCSTRING = r"""
-
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`GLPNImageProcessor.__call__`] for details.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare GLPN encoder (Mix-Transformer) outputting raw hidden-states without any specific head on top.",
-    GLPN_START_DOCSTRING,
-)
+@auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
     def __init__(self, config):
@@ -495,14 +453,7 @@ class GLPNModel(GLPNPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
@@ -510,7 +461,7 @@ class GLPNModel(GLPNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -537,7 +488,7 @@ class GLPNModel(GLPNPreTrainedModel):
 
 class GLPNSelectiveFeatureFusion(nn.Module):
     """
-    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This
+    Selective Feature Fusion module, as explained in the [paper](https://huggingface.co/papers/2201.07436) (section 3.4). This
     module adaptively selects and integrates local and global features by attaining an attention map for each feature.
     """
 
@@ -614,7 +565,7 @@ class GLPNDecoder(nn.Module):
 
         self.final_upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
         stage_hidden_states = []
         stage_hidden_state = None
         for hidden_state, stage in zip(hidden_states[::-1], self.stages):
@@ -628,7 +579,7 @@ class GLPNDecoder(nn.Module):
 
 class SiLogLoss(nn.Module):
     r"""
-    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
+    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://huggingface.co/papers/1406.2283).
 
     $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log
     y_{i}^{*}$.
@@ -660,7 +611,7 @@ class GLPNDepthEstimationHead(nn.Module):
             nn.Conv2d(channels, 1, kernel_size=3, stride=1, padding=1),
         )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # use last features of the decoder
         hidden_states = hidden_states[self.config.head_in_index]
 
@@ -672,9 +623,10 @@ class GLPNDepthEstimationHead(nn.Module):
         return predicted_depth
 
 
-@add_start_docstrings(
-    """GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.""",
-    GLPN_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.
+    """
 )
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
     def __init__(self, config):
@@ -687,8 +639,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -696,12 +647,10 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
+    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
-
-        Returns:
 
         Examples:
 
@@ -723,20 +672,18 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     predicted_depth = outputs.predicted_depth
 
         >>> # interpolate to original size
-        >>> prediction = torch.nn.functional.interpolate(
-        ...     predicted_depth.unsqueeze(1),
-        ...     size=image.size[::-1],
-        ...     mode="bicubic",
-        ...     align_corners=False,
+        >>> post_processed_output = image_processor.post_process_depth_estimation(
+        ...     outputs,
+        ...     target_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
+        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
+        >>> depth = predicted_depth * 255 / predicted_depth.max()
+        >>> depth = depth.detach().cpu().numpy()
+        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -773,3 +720,6 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["GLPNForDepthEstimation", "GLPNLayer", "GLPNModel", "GLPNPreTrainedModel"]

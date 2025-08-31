@@ -16,7 +16,7 @@
 Feature extractor class for Speech2Text
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -52,6 +52,13 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             Number of Mel-frequency bins.
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0 (assuming [-32k,+32k] range of kaldi waveform).
+            The value 0.0 means no dithering.
+            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
+            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
         do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
         normalize_means (`bool`, *optional*, defaults to `True`):
@@ -68,6 +75,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate=16000,
         num_mel_bins=80,
         padding_value=0.0,
+        dither=0.0,
         do_ceptral_normalize=True,
         normalize_means=True,
         normalize_vars=True,
@@ -75,6 +83,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
+        self.dither = dither
         self.do_ceptral_normalize = do_ceptral_normalize
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
@@ -82,7 +91,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
         if not is_speech_available():
             mel_filters = mel_filter_bank(
-                num_frequency_bins=256,
+                num_frequency_bins=257,
                 num_mel_filters=self.num_mel_bins,
                 min_frequency=20,
                 max_frequency=sampling_rate // 2,
@@ -92,7 +101,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 triangularize_in_mel_space=True,
             )
 
-            self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+            self.mel_filters = mel_filters
             self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(
@@ -106,7 +115,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
         if is_speech_available():
             waveform = torch.from_numpy(waveform).unsqueeze(0)
-            features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
+            features = ta_kaldi.fbank(
+                waveform,
+                dither=self.dither,
+                num_mel_bins=self.num_mel_bins,
+                sample_frequency=self.sampling_rate,
+            )
             features = features.numpy()
         else:
             waveform = np.squeeze(waveform)
@@ -118,6 +132,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 fft_length=512,
                 power=2.0,
                 center=False,
+                dither=self.dither,
                 preemphasis=0.97,
                 mel_filters=self.mel_filters,
                 log_mel="log",
@@ -151,8 +166,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
-    ) -> List[np.ndarray]:
+        self, input_features: list[np.ndarray], attention_mask: Optional[np.ndarray] = None
+    ) -> list[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
         return [
             self.utterance_cmvn(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
@@ -161,7 +176,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -175,7 +190,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -233,7 +248,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -295,3 +310,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["Speech2TextFeatureExtractor"]

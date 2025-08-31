@@ -3,6 +3,7 @@ import types
 
 import numpy as np
 
+from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
@@ -37,9 +38,9 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     def __call__(self, table=None, query=None, **kwargs):
         # Returns tqa_pipeline_inputs of shape:
         # [
-        #   {"table": pd.DataFrame, "query": List[str]},
+        #   {"table": pd.DataFrame, "query": list[str]},
         #   ...,
-        #   {"table": pd.DataFrame, "query" : List[str]}
+        #   {"table": pd.DataFrame, "query" : list[str]}
         # ]
         requires_backends(self, "pandas")
         import pandas as pd
@@ -88,6 +89,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -116,6 +121,16 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
     default_input_names = "table,query"
 
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
@@ -128,8 +143,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
             mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
         self.check_model_type(mapping)
 
-        self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
-            getattr(self.model.config, "num_aggregation_labels", None)
+        self.aggregate = getattr(self.model.config, "aggregation_labels", None) and getattr(
+            self.model.config, "num_aggregation_labels", None
         )
         self.type = "tapas" if hasattr(self.model.config, "aggregation_labels") else None
 
@@ -252,7 +267,6 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 )
 
                 coords_to_probs = collections.defaultdict(list)
-                token_type_ids_example = token_type_ids_example
                 for i, p in enumerate(tf.squeeze(probabilities).numpy().tolist()):
                     segment_id = token_type_ids_example[:, 0].tolist()[i]
                     col = token_type_ids_example[:, 1].tolist()[i] - 1
@@ -305,7 +319,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             table (`pd.DataFrame` or `Dict`):
                 Pandas DataFrame or dictionary that will be converted to a DataFrame containing all the table values.
                 See above for an example of dictionary.
-            query (`str` or `List[str]`):
+            query (`str` or `list[str]`):
                 Query or list of queries that will be sent to the model alongside the table.
             sequential (`bool`, *optional*, defaults to `False`):
                 Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
@@ -337,8 +351,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
             - **answer** (`str`) -- The answer of the query given the table. If there is an aggregator, the answer will
               be preceded by `AGGREGATOR >`.
-            - **coordinates** (`List[Tuple[int, int]]`) -- Coordinates of the cells of the answers.
-            - **cells** (`List[str]`) -- List of strings made up of the answer cell values.
+            - **coordinates** (`list[tuple[int, int]]`) -- Coordinates of the cells of the answers.
+            - **cells** (`list[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (`str`) -- If the model has an aggregator, this returns the aggregator.
         """
         pipeline_inputs = self._args_parser(*args, **kwargs)
@@ -358,6 +372,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         forward_params = {}
         if sequential is not None:
             forward_params["sequential"] = sequential
+
+        if getattr(self, "assistant_model", None) is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
     def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
@@ -385,6 +406,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs
@@ -425,7 +450,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 answers.append(answer)
             if len(answer) == 0:
-                raise PipelineException("Empty answer")
+                raise PipelineException("Table question answering", self.model.name_or_path, "Empty answer")
         else:
             answers = [{"answer": answer} for answer in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)]
 

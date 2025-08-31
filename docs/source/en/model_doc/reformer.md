@@ -13,21 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-13 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Reformer
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=reformer">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/reformer-crime-and-punishment">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
-The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451.pdf) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
 The abstract from the paper is the following:
 
@@ -98,7 +94,7 @@ length* of the `input_ids`.
 
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied. Therefore, the key
 query embedding vectors are also tied. LSH self attention uses the locality sensitive hashing mechanism proposed in
-[Practical and Optimal LSH for Angular Distance](https://arxiv.org/abs/1509.02897) to assign each of the tied key
+[Practical and Optimal LSH for Angular Distance](https://huggingface.co/papers/1509.02897) to assign each of the tied key
 query embedding vectors to one of `config.num_buckets` possible buckets. The premise is that the more "similar"
 key query embedding vectors (in terms of *cosine similarity*) are to each other, the more likely they are assigned to
 the same bucket.
@@ -110,7 +106,7 @@ each of length `config.lsh_chunk_length`. For each chunk, the query embedding ve
 (which are tied to themselves) and to the key embedding vectors of `config.lsh_num_chunks_before` previous
 neighboring chunks and `config.lsh_num_chunks_after` following neighboring chunks.
 
-For more information, see the [original Paper](https://arxiv.org/abs/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
+For more information, see the [original Paper](https://huggingface.co/papers/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
 
 Note that `config.num_buckets` can also be factorized into a list \\((n_{\text{buckets}}^1,
 n_{\text{buckets}}^2)\\). This way instead of assigning the query key embedding vectors to one of \\((1,\ldots,

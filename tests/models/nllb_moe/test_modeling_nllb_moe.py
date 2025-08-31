@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -247,7 +246,6 @@ class NllbMoeModelTester:
 @require_torch
 class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (NllbMoeForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": NllbMoeModel,
@@ -266,7 +264,14 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         # Saving the slow tokenizer after saving the fast tokenizer causes the loading of the later hanging forever.
         return True
@@ -347,7 +352,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -486,11 +491,11 @@ class NllbMoeRouterTest(unittest.TestCase):
         mask = mask.reshape(-1)
         set_seed(0)
         hidden_states = torch.rand((self.batch_size, self.sequence_length, self.config.hidden_size))
-        classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
+        classifier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
         hf_router = NllbMoeTop2Router(self.config)
 
         _, _, hidden_dim = hidden_states.shape
-        logits = classfier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
+        logits = classifier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
         top_1_mask, router_probs = hf_router.route_tokens(logits, padding_mask=mask)
         torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()
@@ -512,7 +517,7 @@ class NllbMoeRouterTest(unittest.TestCase):
         hidden_states = masked_hidden_states.sum(dim=0).reshape(self.batch_size, self.sequence_length, hidden_dim)
 
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor([[ 7.0340e-04,  2.7997e-03, -1.3351e-02, -7.6705e-03, -3.5089e-03,3.9773e-03,  7.4593e-03,  1.2566e-02,  3.5860e-03, -2.7448e-02,-1.3731e-02, -1.0534e-02, -1.3606e-02, -1.5048e-02, -2.8914e-03,-5.0371e-03, -1.3963e-03,  6.0076e-03, -1.1380e-02, -1.4620e-02, 5.2401e-03,  8.4660e-04, -1.5319e-03, -1.6735e-02,  1.1302e-02, 3.6119e-03,  4.6084e-03, -1.3458e-02,  7.7792e-05,  1.4312e-02, 4.9107e-03, -5.0936e-03], [-4.4538e-03,  3.1026e-03,  1.4121e-04, -4.8121e-03, -5.6279e-03, 7.2493e-03,  3.9769e-03,  1.1114e-02, -1.5666e-03, -2.3477e-02, 8.7268e-03,  1.3446e-02, -2.8845e-05, -1.7287e-02,  8.7619e-03, -4.5316e-03, -1.2164e-02,  5.7461e-03, -4.5861e-03, -9.3907e-03, 2.9808e-02,  8.9206e-04, -7.6232e-04, -1.4173e-02,  3.0208e-03, 1.5310e-02,  9.7717e-03,  3.1014e-03,  7.8042e-03,  8.0197e-03, 3.4784e-03, -7.1728e-03]])  # fmt: skip
-        self.assertTrue(torch.allclose(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
+        torch.testing.assert_close(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, atol=1e-4, rtol=1e-4)
 
     def test_batch_prioritized_routing(self):
         set_seed(0)

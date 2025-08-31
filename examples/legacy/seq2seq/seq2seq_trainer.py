@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -22,7 +22,6 @@ from transformers import PreTrainedModel, Trainer, logging
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
     Adafactor,
-    AdamW,
     get_constant_schedule,
     get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
@@ -102,12 +101,11 @@ class Seq2SeqTrainer(Trainer):
                     "weight_decay": 0.0,
                 },
             ]
-            optimizer_cls = Adafactor if self.args.adafactor else AdamW
             if self.args.adafactor:
                 optimizer_cls = Adafactor
                 optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
             else:
-                optimizer_cls = AdamW
+                optimizer_cls = torch.optim.AdamW
                 optimizer_kwargs = {
                     "betas": (self.args.adam_beta1, self.args.adam_beta2),
                     "eps": self.args.adam_epsilon,
@@ -174,10 +172,10 @@ class Seq2SeqTrainer(Trainer):
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
-    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        ignore_keys: Optional[list[str]] = None,
+    ) -> tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
 
@@ -186,7 +184,7 @@ class Seq2SeqTrainer(Trainer):
         Args:
             model (:obj:`nn.Module`):
                 The model to evaluate.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (:obj:`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -195,7 +193,7 @@ class Seq2SeqTrainer(Trainer):
                 Whether or not to return the loss only.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+            tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
         inputs = self._prepare_inputs(inputs)

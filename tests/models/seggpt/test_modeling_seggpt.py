@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +21,7 @@ from datasets import load_dataset
 
 from transformers import SegGptConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -172,6 +172,8 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    test_torch_exportable = True
+
     pipeline_model_mapping = (
         {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
     )
@@ -313,7 +315,7 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         loss_value = loss(prompt_masks, pred_masks, label, bool_masked_pos)
         expected_loss_value = torch.tensor(0.3340)
 
-        self.assertTrue(torch.allclose(loss_value, expected_loss_value, atol=1e-4))
+        torch.testing.assert_close(loss_value, expected_loss_value, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_model_from_pretrained(self):
@@ -378,15 +380,23 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 3, 896, 448))
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
-                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
-                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
+                    [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
+                    [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+                ],
+                ("cuda", 8): [
+                    [[-2.1208, -2.1189, -2.1198], [-2.1236, -2.1229, -2.1230], [-2.1233, -2.1227, -2.1228]],
+                    [[-2.0408, -2.0398, -2.0405], [-2.0435, -2.0437, -2.0438], [-2.0431, -2.0435, -2.0436]],
+                    [[-1.8101, -1.8086, -1.8098], [-1.8129, -1.8126, -1.8130], [-1.8128, -1.8128, -1.8130]],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_masks[0, :, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
         result = image_processor.post_process_semantic_segmentation(outputs, [input_image.size[::-1]])[0]
 
@@ -428,7 +438,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, 448:451, :3], expected_slice, atol=4e-4))
+        torch.testing.assert_close(outputs.pred_masks[0, :, 448:451, :3], expected_slice, rtol=4e-4, atol=4e-4)
 
     @slow
     def test_one_shot_with_label(self):
@@ -461,4 +471,4 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, labels=labels, bool_masked_pos=bool_masked_pos)
 
         expected_loss = torch.tensor(0.0074).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)

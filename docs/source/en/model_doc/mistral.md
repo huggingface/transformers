@@ -13,66 +13,35 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-10-10 and added to Hugging Face Transformers on 2023-09-27.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
 
 # Mistral
 
-## Overview
+[Mistral](https://huggingface.co/papers/2310.06825) is a 7B parameter language model, available as a pretrained and instruction-tuned variant, focused on balancing
+the scaling costs of large models with performance and efficient inference. This model uses sliding window attention (SWA) trained with a 8K context length and a fixed cache size to handle longer sequences more effectively. Grouped-query attention (GQA) speeds up inference and reduces memory requirements. Mistral also features a byte-fallback BPE tokenizer to improve token handling and efficiency by ensuring characters are never mapped to out-of-vocabulary tokens.
 
-Mistral was introduced in the [this blogpost](https://mistral.ai/news/announcing-mistral-7b/) by Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lélio Renard Lavaud, Lucile Saulnier, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, William El Sayed.
+You can find all the original Mistral checkpoints under the [Mistral AI_](https://huggingface.co/mistralai) organization.
 
-The introduction of the blog post says:
+> [!TIP]
+> Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
 
-*Mistral AI team is proud to release Mistral 7B, the most powerful language model for its size to date.*
+The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
-Mistral-7B is the first large language model (LLM) released by [mistral.ai](https://mistral.ai/).
-
-### Architectural details
-
-Mistral-7B is a decoder-only Transformer with the following architectural choices:
-
-- Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
-- GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
-- Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
-
-For more details refer to the [release blog post](https://mistral.ai/news/announcing-mistral-7b/).
-
-### License
-
-`Mistral-7B` is released under the Apache 2.0 license.
-
-## Usage tips
-
-The Mistral team has released 3 checkpoints:
-
-- a base model, [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), which has been pre-trained to predict the next token on internet-scale data.
-- an instruction tuned model, [Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1), which is the base model optimized for chat purposes using supervised fine-tuning (SFT) and direct preference optimization (DPO).
-- an improved instruction tuned model, [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), which improves upon v1.
-
-The base model can be used as follows:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-
->>> prompt = "My favourite condiment is"
-
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
->>> model.to(device)
-
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
-"My favourite condiment is to ..."
-```
-
-The instruction tuned model can be used as follows:
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2")
+>>> import torch
+>>> from transformers import pipeline
 
 >>> messages = [
 ...     {"role": "user", "content": "What is your favourite condiment?"},
@@ -80,66 +49,47 @@ The instruction tuned model can be used as follows:
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, device=0)
+>>> chatbot(messages)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+>>> import torch
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+
+>>> messages = [
+...     {"role": "user", "content": "What is your favourite condiment?"},
+...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
+... ]
+
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
 
-As can be seen, the instruction-tuned model requires a [chat template](../chat_templating) to be applied to make sure the inputs are prepared in the right format.
-
-## Speeding up Mistral by using Flash Attention
-
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one.md#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
-
-First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
-
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). Make also sure to load your model in half-precision (e.g. `torch.float16`)
-
-To load and run a model using Flash Attention-2, refer to the snippet below:
+</hfoption>
+<hfoption id="transformers CLI">
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-
->>> prompt = "My favourite condiment is"
-
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
->>> model.to(device)
-
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
-"My favourite condiment is to (...)"
+echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3 --dtype auto --device 0 --attn_implementation flash_attention_2
 ```
 
-### Expected speedups
+</hfoption>
+</hfoptions>
 
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mistral-7B-v0.1` checkpoint and the Flash Attention 2 version of the model.
 
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mistral-7b-inference-large-seqlen.png">
-</div>
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-### Sliding window Attention
-
-The current implementation supports the sliding window attention mechanism and memory efficient cache management. 
-To enable sliding window attention, just make sure to have a `flash-attn` version that is compatible with sliding window attention (`>=2.3.0`). 
-
-The Flash Attention-2 model uses also a more memory efficient cache slicing mechanism - as recommended per the official implementation of Mistral model that use rolling cache mechanism we keep the cache size fixed (`self.config.sliding_window`), support batched generation only for `padding_side="left"` and use the absolute position of the current token to compute the positional embedding.
-
-## Shrinking down Mistral using quantization
-
-As the Mistral model has 7 billion parameters, that would require about 14GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter),that requires only about 3.5GB of RAM.
-
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
 >>> import torch
@@ -152,8 +102,8 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2", quantization_config=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, dtype=torch.bfloat16, device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> prompt = "My favourite condiment is"
 
@@ -163,30 +113,33 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ) .
-The original code can be found [here](https://github.com/mistralai/mistral-src).
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-## Resources
+```py
+>>> from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Mistral. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+>>> visualizer = AttentionMaskVisualizer("mistralai/Mistral-7B-Instruct-v0.3")
+>>> visualizer("Do you have mayonnaise recipes?")
+```
 
-<PipelineTag pipeline="text-generation"/>
-
-- A demo notebook to perform supervised fine-tuning (SFT) of Mistral-7B can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Mistral/Supervised_fine_tuning_(SFT)_of_an_LLM_using_Hugging_Face_tooling.ipynb). 🌎
-- A [blog post](https://www.philschmid.de/fine-tune-llms-in-2024-with-trl) on how to fine-tune LLMs in 2024 using Hugging Face tooling. 🌎
-- The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
-- [Causal language modeling task guide](../tasks/language_modeling)
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mistral-attn-mask.png"/>
+</div>
 
 ## MistralConfig
 
 [[autodoc]] MistralConfig
+
+## MistralCommonTokenizer
+
+[[autodoc]] MistralCommonTokenizer
 
 ## MistralModel
 
@@ -208,27 +161,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] MistralForTokenClassification
     - forward
 
-## FlaxMistralModel
+## MistralForQuestionAnswering
 
-[[autodoc]] FlaxMistralModel
-    - __call__
-
-## FlaxMistralForCausalLM
-
-[[autodoc]] FlaxMistralForCausalLM
-    - __call__
-
-## TFMistralModel
-
-[[autodoc]] TFMistralModel
-    - call
-
-## TFMistralForCausalLM
-
-[[autodoc]] TFMistralForCausalLM
-    - call
-
-## TFMistralForSequenceClassification
-
-[[autodoc]] TFMistralForSequenceClassification
-    - call
+[[autodoc]] MistralForQuestionAnswering
+- forward

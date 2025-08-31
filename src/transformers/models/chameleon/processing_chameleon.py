@@ -16,13 +16,38 @@
 Processor class for Chameleon.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
+
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+class ChameleonTextKwargs(TextKwargs, total=False):
+    return_for_text_completion: bool
+
+
+class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: ChameleonTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_for_text_completion": False,
+            "return_mm_token_type_ids": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class ChameleonProcessor(ProcessorMixin):
@@ -50,49 +75,42 @@ class ChameleonProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
-        self.image_token = image_token
-        self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
-        self.image_end_token = "<eoss>"
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token = (
+            tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
+        )  # fixed tokens for start and end, so can hardcode
+        self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        return_for_text_completion: bool = False,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -110,10 +128,20 @@ class ChameleonProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+        if text is None and images is None:
+            raise ValueError("You must provide either text or images")
+
+        output_kwargs = self._merge_kwargs(
+            ChameleonProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_for_text_completion = output_kwargs["text_kwargs"].pop("return_for_text_completion", False)
 
         # Replace the image token with the expanded image token sequence
         prompt_strings = []
@@ -124,39 +152,45 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        data = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
-
+        image_inputs = {}
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-            data["pixel_values"] = pixel_values
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # add 2 for BOI and EOI tokens
+            num_image_tokens = [self.image_seq_length + 2] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+
+__all__ = ["ChameleonProcessor"]

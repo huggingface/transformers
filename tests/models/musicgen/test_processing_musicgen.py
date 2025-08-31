@@ -106,7 +106,7 @@ class MusicgenProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -121,7 +121,7 @@ class MusicgenProcessorTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):
@@ -136,18 +136,6 @@ class MusicgenProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = MusicgenProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
 
     def test_decode_audio(self):
         feature_extractor = self.get_feature_extractor(padding_side="left")

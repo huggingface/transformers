@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +14,26 @@
 """Testing suite for the PyTorch VideoMAE model."""
 
 import copy
+import tempfile
 import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from pytest import mark
 
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    Expectations,
+    is_flaky,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import cached_property, check_torch_load_is_safe, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -181,11 +191,13 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-
+    # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
+    additional_model_inputs = ["bool_masked_pos"]
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VideoMAEModelTester(self)
@@ -337,6 +349,59 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(**inputs_dict)
+
+    @unittest.skip("Not applicable for VideoMAE")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
 
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
@@ -378,9 +443,14 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 400))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expectations = Expectations(
+            {
+                (None, None): [0.3669, -0.0688, -0.2421],
+                ("cuda", 8): [0.3668, -0.0690, -0.2421],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_for_pretraining(self):
@@ -392,7 +462,8 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        check_torch_load_is_safe()
+        inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
         # forward pass
         with torch.no_grad():
@@ -404,11 +475,11 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
         )
         self.assertEqual(outputs.logits.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `True`)
         expected_loss = torch.tensor([0.5142], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `False`)
         model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False).to(
@@ -419,4 +490,4 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)

@@ -42,9 +42,9 @@ Let's see the pipeline in action. First, initialize the pipeline. If you don't p
 
 ```python
 import torch
-from transformers import pipeline
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from transformers import pipeline, infer_device
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+DEVICE = infer_device()
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
@@ -83,7 +83,7 @@ If you want to get the last hidden states before pooling, avoid passing any valu
 
 ```python
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
-output = pipe(image_real)
+outputs = pipe(image_real)
 ```
 
 Since the outputs are unpooled, we get the last hidden states where the first dimension is the batch size, and the last two are the embedding shape.

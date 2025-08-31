@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-11-09 and added to Hugging Face Transformers on 2022-06-09.*
 
 # BLOOM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The BLOOM model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.
+The [BLOOM](https://huggingface.co/papers/2211.05100) model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.
 The architecture of BLOOM is essentially similar to GPT3 (auto-regressive model for next token prediction), but has been trained on 46 different languages and 13 programming languages.
 Several smaller versions of the models have been trained on the same dataset. BLOOM is available in the following versions:
 
@@ -61,10 +66,6 @@ See also:
 [[autodoc]] BloomTokenizerFast
     - all
 
-
-<frameworkcontent>
-<pt>
-
 ## BloomModel
 
 [[autodoc]] BloomModel
@@ -89,21 +90,3 @@ See also:
 
 [[autodoc]] BloomForQuestionAnswering
     - forward
-
-</pt>
-<jax>
-
-## FlaxBloomModel
-
-[[autodoc]] FlaxBloomModel
-    - __call__
-
-## FlaxBloomForCausalLM
-
-[[autodoc]] FlaxBloomForCausalLM
-    - __call__
-
-</jax>
-</frameworkcontent>
-
-

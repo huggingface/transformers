@@ -1,6 +1,6 @@
 import os
 from functools import partial, reduce
-from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import transformers
 
@@ -53,8 +53,8 @@ if not is_torch_available() and not is_tf_available():
 
 
 def supported_features_mapping(
-    *supported_features: str, onnx_config_cls: str = None
-) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
+    *supported_features: str, onnx_config_cls: Optional[str] = None
+) -> dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
     """
     Generate the mapping between supported the features and their corresponding OnnxConfig for a given model.
 
@@ -556,7 +556,7 @@ class FeaturesManager:
     @staticmethod
     def get_supported_features_for_model_type(
         model_type: str, model_name: Optional[str] = None
-    ) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
+    ) -> dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
         """
         Tries to retrieve the feature -> OnnxConfig constructor map from the model type.
 
@@ -599,7 +599,7 @@ class FeaturesManager:
             raise RuntimeError("Cannot export model to ONNX using TensorFlow because no TensorFlow package was found.")
 
     @staticmethod
-    def get_model_class_for_feature(feature: str, framework: str = "pt") -> Type:
+    def get_model_class_for_feature(feature: str, framework: str = "pt") -> type:
         """
         Attempts to retrieve an AutoModel class from a feature name.
 
@@ -626,7 +626,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
-    def determine_framework(model: str, framework: str = None) -> str:
+    def determine_framework(model: str, framework: Optional[str] = None) -> str:
         """
         Determines the framework to use for the export.
 
@@ -669,7 +669,7 @@ class FeaturesManager:
             elif is_tf_available():
                 framework = "tf"
             else:
-                raise EnvironmentError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
+                raise OSError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
 
         logger.info(f"Framework not requested. Using {exporter_map[framework]} to export to ONNX.")
 
@@ -677,7 +677,7 @@ class FeaturesManager:
 
     @staticmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = None, cache_dir: str = None
+        feature: str, model: str, framework: Optional[str] = None, cache_dir: Optional[str] = None
     ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -711,7 +711,7 @@ class FeaturesManager:
     @staticmethod
     def check_supported_model_or_raise(
         model: Union["PreTrainedModel", "TFPreTrainedModel"], feature: str = "default"
-    ) -> Tuple[str, Callable]:
+    ) -> tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.
 

@@ -14,9 +14,6 @@
 # limitations under the License.
 """CLAP model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -64,9 +61,9 @@ class ClapTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -94,6 +91,7 @@ class ClapTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -136,24 +134,6 @@ class ClapTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.projection_hidden_act = projection_hidden_act
         self.projection_dim = projection_dim
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from ClapConfig
-        if config_dict.get("model_type") == "clap":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class ClapAudioConfig(PretrainedConfig):
@@ -245,6 +225,7 @@ class ClapAudioConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap_audio_model"
+    base_config_key = "audio_config"
 
     def __init__(
         self,
@@ -307,24 +288,6 @@ class ClapAudioConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.projection_hidden_act = projection_hidden_act
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the audio config dict if we are loading from ClapConfig
-        if config_dict.get("model_type") == "clap":
-            config_dict = config_dict["audio_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class ClapConfig(PretrainedConfig):
     r"""
@@ -377,6 +340,7 @@ class ClapConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap"
+    sub_configs = {"text_config": ClapTextConfig, "audio_config": ClapAudioConfig}
 
     def __init__(
         self,
@@ -414,14 +378,5 @@ class ClapConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
 
-    @classmethod
-    def from_text_audio_configs(cls, text_config: ClapTextConfig, audio_config: ClapAudioConfig, **kwargs):
-        r"""
-        Instantiate a [`ClapConfig`] (or a derived class) from clap text model configuration and clap audio model
-        configuration.
 
-        Returns:
-            [`ClapConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
+__all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

@@ -24,7 +24,7 @@ from PIL import Image
 
 from transformers import (
     ChameleonConfig,
-    ChameleonForCausalLM,
+    ChameleonForConditionalGeneration,
     ChameleonImageProcessor,
     ChameleonProcessor,
 )
@@ -49,10 +49,10 @@ python src/transformers/models/chameleon/convert_chameleon_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import ChameleonForCausalLM, LlamaTokenizer
+from transformers import ChameleonForConditionalGeneration, LlamaTokenizerFast
 
-model = ChameleonForCausalLM.from_pretrained("/output/path")
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
+model = ChameleonForConditionalGeneration.from_pretrained("/output/path")
+tokenizer = LlamaTokenizerFast.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -130,13 +130,15 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         for possible_name in ["consolidated.pth", "consolidated.00.pth"]:
             possible_path = os.path.join(input_model_path, possible_name)
             if os.path.exists(possible_path):
-                loaded = torch.load(possible_path, map_location="cpu")
+                loaded = torch.load(possible_path, map_location="cpu", weights_only=True)
                 break
         assert loaded is not None
     else:
         # Sharded
         loaded = [
-            torch.load(os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
+            torch.load(
+                os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu", weights_only=True
+            )
             for i in range(num_shards)
         ]
 
@@ -314,15 +316,15 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Load VQGAN weights
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
-    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
+    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu", weights_only=True)["state_dict"]
     for k, v in vqgan_state_dict.items():
         if "decoder" in k:
             continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
-    ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-    multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+    ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+    multiple_of = params.get("multiple_of", 256)
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
@@ -372,7 +374,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vocabulary_map=vocabulary_map,
     )
     with init_empty_weights():
-        model = ChameleonForCausalLM(config)
+        model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
@@ -382,7 +384,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
     tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
-    tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
+    tokenizer.pad_token_id = 1  # assign <pad> to special pad_token
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
@@ -397,8 +399,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
-    model = ChameleonForCausalLM.from_pretrained(
-        model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
+    model = ChameleonForConditionalGeneration.from_pretrained(
+        model_path, attn_implementation="eager", dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)
 
@@ -444,7 +446,7 @@ def main():
         "--model_size",
         choices=["7B", "30B"],
         help=""
-        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://github.com/facebookresearch/chameleon",
+        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, check out the original repo: https://github.com/facebookresearch/chameleon",
     )
     parser.add_argument(
         "--output_dir",

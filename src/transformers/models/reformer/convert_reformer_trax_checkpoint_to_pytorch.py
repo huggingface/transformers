@@ -150,15 +150,15 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
         position_embeddings = torch_model_reformer.embeddings.position_embeddings
         for emb_idx in range(len(position_embeddings.weights)):
             emb_weights = np.asarray(weights[3][emb_idx][0])
-            assert (
-                position_embeddings.weights[emb_idx].shape == emb_weights.shape
-            ), f"{position_embeddings[emb_idx]} emb does not match"
+            assert position_embeddings.weights[emb_idx].shape == emb_weights.shape, (
+                f"{position_embeddings[emb_idx]} emb does not match"
+            )
             position_embeddings.weights[emb_idx] = nn.Parameter(torch.tensor(emb_weights))
 
     trax_layer_weights = weights[5]
-    assert len(torch_model_reformer.encoder.layers) * 4 == len(
-        trax_layer_weights
-    ), "HF and trax model do not have the same number of layers"
+    assert len(torch_model_reformer.encoder.layers) * 4 == len(trax_layer_weights), (
+        "HF and trax model do not have the same number of layers"
+    )
     for layer_idx, layer in enumerate(torch_model_reformer.encoder.layers):
         block_weights = trax_layer_weights[4 * layer_idx : 4 * (layer_idx + 1)]
         set_block_weights_in_torch(block_weights, layer, hidden_size)
@@ -202,7 +202,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--trax_model_pkl_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--trax_model_pkl_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.\n"
+        "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
         "--config_file",

@@ -11,10 +11,15 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 
 -->
+*This model was released on 2024-02-26 and added to Hugging Face Transformers on 2024-08-06.*
 
 # Nemotron
 
-## Nemotron
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ### License
 
@@ -40,9 +45,9 @@ NVIDIA NeMo is an end-to-end, cloud-native platform to build, customize, and dep
 
 ### Minitron 4B Base
 
-Minitron is a family of small language models (SLMs) obtained by pruning NVIDIA's [Nemotron-4 15B](https://arxiv.org/abs/2402.16819) model. We prune model embedding size, attention heads, and MLP intermediate dimension, following which, we perform continued training with distillation to arrive at the final models.
+Minitron is a family of small language models (SLMs) obtained by pruning NVIDIA's [Nemotron-4 15B](https://huggingface.co/papers/2402.16819) model. We prune model embedding size, attention heads, and MLP intermediate dimension, following which, we perform continued training with distillation to arrive at the final models.
 
-Deriving the Minitron 8B and 4B models from the base 15B model using our approach requires up to **40x fewer training tokens** per model compared to training from scratch; this results in **compute cost savings of 1.8x** for training the full model family (15B, 8B, and 4B). Minitron models exhibit up to a 16% improvement in MMLU scores compared to training from scratch, perform comparably to other community models such as Mistral 7B, Gemma 7B and Llama-3 8B, and outperform state-of-the-art compression techniques from the literature. Please refer to our [arXiv paper](https://arxiv.org/abs/2407.14679) for more details.
+Deriving the Minitron 8B and 4B models from the base 15B model using our approach requires up to **40x fewer training tokens** per model compared to training from scratch; this results in **compute cost savings of 1.8x** for training the full model family (15B, 8B, and 4B). Minitron models exhibit up to a 16% improvement in MMLU scores compared to training from scratch, perform comparably to other community models such as Mistral 7B, Gemma 7B and Llama-3 8B, and outperform state-of-the-art compression techniques from the literature. Please refer to our [arXiv paper](https://huggingface.co/papers/2407.14679) for more details.
 
 Minitron models are for research and development only.
 
@@ -52,15 +57,15 @@ The following code provides an example of how to load the Minitron-4B model and 
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = 'cuda'
+device = infer_device()
 dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'
@@ -80,7 +85,7 @@ Minitron is released under the [NVIDIA Open Model License Agreement](https://dev
 
 ### Evaluation Results
 
-*5-shot performance.* Language Understanding evaluated using [Massive Multitask Language Understanding](https://arxiv.org/abs/2009.03300):
+*5-shot performance.* Language Understanding evaluated using [Massive Multitask Language Understanding](https://huggingface.co/papers/2009.03300):
 
 | Average |
 | :---- |
@@ -99,7 +104,7 @@ Minitron is released under the [NVIDIA Open Model License Agreement](https://dev
 | :------------- |
 | 23.3 |
 
-Please refer to our [paper](https://arxiv.org/abs/2407.14679) for the full set of results.
+Please refer to our [paper](https://huggingface.co/papers/2407.14679) for the full set of results.
 
 ### Citation
 
@@ -110,7 +115,7 @@ If you find our work helpful, please consider citing our paper:
       author={Saurav Muralidharan and Sharath Turuvekere Sreenivas and Raviraj Joshi and Marcin Chochowski and Mostofa Patwary and Mohammad Shoeybi and Bryan Catanzaro and Jan Kautz and Pavlo Molchanov},
       journal={arXiv preprint arXiv:2407.14679},
       year={2024},
-      url={https://arxiv.org/abs/2407.14679},
+      url={https://huggingface.co/papers/2407.14679},
 }
 ```
 

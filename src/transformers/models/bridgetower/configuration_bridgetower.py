@@ -14,9 +14,6 @@
 # limitations under the License.
 """BridgeTower model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -68,6 +65,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -94,21 +92,6 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.stop_gradient = stop_gradient
         self.share_layernorm = share_layernorm
         self.remove_last_layer = remove_last_layer
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "bridgetower":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class BridgeTowerTextConfig(PretrainedConfig):
@@ -153,9 +136,9 @@ class BridgeTowerTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -175,6 +158,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -216,21 +200,6 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "bridgetower":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class BridgeTowerConfig(PretrainedConfig):
@@ -288,6 +257,7 @@ class BridgeTowerConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower"
+    sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
 
     def __init__(
         self,
@@ -334,13 +304,5 @@ class BridgeTowerConfig(PretrainedConfig):
         self.text_config = BridgeTowerTextConfig(**text_config)
         self.vision_config = BridgeTowerVisionConfig(**vision_config)
 
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration. Returns:
-            [`BridgeTowerConfig`]: An instance of a configuration object
-        """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+__all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

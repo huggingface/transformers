@@ -39,9 +39,9 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
             Patch size to use in the patch embedding layer.
         num_stages (`int`, *optional*, defaults to 4):
             The number of stages in the model.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 3, 9, 3]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 3, 9, 3]`):
             Depth (number of blocks) for each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
@@ -52,12 +52,14 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
             The epsilon used by the layer normalization layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
-        out_features (`List[str]`, *optional*):
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
@@ -111,3 +113,6 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+
+__all__ = ["ConvNextV2Config"]

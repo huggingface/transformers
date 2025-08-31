@@ -12,8 +12,13 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2020-06-17 and added to Hugging Face Transformers on 2021-11-18.*
 
 # ImageGPT
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
@@ -21,7 +26,7 @@ The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://
 Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever. ImageGPT (iGPT) is a GPT-2-like
 model trained to predict the next pixel value, allowing for both unconditional and conditional image generation.
 
-The abstract from the paper is the following:
+The abstract from the [paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V1_ICML.pdf) is the following:
 
 *Inspired by progress in unsupervised representation learning for natural language, we examine whether similar models
 can learn useful representations for images. We train a sequence Transformer to auto-regressively predict pixels,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +13,29 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
-from transformers import DonutProcessor
+from transformers import DonutImageProcessor, DonutProcessor, XLMRobertaTokenizerFast
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
-class DonutProcessorTest(unittest.TestCase):
+class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "naver-clova-ix/donut-base"
+    processor_class = DonutProcessor
 
-    def setUp(self):
-        self.processor = DonutProcessor.from_pretrained(self.from_pretrained_id)
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = DonutProcessor.from_pretrained(cls.from_pretrained_id)
+        cls.tmpdirname = tempfile.mkdtemp()
+
+        image_processor = DonutImageProcessor()
+        tokenizer = XLMRobertaTokenizerFast.from_pretrained(cls.from_pretrained_id)
+
+        processor = DonutProcessor(image_processor, tokenizer)
+
+        processor.save_pretrained(cls.tmpdirname)
 
     def test_token2json(self):
         expected_json = {

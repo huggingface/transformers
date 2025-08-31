@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import itertools
 import os
 import random
@@ -24,7 +22,13 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import ClvpFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, slow
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    cleanup,
+    require_torch,
+    slow,
+    torch_device,
+)
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -52,7 +56,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class ClvpFeatureExtractionTester(unittest.TestCase):
+class ClvpFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -116,8 +120,7 @@ class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):
@@ -212,7 +215,7 @@ class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=22050))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
@@ -234,4 +237,4 @@ class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         feature_extractor = ClvpFeatureExtractor.from_pretrained("susnato/clvp_dev")
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 80, 517))
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)

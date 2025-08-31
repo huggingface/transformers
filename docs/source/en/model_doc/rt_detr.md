@@ -13,13 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2024-06-22.*
 
 # RT-DETR
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
 
-The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://arxiv.org/abs/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
+The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://huggingface.co/papers/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
 
 RT-DETR is an object detection model that stands for "Real-Time DEtection Transformer." This model is designed to perform object detection tasks with a focus on achieving real-time performance while maintaining high accuracy. Leveraging the transformer architecture, which has gained significant popularity in various fields of deep learning, RT-DETR processes images to identify and locate multiple objects within them.
 
@@ -30,7 +35,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/rt_detr_overview.png"
 alt="drawing" width="600"/>
 
-<small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://arxiv.org/abs/2304.08069">original paper.</a> </small>
+<small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://huggingface.co/papers/2304.08069">original paper.</a> </small>
 
 The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [sangbumchoi](https://github.com/SangbumChoi). The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
@@ -46,7 +51,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 >>> from PIL import Image
 >>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
@@ -57,7 +62,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+>>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3)
 
 >>> for result in results:
 ...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
@@ -92,6 +97,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## RTDetrImageProcessor
 
 [[autodoc]] RTDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+
+## RTDetrImageProcessorFast
+
+[[autodoc]] RTDetrImageProcessorFast
     - preprocess
     - post_process_object_detection
 

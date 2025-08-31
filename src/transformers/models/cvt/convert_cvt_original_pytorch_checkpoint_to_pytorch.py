@@ -277,7 +277,7 @@ def final():
 
 def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_folder):
     """
-    Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
+    Function to convert the microsoft cvt checkpoint to huggingface checkpoint
     """
     img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000
@@ -290,7 +290,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
+    config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
 
     # For depth size 13 (13 = 1+2+10)
     if cvt_model.rsplit("/", 1)[-1][4:6] == "13":
@@ -309,7 +309,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     model = CvtForImageClassification(config)
     image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
     image_processor.size["shortest_edge"] = image_size
-    original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"))
+    original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"), weights_only=True)
 
     huggingface_weights = OrderedDict()
     list_of_state_dict = []

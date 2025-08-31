@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,503 +14,460 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Text generation strategies
+# Generation strategies
 
-Text generation is essential to many NLP tasks, such as open-ended text generation, summarization, translation, and
-more. It also plays a role in a variety of mixed-modality applications that have text as an output like speech-to-text
-and vision-to-text. Some of the models that can generate text include
-GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper.
+A decoding strategy informs how a model should select the next generated token. There are many types of decoding strategies, and choosing the appropriate one has a significant impact on the quality of the generated text.
 
-Check out a few examples that use [`~generation.GenerationMixin.generate`] method to produce
-text outputs for different tasks:
-* [Text summarization](./tasks/summarization#inference)
-* [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
-* [Audio transcription](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
+This guide will help you understand the different decoding strategies available in Transformers and how and when to use them.
 
-Note that the inputs to the generate method depend on the model's modality. They are returned by the model's preprocessor
-class, such as AutoTokenizer or AutoProcessor. If a model's preprocessor creates more than one kind of input, pass all
-the inputs to generate(). You can learn more about the individual model's preprocessor in the corresponding model's documentation.
+## Basic decoding methods
 
-The process of selecting output tokens to generate text is known as decoding, and you can customize the decoding strategy
-that the `generate()` method will use. Modifying a decoding strategy does not change the values of any trainable parameters.
-However, it can have a noticeable impact on the quality of the generated output. It can help reduce repetition in the text
-and make it more coherent.
+These are well established decoding methods, and should be your starting point for text generation tasks.
 
-This guide describes:
-* default generation configuration
-* common decoding strategies and their main parameters
-* saving and sharing custom generation configurations with your fine-tuned model on 🤗 Hub
+### Greedy search
 
-## Default text generation configuration
+Greedy search is the default decoding strategy. It selects the next most likely token at each step. Unless specified in [`GenerationConfig`], this strategy generates a maximum of 20 new tokens.
 
-A decoding strategy for a model is defined in its generation configuration. When using pre-trained models for inference
-within a [`pipeline`], the models call the `PreTrainedModel.generate()` method that applies a default generation
-configuration under the hood. The default configuration is also used when no custom configuration has been saved with
-the model.
+Greedy search works well for tasks with relatively short outputs where creativity is not a priority. However, it breaks down when generating longer sequences because it begins to repeat itself.
 
-When you load a model explicitly, you can inspect the generation configuration that comes with it through
- `model.generation_config`:
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-```python
->>> from transformers import AutoModelForCausalLM
+device = infer_device()
 
->>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
->>> model.generation_config
-GenerationConfig {
-  "bos_token_id": 50256,
-  "eos_token_id": 50256
-}
-<BLANKLINE>
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
+# explicitly set to default length because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=20)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that provides a suite of tools and services for building, deploying, and maintaining natural language processing'
 ```
 
-Printing out the `model.generation_config` reveals only the values that are different from the default generation
-configuration, and does not list any of the default values.
+### Sampling
 
-The default generation configuration limits the size of the output combined with the input prompt to a maximum of 20
-tokens to avoid running into resource limitations. The default decoding strategy is greedy search, which is the simplest decoding strategy that picks a token with the highest probability as the next token. For many tasks
-and small output sizes this works well. However, when used to generate longer outputs, greedy search can start
-producing highly repetitive results.
+Sampling, or multinomial sampling, randomly selects a token based on the probability distribution over the entire model's vocabulary (as opposed to the most likely token, as in greedy search). This means every token with a non-zero probability has a chance to be selected. Sampling strategies reduce repetition and can generate more creative and diverse outputs.
 
-## Customize text generation
+Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
 
-You can override any `generation_config` by passing the parameters and their values directly to the [`generate`] method:
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-```python
->>> my_model.generate(**inputs, num_beams=4, do_sample=True)  # doctest: +SKIP
+device = infer_device()
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
+# explicitly set to 100 because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company 🤗\nWe are open-source and believe that open-source is the best way to build technology. Our mission is to make AI accessible to everyone, and we believe that open-source is the best way to achieve that.'
 ```
 
-Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
-commonly adjusted parameters include:
+### Beam search
 
-- `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose
-to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
-- `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
-beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
-has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search. Visualize how it works [here](https://huggingface.co/spaces/m-ric/beam_search_visualizer).
-- `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
-multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
-distribution over the entire vocabulary with various strategy-specific adjustments.
-- `num_return_sequences`: the number of sequence candidates to return for each input. This option is only available for
-the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
-strategies like greedy search and contrastive search return a single output sequence.
+Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability. It is best suited for input-grounded tasks, like describing an image or speech recognition. You can also use `do_sample=True` with beam search to sample at each step, but beam search will still greedily prune out low probability sequences between steps.
 
-## Save a custom decoding strategy with your model
+> [!TIP]
+> Check out the [beam search visualizer](https://huggingface.co/spaces/m-ric/beam_search_visualizer) to see how beam search works.
 
-If you would like to share your fine-tuned model with a specific generation configuration, you can:
-* Create a [`GenerationConfig`] class instance
-* Specify the decoding strategy parameters
-* Save your generation configuration with [`GenerationConfig.save_pretrained`], making sure to leave its `config_file_name` argument empty
-* Set `push_to_hub` to `True` to upload your config to the model's repo
+Enable beam search with the `num_beams` parameter (should be greater than 1 otherwise it's equivalent to greedy search).
 
-```python
->>> from transformers import AutoModelForCausalLM, GenerationConfig
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
->>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")  # doctest: +SKIP
->>> generation_config = GenerationConfig(
-...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
-... )
->>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)  # doctest: +SKIP
+device = infer_device()
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
+# explicitly set to 100 because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=50, num_beams=2)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+"['Hugging Face is an open-source company that develops and maintains the Hugging Face platform, which is a collection of tools and libraries for building and deploying natural language processing (NLP) models. Hugging Face was founded in 2018 by Thomas Wolf']"
 ```
 
-You can also store several generation configurations in a single directory, making use of the `config_file_name`
-argument in [`GenerationConfig.save_pretrained`]. You can later instantiate them with [`GenerationConfig.from_pretrained`]. This is useful if you want to
-store several generation configurations for a single model (e.g. one for creative text generation with sampling, and
-one for summarization with beam search). You must have the right Hub permissions to add configuration files to a model.
+## Advanced decoding methods
 
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
+Advanced decoding methods aim at either tackling specific generation quality issues (e.g. repetition) or at improving the generation throughput in certain situations. These techniques are more complex, and may not work correctly with all models.
 
->>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+### Speculative decoding
 
->>> translation_generation_config = GenerationConfig(
-...     num_beams=4,
-...     early_stopping=True,
-...     decoder_start_token_id=0,
-...     eos_token_id=model.config.eos_token_id,
-...     pad_token=model.config.pad_token_id,
-... )
+[Speculative](https://hf.co/papers/2211.17192) or assistive decoding isn't a search or sampling strategy. Instead, speculative decoding adds a second smaller model to generate candidate tokens. The main model verifies the candidate tokens in a single `forward` pass, which speeds up the decoding process overall. This method is especially useful for LLMs where it can be more costly and slower to generate tokens. Refer to the [speculative decoding](./llm_optims#speculative-decoding) guide to learn more.
 
->>> # Tip: add `push_to_hub=True` to push to the Hub
->>> translation_generation_config.save_pretrained("/tmp", "translation_generation_config.json")
+Currently, only greedy search and multinomial sampling are supported with speculative decoding. Batched inputs aren't supported either.
 
->>> # You could then use the named generation config file to parameterize generation
->>> generation_config = GenerationConfig.from_pretrained("/tmp", "translation_generation_config.json")
->>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
->>> outputs = model.generate(**inputs, generation_config=generation_config)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Les fichiers de configuration sont faciles à utiliser!']
+Enable speculative decoding with the `assistant_model` parameter. You'll notice the fastest speed up with an assistant model that is much smaller than the main model. Add `do_sample=True` to enable token validation with resampling.
+
+<hfoptions id="spec-decoding">
+<hfoption id="greedy search">
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
+
+outputs = model.generate(**inputs, assistant_model=assistant_model)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that provides a platform for developers to build and deploy machine'
 ```
 
-## Streaming
-
-The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible with any instance
-from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
-`end()` is used to flag the end of text generation.
-
-<Tip warning={true}>
-
-The API for the streamer classes is still under development and may change in the future.
-
-</Tip>
-
-In practice, you can craft your own streaming class for all sorts of purposes! We also have basic streaming classes
-ready for you to use. For example, you can use the [`TextStreamer`] class to stream the output of `generate()` into
-your screen, one word at a time:
+Speculative decoding is also supported in [`Pipeline`] with the `assistant_model` parameter.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
+from transformers import pipeline
+import torch
 
->>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
->>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
->>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
->>> streamer = TextStreamer(tok)
-
->>> # Despite returning the usual output, the streamer will also print the generated text to stdout.
->>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
-An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
+pipe = pipeline(
+    "text-generation",
+    model="meta-llama/Llama-3.1-8B",
+    assistant_model="meta-llama/Llama-3.2-1B",
+    dtype=torch.bfloat16
+)
+pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
+pipe_output[0]["generated_text"]
 ```
 
+</hfoption>
+<hfoption id="multinomial sampling">
 
-## Watermarking
+Add the `temperature` parameter to control sampling randomness. For speculative decoding, a lower temperature may improve latency.
 
-The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
-When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
-The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
-statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper
-["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on
-the inner functioning of watermarking, it is recommended to refer to the paper.
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
-to detect watermarked text. To trigger watermarking, pass in a [`WatermarkingConfig`] with needed arguments directly to the
-`.generate()` method or add it to the [`GenerationConfig`]. Watermarked text can be later detected with a [`WatermarkDetector`].
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
-
-<Tip warning={true}>
-
-The WatermarkDetector internally relies on the proportion of "green" tokens, and whether generated text follows the coloring pattern.
-That is why it is recommended to strip off the prompt text, if it is much longer than the generated text.
-This also can have an effect when one sequence in the batch is a lot longer causing other rows to be padded.
-Additionally, the detector **must** be initiated with identical watermark configuration arguments used when generating.
-
-</Tip>
-
-Let's generate some text with watermarking. In the below code snippet, we set the bias to 2.5 which is a value that
-will be added to "green" tokens' logits. After generating watermarked text, we can pass it directly to the `WatermarkDetector`
-to check if the text is machine-generated (outputs `True` for machine-generated and `False` otherwise).
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM, WatermarkDetector, WatermarkingConfig
-
->>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
->>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
->>> tok.pad_token_id = tok.eos_token_id
->>> tok.padding_side = "left"
-
->>> inputs = tok(["This is the beginning of a long story", "Alice and Bob are"], padding=True, return_tensors="pt")
->>> input_len = inputs["input_ids"].shape[-1]
-
->>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
->>> out = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
-
->>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
->>> detection_out = detector(out, return_dict=True)
->>> detection_out.prediction
-array([True, True])
+outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that is dedicated to creating a better world through technology.'
 ```
 
+</hfoption>
+</hfoptions>
 
-## Decoding strategies
+#### Prompt lookup decoding
 
-Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading
-[this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+[Prompt lookup decoding](./llm_optims#prompt-lookup-decoding) is a variant of speculative decoding that uses overlapping n-grams as the candidate tokens. It works well for input-grounded tasks such as summarization. Refer to the [prompt lookup decoding](./llm_optims#prompt-lookup-decoding) guide to learn more.
 
-Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+Enable prompt lookup decoding with the `prompt_lookup_num_tokens` parameter.
 
-<Tip>
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
-The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
-thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
-dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
-`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
+device = infer_device()
 
-</Tip>
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype=torch.float16).to(device)
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-### Greedy Search
-
-[`generate`] uses greedy search decoding by default so you don't have to pass any parameters to enable it. This means the parameters `num_beams` is set to 1 and `do_sample=False`.
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> prompt = "I look forward to"
->>> checkpoint = "distilbert/distilgpt2"
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> outputs = model.generate(**inputs)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
+outputs = model.generate(**inputs, assistant_model=assistant_model, max_new_tokens=20, prompt_lookup_num_tokens=5)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that provides a platform for developers to build and deploy machine learning models. It offers a variety of tools'
 ```
 
-### Contrastive search
+### Self-speculative decoding
 
-The contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
-It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
-works, check out [this blog post](https://huggingface.co/blog/introducing-csearch).
-The two main parameters that enable and control the behavior of contrastive search are `penalty_alpha` and `top_k`:
+Early exiting uses the earlier hidden states from the language modeling head as inputs, effectively skipping layers to yield a lower quality output. The lower quality output is used as the assistant output and self-speculation is applied to fix the output using the remaining layers. The final generated result from this self-speculative method is the same (or has the same distribution) as the original models generation.
 
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
+The assistant model is also part of the target model, so the caches and weights can be shared, resulting in lower memory requirements.
 
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+For a model trained with early exit, pass `assistant_early_exit` to [`~GenerationMixin.generate`].
 
->>> prompt = "Hugging Face Company is"
->>> inputs = tokenizer(prompt, return_tensors="pt")
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
-in the business and our customer service is second to none.\n\nIf you have any questions about our
-products or services, feel free to contact us at any time. We look forward to hearing from you!']
+prompt = "Alice and Bob"
+checkpoint = "facebook/layerskip-llama3.2-1B"
+
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+inputs = tokenizer(prompt, return_tensors="pt")
+
+model = AutoModelForCausalLM.from_pretrained(checkpoint)
+outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-### Multinomial sampling
+#### Universal assisted decoding
 
-As opposed to greedy search that always chooses a token with the highest probability as the
-next token, multinomial sampling (also called ancestral sampling) randomly selects the next token based on the probability distribution over the entire
-vocabulary given by the model. Every token with a non-zero probability has a chance of being selected, thus reducing the
-risk of repetition.
+Universal assisted decoding (UAD) enables the main and assistant models to use different tokenizers. The main models input tokens are re-encoded into assistant model tokens. Candidate tokens are generated in the assistant encoding which are re-encoded into the main model candidate tokens. The candidate tokens are verified as explained in [speculative decoding](#speculative-decoding).
 
-To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
+Re-encoding involves decoding token ids into text and encoding the text with a different tokenizer. To prevent tokenization discrepancies during re-encoding, UAD finds the longest common sub-sequence between the source and target encodings to ensure the new tokens include the correct prompt suffix.
 
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
->>> set_seed(0)  # For reproducibility
+Add the `tokenizer` and `assistant_tokenizer` parameters to [`~GenerationMixin.generate`] to enable UAD.
 
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> prompt = "Today was an amazing day because"
->>> inputs = tokenizer(prompt, return_tensors="pt")
+prompt = "Alice and Bob"
 
->>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-["Today was an amazing day because we received these wonderful items by the way of a gift shop. The box arrived on a Thursday and I opened it on Monday afternoon to receive the gifts. Both bags featured pieces from all the previous years!\n\nThe box had lots of surprises in it, including some sweet little mini chocolate chips! I don't think I'd eat all of these. This was definitely one of the most expensive presents I have ever got, I actually got most of them for free!\n\nThe first package came"]
-```
+assistant_tokenizer = AutoTokenizer.from_pretrained("double7/vicuna-68m")
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+inputs = tokenizer(prompt, return_tensors="pt")
 
-### Beam-search decoding
-
-Unlike greedy search, beam-search decoding keeps several hypotheses at each time step and eventually chooses
-the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
-
-<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
-    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
-</a>
-
-You can visualize how beam-search decoding works in [this interactive demo](https://huggingface.co/spaces/m-ric/beam_search_visualizer): type your input sentence, and play with the parameters to see how the decoding beams change.
-
-To enable this decoding strategy, specify the `num_beams` (aka number of hypotheses to keep track of) that is greater than 1.
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> prompt = "It is astonishing how one can"
->>> checkpoint = "openai-community/gpt2-medium"
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-
->>> outputs = model.generate(**inputs, num_beams=5, max_new_tokens=50)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of
-time."\n\nHe added: "I am very proud of the work I have been able to do in the last few years.\n\n"I have']
-```
-
-### Beam-search multinomial sampling
-
-As the name implies, this decoding strategy combines beam search with multinomial sampling. You need to specify
-the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, set_seed
->>> set_seed(0)  # For reproducibility
-
->>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "google-t5/t5-small"
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-
->>> outputs = model.generate(**inputs, num_beams=5, do_sample=True)
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'Das Haus ist wunderbar.'
-```
-
-### Diverse beam search decoding
-
-The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
-set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
-This approach has three main parameters: `num_beams`, `num_beam_groups`, and `diversity_penalty`.
-The diversity penalty ensures the outputs are distinct across groups, and beam search is used within each group.
-
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
->>> checkpoint = "google/pegasus-xsum"
->>> prompt = (
-...     "The Permaculture Design Principles are a set of universal design principles "
-...     "that can be applied to any location, climate and culture, and they allow us to design "
-...     "the most efficient and sustainable human habitation and food production systems. "
-...     "Permaculture is a design system that encompasses a wide variety of disciplines, such "
-...     "as ecology, landscape design, environmental science and energy conservation, and the "
-...     "Permaculture design principles are drawn from these various disciplines. Each individual "
-...     "design principle itself embodies a complete conceptual framework based on sound "
-...     "scientific principles. When we bring all these separate  principles together, we can "
-...     "create a design system that both looks at whole systems, the parts that these systems "
-...     "consist of, and how those parts interact with each other to create a complex, dynamic, "
-...     "living system. Each design principle serves as a tool that allows us to integrate all "
-...     "the separate parts of a design, referred to as elements, into a functional, synergistic, "
-...     "whole system, where the elements harmoniously interact and work together in the most "
-...     "efficient way possible."
-... )
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-
->>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The Design Principles are a set of universal design principles that can be applied to any location, climate and
-culture, and they allow us to design the'
-```
-
-This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
-[`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
-
-### Speculative Decoding
-
-Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
-assistant model (ideally a much smaller one) with the same tokenizer, to generate a few candidate tokens. The main
-model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
-`do_sample=True`, then the token validation with resampling introduced in the
-[speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
-
-Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
-To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
-
-To enable assisted decoding, set the `assistant_model` argument with a model.
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> prompt = "Alice and Bob"
->>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
->>> assistant_checkpoint = "EleutherAI/pythia-160m-deduped"
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
->>> outputs = model.generate(**inputs, assistant_model=assistant_model)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2-9b")
+assistant_model = AutoModelForCausalLM.from_pretrained("double7/vicuna-68m")
+outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
+### Diverse beam search
 
-When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
-just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
+[Diverse beam search](https://hf.co/papers/1610.02424) is a variant of beam search that produces more diverse output candidates to choose from. This strategy measures the dissimilarity of sequences and a penalty is applied if sequences are too similar. To avoid high computation costs, the number of beams is divided into groups.
 
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
->>> set_seed(42)  # For reproducibility
+Enable diverse beam search with the `num_beams`, `num_beam_groups` and `diversity_penalty` parameters (the `num_beams` parameter should be divisible by `num_beam_groups`).
 
->>> prompt = "Alice and Bob"
->>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
->>> assistant_checkpoint = "EleutherAI/pythia-160m-deduped"
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
+device = infer_device()
 
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
->>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob, a couple of friends of mine, who are both in the same office as']
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
+# explicitly set to 100 because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company 🤗\nWe are an open-source company. Our mission is to democratize AI and make it accessible to everyone. We believe that AI should be used for the benefit of humanity, not for the benefit of a'
 ```
 
-Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
-to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
-### DoLa Decoding
 
-**D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
-hallucinations of LLMs, as described in this paper of ICLR 2024 [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://arxiv.org/abs/2309.03883).
+## Custom generation methods
 
-DoLa is achieved by contrasting the differences in logits obtained from final
-layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
+Custom generation methods enable specialized behavior such as:
+- have the model continue thinking if it is uncertain;
+- roll back generation if the model gets stuck;
+- handle special tokens with custom logic;
+- use specialized KV caches;
 
-Do the following two steps to activate DoLa decoding when calling the `model.generate` function:
-1. Set the `dola_layers` argument, which can be either a string or a list of integers.
-    - If set to a string, it can be one of `low`, `high`.
-    - If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model. The 0-th layer is word embedding, and the 1st layer is the first transformer layer, and so on.
-2. Set `repetition_penalty = 1.2` is suggested to reduce repetition in DoLa decoding.
+We enable custom generation methods through model repositories, assuming a specific model tag and file structure (see subsection below). This feature is an extension of [custom modeling code](./models.md#custom-models) and, like such, requires setting `trust_remote_code=True`.
 
-See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
+If a model repository holds a custom generation method, the easiest way to try it out is to load the model and generate with it:
 
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
->>> import torch
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
->>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
->>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
->>> model.to(device)
->>> set_seed(42)
+# `transformers-community/custom_generate_example` holds a copy of `Qwen/Qwen2.5-0.5B-Instruct`, but
+# with custom generation code -> calling `generate` uses the custom generation method!
+tokenizer = AutoTokenizer.from_pretrained("transformers-community/custom_generate_example")
+model = AutoModelForCausalLM.from_pretrained(
+    "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
+)
 
->>> text = "On what date was the Declaration of Independence officially signed?"
->>> inputs = tokenizer(text, return_tensors="pt").to(device)
-
-# Vanilla greddy decoding
->>> vanilla_output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
->>> tokenizer.batch_decode(vanilla_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
-
-# DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
->>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
->>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
-
-# DoLa decoding with contrasting specific layers (layers 28 and 30)
->>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)
->>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
+inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
+# The custom generation method is a minimal greedy decoding implementation. It also prints a custom message at run time.
+gen_out = model.generate(**inputs)
+# you should now see its custom message, "✨ using a custom generation method ✨"
+print(tokenizer.batch_decode(gen_out, skip_special_tokens=True))
+'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
 
-#### Understanding the `dola_layers` argument
+Model repositories with custom generation methods have a special property: their generation method can be loaded from **any** model through [`~GenerationMixin.generate`]'s `custom_generate` argument. This means anyone can create and share their custom generation method to potentially work with any Transformers model, without requiring users to install additional Python packages.
 
-`dola_layers` stands for the candidate layers in premature layer selection, as described in the DoLa paper. The selected premature layer will be contrasted with the final layer.
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-Setting `dola_layers` to `'low'` or `'high'` will select the lower or higher part of the layers to contrast, respectively.
-- For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
-- For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
-- If the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
-- Set the `dola_layers` to a list of integers for layer indices to contrast manually specified layers. For example, setting `dola_layers=[28,30]` will contrast the final layer (32-th layer) with the 28-th and 30-th layers.
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", device_map="auto")
 
-The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as the results shown in the Appendix N of the paper.
+inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
+# `custom_generate` replaces the original `generate` by the custom generation method defined in
+# `transformers-community/custom_generate_example`
+gen_out = model.generate(**inputs, custom_generate="transformers-community/custom_generate_example", trust_remote_code=True)
+print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
+```
+
+You should read the `README.md` file of the repository containing the custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
+
+> [!TIP]
+> You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`.
+
+Consider the Hub repository [transformers-community/custom_generate_example](https://huggingface.co/transformers-community/custom_generate_example) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
+
+```py
+gen_out = model.generate(
+    **inputs, custom_generate="transformers-community/custom_generate_example", trust_remote_code=True, left_padding=5
+)
+print(tokenizer.batch_decode(gen_out)[0])
+'<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
+```
+
+If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [transformers-community/custom_generate_bad_requirements](https://huggingface.co/transformers-community/custom_generate_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
+
+```
+ImportError: Missing requirements in your local environment for `transformers-community/custom_generate_bad_requirements`:
+foo (installed: None)
+bar==0.0.0 (installed: None)
+torch>=99.0 (installed: 2.6.0)
+```
+
+Updating your Python requirements accordingly will remove this error message.
+
+### Creating a custom generation method
+
+To create a new generation method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
+1. The model you've designed your generation method with.
+2. `custom_generate/generate.py`, which contains all the logic for your custom generation method.
+3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
+4. `README.md`, where you should add the `custom_generate` tag and document any new arguments or output type differences of your custom method here.
+
+After you've added all required files, your repository should look like this
+
+```
+your_repo/
+├── README.md          # include the 'custom_generate' tag
+├── config.json
+├── ...
+└── custom_generate/
+    ├── generate.py
+    └── requirements.txt
+```
+
+#### Adding the base model
+
+The starting point for your custom generation method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair. When the model in this repository is loaded, your custom generation method will override `generate`. Don't worry -- your generation method can still be loaded with any other Transformers model, as explained in the section above.
+
+If you simply want to copy an existing model, you can do
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("source/model_repo")
+model = AutoModelForCausalLM.from_pretrained("source/model_repo")
+tokenizer.save_pretrained("your/generation_method", push_to_hub=True)
+model.save_pretrained("your/generation_method", push_to_hub=True)
+```
+
+#### generate.py
+
+This is the core of your generation method. It *must* contain a method named `generate`, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in [`GenerationMixin`] (like the base `generate` method).
+
+> [!WARNING]
+> `generate.py` must be placed in a folder named `custom_generate`, and not at the root level of the repository. The file paths for this feature are hardcoded.
+
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method, with the exception of the arguments used to trigger the custom generation (`trust_remote_code` and `custom_generate`).
+
+This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
+
+```py
+import torch
+
+def generate(model, input_ids, generation_config=None, left_padding=None, **kwargs):
+    generation_config = generation_config or model.generation_config  # default to the model generation config
+    cur_length = input_ids.shape[1]
+    max_length = generation_config.max_length or cur_length + generation_config.max_new_tokens
+
+    # Example of custom argument: add `left_padding` (integer) pad tokens before the prompt
+    if left_padding is not None:
+        if not isinstance(left_padding, int) or left_padding < 0:
+            raise ValueError(f"left_padding must be an integer larger than 0, but is {left_padding}")
+
+        pad_token = kwargs.pop("pad_token", None) or generation_config.pad_token_id or model.config.pad_token_id
+        if pad_token is None:
+            raise ValueError("pad_token is not defined")
+        batch_size = input_ids.shape[0]
+        pad_tensor = torch.full(size=(batch_size, left_padding), fill_value=pad_token).to(input_ids.device)
+        input_ids = torch.cat((pad_tensor, input_ids), dim=1)
+        cur_length = input_ids.shape[1]
+
+    # Simple greedy decoding loop
+    while cur_length < max_length:
+        logits = model(input_ids).logits
+        next_token_logits = logits[:, -1, :]
+        next_tokens = torch.argmax(next_token_logits, dim=-1)
+        input_ids = torch.cat((input_ids, next_tokens[:, None]), dim=-1)
+        cur_length += 1
+
+    return input_ids
+```
+
+Follow the recommended practices below to ensure your custom generation method works as expected.
+- Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
+- Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
+- Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
+
+Your custom `generate` method can relative import code from the `custom_generate` folder. For example, if you have a `utils.py` file, you can import it like this:
+
+```py
+from .utils import some_function
+```
+
+Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom generation method.
+
+
+#### requirements.txt
+
+You can optionally specify additional Python requirements in a `requirements.txt` file inside the `custom_generate` folder. These are checked at runtime and an exception will be thrown if they're missing, nudging users to update their environment accordingly.
+
+#### README.md
+
+The root level `README.md` in the model repository usually describes the model therein. However, since the focus of the repository is the custom generation method, we highly recommend to shift its focus towards describing the custom generation method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
+
+For discoverability, we highly recommend you to add the `custom_generate` tag to your repository. To do so, the top of your `README.md` file should look like the example below. After you push the file, you should see the tag in your repository!
+
+```
+---
+library_name: transformers
+tags:
+  - custom_generate
+---
+
+(your markdown content here)
+```
+
+Recommended practices:
+- Document input and output differences in [`~GenerationMixin.generate`].
+- Add self-contained examples to enable quick experimentation.
+- Describe soft-requirements such as if the method only works well with a certain family of models.
+
+### Reusing `generate`’s input preparation
+
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
+
+```py
+def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+    next_tokens = input_ids
+    while input_ids.shape[1] < stopping_criteria[0].max_length:
+        logits = model(next_tokens, attention_mask=attention_mask, **model_kwargs).logits
+        next_token_logits = logits_processor(input_ids, logits[:, -1, :])
+        next_tokens = torch.argmax(next_token_logits, dim=-1)[:, None]
+        input_ids = torch.cat((input_ids, next_tokens), dim=-1)
+        attention_mask = torch.cat((attention_mask, torch.ones_like(next_tokens)), dim=-1)
+    return input_ids
+
+output = model.generate(
+    **inputs,
+    custom_generate=custom_loop,
+    max_new_tokens=10,
+)
+```
+
+> [!TIP]
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
+
+### Finding custom generation methods
+
+You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:
+- [Custom generation methods - Community](https://huggingface.co/collections/transformers-community/custom-generation-methods-community-6888fb1da0efbc592d3a8ab6) -- a collection of powerful methods contributed by the community;
+- [Custom generation methods - Tutorials](https://huggingface.co/collections/transformers-community/custom-generation-methods-tutorials-6823589657a94940ea02cfec) -- a collection of reference implementations for methods that previously were part of `transformers`, as well as tutorials for `custom_generate`.
+
+## Resources
+
+Read the [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate) blog post for an explanation of how common decoding strategies work.

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ from itertools import chain
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import flax
 import jax
@@ -180,7 +179,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -302,7 +301,7 @@ class FlaxDataCollatorForLanguageModeling:
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: list[dict[str, np.ndarray]], pad_to_multiple_of: int) -> dict[str, np.ndarray]:
         # Handle dict or lists with proper padding and conversion to tensor.
         batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
 
@@ -316,7 +315,7 @@ class FlaxDataCollatorForLanguageModeling:
 
     def mask_tokens(
         self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -449,7 +448,7 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
         )
 
-        if "validation" not in datasets.keys():
+        if "validation" not in datasets:
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
@@ -486,7 +485,7 @@ def main():
             num_proc=data_args.preprocessing_num_workers,
         )
 
-        if "validation" not in datasets.keys():
+        if "validation" not in datasets:
             datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
@@ -604,7 +603,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.
@@ -708,7 +707,7 @@ def main():
         layer_norm_named_params = {
             layer[-2:]
             for layer_norm_name in layer_norm_candidates
-            for layer in flat_params.keys()
+            for layer in flat_params
             if layer_norm_name in "".join(layer).lower()
         }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}

@@ -1,118 +1,131 @@
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+-->
+*This model was released on 2024-03-12 and added to Hugging Face Transformers on 2024-03-15.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
+
 # Cohere
 
-## Overview
+Cohere [Command-R](https://cohere.com/blog/command-r) is a 35B parameter multilingual large language model designed for long context tasks like retrieval-augmented generation (RAG) and calling external APIs and tools. The model is specifically trained for grounded generation and supports both single-step and multi-step tool use. It supports a context length of 128K tokens.
 
-The Cohere Command-R model was proposed in the blogpost [Command-R: Retrieval Augmented Generation at Production Scale](https://txt.cohere.com/command-r/) by the Cohere Team.
+You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
 
-The abstract from the paper is the following:
 
-*Command-R is a scalable generative model targeting RAG and Tool Use to enable production-scale AI for enterprise. Today, we are introducing Command-R, a new LLM aimed at large-scale production workloads. Command-R targets the emerging “scalable” category of models that balance high efficiency with strong accuracy, enabling companies to move beyond proof of concept, and into production.*
+> [!TIP]
+> Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
 
-*Command-R is a generative model optimized for long context tasks such as retrieval augmented generation (RAG) and using external APIs and tools. It is designed to work in concert with our industry-leading Embed and Rerank models to provide best-in-class integration for RAG applications and excel at enterprise use cases. As a model built for companies to implement at scale, Command-R boasts:
-- Strong accuracy on RAG and Tool Use
-- Low latency, and high throughput
-- Longer 128k context and lower pricing
-- Strong capabilities across 10 key languages
-- Model weights available on HuggingFace for research and evaluation
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
-Checkout model checkpoints [here](https://huggingface.co/CohereForAI/c4ai-command-r-v01).
-This model was contributed by [Saurabh Dash](https://huggingface.co/saurabhdash) and [Ahmet Üstün](https://huggingface.co/ahmetustun). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox).
-
-## Usage tips
-
-<Tip warning={true}>
-
-The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
-
-The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
-
-Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
-
-</Tip>
-The model and tokenizer can be loaded via:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
-# pip install transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+from transformers import pipeline
 
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
-
-# Format message with the command-r chat template
-messages = [{"role": "user", "content": "Hello, how are you?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-## <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-
-gen_tokens = model.generate(
-    input_ids, 
-    max_new_tokens=100, 
-    do_sample=True, 
-    temperature=0.3,
-    )
-
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
+pipeline = pipeline(
+    task="text-generation",
+    model="CohereForAI/c4ai-command-r-v01",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
 ```
 
-- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
+</hfoption>
+<hfoption id="AutoModel">
 
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Command-R. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-
-<PipelineTag pipeline="text-generation"/>
-
-Loading FP16 model
 ```python
-# pip install transformers
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
-# Format message with the command-r chat template
-messages = [{"role": "user", "content": "Hello, how are you?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-## <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-
-gen_tokens = model.generate(
-    input_ids, 
-    max_new_tokens=100, 
-    do_sample=True, 
+# format message with the Command-R chat template
+messages = [{"role": "user", "content": "How do plants make energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+output = model.generate(
+    input_ids,
+    max_new_tokens=100,
+    do_sample=True,
     temperature=0.3,
-    )
-
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
+    cache_implementation="static",
+)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Loading bitsnbytes 4bit quantized model
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+# pip install -U flash-attn --no-build-isolation
+transformers chat CohereForAI/c4ai-command-r-v01 --dtype auto --attn_implementation flash_attention_2
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
+
 ```python
-# pip install transformers bitsandbytes accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import torch
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
 
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config)
-
-gen_tokens = model.generate(
-    input_ids, 
-    max_new_tokens=100, 
-    do_sample=True, 
+# format message with the Command-R chat template
+messages = [{"role": "user", "content": "How do plants make energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+output = model.generate(
+    input_ids,
+    max_new_tokens=100,
+    do_sample=True,
     temperature=0.3,
-    )
-
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
+    cache_implementation="static",
+)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("CohereForAI/c4ai-command-r-v01")
+visualizer("Plants create energy through a process known as")
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/cohere-attn-mask.png"/>
+</div>
+
+
+## Notes
+- Don’t use the dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
 ## CohereConfig
 
@@ -137,5 +150,3 @@ print(gen_text)
 
 [[autodoc]] CohereForCausalLM
     - forward
-
-

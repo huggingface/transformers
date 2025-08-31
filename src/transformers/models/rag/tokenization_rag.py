@@ -16,7 +16,7 @@
 
 import os
 import warnings
-from typing import List, Optional
+from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
@@ -76,12 +76,12 @@ class RagTokenizer:
 
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
+        src_texts: list[str],
+        tgt_texts: Optional[list[str]] = None,
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
         padding: str = "longest",
-        return_tensors: str = None,
+        return_tensors: Optional[str] = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
@@ -119,3 +119,6 @@ class RagTokenizer:
         )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+__all__ = ["RagTokenizer"]

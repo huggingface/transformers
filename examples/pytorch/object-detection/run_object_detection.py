@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets>=4.0",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning any 🤗 Transformers model supported by AutoModelForObjectDetection for object detection leveraging the Trainer API."""
 
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, List, Mapping, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import albumentations as A
 import numpy as np
@@ -48,7 +59,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
@@ -60,15 +71,15 @@ class ModelOutput:
 
 
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
-        categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
-        areas (List[float]): list of corresponding areas to provided bounding boxes
-        bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
+        categories (list[int]): list of categories/class labels corresponding to provided bounding boxes
+        areas (list[float]): list of corresponding areas to provided bounding boxes
+        bboxes (list[tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -94,14 +105,14 @@ def format_image_annotations_as_coco(
     }
 
 
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
 
     Args:
         boxes (torch.Tensor): Bounding boxes in YOLO format
-        image_size (Tuple[int, int]): Image size in format (height, width)
+        image_size (tuple[int, int]): Image size in format (height, width)
 
     Returns:
         torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
@@ -148,7 +159,7 @@ def augment_and_transform_batch(
     return result
 
 
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -271,6 +282,10 @@ class DataTrainingArguments:
             )
         },
     )
+    use_fast: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Use a fast torchvision-base image processor if it is supported for a given model."},
+    )
 
 
 @dataclass
@@ -305,7 +320,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -388,14 +403,17 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation
-    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in dataset else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(data_args.train_val_split, seed=training_args.seed)
         dataset["train"] = split["train"]
         dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
-    categories = dataset["train"].features["objects"].feature["category"].names
+    if isinstance(dataset["train"].features["objects"], dict):
+        categories = dataset["train"].features["objects"]["category"].feature.names
+    else:  # (for old versions of `datasets` that used Sequence({...}) of the objects)
+        categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 
@@ -427,6 +445,7 @@ def main():
         size={"max_height": data_args.image_square_size, "max_width": data_args.image_square_size},
         do_pad=True,
         pad_size={"height": data_args.image_square_size, "width": data_args.image_square_size},
+        use_fast=data_args.use_fast,
         **common_pretrained_args,
     )
 
@@ -488,7 +507,7 @@ def main():
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
         compute_metrics=eval_compute_metrics_fn,
     )
