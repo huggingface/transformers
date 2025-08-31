@@ -99,6 +99,7 @@ def convert_colqwen2_weights_to_hf(
     push_to_hub: bool,
     revision: Optional[str] = None,
     original_vlm_name_or_path: Optional[str] = None,
+    using_qwen2_5=False,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
@@ -119,6 +120,7 @@ def convert_colqwen2_weights_to_hf(
     config = ColQwen2Config(
         vlm_config=original_config,
         embedding_dim=128,  # hardcoded in the original model
+        use_qwen2_5=using_qwen2_5
     )
     config.model_type = "colqwen2"
     config.is_composition = False

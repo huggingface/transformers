@@ -61,10 +61,11 @@ class ColQwen2Config(PretrainedConfig):
         vlm_config=None,
         embedding_dim: int = 128,
         initializer_range: float = 0.02,
+        use_qwen2_5=False,
         **kwargs,
     ):
         if vlm_config is None:
-            vlm_config = CONFIG_MAPPING["qwen2_vl"]()
+            vlm_config = CONFIG_MAPPING["qwen2_5_vl"]() if use_qwen2_5 else CONFIG_MAPPING["qwen2_vl"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )
