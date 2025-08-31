@@ -1,12 +1,22 @@
-import math
-from collections import defaultdict
 from typing import Dict, Optional, Sequence
 
 import numpy as np
-import torch
-from ...processing_utils import ProcessorMixin
 
-__all__ = ["AudioFlamingo3Processor"]
+import math
+from collections import defaultdict
+
+import torch
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
+
+
+class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "audio_kwargs": {},
+    }
 
 
 class AudioFlamingo3Processor(ProcessorMixin):
@@ -111,7 +121,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_embed_masks = torch.stack(audio_embed_masks, dim=0)
         return sound_outputs.numpy().tolist(), audio_feature_masks, audio_embed_masks
 
-    def __call__(self, text: str, audio_data):
+    def __call__(
+        self,
+        text: TextInput,
+        audio_data: np.ndarray,
+        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+    ):
         media = []
         media_meta = defaultdict(list)
 
@@ -138,3 +153,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def decode(self, token_ids: torch.Tensor) -> str:
         result = [self.tokenizer.decode(output_ids, skip_special_tokens=True).strip() for output_ids in token_ids]
         return result[0] if len(result) == 1 else result
+
+
+__all__ = ["AudioFlamingo3Processor"]

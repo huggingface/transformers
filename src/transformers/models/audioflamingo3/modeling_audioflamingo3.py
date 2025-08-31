@@ -3,7 +3,6 @@
 from collections import deque
 import copy
 import math
-import os
 import os.path as osp
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -11,7 +10,6 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from huggingface_hub import file_exists, repo_exists, snapshot_download
 from huggingface_hub.utils import HFValidationError
 
 from ... import (
@@ -20,6 +18,7 @@ from ... import (
     GenerationConfig,
     PreTrainedModel,
     GenerationMixin,
+    AutoModel,
 )
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -456,38 +455,24 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         return self.config.d_model
 
 
-def has_tokenizer(repo_id_or_path: str) -> bool:
-    if osp.exists(osp.join(repo_id_or_path, "tokenizer_config.json")):
-        return True
-    try:
-        return repo_exists(repo_id_or_path) and file_exists(repo_id_or_path, "tokenizer_config.json")
-    except HFValidationError:
-        return False
-
-
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     config_class = AudioFlamingo3Config
 
     def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
         super().__init__(config)
 
-        # 🔧 Do NOT pass dtype here; do NOT call .to(...) here.
         self.llm = AutoModelForCausalLM.from_config(config.llm_cfg)
-
-        # 🔧 Instantiate your custom blocks directly (no AutoModel needed unless registered)
-        self.sound_tower = AudioFlamingo3Encoder(config.sound_tower_cfg)
+        self.sound_tower = AutoModel.from_config(config.sound_tower_cfg)
         self.sound_mm_projector = AudioFlamingo3MultiModalProjector(config)
 
-        # tokenizer is fine
-        self.tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, padding_side="right", use_fast=True, legacy=False)
-        self.tokenizer.media_tokens = config.media_tokens
-
-    def _embed_text_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
-        if tokens is None:
-            return None
-        token_ids = self.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.llm.device)
-        return self.llm.model.embed_tokens(token_ids)
+        self.media_tokens = config.media_tokens
+        self.padding_side = config.padding_side
+        self.pad_token_id = config.pad_token_id
+        self.model_max_length = config.model_max_length
+        self.eos_token_id = config.eos_token_id
+        self.bos_token_id = config.bos_token_id
+        self.sound_token_id = config.sound_token_id
+        self.end_newline_token_id = config.end_newline_token_id
 
     def _process_features(
         self,
@@ -506,17 +491,13 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self,
         sounds: List[torch.Tensor],
         masks: List[torch.Tensor],
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
     ) -> List[torch.Tensor]:
         sounds = torch.stack(sounds, dim=0).to(self.llm.device)
         masks = torch.stack(masks, dim=0).to(self.llm.device)
         feats = self.encode_sound(sounds, masks)  # (B, S, D)
 
-        start_emb = self._embed_text_tokens(start_tokens)
-        end_emb = self._embed_text_tokens(end_tokens)
-
-        return [self._process_features(f, start_emb, end_emb) for f in feats]
+        end_emb = self.llm.model.embed_tokens(torch.tensor([self.end_newline_token_id], device=self.llm.device))
+        return [self._process_features(f, None, end_emb) for f in feats]
 
     def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
@@ -569,13 +550,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             elif not _left_padding and _right_padding:
                 left_padding = False
             elif not _left_padding and not _right_padding:
-                left_padding = self.tokenizer.padding_side == "left"
+                left_padding = self.padding_side == "left"
             else:
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
-        # 1. Mask of special audio tokens (uses tokenizer.media_tokens["sound"])
-        sound_token_id = self.tokenizer.convert_tokens_to_ids(self.tokenizer.media_tokens["sound"])
-        special_audio_token_mask = input_ids == sound_token_id
+        # 1. Mask of special audio tokens (uses media_tokens["sound"])
+        special_audio_token_mask = input_ids == self.sound_token_id
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
         # devices
@@ -583,7 +563,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         attention_mask = attention_mask.to(target_device)
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
-        batch_indices, non_audio_indices = torch.where((input_ids != sound_token_id) & (attention_mask == 1))
+        batch_indices, non_audio_indices = torch.where((input_ids != self.sound_token_id) & (attention_mask == 1))
 
         # 2. positions where text should be written
         token_placeholder_num = torch.zeros_like(input_ids)
@@ -604,7 +584,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         # 3. final padded embedding containers
         final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=text_embeds.device)
         final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=text_embeds.device)
-        final_input_ids = torch.full((batch_size, max_token_num), self.tokenizer.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device)
+        final_input_ids = torch.full((batch_size, max_token_num), self.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device)
 
         # 4. scatter text
         final_embedding[batch_indices, text_to_overwrite] = text_embeds[batch_indices, non_audio_indices]
@@ -641,10 +621,10 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         return self.__batchify_sequence(inputs, labels)
 
     def __truncate_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.training and any(len(input) > self.tokenizer.model_max_length for input in inputs):
-            warnings.warn(f"Truncating sequences to `model_max_length` ({self.tokenizer.model_max_length}).")
-            inputs = [input[: self.tokenizer.model_max_length] for input in inputs]
-            labels = [label[: self.tokenizer.model_max_length] for label in labels]
+        if self.training and any(len(input) > self.model_max_length for input in inputs):
+            warnings.warn(f"Truncating sequences to `model_max_length` ({self.model_max_length}).")
+            inputs = [input[: self.model_max_length] for input in inputs]
+            labels = [label[: self.model_max_length] for label in labels]
         return inputs, labels
 
     def __batchify_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -659,7 +639,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             size_pk = max_length - inputs[k].shape[0]
             inputs_pk = torch.zeros((size_pk, hidden_size), dtype=inputs[k].dtype, device=device)
             labels_pk = torch.full((size_pk,), self.config.ignore_index, dtype=labels[k].dtype, device=device)
-            if self.tokenizer.padding_side == "right":
+            if self.padding_side == "right":
                 attention_mask[k, inputs[k].shape[0] :] = False
                 inputs_pk = torch.cat([inputs[k], inputs_pk], dim=0)
                 labels_pk = torch.cat([labels[k], labels_pk], dim=0)
@@ -689,16 +669,16 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     @property
     def default_generation_config(self) -> GenerationConfig:
         generation_config = copy.deepcopy(self.generation_config or GenerationConfig())
-        if self.tokenizer.eos_token_id is None:
+        if self.eos_token_id is None:
             raise ValueError("Tokenizer must have an EOS token")
         if generation_config.max_length == GenerationConfig().max_length:
-            generation_config.max_length = self.tokenizer.model_max_length
+            generation_config.max_length = self.model_max_length
         if generation_config.pad_token_id is None:
-            generation_config.pad_token_id = self.tokenizer.pad_token_id or self.tokenizer.eos_token_id
+            generation_config.pad_token_id = self.pad_token_id or self.eos_token_id
         if generation_config.bos_token_id is None:
-            generation_config.bos_token_id = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
+            generation_config.bos_token_id = self.bos_token_id or self.eos_token_id
         if generation_config.eos_token_id is None:
-            generation_config.eos_token_id = [self.tokenizer.eos_token_id]
+            generation_config.eos_token_id = [self.eos_token_id]
         generation_config.do_sample = False
         generation_config.max_new_tokens = 2048
         return generation_config
