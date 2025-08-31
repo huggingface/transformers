@@ -1244,3 +1244,8 @@
       title: (번역중)Environment Variables
     title: Reference
   title: API
+- title: Inference
+  isExpanded: false
+  sections:
+  - local: jan
+    title: Jan
