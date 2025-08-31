@@ -2141,7 +2141,7 @@ class GenerationMixin(ContinuousMixin):
             GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
         }
         if custom_generate is not None or generation_mode not in moved_to_hub_modes:
-            return custom_generate
+            return None
 
         repo = moved_to_hub_modes[generation_mode]
         logger.warning_once(
@@ -2270,25 +2270,9 @@ class GenerationMixin(ContinuousMixin):
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
-        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+        # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
-        self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
-
-        # 2 If requested, load an arbitrary generation recipe from the Hub and run it instead
-
-        # Set Hub repo for deprecated strategies. (TODO joao, manuel: remove this in v4.62.0)
-        custom_generate = self._get_deprecated_gen_repo(
-            generation_config, trust_remote_code, custom_generate, assistant_model
-        )
-
-        # Load custom generation function from the Hub or local path
         if custom_generate is not None and isinstance(custom_generate, str):
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
@@ -2299,7 +2283,6 @@ class GenerationMixin(ContinuousMixin):
                 "global_keys_to_exclude",
                 "trust_remote_code",
                 "custom_generate",
-                "model_kwargs",
             }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
@@ -2308,6 +2291,40 @@ class GenerationMixin(ContinuousMixin):
                 custom_generate, trust_remote_code=trust_remote_code, **kwargs
             )
             return custom_generate_function(model=self, **generate_arguments)
+
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
+        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+
+        # 2. Set Hub repo for deprecated strategies. (TODO joao, manuel: remove this in v4.62.0)
+        if deprecate_mode_repo := self._get_deprecated_gen_repo(
+            generation_config, trust_remote_code, custom_generate, assistant_model
+        ):
+            return GenerationMixin.generate(
+                self,
+                inputs,
+                generation_config,
+                logits_processor,
+                stopping_criteria,
+                prefix_allowed_tokens_fn,
+                synced_gpus,
+                assistant_model,
+                streamer,
+                negative_prompt_ids,
+                negative_prompt_attention_mask,
+                use_model_defaults,
+                custom_generate=deprecate_mode_repo,
+                trust_remote_code=trust_remote_code,
+                tokenizer=tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
+                **kwargs,
+            )
 
         # 3. Set generation parameters if not already defined
         if synced_gpus is None:
