@@ -15,14 +15,11 @@ from huggingface_hub import file_exists, repo_exists, snapshot_download
 from huggingface_hub.utils import HFValidationError
 
 from ... import (
-    AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
     GenerationConfig,
     PreTrainedModel,
-    PretrainedConfig,
     GenerationMixin,
-    AutoModel,
 )
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -32,7 +29,6 @@ from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
     AudioFlamingo3EncoderConfig,
     AudioFlamingo3Config,
-    SoundMultimodalProjectorConfig,
 )
 
 logger = logging.get_logger(__name__)
@@ -460,19 +456,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         return self.config.d_model
 
 
-def get_model_config(config):
-    root_path = config._name_or_path
-    if root_path is not None and not osp.exists(root_path):
-        try:
-            if repo_exists(root_path):
-                root_path = snapshot_download(root_path)
-        except HFValidationError as e:
-            pass
-
-    default_keys = ["llm", "sound_tower", "sound_mm_projector"]
-    return [os.path.join(root_path, key) for key in default_keys]
-
-
 def has_tokenizer(repo_id_or_path: str) -> bool:
     if osp.exists(osp.join(repo_id_or_path, "tokenizer_config.json")):
         return True
@@ -493,7 +476,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         # 🔧 Instantiate your custom blocks directly (no AutoModel needed unless registered)
         self.sound_tower = AudioFlamingo3Encoder(config.sound_tower_cfg)
-        self.sound_mm_projector = SoundMultimodalProjector(config.sound_mm_projector_cfg)
+        self.sound_mm_projector = AudioFlamingo3MultiModalProjector(config)
 
         # tokenizer is fine
         self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
@@ -720,12 +703,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         return generation_config
 
 
-
-class SoundMultimodalProjector(PreTrainedModel):
-    config: SoundMultimodalProjectorConfig
-
-    def __init__(self, config: SoundMultimodalProjectorConfig):
-        super().__init__(config)
+class AudioFlamingo3MultiModalProjector(nn.Module):
+    def __init__(self, config: AudioFlamingo3Config):
+        super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(config.sound_hidden_size, config.hidden_size),
             nn.GELU(),
@@ -736,4 +716,4 @@ class SoundMultimodalProjector(PreTrainedModel):
         return self.layers(x)
 
 
-__all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder", "SoundMultimodalProjector"]
+__all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder"]
