@@ -311,6 +311,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextModel"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
+        ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
+        ("audioflamingo3_projector", "SoundMultimodalProjector"),
         ("qwen2_moe", "Qwen2MoeModel"),
         ("qwen2_vl", "Qwen2VLModel"),
         ("qwen2_vl_text", "Qwen2VLTextModel"),

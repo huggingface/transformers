@@ -9,11 +9,13 @@ logger = logging.get_logger(__name__)
 
 
 class SoundMultimodalProjectorConfig(PretrainedConfig):
-    model_type = "sound_mm_projector"
+    model_type = "audioflamingo3_projector"
 
-    def __init__(self, sound_mm_projector_type: str = None, **kwargs):
+    def __init__(self, sound_mm_projector_type: str = None, sound_hidden_size: int = None, hidden_size: int = None, **kwargs):
         super().__init__()
         self.sound_mm_projector_type = sound_mm_projector_type
+        self.sound_hidden_size = sound_hidden_size
+        self.hidden_size = hidden_size
 
 
 class AudioFlamingo3EncoderConfig(PretrainedConfig):
@@ -56,7 +58,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
 
 class AudioFlamingo3Config(PretrainedConfig):
     model_type = "audioflamingo3"
-    sub_configs = {"llm_cfg": AutoConfig, "sound_tower_cfg": AutoConfig}  # , "sound_mm_projector_cfg": AutoConfig}
+    sub_configs = {"llm_cfg": AutoConfig, "sound_tower_cfg": AutoConfig, "sound_mm_projector_cfg": AutoConfig}
 
     def __init__(
         self,
@@ -92,8 +94,14 @@ class AudioFlamingo3Config(PretrainedConfig):
 
         self.llm_cfg = llm_cfg
 
+        if isinstance(sound_mm_projector_cfg, dict):
+            sound_mm_projector_cfg["model_type"] = sound_mm_projector_cfg.get("model_type", "audioflamingo3_projector")
+            sound_mm_projector_cfg = CONFIG_MAPPING[sound_mm_projector_cfg["model_type"]](**sound_mm_projector_cfg)
+        elif sound_mm_projector_cfg is None:
+            sound_mm_projector_cfg = CONFIG_MAPPING["audioflamingo3_projector"]()
+
         self.sound_mm_projector_cfg = sound_mm_projector_cfg
         super().__init__(**kwargs)
 
 
-__all__ = ["AudioFlamingo3Config", "AudioFlamingo3EncoderConfig"]
+__all__ = ["AudioFlamingo3Config", "AudioFlamingo3EncoderConfig", "SoundMultimodalProjectorConfig"]

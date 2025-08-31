@@ -483,16 +483,19 @@ def has_tokenizer(repo_id_or_path: str) -> bool:
 
 
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
+    config_class = AudioFlamingo3Config
+
     def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
         super().__init__(config)
 
-        llm_path, sound_tower_path, sound_mm_projector_path = get_model_config(config)
+        # 🔧 Do NOT pass dtype here; do NOT call .to(...) here.
+        self.llm = AutoModelForCausalLM.from_config(config.llm_cfg)
 
-        self.llm = AutoModelForCausalLM.from_pretrained(llm_path, dtype=eval(config.model_dtype), *args, **kwargs)
-        self.sound_tower = AutoModel.from_pretrained(sound_tower_path).to(self.llm.device)
-        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_path, config, dtype=eval(config.model_dtype)).to(self.llm.device)
+        # 🔧 Instantiate your custom blocks directly (no AutoModel needed unless registered)
+        self.sound_tower = AudioFlamingo3Encoder(config.sound_tower_cfg)
+        self.sound_mm_projector = SoundMultimodalProjector(config.sound_mm_projector_cfg)
 
-        # tokenizer
+        # tokenizer is fine
         self.tokenizer = AutoTokenizer.from_pretrained(osp.join(config._name_or_path, "tokenizer"), padding_side="right", use_fast=True, legacy=False)
         self.tokenizer.media_tokens = config.media_tokens
 
@@ -713,23 +716,16 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             generation_config.bos_token_id = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
         if generation_config.eos_token_id is None:
             generation_config.eos_token_id = [self.tokenizer.eos_token_id]
-        generation_config.max_new_tokens = 512
+        generation_config.max_new_tokens = 2048
         return generation_config
 
-    @classmethod
-    def from_pretrained(cls, model_path: str, device_map: str = "auto", device: str = "cuda", **kwargs) -> "AudioFlamingo3ForConditionalGeneration":
-        kwargs["device_map"] = {"": device} if device != "cuda" else device_map
-        config = AutoConfig.from_pretrained(model_path)
-        model = cls(config=config, **kwargs)
-        model.eval()
-        return model
 
 
 class SoundMultimodalProjector(PreTrainedModel):
-    config_class = SoundMultimodalProjectorConfig
+    config: SoundMultimodalProjectorConfig
 
-    def __init__(self, sound_mm_projector_cfg: SoundMultimodalProjectorConfig, config: PretrainedConfig):
-        super().__init__(sound_mm_projector_cfg)
+    def __init__(self, config: SoundMultimodalProjectorConfig):
+        super().__init__(config)
         self.layers = nn.Sequential(
             nn.Linear(config.sound_hidden_size, config.hidden_size),
             nn.GELU(),
@@ -740,4 +736,4 @@ class SoundMultimodalProjector(PreTrainedModel):
         return self.layers(x)
 
 
-__all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder"]
+__all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder", "SoundMultimodalProjector"]
