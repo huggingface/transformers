@@ -51,7 +51,7 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 >>> from transformers import Owlv2Processor, Owlv2ForObjectDetection
 
 >>> processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
->>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+>>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
