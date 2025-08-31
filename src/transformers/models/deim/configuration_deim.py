@@ -27,8 +27,6 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-# TODO: Attribute map assignment logic should be fixed in modular
-# as well as super() call parsing becuase otherwise we cannot re-write args after initialization
 class DeimConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DeimModel`]. It is used to instantiate a deim
@@ -153,6 +151,8 @@ class DeimConfig(PretrainedConfig):
             Parameter gamma used to compute the focal loss.
         weight_loss_vfl (`float`, *optional*, defaults to 1.0):
             Relative weight of the varifocal loss in the object detection loss.
+        weight_loss_mal (`float`, *optional*, defaults to 1.0):
+            Relative weight of the Matching-Aware Loss in the object detection loss.
         weight_loss_bbox (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
         weight_loss_giou (`float`, *optional*, defaults to 2.0):
@@ -163,6 +163,12 @@ class DeimConfig(PretrainedConfig):
             Relative weight of the decoupled distillation focal loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
+        mal_alpha (`float`, *optional*, defaults to `None`):
+            Alpha parameter for Matching-Aware Loss (MAL). If None, MAL is not used and VFL is used instead.
+            When set, it controls the weight for negative samples in MAL.
+        use_uni_set (`bool`, *optional*, defaults to `True`):
+            Whether to use unified matching indices across decoder layers for boxes and local losses.
+            This improves consistency in multi-layer supervision.
         eval_idx (`int`, *optional*, defaults to -1):
             Index of the decoder layer to use for evaluation. If negative, counts from the end
             (e.g., -1 means use the last layer). This allows for early prediction in the decoder
@@ -258,11 +264,14 @@ class DeimConfig(PretrainedConfig):
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
         weight_loss_vfl=1.0,
+        weight_loss_mal=1.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
         weight_loss_fgl=0.15,
         weight_loss_ddf=1.5,
         eos_coefficient=1e-4,
+        mal_alpha=None,
+        use_uni_set=True,
         eval_idx=-1,
         layer_scale=1,
         max_num_bins=32,
@@ -276,6 +285,192 @@ class DeimConfig(PretrainedConfig):
         up=0.5,
         **kwargs,
     ):
+        self.initializer_range = initializer_range
+        self.initializer_bias_prior_prob = initializer_bias_prior_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.batch_norm_eps = batch_norm_eps
+        # backbone
+        if backbone_config is None and backbone is None:
+            logger.info(
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNet-V2` backbone."
+            )
+            backbone_model_type = "hgnet_v2"
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class(
+                num_channels=3,
+                embedding_size=64,
+                hidden_sizes=[256, 512, 1024, 2048],
+                depths=[3, 4, 6, 3],
+                layer_type="bottleneck",
+                hidden_act="relu",
+                downsample_in_first_stage=False,
+                downsample_in_bottleneck=False,
+                out_features=None,
+                out_indices=[2, 3, 4],
+            )
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
+
+        self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
+        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
+        self.backbone_kwargs = backbone_kwargs
+        # encoder
+        self.encoder_hidden_dim = encoder_hidden_dim
+        self.encoder_in_channels = encoder_in_channels
+        self.feat_strides = feat_strides
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.dropout = dropout
+        self.activation_dropout = activation_dropout
+        self.encode_proj_layers = encode_proj_layers
+        self.encoder_layers = encoder_layers
+        self.positional_encoding_temperature = positional_encoding_temperature
+        self.eval_size = eval_size
+        self.normalize_before = normalize_before
+        self.encoder_activation_function = encoder_activation_function
+        self.activation_function = activation_function
+        self.hidden_expansion = hidden_expansion
+        # decoder
+        self.d_model = d_model
+        self.num_queries = num_queries
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_in_channels = decoder_in_channels
+        self.num_feature_levels = num_feature_levels
+        self.decoder_n_points = decoder_n_points
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_activation_function = decoder_activation_function
+        self.attention_dropout = attention_dropout
+        self.num_denoising = num_denoising
+        self.label_noise_ratio = label_noise_ratio
+        self.box_noise_scale = box_noise_scale
+        self.learn_initial_query = learn_initial_query
+        self.anchor_image_size = anchor_image_size
+        self.auxiliary_loss = auxiliary_loss
+        self.with_box_refine = with_box_refine
+        # Loss
+        self.matcher_alpha = matcher_alpha
+        self.matcher_gamma = matcher_gamma
+        self.matcher_class_cost = matcher_class_cost
+        self.matcher_bbox_cost = matcher_bbox_cost
+        self.matcher_giou_cost = matcher_giou_cost
+        self.use_focal_loss = use_focal_loss
+        self.focal_loss_alpha = focal_loss_alpha
+        self.focal_loss_gamma = focal_loss_gamma
+        self.weight_loss_vfl = weight_loss_vfl
+        self.weight_loss_mal = weight_loss_mal
+        self.weight_loss_bbox = weight_loss_bbox
+        self.weight_loss_giou = weight_loss_giou
+        self.weight_loss_fgl = weight_loss_fgl
+        self.weight_loss_ddf = weight_loss_ddf
+        self.eos_coefficient = eos_coefficient
+        self.mal_alpha = mal_alpha
+        self.use_uni_set = use_uni_set
+        # add the new attributes with the given values or defaults
+        self.eval_idx = eval_idx
+        self.layer_scale = layer_scale
+        self.max_num_bins = max_num_bins
+        self.reg_scale = reg_scale
+        self.depth_mult = depth_mult
+        self.decoder_offset_scale = decoder_offset_scale
+        self.decoder_method = decoder_method
+        self.top_prob_values = top_prob_values
+        self.lqe_hidden_dim = lqe_hidden_dim
+        self.lqe_layers = lqe_layers
+        self.up = up
+
+        if isinstance(self.decoder_n_points, list):
+            if len(self.decoder_n_points) != self.num_feature_levels:
+                raise ValueError(
+                    f"Length of decoder_n_points list ({len(self.decoder_n_points)}) must match num_feature_levels ({self.num_feature_levels})."
+                )
+
+        head_dim = self.d_model // self.decoder_attention_heads
+        if head_dim * self.decoder_attention_heads != self.d_model:
+            raise ValueError(
+                f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
+            )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.encoder_attention_heads
+
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
+
+    @classmethod
+    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`DeimConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+        configuration.
+
+            Args:
+                backbone_config ([`PretrainedConfig`]):
+                    The backbone configuration.
+
+            Returns:
+                [`DeimConfig`]: An instance of a configuration object
+        """
+        return cls(
+            backbone_config=backbone_config,
+            **kwargs,
+        )
+
+
+# TODO: Attribute map assignment logic should be fixed in modular
+# as well as super() call parsing because otherwise we cannot re-write args after initialization
+class DEIMConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DEIMModel`].
+    It is used to instantiate a DEIM model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults
+    will yield a similar configuration to that of the DEIM model.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control
+    the model outputs. Read the documentation from [`PretrainedConfig`] for more
+    information.
+
+    Args:
+        weight_loss_mal (`float`, *optional*, defaults to `1.0`):
+            Relative weight of the Matching-Aware Loss in the object detection loss.
+        mal_alpha (`float`, *optional*, defaults to `None`):
+            Alpha parameter for Matching-Aware Loss (MAL). If None, MAL is not used
+            and VFL is used instead. When set, it controls the weight for negative
+            samples in MAL.
+        use_uni_set (`bool`, *optional*, defaults to `True`):
+            Whether to use unified matching indices across decoder layers for boxes
+            and local losses. This improves consistency in multi-layer supervision.
+    """
+
+    model_type = "deim"
+    layer_types = ["basic", "bottleneck"]
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+    }
+
+    def __init__(
+        self,
+        weight_loss_mal=1.0,
+        mal_alpha=None,
+        use_uni_set=True,
+        **kwargs,
+    ):
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
@@ -394,7 +589,9 @@ class DeimConfig(PretrainedConfig):
             raise ValueError(
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.weight_loss_mal = weight_loss_mal
+        self.mal_alpha = mal_alpha
+        self.use_uni_set = use_uni_set
 
     @property
     def num_attention_heads(self) -> int:
@@ -404,9 +601,17 @@ class DeimConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`DeimConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+        """Instantiate a [`DEIMConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
@@ -414,12 +619,9 @@ class DeimConfig(PretrainedConfig):
                     The backbone configuration.
 
             Returns:
-                [`DeimConfig`]: An instance of a configuration object
+                [`DEIMConfig`]: An instance of a configuration object
         """
         return cls(
             backbone_config=backbone_config,
             **kwargs,
         )
-
-
-__all__ = ["DeimConfig"]
