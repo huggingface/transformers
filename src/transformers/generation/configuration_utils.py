@@ -236,10 +236,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SuppressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SuppressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         sequence_bias (`dict[tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the

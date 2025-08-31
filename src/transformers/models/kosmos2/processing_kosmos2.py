@@ -578,7 +578,7 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
 def extract_entities_with_patch_indices(text):
     """Extract entities contained in `text`. The bounding bboxes is given in the form of patch indices.
 
-    This functioin is only intended to be used within `clean_text_and_extract_entities_with_bboxes` where further
+    This function is only intended to be used within `clean_text_and_extract_entities_with_bboxes` where further
     processing happens, including converting to normalized coordinates and whitespace character cleaning up.
 
     Examples:
