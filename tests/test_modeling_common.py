@@ -991,6 +991,10 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def check_determinism(first, second):
+            # Simply don't compare if both tensors only contain `nan` elements
+            if torch.all(torch.isnan(first)) and torch.all(torch.isnan(second)):
+                return
+
             out_1 = first.cpu().numpy()
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
