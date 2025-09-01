@@ -1018,11 +1018,9 @@ def check_model_inputs(func):
                 getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
             ]
             if config_attn != "eager" or any(attn != "eager" for attn in sub_configs_attn):
-                self.config._attn_implementation = "eager"
                 warnings.warn(
                     "`output_attentions=True` is not supported with `attn_implementation` other than `eager`. "
-                    "Falling back to eager attention. This warning can be removed using the argument "
-                    "`attn_implementation='eager' when loading the model.",
+                    "Please set `attn_implementation='eager' when loading the model to enable capturing attention outputs.",
                     UserWarning,
                 )
 
