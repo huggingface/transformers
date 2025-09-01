@@ -2172,17 +2172,17 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
         }
-        logits_processor_kwargs = {
-            "negative_prompt_ids": negative_prompt_ids,
-            "negative_prompt_attention_mask": negative_prompt_attention_mask,
-            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
-        }
-        # If custom_generate is a callable, we need to extract its parameters
+        gen_mode_kwargs = {k: v for k, v in gen_mode_kwargs.items() if v is not None}
         if isinstance(custom_generate, Callable):
             usual_mode_kwargs = inspect.signature(GenerationMixin._sample).parameters.keys()
             custom_generate_kwargs = inspect.signature(custom_generate).parameters.keys()
             new_custom_keys = custom_generate_kwargs - usual_mode_kwargs
             gen_mode_kwargs = {k: kwargs.pop(k) for k in new_custom_keys if k in kwargs}
+        logits_processor_kwargs = {
+            "negative_prompt_ids": negative_prompt_ids,
+            "negative_prompt_attention_mask": negative_prompt_attention_mask,
+            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
+        }
         return gen_mode_kwargs, logits_processor_kwargs
 
     @torch.no_grad()
@@ -2335,9 +2335,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(
-            assistant_model, gen_mode_kwargs.get("tokenizer"), gen_mode_kwargs.get("prefix_allowed_tokens_fn")
-        )
+        self._validate_assistant(assistant_model, gen_mode_kwargs.get("tokenizer"), prefix_allowed_tokens_fn)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
@@ -2354,7 +2352,7 @@ class GenerationMixin(ContinuousMixin):
                 stopping_criteria,
                 prefix_allowed_tokens_fn,
                 synced_gpus,
-                assistant_model,
+                gen_mode_kwargs.pop("assistant_model"),
                 streamer,
                 negative_prompt_ids,
                 negative_prompt_attention_mask,
@@ -2529,6 +2527,7 @@ class GenerationMixin(ContinuousMixin):
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
+                **gen_mode_kwargs,
             )
         elif generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
