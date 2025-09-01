@@ -3514,14 +3514,22 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
 
                 # Create first inputs without attention mask
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if torch.is_floating_point(dummy_input):
-                    dummy_input = dummy_input.to(torch.bfloat16)
-                first_inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
+                main_input = inputs_dict[model.main_input_name]
+                # Only keep first batch sequence
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    # Fix the dtype
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                # Some models have main input name which is different from input_ids, but require input_ids... e.g. BarkFine
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                # If we have some pixel values, use them as well
                 if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
                     first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
-                    first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+                    first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", first_inputs["input_ids"])[:1]
 
                 # Create attention mask with padding
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
