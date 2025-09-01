@@ -512,7 +512,6 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         self.embeddings = Idefics2VisionEmbeddings(config)
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -559,7 +558,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        elif self.config._attn_implementation != "flash_attention_2":
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -808,8 +807,6 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @auto_docstring
     def forward(
         self,
@@ -829,7 +826,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = (
             _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if not self._use_flash_attention_2
+            if self.config._attn_implementation != "flash_attention_2"
             else attention_mask
         )
 
@@ -886,8 +883,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
-
-        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 

@@ -491,9 +491,6 @@ class MetaClip2TextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-        # For attention mask, it differs between `flash_attention_2` and other attention implementations
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -516,7 +513,7 @@ class MetaClip2TextTransformer(nn.Module):
         )
 
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -624,6 +621,7 @@ class MetaClip2TextModelOutput(ModelOutput):
 class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     config: MetaClip2TextConfig
 
+    _supports_flash_attn = False
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2TextConfig):
