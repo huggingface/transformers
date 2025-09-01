@@ -32,6 +32,7 @@ class Scheduler(ABC):
         self.waiting_requests_order: deque[str] = deque()
         self.cache = cache
         self.retain_cache_on_finish = retain_cache_on_finish
+        self.requests_to_cancel: set[str] = set()
 
     @abstractmethod
     def add_waiting_request(self, state: RequestState):
@@ -57,6 +58,28 @@ class Scheduler(ABC):
         if request_id in self.active_requests:
             return self.active_requests[request_id].static_outputs
         return []
+
+    @traced
+    def set_request_cancellation(self, request_id: str):
+        self.requests_to_cancel.add(request_id)
+
+    @traced
+    def clear_cancelled_requests(self):
+        for request_id in self.requests_to_cancel:
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
+            if request_id in self.waiting_requests:
+                del self.waiting_requests[request_id]
+            if request_id in self.waiting_requests_order:
+                self.waiting_requests_order.remove(request_id)
+            self.cache.free_blocks(request_id)
+        self.requests_to_cancel = set()
+
+    @traced
+    def request_is_cancelled(self, request_id: str) -> bool:
+        return request_id in self.requests_to_cancel or (
+            request_id not in self.active_requests and request_id not in self.waiting_requests
+        )
 
 
 @attach_tracer()

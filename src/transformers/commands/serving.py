@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import base64
 import copy
 import datetime
@@ -24,7 +25,7 @@ import tempfile
 import threading
 import time
 from argparse import ArgumentParser, Namespace
-from collections.abc import Generator, Iterable
+from collections.abc import AsyncGenerator, Generator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -784,7 +785,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def continuous_batching_chat_completion(self, req: dict) -> AsyncGenerator[str, None]:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -832,13 +833,8 @@ class ServeCommand(BaseTransformersCLICommand):
             model.device
         )
 
-        def stream_chat_completion(_inputs):
+        def stream_chat_completion(request_id, decode_stream):
             try:
-                decode_stream = DecodeStream(_inputs.tolist(), False)
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
-                )
-
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
@@ -862,9 +858,25 @@ class ServeCommand(BaseTransformersCLICommand):
 
             except Exception as e:
                 logger.error(str(e))
+                self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_chat_completion(inputs[0])
+        async def cancellation_wrapper(_inputs):
+            request_id = None
+            try:
+                decode_stream = DecodeStream(_inputs.tolist(), False)
+                request_id = self.running_continuous_batching_manager.add_request(
+                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
+                )
+                for chunk in stream_chat_completion(request_id, decode_stream):
+                    yield chunk
+                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+            except asyncio.CancelledError:
+                if request_id is not None:
+                    logger.warning(f"Request {request_id} was cancelled. Cleaning up.")
+                    self.running_continuous_batching_manager.cancel_request(request_id)
+
+        return cancellation_wrapper(inputs[0])
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
