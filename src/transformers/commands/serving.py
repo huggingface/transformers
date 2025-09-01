@@ -648,9 +648,20 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
-        # NOTE:
-        # This is how you handle startup and shutdown events in FastAPI
-        # cf https://fastapi.tiangolo.com/advanced/events/#async-context-manager
+        """
+        Setup and run the FastAPI server for transformers serve.
+
+        Models will be loaded and unloaded automatically based on usage and a timeout.
+
+        The server will expose the following endpoints:
+        - POST /v1/chat/completions: Generates chat completions.
+        - POST /v1/responses: Generates responses.
+        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
+        - GET /v1/models: Lists available models for 3rd party tools.
+
+        Requires FastAPI and Uvicorn to be installed.
+        """
+
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
