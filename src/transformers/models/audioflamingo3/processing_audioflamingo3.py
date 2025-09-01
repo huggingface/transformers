@@ -31,7 +31,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         overrides: Optional[Dict[str, str]] = None,
         no_system_prompt: bool = False,
     ) -> torch.Tensor:
-        # Normalize the conversation before tokenization
+        # Normalize conversation before tokenization
         for message in messages:
             message["value"] = message["value"].strip()
 
@@ -113,12 +113,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
             orig_length = audio_data_tensor_this.shape[1]
             audio_data_tensor_this = self.feature_extractor(audio_data_tensor_this.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
             sound_outputs.append(audio_data_tensor_this["input_features"])
-            # calculate the mask for the input melspec to Whisper
+            # Mask for the input mel-spectrogram to Whisper
             melspec_frames_this_window = int(math.ceil(orig_length / 160))
             feature_attention_mask = torch.zeros(3000, dtype=torch.int32)
             feature_attention_mask[:melspec_frames_this_window] = 1
             audio_feature_masks.append(feature_attention_mask.unsqueeze(0))
-            # calculate the mask for the output embedding for use in AF3
+            # Mask for the output embedding used in AF3
             conv_lengths = (melspec_frames_this_window - 1) // 2 + 1
             output_embedding_lengths = (conv_lengths - 2) // 2 + 1
             audio_embed_mask[:output_embedding_lengths] = 1

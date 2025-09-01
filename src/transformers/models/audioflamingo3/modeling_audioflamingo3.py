@@ -3,18 +3,15 @@
 from collections import deque
 import copy
 import math
-import os.path as osp
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from huggingface_hub.utils import HFValidationError
 
 from ... import (
     AutoModelForCausalLM,
-    AutoTokenizer,
     GenerationConfig,
     PreTrainedModel,
     GenerationMixin,
@@ -244,14 +241,14 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
 class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers.
-    This version folds the old "AudioFlamingo3SoundTower" wrapper functionality directly into the encoder.
+    This version folds the former "AudioFlamingo3SoundTower" wrapper functionality directly into the encoder.
 
     Use cases:
       - HF-native: forward(input_features=..., attention_mask=...) -> BaseModelOutput
       - Tower-style (old wrapper): forward_tower(sounds, mask) -> last_hidden_state
     """
 
-    # keep HF typing and split rules
+    # Keep HF typing and split rules
     config: AudioFlamingo3EncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
@@ -279,31 +276,26 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self.layers = nn.ModuleList([AudioFlamingo3EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        # additional pooling to match your prior wrapper’s behavior
+        # Additional pooling to downsample the time dimension
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
         self.post_init()
 
-    # ----------------------------
     # Compatibility helpers (tower)
-    # ----------------------------
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
-        Computes output lengths after the two convs:
-          conv1: stride=1
-          conv2: stride=2
-        And returns both the feature length after conv1 and after conv2 (encoder S).
+        Compute output lengths after the two conv layers.
+        Returns both the feature length after conv1 and after conv2 (encoder S).
         """
-        input_lengths = (input_lengths - 1) // 2 + 1  # conv2 path as in your previous code (kept verbatim)
+        input_lengths = (input_lengths - 1) // 2 + 1  # conv2 path as in the previous implementation
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
 
     def _build_square_attn_mask(self, mask_1d: torch.Tensor, max_mel_seq_len: int) -> torch.Tensor:
         """
-        Build (B,1,S,S) attention mask with -inf on padded positions for Whisper-style encoders.
-
+        Build (B, 1, S, S) attention mask with -inf on padded positions.
         mask_1d: (B, T_mel) boolean/0-1 mask indicating valid mel frames.
         max_mel_seq_len: T_mel
         """
@@ -323,12 +315,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     @torch.no_grad()
     def forward_tower(self, sounds: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Wrapper-compatible entry point:
-        sounds: (B, num_mel_bins, T_mel) or (1,1,B,num_mel_bins,T_mel)
+        Tower-compatible entry point.
+        sounds: (B, num_mel_bins, T_mel) or (1, 1, B, num_mel_bins, T_mel)
         mask:   (B, T_mel) 0/1 mask for valid mel frames (required)
 
-        Returns:
-          last_hidden_state: (B, S, d_model) in sounds.dtype
+        Returns last_hidden_state: (B, S, d_model) in sounds.dtype
         """
         if sounds.ndim == 5:
             sounds = sounds.squeeze(0).squeeze(1)  # -> (B, M, T)
@@ -353,9 +344,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.conv1 = value
 
-    # ----------------------------
     # Core HF forward
-    # ----------------------------
     def forward(
         self,
         input_features: torch.Tensor,
@@ -380,17 +369,17 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # dtype/device normalization (match conv weights)
+        # Normalize dtype/device to match conv weights
         x = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)  # (B, M, T)
 
-        # frontend convs
+        # Frontend convolutions
         x = nn.functional.gelu(self.conv1(x))
         x = nn.functional.gelu(self.conv2(x))  # (B, d_model, T/2)
 
-        # time-major for transformer: (B, T', C)
+        # Time-major for transformer: (B, T', C)
         x = x.permute(0, 2, 1)
         embed_pos = self.embed_positions.weight  # (max_source_positions, C)
-        # broadcast add positional embeddings (trim if needed)
+        # Broadcast-add positional embeddings (trim if needed)
         if embed_pos.shape[0] < x.shape[1]:
             raise ValueError(f"embed_positions shorter than sequence length: {embed_pos.shape[0]} < {x.shape[1]}")
         x = x + embed_pos[: x.shape[1]]
@@ -425,7 +414,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             if output_attentions:
                 all_attns = all_attns + (layer_outputs[1],)
 
-        # match prior wrapper’s pooling path
+        # Apply pooling and layer norm
         hs = hidden_states.permute(0, 2, 1)  # (B, C, S)
         hs = self.avg_pooler(hs)  # downsample in time
         hs = hs.permute(0, 2, 1)  # (B, S', C)
@@ -439,9 +428,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         return AudioFlamingo3CausalLMOutputWithPast(last_hidden_state=hs, hidden_states=encoder_states, attentions=all_attns)
 
-    # ----------------------------
-    # Legacy convenience properties
-    # ----------------------------
+    # Convenience properties
     @property
     def device(self) -> torch.device:
         return self.conv1.weight.device
