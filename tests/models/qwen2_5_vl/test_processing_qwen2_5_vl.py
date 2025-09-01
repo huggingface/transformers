@@ -26,6 +26,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
+
 if is_vision_available():
     from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessorFast
 
