@@ -62,7 +62,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
 
         If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to `int(c * (256/224))`.
         The smaller edge of the image will be matched to this value i.e, if height > width, then image will be rescaled
-        to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
+        to `(size["shortest_edge"] * height / width, size["shortest_edge"])`.
 
         Args:
             image (`torch.Tensor`):

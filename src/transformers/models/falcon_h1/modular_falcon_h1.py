@@ -1324,7 +1324,7 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
+        # Overwritten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 

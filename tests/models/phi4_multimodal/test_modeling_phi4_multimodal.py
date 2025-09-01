@@ -213,10 +213,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Right padding not supported")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass

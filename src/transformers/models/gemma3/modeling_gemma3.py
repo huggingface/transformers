@@ -751,7 +751,7 @@ def token_type_ids_mask_function(
 
 @auto_docstring(
     custom_intro="""
-    The Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Gemma3 model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class Gemma3Model(Gemma3PreTrainedModel):
