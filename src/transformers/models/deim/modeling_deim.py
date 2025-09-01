@@ -920,3 +920,36 @@ class DEIMDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
+
+
+class DEIMMLP(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
+        super().__init__()
+        self.num_layers = num_layers
+        hidden_dims = [hidden_dim] * (num_layers - 1)
+        input_dims = [input_dim] + hidden_dims
+        output_dims = hidden_dims + [output_dim]
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
+        self.act = ACT2CLS[act]()
+
+    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
+        for i, layer in enumerate(self.layers):
+            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+        return stat_features
+
+
+class DEIMLQE(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        self.top_prob_values = config.top_prob_values
+        self.max_num_bins = config.max_num_bins
+        self.reg_conf = DEIMMLP(4 * (self.top_prob_values + 1), config.lqe_hidden_dim, 1, config.lqe_layers)
+
+    def forward(self, scores: torch.Tensor, pred_corners: torch.Tensor) -> torch.Tensor:
+        batch_size, length, _ = pred_corners.size()
+        prob = F.softmax(pred_corners.reshape(batch_size, length, 4, self.max_num_bins + 1), dim=-1)
+        prob_topk, _ = prob.topk(self.top_prob_values, dim=-1)
+        stat = torch.cat([prob_topk, prob_topk.mean(dim=-1, keepdim=True)], dim=-1)
+        quality_score = self.reg_conf(stat.reshape(batch_size, length, -1))
+        scores = scores + quality_score
+        return scores
