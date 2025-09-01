@@ -1237,14 +1237,24 @@ class PretrainedConfig(PushToHubMixin):
         if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_discard = "encoder" if decoder else "decoder"
+            prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
                 if key.startswith(prefix_to_discard):
                     delattr(config_to_return, key)
-            # old encoder/decoder models may use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
-            if decoder and hasattr(config_to_return, "decoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.decoder_layers
-            elif encoder and hasattr(config_to_return, "encoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.encoder_layers
+                if key.startswith(prefix_to_keep):
+                    if key == prefix_to_keep + "_layers":  # [encoder/decoder]_layers -> num_hidden_layers
+                        new_key = "num_hidden_layers"
+                    else:  # e.g. encoder_hidden_act -> hidden_act
+                        new_key = key[len(prefix_to_keep) + 1 :]
+
+                    # Does the class map the new key into a different attribute name? if so, let's write into that
+                    # attribute instead
+                    if new_key in config_to_return.attribute_map:
+                        new_key = config_to_return.attribute_map[new_key]
+
+                    value = getattr(config_to_return, key)
+                    delattr(config_to_return, key)
+                    setattr(config_to_return, new_key, value)
 
         return config_to_return
 
