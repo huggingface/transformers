@@ -37,7 +37,7 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...utils import filter_out_non_signature_kwargs
+from ...utils import auto_docstring, filter_out_non_signature_kwargs
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -361,6 +361,7 @@ class Siglip2VisionModel(SiglipVisionModel):
 class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     @filter_out_non_signature_kwargs()
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

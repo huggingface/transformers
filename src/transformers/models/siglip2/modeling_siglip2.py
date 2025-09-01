@@ -990,6 +990,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         return pooled_output
 
     @filter_out_non_signature_kwargs()
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
