@@ -24,7 +24,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -152,7 +152,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
             return []
 
         images = self.fetch_images(images)
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

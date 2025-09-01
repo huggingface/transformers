@@ -36,7 +36,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -429,7 +428,7 @@ class JanusImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)  # Ensures input is a list
+        images = make_flat_list_of_images(images)  # Ensures input is a list
 
         if isinstance(images[0], PIL.Image.Image):
             return images if len(images) > 1 else images[0]

@@ -94,9 +94,9 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
     Args:
         router_probs (`torch.Tensor`):
-            Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
+            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
         expert_indices (`torch.Tensor`):
-            Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
+            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
 
     Returns:
         The auxiliary loss.

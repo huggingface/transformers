@@ -31,7 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int, filter_out_non_signature_kwargs
 from ...utils.generic import check_model_inputs
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 
@@ -824,13 +824,13 @@ class SiglipModel(SiglipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -855,17 +855,16 @@ class SiglipModel(SiglipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            **kwargs,
         )
-
         pooled_output = text_outputs.pooler_output
 
         return pooled_output
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
@@ -877,16 +876,15 @@ class SiglipModel(SiglipPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
 
         >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -898,7 +896,6 @@ class SiglipModel(SiglipPreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-
         pooled_output = vision_outputs.pooler_output
 
         return pooled_output

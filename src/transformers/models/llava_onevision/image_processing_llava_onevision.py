@@ -460,7 +460,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -734,7 +734,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             else (size["shortest_edge"], size["shortest_edge"])
         )
 
-        new_images = []
+        processed_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for i, image in enumerate(images):
             if need_patching[i]:
@@ -772,10 +772,10 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values = np.array(pixel_values)
-            new_images.append(pixel_values)
+            processed_images.append(pixel_values)
 
         if do_pad:
-            processed_images = self._pad_for_batching(new_images)
+            processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},

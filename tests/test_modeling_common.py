@@ -174,11 +174,6 @@ def _test_eager_matches_sdpa_inference(
     This test is written as a regular function to be able to overload it easily with different tolerances.
     Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
     """
-    # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
-    # models have a custom mixin, which we detect to skip this test.
-    if any(".CLIPModelTesterMixin" in str(base) for base in self.__class__.__bases__):
-        self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
-
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
 
@@ -4739,6 +4734,7 @@ class ModelTesterMixin:
         (There are many more examples especially now that the `kernels` library is
         supported)
         """
+        config = copy.deepcopy(config)
 
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
@@ -4766,6 +4762,15 @@ class ModelTesterMixin:
                 head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
+                # Some models use 3D RoPE where the sum of RoPE sections has to be equal to head dim
+                if (
+                    getattr(config, "rope_scaling", None) is not None
+                    and config.rope_scaling.get("mrope_section") is not None
+                ):
+                    mrope_section = config.rope_scaling["mrope_section"]
+                    mutiplier = max(requested_dim // head_dim, 1)
+                    config.rope_scaling = {"type": "default", "mrope_section": [i * mutiplier for i in mrope_section]}
+
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
@@ -4783,6 +4788,14 @@ class ModelTesterMixin:
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
                 config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+
+            # 3d rope also depends on the head dim
+            # (we assume easy shapes here where we get to the requested head dim at least)
+            if hasattr(config, "rope_scaling") and len(config.rope_scaling.get("mrope_section", None)) > 0:
+                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
+                config.rope_scaling["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                ]
 
         # Update config values
         update_config_headdim(config, requested_dim)
