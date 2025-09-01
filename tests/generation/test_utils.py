@@ -209,17 +209,6 @@ class GenerationTesterMixin:
         }
         return beam_kwargs
 
-    def _get_diverse_beam_kwargs(self, num_return_sequences=1):
-        beam_kwargs = {
-            "early_stopping": False,
-            "length_penalty": 2.0,
-            "num_beams": 2,
-            "num_return_sequences": num_return_sequences,
-            "num_beam_groups": 2,  # one beam per group
-            "diversity_penalty": 2.0,
-        }
-        return beam_kwargs
-
     def _get_constrained_beam_kwargs(self, num_return_sequences=1):
         beam_kwargs = {
             "early_stopping": False,
@@ -336,36 +325,6 @@ class GenerationTesterMixin:
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
         output_generate = model.generate(
             do_sample=True,
-            max_new_tokens=self.max_new_tokens,
-            min_new_tokens=self.max_new_tokens,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            use_cache=use_cache,
-            **beam_kwargs,
-            **logits_processor_kwargs,
-            **inputs_dict,
-        )
-
-        return output_generate
-
-    def _group_beam_search_generate(
-        self,
-        model,
-        inputs_dict,
-        beam_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-        use_cache=True,
-    ):
-        logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
-        output_generate = model.generate(
-            do_sample=False,
             max_new_tokens=self.max_new_tokens,
             min_new_tokens=self.max_new_tokens,
             output_scores=output_scores,
@@ -746,77 +705,6 @@ class GenerationTesterMixin:
                 do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
             )
             self.assertIsNotNone(output_ids_generate)
-
-    @pytest.mark.generate
-    def test_group_beam_search_generate(self):
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            model = model_class(config).to(torch_device).eval()
-            # check `generate()` and `group_beam_search()` are equal
-            beam_kwargs = self._get_diverse_beam_kwargs()
-            output_generate = self._group_beam_search_generate(
-                model=model,
-                inputs_dict=inputs_dict,
-                beam_kwargs=beam_kwargs,
-            )
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
-                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
-            else:
-                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
-
-            # check `group_beam_search` for higher than 1 `num_return_sequences`
-            num_return_sequences = 2
-            beam_kwargs = self._get_diverse_beam_kwargs(num_return_sequences=num_return_sequences)
-            output_generate = self._group_beam_search_generate(
-                model=model,
-                inputs_dict=inputs_dict,
-                beam_kwargs=beam_kwargs,
-            )
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
-                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
-            else:
-                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
-
-    @pytest.mark.generate
-    def test_group_beam_search_generate_dict_output(self):
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            if self.has_attentions:
-                config._attn_implementation = "eager"  # can't output attentions otherwise
-
-            model = model_class(config).to(torch_device).eval()
-            beam_kwargs = self._get_diverse_beam_kwargs()
-            output_generate = self._group_beam_search_generate(
-                model=model,
-                inputs_dict=inputs_dict,
-                beam_kwargs=beam_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=self.has_attentions,
-                return_dict_in_generate=True,
-                use_cache=False,
-            )
-            if model.config.get_text_config(decoder=True).is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(
-                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
-                )
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_generate_outputs(
-                output_generate,
-                model.config,
-                num_return_sequences=beam_kwargs["num_return_sequences"],
-                num_beams=beam_kwargs["num_beams"],
-            )
 
     @is_flaky()  # Some models have position-specific tokens, this test may try to force them in an invalid position
     @pytest.mark.generate
@@ -2664,6 +2552,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
@@ -2682,6 +2571,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_beam_groups=4,
             diversity_penalty=2.0,
             remove_invalid_values=True,
+            trust_remote_code=True,
+            custom_generate="transformers-community/group-beam-search",
         )
 
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2841,6 +2732,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))
 
+    # TODO joao, manuel: remove in v4.62.0
     def test_transition_scores_group_beam_search_encoder_decoder(self):
         articles = [
             "Justin Timberlake and Jessica Biel, welcome to parenthood.",
@@ -2849,12 +2741,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         model = BartForConditionalGeneration.from_pretrained(
             "hf-internal-testing/tiny-random-bart",
+            eos_token_id=None,
+        )
+        generation_config = GenerationConfig(
             max_length=10,
             num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
             diversity_penalty=1.0,
-            eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,
             length_penalty=0.0,
@@ -2862,7 +2756,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = model.to(torch_device)
 
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
+        outputs = model.generate(
+            input_ids=input_ids,
+            generation_config=generation_config,
+            trust_remote_code=True,
+            custom_generate="transformers-community/group-beam-search",
+        )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
@@ -4833,6 +4732,16 @@ class GenerationIntegrationTests(unittest.TestCase):
         [
             ("transformers-community/dola", {"dola_layers": "low"}),
             ("transformers-community/contrastive-search", {"penalty_alpha": 0.6, "top_k": 4}),
+            (
+                "transformers-community/group-beam-search",
+                {
+                    "do_sample": False,
+                    "num_beams": 2,
+                    "num_beam_groups": 2,
+                    "diversity_penalty": 2.0,
+                    "length_penalty": 2.0,
+                },
+            ),
         ]
     )
     def test_hub_gen_strategies(self, custom_generate, extra_kwargs):
