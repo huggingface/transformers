@@ -18,7 +18,7 @@ Processor class for AudioFlamingo3.
 
 import math
 from collections import defaultdict
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -163,6 +163,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self,
         text: TextInput,
         audio_data: np.ndarray,
+        device: Optional[Union[str, torch.device]] = None,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> Tuple[torch.Tensor, List[torch.Tensor], Dict[str, List[torch.Tensor]]]:
         """
@@ -177,6 +178,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 The sequence to be encoded. Can be a string.
             audio_data (`np.ndarray`):
                 The audio to be prepared. Should be a NumPy array.
+            device (`str` or `torch.device`, *optional*):
+                Device to place the output tensors on. If None, tensors remain on CPU.
 
         Returns:
             [`Tuple[torch.Tensor, List[torch.Tensor], Dict[str, List[torch.Tensor]]]`]: A tuple containing:
@@ -196,7 +199,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         final_text += text.replace("<sound>", "").strip()
 
         conversation = [{"from": "human", "value": final_text}]
-        input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).cuda().unsqueeze(0)
+        input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).unsqueeze(0)
 
         sounds = torch.tensor(media).half()
         media = [sound for sound in sounds]
@@ -204,6 +207,13 @@ class AudioFlamingo3Processor(ProcessorMixin):
         media_meta["sound_feature_masks"] = [sound_mask for sound_mask in sound_feature_masks]
         sound_embed_masks = media_meta["sound_embed_masks"][0].detach().clone().half()
         media_meta["sound_embed_masks"] = [sound_mask for sound_mask in sound_embed_masks]
+
+        # Move tensors to device if specified
+        if device is not None:
+            input_ids = input_ids.to(device)
+            media = [sound.to(device) for sound in media]
+            media_meta["sound_feature_masks"] = [mask.to(device) for mask in media_meta["sound_feature_masks"]]
+            media_meta["sound_embed_masks"] = [mask.to(device) for mask in media_meta["sound_embed_masks"]]
 
         return input_ids, media, media_meta
 
