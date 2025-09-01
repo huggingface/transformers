@@ -564,8 +564,6 @@ class GPTJModel(GPTJPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         warnings.warn(
