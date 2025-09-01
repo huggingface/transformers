@@ -24,11 +24,7 @@ from transformers import AutoProcessor, Qwen2TokenizerFast
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-sys.path.append(".")
-from utils.fetch_hub_objects_for_ci import url_to_local_path
-
-from ...test_processing_common import ProcessorTesterMixin
-
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 if is_vision_available():
     from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessorFast
@@ -277,7 +273,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": url_to_local_path("https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"),
+            "url": url_to_local_path(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+            ),
         }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(

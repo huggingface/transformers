@@ -24,7 +24,7 @@ from transformers import MllamaProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -172,9 +172,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Describe this image in two sentences"},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
                     {"type": "text", "text": " Test sentence   "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
                     {"type": "text", "text": "ok\n"},
                 ],
             }
