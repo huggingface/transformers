@@ -726,7 +726,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [
+            " and I'm going to take a walk.\n\nI really enjoy the scenery, and I'",
+            ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'",
+        ]
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     @pytest.mark.torch_export_test

@@ -621,7 +621,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             self.assertEqual(
                 decoded,
                 expected,
-                f"Decoded text {i}:\n{repr(decoded)}\ndoes not match expected decoded text:\n{repr(expected)}"
+                f"Decoded text {i}:\n{repr(decoded)}\ndoes not match expected decoded text:\n{repr(expected)}",
             )
 
     @slow
