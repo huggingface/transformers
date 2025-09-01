@@ -1634,8 +1634,8 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 kwargs["do_sample_frames"] = True
 
-            images_exist = any(im for im_list in batch_images for im in im_list)
-            videos_exist = any(vid for vid_list in batch_videos for vid in vid_list)
+            images_exist = any(len(im) > 0 for im_list in batch_images for im in im_list)
+            videos_exist = any(len(vid) > 0 for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
                 images=batch_images if images_exist else None,
