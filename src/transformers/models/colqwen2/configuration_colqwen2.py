@@ -65,9 +65,11 @@ class ColQwen2Config(PretrainedConfig):
         **kwargs,
     ):
         if vlm_config is None:
-            vlm_config = CONFIG_MAPPING["qwen2_5_vl"]() if use_qwen2_5 else CONFIG_MAPPING["qwen2_vl"]()
+            model_name = "qwen2_5_vl" if use_qwen2_5 else "qwen2_vl"
+            vlm_config = CONFIG_MAPPING[model_name]()
+            config_name = "Qwen2_5VLConfig" if use_qwen2_5 else "Qwen2VLConfig"
             logger.info(
-                f"`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2{".5" if use_qwen2_5 else ""}VLConfig` with default values."
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `%s` with default values." % config_name
             )
         elif isinstance(vlm_config, dict):
             vlm_config = deepcopy(vlm_config)
@@ -83,6 +85,7 @@ class ColQwen2Config(PretrainedConfig):
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
 
+        self.use_qwen2_5 = use_qwen2_5
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range

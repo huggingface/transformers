@@ -99,12 +99,12 @@ def convert_colqwen2_weights_to_hf(
     push_to_hub: bool,
     revision: Optional[str] = None,
     original_vlm_name_or_path: Optional[str] = None,
-    using_qwen2_5=False,
+    use_qwen2_5=False,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
-        model_id,
-        revision=revision
+        model_id, 
+        revision=revision,
     )
     if original_vlm_name_or_path is not None:
         original_config._name_or_path = original_vlm_name_or_path
@@ -120,11 +120,11 @@ def convert_colqwen2_weights_to_hf(
     config = ColQwen2Config(
         vlm_config=original_config,
         embedding_dim=128,  # hardcoded in the original model
-        use_qwen2_5=using_qwen2_5
+        use_qwen2_5=use_qwen2_5,
     )
     config.model_type = "colqwen2"
     config.is_composition = False
-    
+
     # Load the untrained model
     model = ColQwen2ForRetrieval(config=config).to("cpu").eval()
     print("Created model with new config and randomly initialized weights")
@@ -204,7 +204,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--using_qwen2_5",
+        "--use_qwen2_5",
         help="Whether the original VLM backbone is Qwen2.5",
         action="store_true",
         default=False,
@@ -217,5 +217,5 @@ if __name__ == "__main__":
         push_to_hub=args.push_to_hub,
         revision=args.revision,
         original_vlm_name_or_path=args.original_vlm_name_or_path,
-        using_qwen2_5=args.using_qwen2_5
+        use_qwen2_5=args.use_qwen2_5,
     )
