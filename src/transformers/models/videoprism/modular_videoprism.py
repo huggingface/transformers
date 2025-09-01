@@ -450,17 +450,19 @@ class PerDimScale(nn.Module):
         self.config = config
         self.dim = int(config.intermediate_size / config.num_attention_heads)
         self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
-        self.r_softplus_0 = 1.442695041
-        self.scale = torch.tensor(self.r_softplus_0 / (self.dim**0.5))
-        self.softplus = nn.Softplus()(self.per_dim_scale)
-        self.scale = self.scale * self.softplus
+        r_softplus_0 = 1.442695041
+        scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
+        self.register_buffer('scale', scale)
         # self.register_buffer('scale_factor', self.scale, persistent=True)
+    
     def forward(self, inputs):
         # ? original comments
         # 1.0/jax.nn.softplus(0.0) = 1.442695041. Hard code this number so that we
         # can avoid unnecessary XLA op fusion mess on TPU.
-
-        return inputs * self.scale.expand(*inputs.shape)
+        softplus = nn.functional.softplus(self.per_dim_scale)
+        scale = self.scale * softplus
+        
+        return inputs * scale.expand(*inputs.shape)
 
 
 class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name pattern as in siglip 2 or aimv2
@@ -527,19 +529,14 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name patter
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
-        # outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
         outputs = self.projection(context_layer)
-
-        with torch.no_grad():
-            self.layernorm.weight += nn.Parameter(torch.ones(self.config.hidden_size))
 
         outputs = self.layernorm(outputs)
 
         return AttentionPoolingOutput(
             pooled_output=outputs,  # ? (B, 1, 768)
             attention_weights=attention_probs
-        )  
+        )
 
 
 class PositionalEmbedding(nn.Module):
@@ -653,11 +650,13 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
         backbone_outputs = self.backbone(pixel_values=pixel_values)        # ? returns (B, 4096, 768)        
         video_features = backbone_outputs.last_hidden_state
+        print(f"{video_features[0, :2, :3]=}")
         auxiliary_output = self.auxiliary_encoder(video_features)          # ? returns (B, 4096, 768) 
         auxiliary_output_features = auxiliary_output.last_hidden_state
+        print(f"{auxiliary_output_features[0, :3, :3]=}")
         contrastive_vision_pooler_output = self.contrastive_vision_pooler(auxiliary_output_features)
         video_embeddings = contrastive_vision_pooler_output.pooled_output  # ? (B, 1, 768)
-        
+        print(f"{video_embeddings[0, :3, :3]=}")
         if self.normalize:
             video_embeddings = self.l2norm(video_embeddings, dim=-1)
 
@@ -693,8 +692,9 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
 
         video_embeddings = video_model_outputs.video_last_hidden_state  # ? (video_batch, 1, 768)
-        text_embeddings = text_model_outputs.last_hidden_state          # ? (text_batch, 1, 768)
-
+        print(f"{video_embeddings[0, 0, :3]}")
+        text_embeddings = text_model_outputs.last_hidden_state          # ? (text_batch, 768)
+        print(f"{text_embeddings[0, :3]}")
 
         emb_dim = video_embeddings[0].shape[-1]
         assert emb_dim == text_embeddings[0].shape[-1]
