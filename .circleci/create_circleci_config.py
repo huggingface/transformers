@@ -181,7 +181,7 @@ class CircleCIJob:
             {"run": {
                 "name": "Run tests",
                 # "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} $(cat tests.txt) -k 'not (tests/models/xlm_roberta/test_tokenization_xlm_roberta.py::XLMRobertaTokenizationTest::test_pickle_subword_regularization_tokenizer)' | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} $(cat tests.txt) -k 'not (XLMRobertaTokenizationTest and test_pickle_subword_regularization_tokenizer)' | tee tests_output.txt)"}
             },
             {"run":
                 {
