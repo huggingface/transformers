@@ -111,7 +111,7 @@ class CircleCIJob:
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
         # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded`
-        self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
+        #vself.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -180,7 +180,8 @@ class CircleCIJob:
             {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                # "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} $(cat tests.txt) | tee tests_output.txt)"}
             },
             {"run":
                 {
@@ -204,7 +205,7 @@ class CircleCIJob:
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
-            {"store_artifacts": {"path": "tests.txt"}},
+            {"store_artifacts": {"path": "tests_output.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
         ]
