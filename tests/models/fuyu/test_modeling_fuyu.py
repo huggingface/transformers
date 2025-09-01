@@ -243,10 +243,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
-    @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass

@@ -1605,8 +1605,6 @@ class GenerationTesterMixin:
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
-            # TODO (joao, raushan): the correct line below is `if not hasattr(config.get_text_config(), "use_cache")`,
-            # but it breaks a few models. Fix and then apply `has_similar_generate_outputs` pattern
             if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
@@ -1630,6 +1628,7 @@ class GenerationTesterMixin:
             generation_kwargs = {
                 "return_dict_in_generate": True,
                 "do_sample": False,
+                "output_scores": True,
             }
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values.
@@ -1647,8 +1646,11 @@ class GenerationTesterMixin:
             )
 
             # Combine the (3 + 1) generated tokens and verify it matches with full generation.
-            combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
-            self.assertTrue(has_similar_generate_outputs(outputs, combined_output_sequences))
+            combined_output = type(cached_output)(
+                sequences=torch.concat([initial_output.sequences, cached_output.sequences], axis=1),
+                scores=initial_output.scores + cached_output.scores,
+            )
+            self.assertTrue(has_similar_generate_outputs(outputs, combined_output))
             # The two sets of past kv should be equal to each other
             for layer_idx in range(len(cached_output.past_key_values)):
                 for kv_idx in range(len(cached_output.past_key_values[layer_idx])):

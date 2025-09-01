@@ -360,7 +360,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 all_cache_shapes.append([self_attention_cache_shape, self_attention_cache_shape])
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
-    @unittest.skip(reason="Zamba2 has hybrid cache.")
+    @unittest.skip(reason="Zamba2 has hybrid mamba cache.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
