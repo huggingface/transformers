@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import json
+import math
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
@@ -328,6 +329,34 @@ class MiniCPM_V_4PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, MiniCPM_V_4RMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MiniCPM4VResampler):
+            nn.init.zeros_(module.query)
+            nn.init.normal_(module.proj, mean=0.0, std=module.embed_dim**-0.5)
+        elif isinstance(module, nn.Conv2d):
+            fan_in = module.in_channels * module.kernel_size[0] * module.kernel_size[1]
+            nn.init.trunc_normal_(module.weight, std=math.sqrt(1 / fan_in))
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MiniCPM_V_4RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.MultiheadAttention):
+            module.in_proj_weight.data.normal_(mean=0.0, std=std)
+            if module.in_proj_bias is not None:
+                module.in_proj_bias.data.zero_()
+
+        if hasattr(module, "probe") and isinstance(module.probe, nn.Parameter):
+            module.probe.data.normal_(mean=0.0, std=std)
 
 
 class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
@@ -341,6 +370,8 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.processor = None
 
         self.terminators = ["<|im_end|>", "</s>"]
+
+        self.post_init()
 
     def init_vision_module(self):
         if self.config._attn_implementation == "flash_attention_2":
@@ -499,51 +530,63 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
     def forward(
         self,
-        data: Union[dict, torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_bound: Optional[torch.LongTensor] = None,
+        tgt_sizes: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        """
-        Performs the forward pass of the model with multimodal inputs.
+        if pixel_values is None:
+            return self.language_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                inputs_embeds=inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                cache_position=cache_position,
+            )
 
-        Args:
-            data (`Union[Dict[str, torch.Tensor], torch.Tensor]`, *optional*):
-                A multimodal input containing text and/or vision data.
-                - If a `torch.Tensor` is provided, it is treated as `input_ids`, and a corresponding
-                  `attention_mask` of ones is automatically created.
-            **kwargs:
-                Additional keyword arguments to be passed to the underlying language model.
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        Returns:
-            `BaseModelOutputWithPast`: The output from the language model, typically containing the last hidden
-            state, past key-value states for causal language modeling, and other model outputs.
-        """
-        if isinstance(data, torch.Tensor):
-            attention_mask = torch.ones_like(data, dtype=torch.bool)
-            kwargs = {"attention_mask": attention_mask}
-            return self.language_model(input_ids=data, **kwargs)
-
-        if data is None:
-            data = {
-                "input_ids": kwargs.pop("input_ids", None),
-                "pixel_values": kwargs.pop("pixel_values", None),
-                "image_bound": kwargs.pop("image_bound", None),
-                "tgt_sizes": kwargs.pop("tgt_sizes", None),
-                "position_ids": kwargs.pop("position_ids", None),
-            }
-        else:
-            kwargs.pop("input_ids", None)
-            kwargs.pop("pixel_values", None)
-            kwargs.pop("image_bound", None)
-            kwargs.pop("tgt_sizes", None)
-            kwargs.pop("position_ids", None)
-        kwargs.pop("inputs_embeds", None)
+        data = {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "image_bound": image_bound,
+            "tgt_sizes": tgt_sizes,
+            "position_ids": position_ids,
+        }
 
         vllm_embedding, vision_hidden_states = self.get_vllm_embedding(data)
-        position_ids = data["position_ids"]
-        if position_ids.dtype != torch.int64:
+
+        if position_ids is not None and position_ids.dtype != torch.int64:
             position_ids = position_ids.long()
 
-        return self.language_model(input_ids=None, position_ids=position_ids, inputs_embeds=vllm_embedding, **kwargs)
+        return self.language_model(
+            input_ids=None,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=vllm_embedding,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
 
 
 @auto_docstring

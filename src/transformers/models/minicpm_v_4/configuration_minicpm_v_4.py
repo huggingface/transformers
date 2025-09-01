@@ -68,17 +68,35 @@ class MiniCPM_V_4Config(PretrainedConfig):
             logger.info("vision_config is None, using default MiniCPMVisionConfig.")
             vision_config = {}
 
-        self.vision_config = MiniCPMVisionConfig(**vision_config)
+        if isinstance(vision_config, dict):
+            self.vision_config = MiniCPMVisionConfig(**vision_config)
+        else:
+            self.vision_config = vision_config
 
         if text_config is None:
             logger.info("text_config is None, using default LlamaConfig.")
             text_config = {}
 
-        self.text_config = LlamaConfig(**text_config)
+        if isinstance(text_config, dict):
+            self.text_config = LlamaConfig(**text_config)
+        else:
+            self.text_config = text_config
 
         self.query_num = query_num
 
         self.text_config.use_cache = use_cache
 
+        if getattr(self, "hidden_size", None) is None:
+            self.hidden_size = self.text_config.hidden_size
+        if getattr(self, "vocab_size", None) is None:
+            self.vocab_size = self.text_config.vocab_size
+        if getattr(self, "num_hidden_layers", None) is None:
+            self.num_hidden_layers = self.text_config.num_hidden_layers
+        if getattr(self, "num_attention_heads", None) is None:
+            self.num_attention_heads = self.text_config.num_attention_heads
+        if getattr(self, "num_key_value_heads", None) is None:
+            self.num_key_value_heads = self.text_config.num_key_value_heads
+        if getattr(self, "intermediate_size", None) is None:
+            self.intermediate_size = self.text_config.intermediate_size
 
 __all__ = ["MiniCPM_V_4Config"]
