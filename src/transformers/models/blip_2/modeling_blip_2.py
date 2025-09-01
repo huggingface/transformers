@@ -15,6 +15,7 @@
 """PyTorch BLIP-2 model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -1287,7 +1288,8 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1307,10 +1309,9 @@ class Blip2Model(Blip2PreTrainedModel):
             be used by default.
 
         Returns:
-            text_outputs (`CausalLMOutputWithPast`, or `tuple(torch.FloatTensor)` if `return_dict=False`):
-                The language model outputs. If `return_dict=True`, the output is a [`CausalLMOutputWithPast`] that
-                contains the language model logits, the past key values and the hidden states if
-                `output_hidden_states=True`.
+            text_outputs (`CausalLMOutputWithPast` or `torch.FloatTensor`):
+                The language model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
         ```python
         >>> import torch
@@ -1323,10 +1324,19 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
+
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
+
         if self.config.use_decoder_only_language_model:
             text_outputs: CausalLMOutputWithPast = self.language_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                return_dict=True,
             )
         else:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
@@ -1336,9 +1346,10 @@ class Blip2Model(Blip2PreTrainedModel):
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
                 labels=labels,
+                return_dict=True,
             )
 
-        return text_outputs.logits
+        return text_outputs if legacy_output else text_outputs.logits
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -1346,13 +1357,13 @@ class Blip2Model(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
-                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
-                contains the image features, the pooled image features and the hidden states if
-                `output_hidden_states=True`.
+            vision_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
+                The vision model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
         ```python
         >>> import torch
@@ -1369,13 +1380,20 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_outputs = model.get_image_features(**inputs)
         ```"""
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
-        vision_features = vision_outputs.pooler_output
 
-        return vision_features
+        return vision_outputs if legacy_output else vision_outputs.pooler_output
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -1383,13 +1401,13 @@ class Blip2Model(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
-                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
-                contains the image features, the pooled image features and the hidden states if
-                `output_hidden_states=True`.
+            qformer_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
+                The Q-Former outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
 
         ```python
@@ -1407,9 +1425,18 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     qformer_outputs = model.get_qformer_features(**inputs)
         ```"""
+
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_qformer_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
+
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
 
         image_embeds = vision_outputs.last_hidden_state
@@ -1422,9 +1449,10 @@ class Blip2Model(Blip2PreTrainedModel):
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
+            return_dict=True,
         )
 
-        return query_outputs.last_hidden_state
+        return query_outputs if legacy_output else query_outputs.last_hidden_state
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
