@@ -14,39 +14,38 @@
 
 """Tokenization classes and Image processor class, Processor class for Ernie_45T_VL."""
 
-import base64
 import copy
+import io
+import os
+import math
+import random
+import requests
+import base64
 import datetime
 import hashlib
-import io
-import math
-import os
-import random
 import threading
 import uuid
-from collections import defaultdict
-from pathlib import Path
-from shutil import copyfile
-from tempfile import NamedTemporaryFile as ntf
-from typing import Any, Optional, Union
-
 import decord
+from shutil import copyfile
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
-import requests
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from PIL.ExifTags import TAGS
-
-
-try:
-    # moviepy 1.0
-    import moviepy.editor as mp
-except:
-    # moviepy 2.0
-    import moviepy as mp
+from collections import defaultdict
+from pathlib import Path
+from tempfile import NamedTemporaryFile as ntf
 
 import sentencepiece as spm
-
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import (
+    PaddingStrategy,
+    TextInput,
+)
+from transformers.utils import TensorType, logging
+from transformers.video_utils import VideoInput
+from transformers.processing_utils import ProcessorMixin
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
@@ -69,14 +68,6 @@ from transformers.image_utils import (
     to_numpy_array,
     valid_images,
 )
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.tokenization_utils_base import (
-    PaddingStrategy,
-)
-from transformers.utils import TensorType, logging
-from transformers.video_utils import VideoInput
-
 
 logger = logging.get_logger(__name__)
 
@@ -225,7 +216,7 @@ class Ernie4_5_VLTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(
         self, save_directory, filename_prefix: Optional[str] = None
-    ) -> tuple[str]:
+    ) -> Tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -275,7 +266,7 @@ class Ernie4_5_VLTokenizer(PreTrainedTokenizer):
 
     def _pad(
         self,
-        encoded_inputs: dict,
+        encoded_inputs: Dict,
         max_length: Optional[int] = None,
         padding_strategy=PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -444,7 +435,7 @@ def is_scaled_image(image: np.ndarray) -> bool:
     return np.min(image) >= 0 and np.max(image) <= 1
 
 
-def make_batched_images(images) -> list[list[ImageInput]]:
+def make_batched_images(images) -> List[List[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 
@@ -472,7 +463,7 @@ def make_batched_images(images) -> list[list[ImageInput]]:
 
 
 # Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
-def make_batched_videos(videos) -> list[VideoInput]:
+def make_batched_videos(videos) -> List[VideoInput]:
     """dummy"""
     if (
         isinstance(videos, (list, tuple))
@@ -493,7 +484,7 @@ def make_batched_videos(videos) -> list[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-class Ernie_45T_VLImageProcessor(BaseImageProcessor):
+class Ernie4_5_VLImageProcessor(BaseImageProcessor):
     r"""
     Constructs a adaptive image processor that dynamically resizes images based on the original images.
 
@@ -539,10 +530,10 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[float, list[float]] = 1 / 255,
+        rescale_factor: Union[float, List[float]] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         min_pixels: int = 56 * 56,
         max_pixels: int = 28 * 28 * 1280,
@@ -568,6 +559,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
+    # TODO: this seems not to be used at all
     def set_pixels(self, min_pixels=None, max_pixels=None, msg=""):
         """set_pixels"""
         if min_pixels is not None:
@@ -575,7 +567,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
                 isinstance(min_pixels, int) and min_pixels >= 0
             ), "min_pixels must be positive int"
             logger.info(
-                f"{msg} Ernie_45T_VLImageProcessor set min_pixels = {min_pixels}"
+                f"{msg} Ernie4_5_VLImageProcessor set min_pixels = {min_pixels}"
             )
             self.min_pixels = min_pixels
             self.size["min_pixels"] = int(min_pixels)
@@ -584,7 +576,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
                 isinstance(max_pixels, int) and max_pixels > 0
             ), "max_pixels must be positive int"
             logger.info(
-                f"{msg} Ernie_45T_VLImageProcessor set max_pixels = {max_pixels}"
+                f"{msg} Ernie4_5_VLImageProcessor set max_pixels = {max_pixels}"
             )
             self.max_pixels = max_pixels
             self.size["max_pixels"] = int(max_pixels)
@@ -613,12 +605,12 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = False,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        predetermined_grid_thw=None,
+        predetermined_grid_thw=None,  # TODO: this is a diff to qwen2 vl
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -685,6 +677,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
 
         for img_idx, image in enumerate(images):
             if do_resize:
+                # TODO: diff to qwen2 vl
                 if predetermined_grid_thw is not None:
                     (resized_height, resized_width) = predetermined_grid_thw[img_idx]
                     resized_height *= self.patch_size
@@ -726,6 +719,8 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose([0, 3, 1, 2])
 
+        # TODO: no temporal patches? --> ie also different reshape
+
         channel = patches.shape[1]  # [time, C, H, W]
         grid_t = patches.shape[0]
         grid_h, grid_w = (
@@ -758,13 +753,13 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
         images: ImageInput,
         videos: VideoInput = None,
         do_resize: bool = True,
-        size: Optional[Union[int, list[int]]] = None,
+        size: Optional[Union[int, List[int]]] = None,
         resample: PILImageResampling = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -818,6 +813,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
+        # TODO: check for base options
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
@@ -832,6 +828,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
             do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         )
 
+        # TODO: diff --> we should fetch and then batch
         if images is not None:
             images = make_batched_images(images)
 
@@ -841,14 +838,18 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
                 "torch.Tensor."
             )
 
+        # TODO: missing validation
+
         data = {}
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for img_idx, image in enumerate(images):
+                # TODO: predetermined ...
                 if predetermined_grid_thw is not None:
                     predetermined_grid_thw_one = [predetermined_grid_thw[img_idx]]
                 else:
                     predetermined_grid_thw_one = None
+
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
@@ -871,6 +872,7 @@ class Ernie_45T_VLImageProcessor(BaseImageProcessor):
                 {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
             )
 
+        # TODO: move to separate vid processor
         if videos is not None:
             videos = make_batched_videos(videos)
             pixel_values, vision_grid_thws = [], []
@@ -950,9 +952,15 @@ class VideoReaderWrapper(decord.VideoReader):
                     gif_input = gif_file.name
 
             if gif_input is not None:
+                try:
+                    # moviepy 1.0
+                    import moviepy.editor as mp
+                except:
+                    # moviepy 2.0
+                    import moviepy as mp
                 clip = mp.VideoFileClip(gif_input)
                 mp4_file = ntf(delete=False, suffix=".mp4")
-                clip.write_videofile(mp4_file.name, verbose=False, logger=None)
+                clip.write_videofile(mp4_file.name, logger=None)
                 clip.close()
                 video_path = mp4_file.name
                 self.original_file = video_path
@@ -1104,7 +1112,7 @@ def get_downloadable_image(
     if need_exif_info:
         try:
             exif_info = get_image_exif(pil_image)
-        except Exception:
+        except Exception as why:
             exif_info = {}
     else:
         exif_info = {}
@@ -1114,7 +1122,7 @@ def get_downloadable_image(
             pil_image = change_I16_to_L(pil_image)
         if has_transparent_background(pil_image):
             pil_image = add_white_background(pil_image)
-    except Exception:
+    except Exception as e:
         pass
 
     return pil_image.convert("RGB"), exif_info
@@ -1170,7 +1178,7 @@ def get_frame_indices(
         if frames_sample == "rand":
             try:
                 frame_indices = [random.choice(range(x[0], x[1])) for x in ranges]
-            except Exception:
+            except Exception as e:
                 frame_indices = np.random.permutation(vlen)[:acc_samples]
                 frame_indices.sort()
                 frame_indices = list(frame_indices)
@@ -1284,7 +1292,7 @@ def read_frames_decord(
                         )
                         frame_indices[frame_indice_index] = frame_indice + later_counter
                         break
-                    except Exception:
+                    except Exception as e:
                         later_counter += 1
                 previous_after_flag = not previous_after_flag
 
@@ -1383,7 +1391,7 @@ def render_frame_timestamp(frame, timestamp, font_rate=0.1):
 IDS_TYPE_FLAG = {"text": 0, "image": 1, "video": 2, "audio": 3}
 
 
-class Ernie_45T_VLProcessor(ProcessorMixin):
+class Ernie4_5_VLProcessor(ProcessorMixin):
     """
     Processes multimodal chat messages into model-ready inputs,
     handling text, images, and videos with 3D positional embeddings.
@@ -1467,7 +1475,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
         self.is_training = True
         self.role_prefixes = {"system": "", "user": "User: ", "bot": "Assistant: "}
 
-    def _build_token_type_mapping(self) -> dict[Any, int]:
+    def _build_token_type_mapping(self) -> Dict[Any, int]:
         mapping = defaultdict(lambda: IDS_TYPE_FLAG["text"])
         for token in (self.IMG_START, self.IMG_END, self.VID_START, self.VID_END):
             mapping[token] = IDS_TYPE_FLAG["image"]
@@ -1484,7 +1492,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
 
     def _download_image(
         self,
-        item: dict,
+        item: Dict,
     ):
         """Download image from url and resize it to the specified size."""
         url_info = item.get("image_url", {})
@@ -1498,7 +1506,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
             img = img.resize((w, h))
         return img
 
-    def _download_video(self, item: dict):
+    def _download_video(self, item: Dict):
         """Download video from url and resize it to the specified size."""
         url_info = item.get("video_url", {})
         url = url_info.get("url")
@@ -1508,7 +1516,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
         pixel_stack = np.stack([np.array(f.convert("RGB")) for f in frames], axis=0)
         return pixel_stack
 
-    def process_vision_info(self, messages: list[dict[str, Any]]):
+    def process_vision_info(self, messages: List[Dict[str, Any]]):
         """Preprocess messages into lists of text, images, and videos."""
         images = []
         videos = []
@@ -1525,16 +1533,16 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
                 elif item.get("type") == "video_url":
                     pixel_stack = self._download_video(item)
                     videos.append(pixel_stack)
-
+                    
         return images, videos
 
     def __call__(
         self,
-        text: list[str],
-        images: list[Image.Image],
-        videos: list[list[Image.Image]],
+        text: Union[str, List[str]],
+        images: List[Image.Image] = None,
+        videos: List[List[Image.Image]] = None,
         **kwargs,
-    ) -> dict[str, Union[np.ndarray, list[np.ndarray], None]]:
+    ) -> BatchFeature:
         """
         Convert chat messages into model inputs.
         Returns a dict with input_ids, token_type_ids, position_ids, images, grid_thw, image_type_ids, labels.
@@ -1550,6 +1558,13 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
             "pic_cnt": 0,
             "video_cnt": 0,
         }
+        if images is None:
+            images = []
+        if videos is None:
+            videos = []
+        if not isinstance(text, list):
+            text = [text]
+            
         texts = text[0]
 
         new_video_seg = True
@@ -1577,7 +1592,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
 
         return BatchFeature(data=outputs)
 
-    def _add_special_token(self, token: Union[str, int], outputs: dict) -> None:
+    def _add_special_token(self, token: Union[str, int], outputs: Dict) -> None:
         """add special token to outputs"""
         token_id = (
             token
@@ -1589,8 +1604,8 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
         pos = outputs["cur_position"]
         outputs["position_ids"].append([pos] * 3)
         outputs["cur_position"] += 1
-
-    def _add_text(self, text: str, outputs: dict) -> None:
+    
+    def _add_text(self, text: str, outputs: Dict) -> None:
         """add text to outputs"""
         tokens = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(text))
         outputs["input_ids"].extend(tokens)
@@ -1601,7 +1616,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
             outputs["position_ids"].append([start + i] * 3)
         outputs["cur_position"] += len(tokens)
 
-    def _add_image(self, img: Image.Image, outputs: dict) -> None:
+    def _add_image(self, img: Image.Image, outputs: Dict) -> None:
         """add image to outputs"""
         outputs["pic_cnt"] += 1
         self._add_special_token(self.IMG_START, outputs)
@@ -1639,7 +1654,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
         self._add_special_token(self.IMG_END, outputs)
 
     def _add_video(
-        self, pixel_stack: list[np.ndarray], outputs: dict
+        self, pixel_stack: np.ndarray, outputs: Dict
     ) -> None:
         outputs["video_cnt"] += 1
         self._add_special_token(self.VID_START, outputs)
@@ -1679,7 +1694,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
 
         self._add_special_token(self.VID_END, outputs)
 
-    def _load_and_process_video(self, url: str, item: dict) -> list[Image.Image]:
+    def _load_and_process_video(self, url: str, item: Dict) -> List[Image.Image]:
         reader, meta, path = read_video_decord(url, save_to_disk=False)
 
         video_frame_args = dict()
@@ -1705,7 +1720,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
             save_to_disk=False,
         )
 
-        frames: list[Image.Image] = []
+        frames: List[Image.Image] = []
         for img_array, ts in zip(frames_data, timestamps):
             frames.append(render_frame_timestamp(img_array, ts))
         # Ensure even number of frames for temporal conv
@@ -1762,7 +1777,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
 
     def _compute_3d_positions(
         self, t: int, h: int, w: int, start_idx: int
-    ) -> list[list[int]]:
+    ) -> List[List[int]]:
         # Downsample time if needed
         t_eff = t // self.temporal_conv_size if t != 1 else 1
         gh, gw = h // self.spatial_conv_size, w // self.spatial_conv_size
@@ -1775,7 +1790,7 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
             [start_idx + ti, start_idx + hi, start_idx + wi] for ti, hi, wi in coords
         ]
 
-    def _pack_outputs(self, outs: dict) -> dict[str, Any]:
+    def _pack_outputs(self, outs: Dict) -> Dict[str, Any]:
         # Stack or nullify image-related fields
         if not outs["images"]:
             outs["images"] = None
@@ -1814,4 +1829,4 @@ class Ernie_45T_VLProcessor(ProcessorMixin):
         return list(tokenizer_input_names) + list(image_processor_input_names)
 
 
-__all__ = ["Ernie4_5_VLTokenizer", "Ernie_45T_VLImageProcessor", "Ernie_45T_VLProcessor"]
+__all__ = ["Ernie4_5_VLTokenizer", "Ernie4_5_VLImageProcessor", "Ernie4_5_VLProcessor"]
