@@ -93,6 +93,8 @@ class DeepseekV3Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        use_grouped_gemm (`bool`, *optional*, defaults to `False`):
+            Whether to use grouped GEMM.
         pad_token_id (`int`, *optional*):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 0):
@@ -179,6 +181,7 @@ class DeepseekV3Config(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
+        use_grouped_gemm=False,
         pad_token_id=None,
         bos_token_id=0,
         eos_token_id=1,
@@ -225,6 +228,7 @@ class DeepseekV3Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
+        self.use_grouped_gemm = use_grouped_gemm
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
@@ -238,6 +242,16 @@ class DeepseekV3Config(PretrainedConfig):
             for key in ["beta_fast", "beta_slow", "factor"]:
                 if key in self.rope_scaling:
                     self.rope_scaling[key] = float(self.rope_scaling[key])
+
+        if self.use_grouped_gemm:
+            # https://github.com/fanshiqing/grouped_gemm
+            import importlib.util
+
+            if importlib.util.find_spec("grouped_gemm") is None:
+                raise ImportError(
+                    "Please install grouped_gemm to use use_grouped_gemm=True. "
+                    "You can install it with `pip install git+https://github.com/fanshiqing/grouped_gemm@main`"
+                )
 
         rope_config_validation(self)
 

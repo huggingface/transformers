@@ -9,7 +9,9 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 from torch import nn
+from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -149,59 +151,114 @@ class DeepseekV3TopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-class DeepseekV3MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
+class GroupedLinear(nn.Module):
+    def __init__(self, num_groups: int, in_features: int, out_features: int, bias: bool = False):
+        super().__init__()
+        self.num_groups = num_groups
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.empty(num_groups, out_features, in_features))
+        if bias:
+            self.bias = nn.Parameter(torch.empty(num_groups, out_features))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
 
+    def reset_parameters(self) -> None:
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, x):
+        raise NotImplementedError("`GroupedLinear` is a weight container for use with specialized kernels.")
+
+    def extra_repr(self) -> str:
+        return f"num_groups={self.num_groups}, in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
+
+
+class GroupedDeepseekV3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = nn.ModuleList(
-            [
-                DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
+        num_experts = config.n_routed_experts
+        hidden_size = config.hidden_size
+        intermediate_size = config.moe_intermediate_size
+
+        # Use the new GroupedLinear layer for a cleaner, more consistent structure
+        self.gate_proj = GroupedLinear(num_experts, hidden_size, intermediate_size, bias=False)
+        self.up_proj = GroupedLinear(num_experts, hidden_size, intermediate_size, bias=False)
+        self.down_proj = GroupedLinear(num_experts, intermediate_size, hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        raise NotImplementedError("The MoE computation is performed in the parent `DeepseekV3MoE` module.")
+
+
+class DeepseekV3MoE(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.use_grouped_gemm = config.use_grouped_gemm
         self.gate = DeepseekV3TopkRouter(config)
         self.shared_experts = DeepseekV3MLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+            config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        if self.use_grouped_gemm:
+            self.experts = GroupedDeepseekV3MLP(config)
+        else:
+            self.experts = nn.ModuleList(
+                [
+                    DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)
+                    for _ in range(config.n_routed_experts)
+                ]
+            )
 
-    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
-        """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.use_grouped_gemm:
+            return self.grouped_forward(hidden_states)
+        else:
+            return self.vanilla_forward(hidden_states)
+
+    def grouped_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        import grouped_gemm.ops as ops
+
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        flat_hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        topk_indices, topk_weights = self.gate(hidden_states)
+        topk_indices = topk_indices.to(torch.int32)
+        batch_sizes = torch.bincount(topk_indices.flatten().cpu(), minlength=self.config.n_routed_experts)
+        permuted_hidden_states, row_id_map = ops.permute(flat_hidden_states, topk_indices)
+
+        gate_out = ops.gmm(permuted_hidden_states, self.experts.gate_proj.weight, batch_sizes, trans_b=True)
+        up_out = ops.gmm(permuted_hidden_states, self.experts.up_proj.weight, batch_sizes, trans_b=True)
+        intermediate_out = self.experts.act_fn(gate_out) * up_out
+        expert_out = ops.gmm(intermediate_out, self.experts.down_proj.weight, batch_sizes, trans_b=True)
+
+        moe_output = ops.unpermute(expert_out, row_id_map, topk_weights)
+        return moe_output.view(*orig_shape) + self.shared_experts(residuals)
+
+    def vanilla_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        flat_hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        topk_indices, topk_weights = self.gate(hidden_states)
+        final_hidden_states = torch.zeros_like(flat_hidden_states)
+        expert_mask = F.one_hot(topk_indices, num_classes=len(self.experts)).permute(2, 0, 1)
 
         for expert_idx in range(len(self.experts)):
             expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
+            token_indices, weight_indices = torch.where(expert_mask[expert_idx])
             if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
+                expert_weights = topk_weights[token_indices, weight_indices].unsqueeze(1)
+                expert_output = expert(flat_hidden_states[token_indices])
+                final_hidden_states.index_add_(
+                    0, token_indices, (expert_output * expert_weights).to(final_hidden_states.dtype)
+                )
 
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
-        return final_hidden_states.type(hidden_states.dtype)
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
+        return final_hidden_states.view(*orig_shape) + self.shared_experts(residuals)
 
 
 def rotate_half(x):
@@ -595,6 +652,44 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             past_key_values=past_key_values,
         )
 
+    def _fuse_experts(self):
+        for layer in tqdm(self.layers, desc="Fusing experts"):
+            if isinstance(layer.mlp, DeepseekV3MoE) and not layer.mlp.use_grouped_gemm:
+                grouped_experts = GroupedDeepseekV3MLP(layer.mlp.config)
+
+                gate_weights = torch.stack([expert.gate_proj.weight for expert in layer.mlp.experts])
+                up_weights = torch.stack([expert.up_proj.weight for expert in layer.mlp.experts])
+                down_weights = torch.stack([expert.down_proj.weight for expert in layer.mlp.experts])
+
+                grouped_experts.gate_proj.weight.data = gate_weights
+                grouped_experts.up_proj.weight.data = up_weights
+                grouped_experts.down_proj.weight.data = down_weights
+
+                layer.mlp.experts = grouped_experts
+                layer.mlp.use_grouped_gemm = True
+
+    def _unfuse_experts(self):
+        for layer in tqdm(self.layers, desc="Unfusing experts"):
+            if isinstance(layer.mlp, DeepseekV3MoE) and layer.mlp.use_grouped_gemm:
+                grouped_experts = layer.mlp.experts
+                gate_weights = grouped_experts.gate_proj.weight.data
+                up_weights = grouped_experts.up_proj.weight.data
+                down_weights = grouped_experts.down_proj.weight.data
+
+                config = layer.mlp.config
+                num_experts = config.n_routed_experts
+                experts = nn.ModuleList(
+                    [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(num_experts)]
+                )
+
+                for i in range(num_experts):
+                    experts[i].gate_proj.weight.data = gate_weights[i]
+                    experts[i].up_proj.weight.data = up_weights[i]
+                    experts[i].down_proj.weight.data = down_weights[i]
+
+                layer.mlp.experts = experts
+                layer.mlp.use_grouped_gemm = False
+
 
 @auto_docstring
 class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
@@ -670,6 +765,19 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def fuse_experts(self):
+        import importlib.util
+
+        if importlib.util.find_spec("grouped_gemm") is None:
+            raise ImportError(
+                "Please install grouped_gemm to use use_grouped_gemm=True. "
+                "You can install it with `pip install git+https://github.com/fanshiqing/grouped_gemm@main`"
+            )
+        self.model._fuse_experts()
+
+    def unfuse_experts(self):
+        self.model._unfuse_experts()
 
 
 class DeepseekV3ForSequenceClassification(GenericForSequenceClassification, DeepseekV3PreTrainedModel):
