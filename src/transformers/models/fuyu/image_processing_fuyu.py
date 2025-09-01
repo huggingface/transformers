@@ -27,11 +27,13 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_nested_list_of_images,
+    is_valid_image,
+    make_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -51,6 +53,21 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+def make_list_of_list_of_images(
+    images: Union[list[list[ImageInput]], list[ImageInput], ImageInput],
+) -> list[list[ImageInput]]:
+    if is_valid_image(images):
+        return [[images]]
+
+    if isinstance(images, list) and all(isinstance(image, list) for image in images):
+        return images
+
+    if isinstance(images, list):
+        return [make_list_of_images(image) for image in images]
+
+    raise ValueError("images must be a list of list of images or a list of images or an image.")
 
 
 class FuyuBatchFeature(BatchFeature):
@@ -430,7 +447,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
             raise ValueError("Multiple images for a single sample are not yet supported.")
 
-        batch_images = make_nested_list_of_images(images)
+        batch_images = make_list_of_list_of_images(images)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

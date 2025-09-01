@@ -454,7 +454,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -576,7 +575,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
             text=input_str,
             images=image_input,

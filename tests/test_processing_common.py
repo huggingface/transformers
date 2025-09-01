@@ -272,7 +272,7 @@ class ProcessorTesterMixin:
         """
         processor = self.get_processor()
         call_signature = inspect.signature(processor.__call__)
-        input_args = [param.name for param in call_signature.parameters.values()]
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
 
         if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
             self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
