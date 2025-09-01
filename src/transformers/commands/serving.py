@@ -281,9 +281,6 @@ def create_generation_config_from_req(
         generation_config.top_p = float(req["top_p"])
     if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
-    if generation_config.max_new_tokens is None:
-        # Default to 512 tokens if not set
-        generation_config.max_new_tokens = 512
 
     return generation_config
 
