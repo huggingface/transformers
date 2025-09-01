@@ -17,6 +17,10 @@ Audio/Text processor class for CLAP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class ClapProcessor(ProcessorMixin):
@@ -38,6 +42,20 @@ class ClapProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
+
+    def __call__(self, *args, **kwargs):
+        """
+        Forwards the `audio` and `sampling_rate` arguments to [`~ClapFeatureExtractor.__call__`] and the `text`
+        argument to [`~RobertaTokenizerFast.__call__`]. Please refer to the docstring of the above two methods for more
+        information.
+        """
+        audios = kwargs.pop("audios", None)
+        if audios is not None:
+            logger.warning(
+                "Using `audios` keyword argument is deprecated when calling ClapProcessor, instead use `audio`."
+            )
+        kwargs["audio"] = audios
+        return super().__call__(*args, **kwargs)
 
 
 __all__ = ["ClapProcessor"]
