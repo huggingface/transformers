@@ -16,6 +16,7 @@ from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
 from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP,DFinePreTrainedModel,DFineModelOutput,DFineObjectDetectionOutput,DFineFrozenBatchNorm2d,DFineEncoderLayer,DFineDecoderOutput,DFineDecoder,DFineModel,DFineIntegral,DFineDecoder,DFineConvNormLayer
 from ..d_fine.configuration_d_fine import DFineConfig
 from ...configuration_utils import PretrainedConfig
+from ..detr.image_processing_detr import DetrImageProcessor
 
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -526,7 +527,13 @@ class DEIMHybridEncoder(DFineHybridEncoder):
     pass
 
 
-__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection","DEIMConfig"]
+class DEIMImageProcessor(DetrImageProcessor):
+    pass
+
+
+
+
+__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection", "DEIMConfig","DEIMImageProcessor"]
 
 
 

@@ -33,7 +33,12 @@ from ...image_transforms import center_to_corners_format, corners_to_center_form
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, torch_int
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    is_torchdynamo_compiling,
+    torch_int,
+)
 from ...utils.backbone_utils import load_backbone
 from .configuration_deim import DEIMConfig
 
