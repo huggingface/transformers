@@ -17,6 +17,7 @@ from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEn
 from ..d_fine.configuration_d_fine import DFineConfig
 from ...configuration_utils import PretrainedConfig
 from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -531,9 +532,13 @@ class DEIMImageProcessor(DetrImageProcessor):
     pass
 
 
+class DEIMImageProcessorFast(DetrImageProcessorFast):
+    pass
 
 
-__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection", "DEIMConfig","DEIMImageProcessor"]
+
+
+__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection", "DEIMConfig","DEIMImageProcessor","DEIMImageProcessorFast"]
 
 
 
