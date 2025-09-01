@@ -526,6 +526,7 @@ class DEIMHybridEncoder(DFineHybridEncoder):
     pass
 
 
+__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection","DEIMConfig"]
 
 
 

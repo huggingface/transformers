@@ -2183,3 +2183,6 @@ class DEIMHybridEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
         )
+
+
+__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection"]
