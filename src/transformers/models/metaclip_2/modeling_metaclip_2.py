@@ -23,14 +23,10 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    logging,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class MetaClip2TextEmbeddings(nn.Module):

@@ -943,7 +943,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -952,7 +952,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
             query_length=query_length,
             **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = sequence_output[:, 0, :]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(

@@ -506,12 +506,12 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         elif not torch.any(~patch_attention_mask):
             patch_attention_mask = None
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=patch_attention_mask,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         return BaseModelOutput(

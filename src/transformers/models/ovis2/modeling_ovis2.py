@@ -396,13 +396,13 @@ class Ovis2VisionTransformer(nn.Module):
     ):
         hidden_states = self.embeddings(pixel_values)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
         return BaseModelOutput(last_hidden_state=last_hidden_state)

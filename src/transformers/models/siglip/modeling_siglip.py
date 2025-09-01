@@ -609,7 +609,7 @@ class SiglipTextTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # The model uses the last token's hidden state, which may be padding.
@@ -704,7 +704,7 @@ class SiglipVisionTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         pooler_output = self.head(last_hidden_state) if self.use_head else None

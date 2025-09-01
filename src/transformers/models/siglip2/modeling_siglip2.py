@@ -691,7 +691,7 @@ class Siglip2TextTransformer(nn.Module):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # The model uses the last token's hidden state, which may be padding.
