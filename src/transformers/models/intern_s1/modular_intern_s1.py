@@ -363,10 +363,10 @@ class InternS1ForConditionalGeneration(InternVLForConditionalGeneration):
         >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
-        >>> torch_device = "cuda"
-        >>> processor = AutoProcessor.from_pretrained("internlm/Intern-S1")
+        >>> torch_device = "auto"
+        >>> processor = AutoProcessor.from_pretrained("internlm/Intern-S1-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "internlm/Intern-S1", dtype=torch.bfloat16, device_map=torch_device
+        ...     "internlm/Intern-S1-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [
@@ -387,7 +387,7 @@ class InternS1ForConditionalGeneration(InternVLForConditionalGeneration):
         ... ]
 
         >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=1024)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

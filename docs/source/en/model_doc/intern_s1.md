@@ -66,7 +66,7 @@ temperature = 0.8
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
-model_name = "internlm/Intern-S1"
+model_name = "internlm/Intern-S1-hf"
 processor = AutoProcessor.from_pretrained(model_name)
 model = AutoModelForImageTextToText.from_pretrained(model_name, device_map="auto", dtype="auto")
 
@@ -92,7 +92,7 @@ print(decoded_output)
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
-model_name = "internlm/Intern-S1"
+model_name = "internlm/Intern-S1-hf"
 processor = AutoProcessor.from_pretrained(model_name)
 model = AutoModelForImageTextToText.from_pretrained(model_name, device_map="auto", dtype="auto")
 
@@ -121,7 +121,7 @@ Please ensure that the decord video decoding library is installed via `pip insta
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
-model_name = "internlm/Intern-S1"
+model_name = "internlm/Intern-S1-hf"
 processor = AutoProcessor.from_pretrained(model_name)
 model = AutoModelForImageTextToText.from_pretrained(model_name, device_map="auto", dtype="auto")
 
