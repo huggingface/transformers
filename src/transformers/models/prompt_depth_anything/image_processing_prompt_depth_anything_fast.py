@@ -15,9 +15,13 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils import BatchFeature
+
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthEstimatorOutput
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -39,6 +43,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    requires_backends,
 )
 
 
@@ -404,6 +409,48 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
+    def post_process_depth_estimation(
+        self,
+        outputs: "DepthEstimatorOutput",
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
+        """
+        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`DepthEstimatorOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+
+        Returns:
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        results = []
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        for depth, target_size in zip(predicted_depth, target_sizes):
+            if target_size is not None:
+                depth = torch.nn.functional.interpolate(
+                    depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+                ).squeeze()
+
+            results.append({"predicted_depth": depth})
+
+        return results
+
     def to_dict(self):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
@@ -417,9 +464,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         encoder_dict.pop("prompt_depth", None)
         encoder_dict.pop("return_tensors", None)
         return encoder_dict
-
-
-__all__ = ["PromptDepthAnythingImageProcessorFast"]
 
 
 __all__ = ["PromptDepthAnythingImageProcessorFast"]
