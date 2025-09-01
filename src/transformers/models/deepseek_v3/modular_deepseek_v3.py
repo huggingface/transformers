@@ -216,6 +216,7 @@ class DeepseekV3MoE(nn.Module):
 
     def grouped_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         import grouped_gemm.ops as ops
+
         residuals = hidden_states
         orig_shape = hidden_states.shape
         flat_hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
