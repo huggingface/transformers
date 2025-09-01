@@ -578,7 +578,6 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     @slow
     def test_full_request(self):
         """Tests that an inference using the Responses API works"""
-
         request = {
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
             "instructions": "You are a sports assistant designed to craft sports programs.",
@@ -599,36 +598,23 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
                 "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
             )
         )
+
     @slow
     def test_responses_api_with_complex_input(self):
         """Tests that the /v1/responses endpoint handles nested input content."""
 
         request = {
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": "Tell me a joke!"
-                        }
-                    ]
-                }
-            ],
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "Tell me a joke!"}]}],
             "stream": True,
             "max_output_tokens": 10,
         }
-
         all_payloads = asyncio.run(self.run_server(request))
-
         # This assertion confirms the server didn't crash and sent back a response.
         self.assertTrue(len(all_payloads) > 0, "The server should return response payloads.")
-
         # This makes sure the output is not just empty.
         full_text = ""
         for token in all_payloads:
             if isinstance(token, ResponseTextDeltaEvent):
                 full_text += token.delta
-        
         self.assertTrue(len(full_text) > 0, "The model should have generated some text.")
