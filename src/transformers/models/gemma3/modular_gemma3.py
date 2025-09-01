@@ -383,7 +383,7 @@ class Gemma3MLP(Gemma2MLP):
 
 class Gemma3RMSNorm(Gemma2RMSNorm):
     def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
+        super().__init__(dim=dim, eps=eps)
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -396,7 +396,7 @@ class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)

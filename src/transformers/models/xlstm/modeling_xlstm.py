@@ -1434,7 +1434,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
             offset = 0
             with torch.no_grad():
                 if cache_params is None:
-                    cache_params = xLSTMCache(config=self.config, batch_size=hidden_states.shape[0])
+                    cache_params = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
                 final_state = torch.zeros_like(hidden_states)
                 while offset < hidden_states.shape[1]:
                     hidden_states_chunk = hidden_states[
