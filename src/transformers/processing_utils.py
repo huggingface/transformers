@@ -1629,7 +1629,9 @@ class ProcessorMixin(PushToHubMixin):
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
             # sampling should not done for BC.
-            if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
+            if "do_sample_frames" not in kwargs and (
+                kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
+            ):
                 kwargs["do_sample_frames"] = True
 
             images_exist = any(im for im_list in batch_images for im in im_list)
