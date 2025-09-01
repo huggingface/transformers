@@ -3507,6 +3507,7 @@ class ModelTesterMixin:
             ):
                 continue
 
+            # If we end up here, at least one model class was not skipped
             _has_run_at_least_one_model = True
             with tempfile.TemporaryDirectory() as tmpdirname:
                 # Save the model so we can reload with correct attention
@@ -3517,7 +3518,7 @@ class ModelTesterMixin:
                 if torch.is_floating_point(dummy_input):
                     dummy_input = dummy_input.to(torch.bfloat16)
                 first_inputs = {model.main_input_name: dummy_input, "output_hidden_states": True}
-                if "pixel_values" in inputs_dict:
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
                     first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
                     first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
@@ -4812,7 +4813,7 @@ class ModelTesterMixin:
             # (we assume easy shapes here where we get to the requested head dim at least)
             if (
                 getattr(config, "rope_scaling", None) is not None
-                and len(config.rope_scaling.get("mrope_section", None)) > 0
+                and len(config.rope_scaling.get("mrope_section", [])) > 0
             ):
                 scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
                 config.rope_scaling["mrope_section"] = [
