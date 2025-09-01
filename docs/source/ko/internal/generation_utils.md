@@ -305,28 +305,6 @@ generation_output[:2]
 [[autodoc]] EosTokenCriteria
     - __call__
 
-## Constraint [[transformers.Constraint]]
-
-[`Constraint`]는 생성 출력에 특정 토큰이나 시퀀스를 강제로 포함시키는 데 사용됩니다. 이 기능은 PyTorch 구현에만 제공됩니다.
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## 빔 검색 (BeamSearch) [[transformers.BeamScorer]]
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
-
 ## 스트리머 (Streamers) [[transformers.TextStreamer]]
 
 [[autodoc]] TextStreamer
