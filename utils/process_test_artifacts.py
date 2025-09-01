@@ -23,7 +23,7 @@ import math
 import os
 
 
-MAX_PARALLEL_NODES = 1  # TODO create a mapping!
+MAX_PARALLEL_NODES = 5  # TODO create a mapping!
 AVERAGE_TESTS_PER_NODES = 1
 
 
@@ -41,7 +41,7 @@ def compute_parallel_nodes(line_count, max_tests_per_node=10):
     num_nodes = math.ceil(line_count / AVERAGE_TESTS_PER_NODES)
     if line_count < 4:
         return 1
-    return min(MAX_PARALLEL_NODES, num_nodes)
+    return MAX_PARALLEL_NODES
 
 
 def process_artifacts(input_file, output_file):
