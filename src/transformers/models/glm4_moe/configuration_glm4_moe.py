@@ -66,6 +66,8 @@ class Glm4MoeConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        use_grouped_gemm (`bool`, *optional*, defaults to `False`):
+            Whether to use grouped gemm to speed up the model.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -181,6 +183,7 @@ class Glm4MoeConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
+        use_grouped_gemm=False,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
@@ -211,6 +214,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.use_grouped_gemm = use_grouped_gemm
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
@@ -219,6 +223,13 @@ class Glm4MoeConfig(PretrainedConfig):
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+
+        if self.use_grouped_gemm:
+            import importlib.util
+
+            if importlib.util.find_spec("grouped_gemm") is None:
+                raise ImportError("Cannot fuse experts because 'grouped_gemm' is not installed.")
+
         rope_config_validation(self)
 
         # MoE arguments
