@@ -22,6 +22,7 @@ from ..clip.modeling_clip import (
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     CLIPVisionModelWithProjection,
+    CLIPVisionTransformer,
 )
 
 
@@ -174,6 +175,10 @@ class MetaClip2TextTransformer(CLIPTextTransformer):
         )
 
 
+class MetaClip2VisionTransformer(CLIPVisionTransformer):
+    pass
+
+
 class MetaClip2TextModel(CLIPTextModel):
     def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
@@ -186,9 +191,7 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
     def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
 
-        text_model = MetaClip2TextModel._from_config(config)
-        self.text_model = text_model.text_model
-
+        self.text_model = MetaClip2TextTransformer(config)
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -199,18 +202,12 @@ class MetaClip2Model(CLIPModel):
     def __init__(self, config: MetaClip2Config):
         super().__init__(config)
 
-        text_config = config.text_config
-        vision_config = config.vision_config
-
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
-        self.vision_embed_dim = vision_config.hidden_size
+        self.text_embed_dim = config.text_config.hidden_size
+        self.vision_embed_dim = config.vision_config.hidden_size
 
-        text_model = MetaClip2TextModel._from_config(text_config)
-        self.text_model = text_model.text_model
-
-        vision_model = MetaClip2VisionModel._from_config(vision_config)
-        self.vision_model = vision_model.vision_model
+        self.text_model = MetaClip2TextTransformer(config.text_config)
+        self.vision_model = MetaClip2VisionTransformer(config.vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
