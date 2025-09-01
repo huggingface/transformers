@@ -38,619 +38,6 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_deim import DEIMConfig
 
 
-class DEIMConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding=(kernel_size - 1) // 2 if padding is None else padding,
-            bias=False,
-        )
-        self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
-
-
-class DEIMSCDown(nn.Module):
-    def __init__(self, config: DEIMConfig, kernel_size: int, stride: int):
-        super().__init__()
-        self.conv1 = DEIMConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
-        self.conv2 = DEIMConvNormLayer(
-            config,
-            config.encoder_hidden_dim,
-            config.encoder_hidden_dim,
-            kernel_size,
-            stride,
-            config.encoder_hidden_dim,
-        )
-
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        input_features = self.conv1(input_features)
-        input_features = self.conv2(input_features)
-        return input_features
-
-
-class DEIMCSPRepLayer(nn.Module):
-    """
-    Cross Stage Partial (CSP) network layer with RepVGG blocks.
-    """
-
-    def __init__(
-        self, config: DEIMConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
-    ):
-        super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
-        activation = config.activation_function
-
-        hidden_channels = int(out_channels * expansion)
-        self.conv1 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.conv2 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.ModuleList(
-            [DEIMRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
-        )
-        if hidden_channels != out_channels:
-            self.conv3 = DEIMConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
-        else:
-            self.conv3 = nn.Identity()
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state_1 = self.conv1(hidden_state)
-        for bottleneck in self.bottlenecks:
-            hidden_state_1 = bottleneck(hidden_state_1)
-        hidden_state_2 = self.conv2(hidden_state)
-        hidden_state_3 = self.conv3(hidden_state_1 + hidden_state_2)
-        return hidden_state_3
-
-
-class DEIMRepNCSPELAN4(nn.Module):
-    def __init__(self, config: DEIMConfig, act: str = "silu", numb_blocks: int = 3):
-        super().__init__()
-        conv1_dim = config.encoder_hidden_dim * 2
-        conv2_dim = config.encoder_hidden_dim
-        conv3_dim = config.encoder_hidden_dim * 2
-        conv4_dim = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
-        self.conv_dim = conv3_dim // 2
-        self.conv1 = DEIMConvNormLayer(config, conv1_dim, conv3_dim, 1, 1, activation=act)
-        self.csp_rep1 = DEIMCSPRepLayer(config, conv3_dim // 2, conv4_dim, num_blocks=numb_blocks)
-        self.conv2 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
-        self.csp_rep2 = DEIMCSPRepLayer(config, conv4_dim, conv4_dim, num_blocks=numb_blocks)
-        self.conv3 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
-        self.conv4 = DEIMConvNormLayer(config, conv3_dim + (2 * conv4_dim), conv2_dim, 1, 1, activation=act)
-
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        # Split initial features into two branches after first convolution
-        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
-
-        # Process branches sequentially
-        branch1 = self.csp_rep1(split_features[-1])
-        branch1 = self.conv2(branch1)
-        branch2 = self.csp_rep2(branch1)
-        branch2 = self.conv3(branch2)
-
-        split_features.extend([branch1, branch2])
-        merged_features = torch.cat(split_features, 1)
-        merged_features = self.conv4(merged_features)
-        return merged_features
-
-
-class DEIMRepVggBlock(nn.Module):
-    """
-    RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
-    """
-
-    def __init__(self, config: DEIMConfig, in_channels: int, out_channels: int):
-        super().__init__()
-
-        activation = config.activation_function
-        hidden_channels = in_channels
-        self.conv1 = DEIMConvNormLayer(config, hidden_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = DEIMConvNormLayer(config, hidden_channels, out_channels, 1, 1, padding=0)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
-
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
-
-
-class DEIMMultiheadAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-
-    Here, we add position embeddings to the queries and keys (as explained in the Deformable DETR paper).
-    """
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, target_len, embed_dim = hidden_states.size()
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
-
-        # get queries, keys and values
-        query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
-
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
-
-
-class DEIMEncoderLayer(nn.Module):
-    def __init__(self, config: DEIMConfig):
-        super().__init__()
-        self.normalize_before = config.normalize_before
-
-        # self-attention
-        self.self_attn = DEIMMultiheadAttention(
-            embed_dim=config.encoder_hidden_dim,
-            num_heads=config.num_attention_heads,
-            dropout=config.dropout,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.encoder_activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
-        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        **kwargs,
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Object queries (also called content embeddings), to be added to the hidden states.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-        )
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
-        residual = hidden_states
-
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
-        hidden_states = self.fc2(hidden_states)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
-
-        if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class DEIMEncoder(nn.Module):
-    def __init__(self, config: DEIMConfig):
-        super().__init__()
-
-        self.layers = nn.ModuleList([DEIMEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
-        hidden_states = src
-        for layer in self.layers:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=src_mask,
-                position_embeddings=pos_embed,
-                output_attentions=output_attentions,
-            )
-        return hidden_states
-
-
-class DEIMHybridEncoder(nn.Module):
-    """
-    Decoder consisting of a projection layer, a set of `DEIMEncoder`, a top-down Feature Pyramid Network
-    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
-
-    Args:
-        config: DEIMConfig
-    """
-
-    def __init__(self, config: DEIMConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.in_channels = config.encoder_in_channels
-        self.num_fpn_stages = len(self.in_channels) - 1
-        self.feat_strides = config.feat_strides
-        self.encoder_hidden_dim = config.encoder_hidden_dim
-        self.encode_proj_layers = config.encode_proj_layers
-        self.positional_encoding_temperature = config.positional_encoding_temperature
-        self.eval_size = config.eval_size
-        self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
-        self.out_strides = self.feat_strides
-
-        # encoder transformer
-        self.encoder = nn.ModuleList([DEIMEncoder(config) for _ in range(len(self.encode_proj_layers))])
-        # top-down fpn
-        self.lateral_convs = nn.ModuleList()
-        self.fpn_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1, 0, -1):
-            lateral_layer = DEIMConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
-            self.lateral_convs.append(lateral_layer)
-            num_blocks = round(3 * config.depth_mult)
-            fpn_layer = DEIMRepNCSPELAN4(config, numb_blocks=num_blocks)
-            self.fpn_blocks.append(fpn_layer)
-
-        # bottom-up pan
-        self.downsample_convs = nn.ModuleList()
-        self.pan_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(DEIMSCDown(config, 3, 2))
-            num_blocks = round(3 * config.depth_mult)
-            self.pan_blocks.append(DEIMRepNCSPELAN4(config, numb_blocks=num_blocks))
-
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
-        if embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
-
-    def forward(
-        self,
-        inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        hidden_states = inputs_embeds
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # encoder
-        if self.config.encoder_layers > 0:
-            for i, enc_ind in enumerate(self.encode_proj_layers):
-                if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        width,
-                        height,
-                        self.encoder_hidden_dim,
-                        self.positional_encoding_temperature,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
-                    )
-                else:
-                    pos_embed = None
-
-                layer_outputs = self.encoder[i](
-                    src_flatten,
-                    pos_embed=pos_embed,
-                    output_attentions=output_attentions,
-                )
-                hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
-
-                if output_attentions:
-                    all_attentions = all_attentions + (layer_outputs[1],)
-
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states[enc_ind],)
-
-        # top-down FPN
-        fpn_feature_maps = [hidden_states[-1]]
-        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
-            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
-            top_fpn_feature_map = fpn_feature_maps[-1]
-            # apply lateral block
-            top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
-            fpn_feature_maps[-1] = top_fpn_feature_map
-            # apply fpn block
-            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
-            fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
-            new_fpn_feature_map = fpn_block(fused_feature_map)
-            fpn_feature_maps.append(new_fpn_feature_map)
-
-        fpn_feature_maps = fpn_feature_maps[::-1]
-
-        # bottom-up PAN
-        pan_feature_maps = [fpn_feature_maps[0]]
-        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
-            top_pan_feature_map = pan_feature_maps[-1]
-            fpn_feature_map = fpn_feature_maps[idx + 1]
-            downsampled_feature_map = downsample_conv(top_pan_feature_map)
-            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
-            new_pan_feature_map = pan_block(fused_feature_map)
-            pan_feature_maps.append(new_pan_feature_map)
-
-        if not return_dict:
-            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
-class DEIMFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DEIMFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = DEIMFrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class DEIMConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_d_e_i_m_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by DEIMFrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/DEIM_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
-
-
 def multi_scale_deformable_attention_v2(
     value: Tensor,
     value_spatial_shapes: Tensor,
@@ -816,27 +203,234 @@ class DEIMMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-class DEIMMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DEIM_paddle/ppdet/modeling/transformers/utils.py#L453
-
-    """
-
-    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+class DEIMGate(nn.Module):
+    def __init__(self, d_model: int):
         super().__init__()
-        self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.gate = nn.Linear(2 * d_model, 2 * d_model)
+        self.norm = nn.LayerNorm(d_model)
 
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
+    def forward(self, second_residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        gate_input = torch.cat([second_residual, hidden_states], dim=-1)
+        gates = torch.sigmoid(self.gate(gate_input))
+        gate1, gate2 = gates.chunk(2, dim=-1)
+        hidden_states = self.norm(gate1 * second_residual + gate2 * hidden_states)
+        return hidden_states
+
+
+class DEIMMultiheadAttention(nn.Module):
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper.
+
+    Here, we add position embeddings to the queries and keys (as explained in the Deformable DETR paper).
+    """
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, target_len, embed_dim = hidden_states.size()
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if position_embeddings is not None:
+            hidden_states_original = hidden_states
+            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+
+        # get queries, keys and values
+        query_states = self.q_proj(hidden_states) * self.scaling
+        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
+        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
+
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        source_len = key_states.size(1)
+
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
+            raise ValueError(
+                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
+
+        if attention_mask is not None:
+            if attention_mask.size() != (batch_size, 1, target_len, source_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
+                    f" {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
+            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if output_attentions:
+            # this operation is a bit awkward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
+            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights_reshaped
+
+
+class DEIMDecoderLayer(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        # self-attention
+        self.self_attn = DEIMMultiheadAttention(
+            embed_dim=config.d_model,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.activation_dropout = config.activation_dropout
+
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+
+        # override the encoder attention module with d-fine version
+        self.encoder_attn = DEIMMultiscaleDeformableAttention(config=config)
+        # feedforward neural networks
+        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        # gate
+        self.gateway = DEIMGate(config.d_model)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> tuple[torch.Tensor, Any, Any]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings that are added to the queries and keys in the self-attention layer.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes.
+            level_start_index (`torch.LongTensor`, *optional*):
+                Level start index.
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        # Self Attention
+        hidden_states_2, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states
+
+        # Cross-Attention
+        cross_attn_weights = None
+        hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
+        hidden_states_2, cross_attn_weights = self.encoder_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+        )
+
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = self.gateway(residual, hidden_states_2)
+
+        # Fully Connected
+        hidden_states_2 = self.activation_fn(self.fc1(hidden_states))
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.activation_dropout, training=self.training)
+        hidden_states_2 = self.fc2(hidden_states_2)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
+        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
+
+        return outputs
 
 
 @dataclass
@@ -973,6 +567,492 @@ class DEIMObjectDetectionOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[dict] = None
+
+
+class DEIMFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DEIMFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = DEIMFrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class DEIMConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_d_e_i_m_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by DEIMFrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/DEIM_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
+class DEIMEncoderLayer(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        self.normalize_before = config.normalize_before
+
+        # self-attention
+        self.self_attn = DEIMMultiheadAttention(
+            embed_dim=config.encoder_hidden_dim,
+            num_heads=config.num_attention_heads,
+            dropout=config.dropout,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.encoder_activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
+        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ):
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Object queries (also called content embeddings), to be added to the hidden states.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
+        residual = hidden_states
+
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+
+        hidden_states = self.fc2(hidden_states)
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        hidden_states = residual + hidden_states
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
+
+        if self.training:
+            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
+def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
+    """
+    Generates the non-uniform Weighting Function W(n) for bounding box regression.
+
+    Args:
+        max_num_bins (int): Max number of the discrete bins.
+        up (Tensor): Controls upper bounds of the sequence,
+                     where maximum offset is ±up * H / W.
+        reg_scale (float): Controls the curvature of the Weighting Function.
+                           Larger values result in flatter weights near the central axis W(max_num_bins/2)=0
+                           and steeper weights at both ends.
+    Returns:
+        Tensor: Sequence of Weighting Function.
+    """
+    upper_bound1 = abs(up[0]) * abs(reg_scale)
+    upper_bound2 = abs(up[0]) * abs(reg_scale) * 2
+    step = (upper_bound1 + 1) ** (2 / (max_num_bins - 2))
+    left_values = [-((step) ** i) + 1 for i in range(max_num_bins // 2 - 1, 0, -1)]
+    right_values = [(step) ** i - 1 for i in range(1, max_num_bins // 2)]
+    values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
+    values = torch.cat(values, 0)
+    return values
+
+
+def distance2bbox(points, distance: torch.Tensor, reg_scale: float) -> torch.Tensor:
+    """
+    Decodes edge-distances into bounding box coordinates.
+
+    Args:
+        points (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
+        distance (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4), representing distances from the point to the left, top, right, and bottom boundaries.
+        reg_scale (`float`):
+            Controls the curvature of the Weighting Function.
+    Returns:
+        `torch.Tensor`: Bounding boxes in (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
+    """
+    reg_scale = abs(reg_scale)
+    top_left_x = points[..., 0] - (0.5 * reg_scale + distance[..., 0]) * (points[..., 2] / reg_scale)
+    top_left_y = points[..., 1] - (0.5 * reg_scale + distance[..., 1]) * (points[..., 3] / reg_scale)
+    bottom_right_x = points[..., 0] + (0.5 * reg_scale + distance[..., 2]) * (points[..., 2] / reg_scale)
+    bottom_right_y = points[..., 1] + (0.5 * reg_scale + distance[..., 3]) * (points[..., 3] / reg_scale)
+
+    bboxes = torch.stack([top_left_x, top_left_y, bottom_right_x, bottom_right_y], -1)
+
+    return corners_to_center_format(bboxes)
+
+
+def get_contrastive_denoising_training_group(
+    targets,
+    num_classes,
+    num_queries,
+    class_embed,
+    num_denoising_queries=100,
+    label_noise_ratio=0.5,
+    box_noise_scale=1.0,
+):
+    """
+    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
+
+    Args:
+        targets (`list[dict]`):
+            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
+        num_classes (`int`):
+            Total number of classes in the dataset.
+        num_queries (`int`):
+            Number of query slots in the transformer.
+        class_embed (`callable`):
+            A function or a model layer to embed class labels.
+        num_denoising_queries (`int`, *optional*, defaults to 100):
+            Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
+            Scale of noise applied to bounding boxes.
+    Returns:
+        `tuple` comprising various elements:
+        - **input_query_class** (`torch.FloatTensor`) --
+          Class queries with applied label noise.
+        - **input_query_bbox** (`torch.FloatTensor`) --
+          Bounding box queries with applied box noise.
+        - **attn_mask** (`torch.FloatTensor`) --
+           Attention mask for separating denoising and reconstruction queries.
+        - **denoising_meta_values** (`dict`) --
+          Metadata including denoising positive indices, number of groups, and split sizes.
+    """
+
+    if num_denoising_queries <= 0:
+        return None, None, None, None
+
+    num_ground_truths = [len(t["class_labels"]) for t in targets]
+    device = targets[0]["class_labels"].device
+
+    max_gt_num = max(num_ground_truths)
+    if max_gt_num == 0:
+        return None, None, None, None
+
+    num_groups_denoising_queries = num_denoising_queries // max_gt_num
+    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    # pad gt to max_num of a batch
+    batch_size = len(num_ground_truths)
+
+    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
+    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
+
+    for i in range(batch_size):
+        num_gt = num_ground_truths[i]
+        if num_gt > 0:
+            input_query_class[i, :num_gt] = targets[i]["class_labels"]
+            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
+            pad_gt_mask[i, :num_gt] = 1
+    # each group has positive and negative queries.
+    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
+    # positive and negative mask
+    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
+    negative_gt_mask[:, max_gt_num:] = 1
+    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
+    positive_gt_mask = 1 - negative_gt_mask
+    # contrastive denoising training positive index
+    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
+    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    denoise_positive_idx = torch.split(
+        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+    )
+    # total denoising queries
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
+
+    if label_noise_ratio > 0:
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        # randomly put a new one here
+        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
+        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
+
+    if box_noise_scale > 0:
+        known_bbox = center_to_corners_format(input_query_bbox)
+        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
+        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
+        rand_part = torch.rand_like(input_query_bbox)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part *= rand_sign
+        known_bbox += rand_part * diff
+        known_bbox.clip_(min=0.0, max=1.0)
+        input_query_bbox = corners_to_center_format(known_bbox)
+        input_query_bbox = inverse_sigmoid(input_query_bbox)
+
+    input_query_class = class_embed(input_query_class)
+
+    target_size = num_denoising_queries + num_queries
+    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    # match query cannot see the reconstruction
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+
+    # reconstructions cannot see each other
+    for i in range(num_groups_denoising_queries):
+        idx_block_start = max_gt_num * 2 * i
+        idx_block_end = max_gt_num * 2 * (i + 1)
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+
+    denoising_meta_values = {
+        "dn_positive_idx": denoise_positive_idx,
+        "dn_num_group": num_groups_denoising_queries,
+        "dn_num_split": [num_denoising_queries, num_queries],
+    }
+
+    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
+
+
+@auto_docstring
+class DEIMPreTrainedModel(PreTrainedModel):
+    config: DEIMConfig
+    base_model_prefix = "d_e_i_m"
+    main_input_name = "pixel_values"
+    _no_split_modules = [r"DEIMHybridEncoder", r"DEIMDecoderLayer"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # initialize linear layer bias value according to a given probability value.
+        if isinstance(module, (DEIMForObjectDetection, DEIMDecoder)):
+            if module.class_embed is not None:
+                for layer in module.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.constant_(layer.bias, bias)
+
+            if module.bbox_embed is not None:
+                for layer in module.bbox_embed:
+                    nn.init.constant_(layer.layers[-1].weight, 0)
+                    nn.init.constant_(layer.layers[-1].bias, 0)
+
+        if isinstance(module, DEIMMultiscaleDeformableAttention):
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
+            grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
+            scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
+            grid_init *= scaling
+            with torch.no_grad():
+                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+
+        if isinstance(module, DEIMModel):
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
+            nn.init.xavier_uniform_(module.enc_score_head.weight)
+            nn.init.constant_(module.enc_score_head.bias, bias)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+        if isinstance(module, DEIMGate):
+            bias = float(-math.log((1 - 0.5) / 0.5))
+            init.constant_(module.gate.bias, bias)
+            init.constant_(module.gate.weight, 0)
+
+        if isinstance(module, DEIMLQE):
+            init.constant_(module.reg_conf.layers[-1].bias, 0)
+            init.constant_(module.reg_conf.layers[-1].weight, 0)
+
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
+            nn.init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+
+
+class DEIMIntegral(nn.Module):
+    """
+    A static layer that calculates integral results from a distribution.
+
+    This layer computes the target location using the formula: `sum{Pr(n) * W(n)}`,
+    where Pr(n) is the softmax probability vector representing the discrete
+    distribution, and W(n) is the non-uniform Weighting Function.
+
+    Args:
+        max_num_bins (int): Max number of the discrete bins. Default is 32.
+                       It can be adjusted based on the dataset or task requirements.
+    """
+
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        self.max_num_bins = config.max_num_bins
+
+    def forward(self, pred_corners: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
+        batch_size, num_queries, _ = pred_corners.shape
+        pred_corners = F.softmax(pred_corners.reshape(-1, self.max_num_bins + 1), dim=1)
+        pred_corners = F.linear(pred_corners, project.to(pred_corners.device)).reshape(-1, 4)
+        pred_corners = pred_corners.reshape(batch_size, num_queries, -1)
+        return pred_corners
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the DEIMDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+    """
+)
+class DEIMDecoderOutput(ModelOutput):
+    r"""
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked initial reference points (initial reference points of each layer of the decoder).
+    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+        used to compute the weighted average in the cross-attention heads.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class DEIMDecoder(DEIMPreTrainedModel):
@@ -1531,248 +1611,6 @@ class DEIMModel(DEIMPreTrainedModel):
         )
 
 
-class DEIMIntegral(nn.Module):
-    """
-    A static layer that calculates integral results from a distribution.
-
-    This layer computes the target location using the formula: `sum{Pr(n) * W(n)}`,
-    where Pr(n) is the softmax probability vector representing the discrete
-    distribution, and W(n) is the non-uniform Weighting Function.
-
-    Args:
-        max_num_bins (int): Max number of the discrete bins. Default is 32.
-                       It can be adjusted based on the dataset or task requirements.
-    """
-
-    def __init__(self, config: DEIMConfig):
-        super().__init__()
-        self.max_num_bins = config.max_num_bins
-
-    def forward(self, pred_corners: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
-        batch_size, num_queries, _ = pred_corners.shape
-        pred_corners = F.softmax(pred_corners.reshape(-1, self.max_num_bins + 1), dim=1)
-        pred_corners = F.linear(pred_corners, project.to(pred_corners.device)).reshape(-1, 4)
-        pred_corners = pred_corners.reshape(batch_size, num_queries, -1)
-        return pred_corners
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the DEIMDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
-    """
-)
-class DEIMDecoderOutput(ModelOutput):
-    r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
-        Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked initial reference points (initial reference points of each layer of the decoder).
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_logits: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
-    initial_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-
-
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
-def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
-    """
-    Generates the non-uniform Weighting Function W(n) for bounding box regression.
-
-    Args:
-        max_num_bins (int): Max number of the discrete bins.
-        up (Tensor): Controls upper bounds of the sequence,
-                     where maximum offset is ±up * H / W.
-        reg_scale (float): Controls the curvature of the Weighting Function.
-                           Larger values result in flatter weights near the central axis W(max_num_bins/2)=0
-                           and steeper weights at both ends.
-    Returns:
-        Tensor: Sequence of Weighting Function.
-    """
-    upper_bound1 = abs(up[0]) * abs(reg_scale)
-    upper_bound2 = abs(up[0]) * abs(reg_scale) * 2
-    step = (upper_bound1 + 1) ** (2 / (max_num_bins - 2))
-    left_values = [-((step) ** i) + 1 for i in range(max_num_bins // 2 - 1, 0, -1)]
-    right_values = [(step) ** i - 1 for i in range(1, max_num_bins // 2)]
-    values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
-    values = torch.cat(values, 0)
-    return values
-
-
-def distance2bbox(points, distance: torch.Tensor, reg_scale: float) -> torch.Tensor:
-    """
-    Decodes edge-distances into bounding box coordinates.
-
-    Args:
-        points (`torch.Tensor`):
-            (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
-        distance (`torch.Tensor`):
-            (batch_size, num_boxes, 4) or (num_boxes, 4), representing distances from the point to the left, top, right, and bottom boundaries.
-        reg_scale (`float`):
-            Controls the curvature of the Weighting Function.
-    Returns:
-        `torch.Tensor`: Bounding boxes in (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
-    """
-    reg_scale = abs(reg_scale)
-    top_left_x = points[..., 0] - (0.5 * reg_scale + distance[..., 0]) * (points[..., 2] / reg_scale)
-    top_left_y = points[..., 1] - (0.5 * reg_scale + distance[..., 1]) * (points[..., 3] / reg_scale)
-    bottom_right_x = points[..., 0] + (0.5 * reg_scale + distance[..., 2]) * (points[..., 2] / reg_scale)
-    bottom_right_y = points[..., 1] + (0.5 * reg_scale + distance[..., 3]) * (points[..., 3] / reg_scale)
-
-    bboxes = torch.stack([top_left_x, top_left_y, bottom_right_x, bottom_right_y], -1)
-
-    return corners_to_center_format(bboxes)
-
-
-def get_contrastive_denoising_training_group(
-    targets,
-    num_classes,
-    num_queries,
-    class_embed,
-    num_denoising_queries=100,
-    label_noise_ratio=0.5,
-    box_noise_scale=1.0,
-):
-    """
-    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
-
-    Args:
-        targets (`list[dict]`):
-            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
-        num_classes (`int`):
-            Total number of classes in the dataset.
-        num_queries (`int`):
-            Number of query slots in the transformer.
-        class_embed (`callable`):
-            A function or a model layer to embed class labels.
-        num_denoising_queries (`int`, *optional*, defaults to 100):
-            Number of denoising queries.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            Ratio of noise applied to labels.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale of noise applied to bounding boxes.
-    Returns:
-        `tuple` comprising various elements:
-        - **input_query_class** (`torch.FloatTensor`) --
-          Class queries with applied label noise.
-        - **input_query_bbox** (`torch.FloatTensor`) --
-          Bounding box queries with applied box noise.
-        - **attn_mask** (`torch.FloatTensor`) --
-           Attention mask for separating denoising and reconstruction queries.
-        - **denoising_meta_values** (`dict`) --
-          Metadata including denoising positive indices, number of groups, and split sizes.
-    """
-
-    if num_denoising_queries <= 0:
-        return None, None, None, None
-
-    num_ground_truths = [len(t["class_labels"]) for t in targets]
-    device = targets[0]["class_labels"].device
-
-    max_gt_num = max(num_ground_truths)
-    if max_gt_num == 0:
-        return None, None, None, None
-
-    num_groups_denoising_queries = num_denoising_queries // max_gt_num
-    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
-    # pad gt to max_num of a batch
-    batch_size = len(num_ground_truths)
-
-    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
-    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
-    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
-
-    for i in range(batch_size):
-        num_gt = num_ground_truths[i]
-        if num_gt > 0:
-            input_query_class[i, :num_gt] = targets[i]["class_labels"]
-            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
-            pad_gt_mask[i, :num_gt] = 1
-    # each group has positive and negative queries.
-    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
-    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
-    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
-    # positive and negative mask
-    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
-    negative_gt_mask[:, max_gt_num:] = 1
-    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
-    positive_gt_mask = 1 - negative_gt_mask
-    # contrastive denoising training positive index
-    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
-    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
-    denoise_positive_idx = torch.split(
-        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
-    )
-    # total denoising queries
-    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
-
-    if label_noise_ratio > 0:
-        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
-        # randomly put a new one here
-        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
-        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
-
-    if box_noise_scale > 0:
-        known_bbox = center_to_corners_format(input_query_bbox)
-        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
-        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
-        rand_part = torch.rand_like(input_query_bbox)
-        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
-        rand_part *= rand_sign
-        known_bbox += rand_part * diff
-        known_bbox.clip_(min=0.0, max=1.0)
-        input_query_bbox = corners_to_center_format(known_bbox)
-        input_query_bbox = inverse_sigmoid(input_query_bbox)
-
-    input_query_class = class_embed(input_query_class)
-
-    target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
-    # match query cannot see the reconstruction
-    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
-
-    # reconstructions cannot see each other
-    for i in range(num_groups_denoising_queries):
-        idx_block_start = max_gt_num * 2 * i
-        idx_block_end = max_gt_num * 2 * (i + 1)
-        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
-
-    denoising_meta_values = {
-        "dn_positive_idx": denoise_positive_idx,
-        "dn_num_group": num_groups_denoising_queries,
-        "dn_num_split": [num_denoising_queries, num_queries],
-    }
-
-    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
-
-
 @auto_docstring(
     custom_intro="""
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
@@ -1962,117 +1800,43 @@ class DEIMForObjectDetection(DEIMPreTrainedModel):
         )
 
 
-class DEIMGate(nn.Module):
-    def __init__(self, d_model: int):
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+class DEIMMLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DEIM_paddle/ppdet/modeling/transformers/utils.py#L453
+
+    """
+
+    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
         super().__init__()
-        self.gate = nn.Linear(2 * d_model, 2 * d_model)
-        self.norm = nn.LayerNorm(d_model)
+        self.num_layers = num_layers
+        h = [d_model] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
-    def forward(self, second_residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate_input = torch.cat([second_residual, hidden_states], dim=-1)
-        gates = torch.sigmoid(self.gate(gate_input))
-        gate1, gate2 = gates.chunk(2, dim=-1)
-        hidden_states = self.norm(gate1 * second_residual + gate2 * hidden_states)
-        return hidden_states
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
 
 
-class DEIMDecoderLayer(nn.Module):
-    def __init__(self, config: DEIMConfig):
+class DEIMMLP(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
         super().__init__()
-        # self-attention
-        self.self_attn = DEIMMultiheadAttention(
-            embed_dim=config.d_model,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.num_layers = num_layers
+        hidden_dims = [hidden_dim] * (num_layers - 1)
+        input_dims = [input_dim] + hidden_dims
+        output_dims = hidden_dims + [output_dim]
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
+        self.act = ACT2CLS[act]()
 
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
-
-        # override the encoder attention module with d-fine version
-        self.encoder_attn = DEIMMultiscaleDeformableAttention(config=config)
-        # feedforward neural networks
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
-        # gate
-        self.gateway = DEIMGate(config.d_model)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Any, Any]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        # Self Attention
-        hidden_states_2, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-        )
-
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + hidden_states_2
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        residual = hidden_states
-
-        # Cross-Attention
-        cross_attn_weights = None
-        hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
-        hidden_states_2, cross_attn_weights = self.encoder_attn(
-            hidden_states=hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-        )
-
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
-        hidden_states = self.gateway(residual, hidden_states_2)
-
-        # Fully Connected
-        hidden_states_2 = self.activation_fn(self.fc1(hidden_states))
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.activation_dropout, training=self.training)
-        hidden_states_2 = self.fc2(hidden_states_2)
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + hidden_states_2
-        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
+        for i, layer in enumerate(self.layers):
+            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+        return stat_features
 
 
 class DEIMLQE(nn.Module):
@@ -2092,83 +1856,330 @@ class DEIMLQE(nn.Module):
         return scores
 
 
-class DEIMMLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
+class DEIMConvNormLayer(nn.Module):
+    def __init__(
+        self,
+        config: DEIMConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        groups: int = 1,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
+    ):
         super().__init__()
-        self.num_layers = num_layers
-        hidden_dims = [hidden_dim] * (num_layers - 1)
-        input_dims = [input_dim] + hidden_dims
-        output_dims = hidden_dims + [output_dim]
-        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            groups=groups,
+            padding=(kernel_size - 1) // 2 if padding is None else padding,
+            bias=False,
+        )
+        self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
-        return stat_features
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
-@auto_docstring
-class DEIMPreTrainedModel(PreTrainedModel):
-    config: DEIMConfig
-    base_model_prefix = "d_e_i_m"
-    main_input_name = "pixel_values"
-    _no_split_modules = [r"DEIMHybridEncoder", r"DEIMDecoderLayer"]
+class DEIMRepVggBlock(nn.Module):
+    """
+    RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
+    """
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # initialize linear layer bias value according to a given probability value.
-        if isinstance(module, (DEIMForObjectDetection, DEIMDecoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    nn.init.xavier_uniform_(layer.weight)
-                    nn.init.constant_(layer.bias, bias)
+    def __init__(self, config: DEIMConfig, in_channels: int, out_channels: int):
+        super().__init__()
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    nn.init.constant_(layer.layers[-1].weight, 0)
-                    nn.init.constant_(layer.layers[-1].bias, 0)
+        activation = config.activation_function
+        hidden_channels = in_channels
+        self.conv1 = DEIMConvNormLayer(config, hidden_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = DEIMConvNormLayer(config, hidden_channels, out_channels, 1, 1, padding=0)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-        if isinstance(module, DEIMMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
+    def forward(self, x):
+        y = self.conv1(x) + self.conv2(x)
+        return self.activation(y)
+
+
+class DEIMCSPRepLayer(nn.Module):
+    """
+    Cross Stage Partial (CSP) network layer with RepVGG blocks.
+    """
+
+    def __init__(
+        self, config: DEIMConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
+    ):
+        super().__init__()
+        in_channels = in_channels
+        out_channels = out_channels
+        activation = config.activation_function
+
+        hidden_channels = int(out_channels * expansion)
+        self.conv1 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.conv2 = DEIMConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.bottlenecks = nn.ModuleList(
+            [DEIMRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        )
+        if hidden_channels != out_channels:
+            self.conv3 = DEIMConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+        else:
+            self.conv3 = nn.Identity()
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state_1 = self.conv1(hidden_state)
+        for bottleneck in self.bottlenecks:
+            hidden_state_1 = bottleneck(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
+        hidden_state_3 = self.conv3(hidden_state_1 + hidden_state_2)
+        return hidden_state_3
+
+
+class DEIMRepNCSPELAN4(nn.Module):
+    def __init__(self, config: DEIMConfig, act: str = "silu", numb_blocks: int = 3):
+        super().__init__()
+        conv1_dim = config.encoder_hidden_dim * 2
+        conv2_dim = config.encoder_hidden_dim
+        conv3_dim = config.encoder_hidden_dim * 2
+        conv4_dim = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
+        self.conv_dim = conv3_dim // 2
+        self.conv1 = DEIMConvNormLayer(config, conv1_dim, conv3_dim, 1, 1, activation=act)
+        self.csp_rep1 = DEIMCSPRepLayer(config, conv3_dim // 2, conv4_dim, num_blocks=numb_blocks)
+        self.conv2 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.csp_rep2 = DEIMCSPRepLayer(config, conv4_dim, conv4_dim, num_blocks=numb_blocks)
+        self.conv3 = DEIMConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.conv4 = DEIMConvNormLayer(config, conv3_dim + (2 * conv4_dim), conv2_dim, 1, 1, activation=act)
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        # Split initial features into two branches after first convolution
+        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
+
+        # Process branches sequentially
+        branch1 = self.csp_rep1(split_features[-1])
+        branch1 = self.conv2(branch1)
+        branch2 = self.csp_rep2(branch1)
+        branch2 = self.conv3(branch2)
+
+        split_features.extend([branch1, branch2])
+        merged_features = torch.cat(split_features, 1)
+        merged_features = self.conv4(merged_features)
+        return merged_features
+
+
+class DEIMSCDown(nn.Module):
+    def __init__(self, config: DEIMConfig, kernel_size: int, stride: int):
+        super().__init__()
+        self.conv1 = DEIMConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
+        self.conv2 = DEIMConvNormLayer(
+            config,
+            config.encoder_hidden_dim,
+            config.encoder_hidden_dim,
+            kernel_size,
+            stride,
+            config.encoder_hidden_dim,
+        )
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        input_features = self.conv1(input_features)
+        input_features = self.conv2(input_features)
+        return input_features
+
+
+class DEIMEncoder(nn.Module):
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+
+        self.layers = nn.ModuleList([DEIMEncoderLayer(config) for _ in range(config.encoder_layers)])
+
+    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
+        hidden_states = src
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=src_mask,
+                position_embeddings=pos_embed,
+                output_attentions=output_attentions,
             )
-            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-            grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
-            grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
-            scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
-            grid_init *= scaling
-            with torch.no_grad():
-                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+        return hidden_states
 
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
 
-        if isinstance(module, DEIMModel):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-            bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
+class DEIMHybridEncoder(nn.Module):
+    """
+    Decoder consisting of a projection layer, a set of `DEIMEncoder`, a top-down Feature Pyramid Network
+    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
+    Args:
+        config: DEIMConfig
+    """
 
-        if isinstance(module, DEIMGate):
-            bias = float(-math.log((1 - 0.5) / 0.5))
-            init.constant_(module.gate.bias, bias)
-            init.constant_(module.gate.weight, 0)
+    def __init__(self, config: DEIMConfig):
+        nn.Module.__init__(self)
+        self.config = config
+        self.in_channels = config.encoder_in_channels
+        self.num_fpn_stages = len(self.in_channels) - 1
+        self.feat_strides = config.feat_strides
+        self.encoder_hidden_dim = config.encoder_hidden_dim
+        self.encode_proj_layers = config.encode_proj_layers
+        self.positional_encoding_temperature = config.positional_encoding_temperature
+        self.eval_size = config.eval_size
+        self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
+        self.out_strides = self.feat_strides
 
-        if isinstance(module, DEIMLQE):
-            init.constant_(module.reg_conf.layers[-1].bias, 0)
-            init.constant_(module.reg_conf.layers[-1].weight, 0)
+        # encoder transformer
+        self.encoder = nn.ModuleList([DEIMEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        # top-down fpn
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1, 0, -1):
+            lateral_layer = DEIMConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
+            self.lateral_convs.append(lateral_layer)
+            num_blocks = round(3 * config.depth_mult)
+            fpn_layer = DEIMRepNCSPELAN4(config, numb_blocks=num_blocks)
+            self.fpn_blocks.append(fpn_layer)
 
-        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module.weight_embedding.weight)
-        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+        # bottom-up pan
+        self.downsample_convs = nn.ModuleList()
+        self.pan_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1):
+            self.downsample_convs.append(DEIMSCDown(config, 3, 2))
+            num_blocks = round(3 * config.depth_mult)
+            self.pan_blocks.append(DEIMRepNCSPELAN4(config, numb_blocks=num_blocks))
+
+    @staticmethod
+    def build_2d_sincos_position_embedding(
+        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+    ):
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        if embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
+        omega = 1.0 / (temperature**omega)
+
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+
+    def forward(
+        self,
+        inputs_embeds=None,
+        attention_mask=None,
+        position_embeddings=None,
+        spatial_shapes=None,
+        level_start_index=None,
+        valid_ratios=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+                - 1 for pixel features that are real (i.e. **not masked**),
+                - 0 for pixel features that are padding (i.e. **masked**).
+                [What are attention masks?](../glossary#attention-mask)
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
+            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of each feature map.
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
+                Starting index of each feature map.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+                Ratio of valid area in each feature level.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        hidden_states = inputs_embeds
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        # encoder
+        if self.config.encoder_layers > 0:
+            for i, enc_ind in enumerate(self.encode_proj_layers):
+                if output_hidden_states:
+                    encoder_states = encoder_states + (hidden_states[enc_ind],)
+                height, width = hidden_states[enc_ind].shape[2:]
+                # flatten [batch, channel, height, width] to [batch, height*width, channel]
+                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
+                if self.training or self.eval_size is None:
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        width,
+                        height,
+                        self.encoder_hidden_dim,
+                        self.positional_encoding_temperature,
+                        device=src_flatten.device,
+                        dtype=src_flatten.dtype,
+                    )
+                else:
+                    pos_embed = None
+
+                layer_outputs = self.encoder[i](
+                    src_flatten,
+                    pos_embed=pos_embed,
+                    output_attentions=output_attentions,
+                )
+                hidden_states[enc_ind] = (
+                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
+                )
+
+                if output_attentions:
+                    all_attentions = all_attentions + (layer_outputs[1],)
+
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states[enc_ind],)
+
+        # top-down FPN
+        fpn_feature_maps = [hidden_states[-1]]
+        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
+            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            top_fpn_feature_map = fpn_feature_maps[-1]
+            # apply lateral block
+            top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
+            fpn_feature_maps[-1] = top_fpn_feature_map
+            # apply fpn block
+            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
+            fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
+            new_fpn_feature_map = fpn_block(fused_feature_map)
+            fpn_feature_maps.append(new_fpn_feature_map)
+
+        fpn_feature_maps = fpn_feature_maps[::-1]
+
+        # bottom-up PAN
+        pan_feature_maps = [fpn_feature_maps[0]]
+        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
+            top_pan_feature_map = pan_feature_maps[-1]
+            fpn_feature_map = fpn_feature_maps[idx + 1]
+            downsampled_feature_map = downsample_conv(top_pan_feature_map)
+            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            new_pan_feature_map = pan_block(fused_feature_map)
+            pan_feature_maps.append(new_pan_feature_map)
+
+        if not return_dict:
+            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
+        )

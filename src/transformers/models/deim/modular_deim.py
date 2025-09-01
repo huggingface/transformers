@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP,DFinePreTrainedModel
+from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP,DFinePreTrainedModel,DFineModelOutput,DFineObjectDetectionOutput,DFineFrozenBatchNorm2d,DFineEncoderLayer,DFineDecoderOutput,DFineDecoder,DFineModel,DFineIntegral,DFineDecoder,DFineConvNormLayer
 from ..d_fine.configuration_d_fine import DFineConfig
 from ...configuration_utils import PretrainedConfig
+
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -429,22 +430,94 @@ class DeimConfig(PretrainedConfig):
 
 
 
+class DEIMMultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
+    pass
+
+class DEIMGate(DFineGate):
+    pass
 
 
-class DEIMConvNormLayer(RTDetrConvNormLayer):
+class DEIMDecoderLayer(DFineDecoderLayer):
+    pass
+
+
+class DEIMModelOutput(DFineModelOutput):
+    pass
+
+
+class DEIMObjectDetectionOutput(DFineObjectDetectionOutput):
+    pass
+
+
+class DEIMFrozenBatchNorm2d(DFineFrozenBatchNorm2d):
+    pass
+
+
+class DEIMConvEncoder(DFineConvEncoder):
+    pass
+
+
+class DEIMEncoderLayer(DFineEncoderLayer):
+    pass
+
+
+
+class DEIMPreTrainedModel(DFinePreTrainedModel):
+    pass
+
+
+class DEIMIntegral(DFineIntegral):
+    pass
+
+
+class DEIMDecoderOutput(DFineDecoderOutput):
+    pass
+
+
+
+
+
+
+class DEIMDecoder(DFineDecoder):
+    pass
+
+class DEIMModel(DFineModel):
+    pass
+
+
+class DEIMForObjectDetection(DFineForObjectDetection):
+    pass
+
+
+class DEIMMLPPredictionHead(DFineMLPPredictionHead):
+    pass
+
+
+class DEIMMLP(DFineMLP):
+    pass
+
+
+class DEIMLQE(DFineLQE):
+    pass
+
+
+class DEIMConvNormLayer(DFineConvNormLayer):
+    pass
+
+class DEIMRepVggBlock(DFineRepVggBlock):
+    pass
+
+class DEIMCSPRepLayer(DFineCSPRepLayer):
+    pass
+
+
+class DEIMRepNCSPELAN4(DFineRepNCSPELAN4):
     pass
 
 class DEIMSCDown(DFineSCDown):
     pass
 
-class DEIMCSPRepLayer(DFineCSPRepLayer):
-    pass
-    
-class DEIMRepNCSPELAN4(DFineRepNCSPELAN4):
-    pass
 
-class DEIMRepVggBlock(DFineRepVggBlock):
-    pass
 
 class DEIMEncoder(DFineEncoder):
     pass
@@ -453,33 +526,12 @@ class DEIMHybridEncoder(DFineHybridEncoder):
     pass
 
 
-class DEIMConvEncoder(DFineConvEncoder):
-    pass
-
-class DEIMMultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
-    pass
 
 
-class DEIMMLPPredictionHead(DFineMLPPredictionHead):
-    pass
 
 
-class DEIMForObjectDetection(DFineForObjectDetection):
-    pass
 
 
-class DEIMGate(DFineGate):
-    pass
-
-class DEIMDecoderLayer(DFineDecoderLayer):
-    pass
-
-class DEIMLQE(DFineLQE):
-    pass
-
-class DEIMMLP(DFineMLP):
-    pass
 
 
-class DEIMPreTrainedModel(DFinePreTrainedModel):
-    pass
+
