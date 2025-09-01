@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE
+from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP
 from ..d_fine.configuration_d_fine import DFineConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -460,6 +460,13 @@ class DEIMMultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
     pass
 
 
+class DEIMMLPPredictionHead(DFineMLPPredictionHead):
+    pass
+
+
+class DEIMForObjectDetection(DFineForObjectDetection):
+    pass
+
 
 class DEIMGate(DFineGate):
     pass
@@ -470,6 +477,8 @@ class DEIMDecoderLayer(DFineDecoderLayer):
 class DEIMLQE(DFineLQE):
     pass
 
+class DEIMMLP(DFineMLP):
+    pass
 
 
 class DEIMConfig(DFineConfig):

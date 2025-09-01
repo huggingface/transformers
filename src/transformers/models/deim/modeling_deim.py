@@ -18,15 +18,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional
+
+import math
+from dataclasses import dataclass
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 from torch import Tensor, nn
 
 from ...activations import ACT2CLS, ACT2FN
+from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
-from ...utils import is_torchdynamo_compiling, torch_int
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
+from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_deim import DEIMConfig
 
@@ -809,6 +816,1218 @@ class DEIMMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+class DEIMMLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DEIM_paddle/ppdet/modeling/transformers/utils.py#L453
+
+    """
+
+    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [d_model] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the RT-DETR encoder-decoder model.
+    """
+)
+class DEIMModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points used for the first decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+        Logits of predicted bounding boxes coordinates in the encoder stage.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    denoising_meta_values: Optional[dict] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`DEIMForObjectDetection`].
+    """
+)
+class DEIMObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~DEIMImageProcessor.post_process_object_detection`] to retrieve the
+        unnormalized (absolute) bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked initial reference points (initial reference points of each layer of the decoder).
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[dict] = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: Optional[list[dict]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[tuple[torch.FloatTensor]] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    denoising_meta_values: Optional[dict] = None
+
+
+class DEIMDecoder(DEIMPreTrainedModel):
+    """
+    D-FINE Decoder implementing Fine-grained Distribution Refinement (FDR).
+
+    This decoder refines object detection predictions through iterative updates across multiple layers,
+    utilizing attention mechanisms, location quality estimators, and distribution refinement techniques
+    to improve bounding box accuracy and robustness.
+    """
+
+    def __init__(self, config: DEIMConfig):
+        super().__init__(config)
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
+
+        self.dropout = config.dropout
+        self.layers = nn.ModuleList(
+            [DEIMDecoderLayer(config) for _ in range(config.decoder_layers)]
+            + [DEIMDecoderLayer(config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
+        )
+        self.query_pos_head = DEIMMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+
+        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        self.bbox_embed = None
+        self.class_embed = None
+        self.reg_scale = nn.Parameter(torch.tensor([config.reg_scale]), requires_grad=False)
+        self.max_num_bins = config.max_num_bins
+        self.d_model = config.d_model
+        self.layer_scale = config.layer_scale
+        self.pre_bbox_head = DEIMMLP(config.hidden_size, config.hidden_size, 4, 3)
+        self.integral = DEIMIntegral(config)
+        self.num_head = config.decoder_attention_heads
+        self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
+        self.lqe_layers = nn.ModuleList([DEIMLQE(config) for _ in range(config.decoder_layers)])
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        spatial_shapes,
+        level_start_index=None,
+        spatial_shapes_list=None,
+        output_hidden_states=None,
+        encoder_attention_mask=None,
+        memory_mask=None,
+        output_attentions=None,
+        return_dict=None,
+    ) -> DEIMDecoderOutput:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+                The query embeddings that are passed into the decoder.
+            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                of the decoder.
+            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+                in `[0, 1]`:
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
+            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of the feature maps.
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+                Ratio of valid area in each feature level.
+
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        intermediate = ()
+        intermediate_reference_points = ()
+        intermediate_logits = ()
+        intermediate_predicted_corners = ()
+        initial_reference_points = ()
+
+        output_detach = pred_corners_undetach = 0
+
+        project = weighting_function(self.max_num_bins, self.up, self.reg_scale)
+        ref_points_detach = F.sigmoid(reference_points)
+
+        for i, decoder_layer in enumerate(self.layers):
+            ref_points_input = ref_points_detach.unsqueeze(2)
+            query_pos_embed = self.query_pos_head(ref_points_detach).clamp(min=-10, max=10)
+
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            output = decoder_layer(
+                hidden_states=hidden_states,
+                position_embeddings=query_pos_embed,
+                reference_points=ref_points_input,
+                spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
+
+            hidden_states = output[0]
+
+            if i == 0:
+                # Initial bounding box predictions with inverse sigmoid refinement
+                new_reference_points = F.sigmoid(self.pre_bbox_head(output[0]) + inverse_sigmoid(ref_points_detach))
+                ref_points_initial = new_reference_points.detach()
+
+            # Refine bounding box corners using FDR, integrating previous layer's corrections
+            if self.bbox_embed is not None:
+                pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
+                inter_ref_bbox = distance2bbox(
+                    ref_points_initial, self.integral(pred_corners, project), self.reg_scale
+                )
+                pred_corners_undetach = pred_corners
+                ref_points_detach = inter_ref_bbox.detach()
+
+            output_detach = hidden_states.detach()
+
+            intermediate += (hidden_states,)
+
+            if self.class_embed is not None and (self.training or i == self.eval_idx):
+                scores = self.class_embed[i](hidden_states)
+                # Add initial logits and reference points with pre-bbox head
+                if i == 0:
+                    intermediate_logits += (scores,)
+                    intermediate_reference_points += (new_reference_points,)
+                # Lqe does not affect the performance here.
+                scores = self.lqe_layers[i](scores, pred_corners)
+                intermediate_logits += (scores,)
+                intermediate_reference_points += (inter_ref_bbox,)
+                initial_reference_points += (ref_points_initial,)
+                intermediate_predicted_corners += (pred_corners,)
+
+            if output_attentions:
+                all_self_attns += (output[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (output[2],)
+
+        # Keep batch_size as first dimension
+        intermediate = torch.stack(intermediate)
+        if self.class_embed is not None and self.bbox_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
+            intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
+            initial_reference_points = torch.stack(initial_reference_points, dim=1)
+            intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    intermediate,
+                    intermediate_logits,
+                    intermediate_reference_points,
+                    intermediate_predicted_corners,
+                    initial_reference_points,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
+
+        return DEIMDecoderOutput(
+            last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
+            intermediate_logits=intermediate_logits,
+            intermediate_reference_points=intermediate_reference_points,
+            intermediate_predicted_corners=intermediate_predicted_corners,
+            initial_reference_points=initial_reference_points,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
+    """
+)
+class DEIMModel(DEIMPreTrainedModel):
+    def __init__(self, config: DEIMConfig):
+        super().__init__(config)
+
+        # Create backbone
+        self.backbone = DEIMConvEncoder(config)
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
+        num_backbone_outs = len(config.decoder_in_channels)
+        encoder_input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[_]
+            encoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.encoder_hidden_dim),
+                )
+            )
+        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
+        self.encoder = DEIMHybridEncoder(config=config)
+
+        # denoising part
+        if config.num_denoising > 0:
+            self.denoising_class_embed = nn.Embedding(
+                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
+            )
+
+        # decoder embedding
+        if config.learn_initial_query:
+            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
+
+        # encoder head
+        self.enc_output = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model),
+            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+        )
+        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
+        self.enc_bbox_head = DEIMMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+
+        # init encoder output anchors and valid_mask
+        if config.anchor_image_size:
+            self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
+        num_backbone_outs = len(config.decoder_in_channels)
+        decoder_input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[_]
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder = DEIMDecoder(config)
+        decoder_input_proj = []
+        in_channels = config.decoder_in_channels[-1]
+        for _ in range(num_backbone_outs):
+            if config.hidden_size == config.decoder_in_channels[-1]:
+                decoder_input_proj.append(nn.Identity())
+            else:
+                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
+                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
+                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            if config.hidden_size == config.decoder_in_channels[-1]:
+                decoder_input_proj.append(nn.Identity())
+            else:
+                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
+                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
+                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
+
+        self.post_init()
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    def freeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad_(False)
+
+    def unfreeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad_(True)
+
+    @compile_compatible_method_lru_cache(maxsize=32)
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = [
+                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
+                for s in self.config.feat_strides
+            ]
+        anchors = []
+        for level, (height, width) in enumerate(spatial_shapes):
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(end=height, device=device).to(dtype),
+                torch.arange(end=width, device=device).to(dtype),
+                indexing="ij",
+            )
+            grid_xy = torch.stack([grid_x, grid_y], -1)
+            grid_xy = grid_xy.unsqueeze(0) + 0.5
+            grid_xy[..., 0] /= width
+            grid_xy[..., 1] /= height
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+        # define the valid range for anchor coordinates
+        eps = 1e-2
+        anchors = torch.concat(anchors, 1)
+        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
+        anchors = torch.log(anchors / (1 - anchors))
+        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+
+        return anchors, valid_mask
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[list[dict]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple[torch.FloatTensor], DEIMModelOutput]:
+        r"""
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
+            can choose to directly pass a flattened representation of an image.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
+            embedded representation.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, DEIMModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/DEIM_r50vd")
+        >>> model = DEIMModel.from_pretrained("PekingU/DEIM_r50vd")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 300, 256]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+
+        features = self.backbone(pixel_values, pixel_mask)
+
+        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                proj_feats,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if output_hidden_states else None,
+                attentions=encoder_outputs[2]
+                if len(encoder_outputs) > 2
+                else encoder_outputs[1]
+                if output_attentions
+                else None,
+            )
+
+        # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DEIM_pytorch/src/zoo/DEIM/DEIM_decoder.py#L412
+        sources = []
+        for level, source in enumerate(encoder_outputs[0]):
+            sources.append(self.decoder_input_proj[level](source))
+
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
+        if self.config.num_feature_levels > len(sources):
+            _len_sources = len(sources)
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
+            for i in range(_len_sources + 1, self.config.num_feature_levels):
+                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+
+        # Prepare encoder inputs (by flattening)
+        source_flatten = []
+        spatial_shapes_list = []
+        spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
+        for level, source in enumerate(sources):
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+            spatial_shapes_list.append((height, width))
+            source = source.flatten(2).transpose(1, 2)
+            source_flatten.append(source)
+        source_flatten = torch.cat(source_flatten, 1)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+
+        # prepare denoising training
+        if self.training and self.config.num_denoising > 0 and labels is not None:
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                attention_mask,
+                denoising_meta_values,
+            ) = get_contrastive_denoising_training_group(
+                targets=labels,
+                num_classes=self.config.num_labels,
+                num_queries=self.config.num_queries,
+                class_embed=self.denoising_class_embed,
+                num_denoising_queries=self.config.num_denoising,
+                label_noise_ratio=self.config.label_noise_ratio,
+                box_noise_scale=self.config.box_noise_scale,
+            )
+        else:
+            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
+
+        batch_size = len(source_flatten)
+        device = source_flatten.device
+        dtype = source_flatten.dtype
+
+        # prepare input for decoder
+        if self.training or self.config.anchor_image_size is None:
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
+            spatial_shapes_tuple = tuple(spatial_shapes_list)
+            anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
+        else:
+            anchors, valid_mask = self.anchors, self.valid_mask
+            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
+
+        # use the valid_mask to selectively retain values in the feature map where the mask is `True`
+        memory = valid_mask.to(source_flatten.dtype) * source_flatten
+
+        output_memory = self.enc_output(memory)
+
+        enc_outputs_class = self.enc_score_head(output_memory)
+        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
+
+        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
+
+        reference_points_unact = enc_outputs_coord_logits.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
+        )
+
+        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        if denoising_bbox_unact is not None:
+            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+
+        enc_topk_logits = enc_outputs_class.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
+        )
+
+        # extract region features
+        if self.config.learn_initial_query:
+            target = self.weight_embedding.tile([batch_size, 1, 1])
+        else:
+            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = target.detach()
+
+        if denoising_class is not None:
+            target = torch.concat([denoising_class, target], 1)
+
+        init_reference_points = reference_points_unact.detach()
+
+        # decoder
+        decoder_outputs = self.decoder(
+            inputs_embeds=target,
+            encoder_hidden_states=source_flatten,
+            encoder_attention_mask=attention_mask,
+            reference_points=init_reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            enc_outputs = tuple(
+                value
+                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
+                if value is not None
+            )
+            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
+            tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
+
+            return tuple_outputs
+
+        return DEIMModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_logits=decoder_outputs.intermediate_logits,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            intermediate_predicted_corners=decoder_outputs.intermediate_predicted_corners,
+            initial_reference_points=decoder_outputs.initial_reference_points,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            init_reference_points=init_reference_points,
+            enc_topk_logits=enc_topk_logits,
+            enc_topk_bboxes=enc_topk_bboxes,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_logits=enc_outputs_coord_logits,
+            denoising_meta_values=denoising_meta_values,
+        )
+
+
+@auto_docstring
+class DEIMPreTrainedModel(PreTrainedModel):
+    config: DEIMConfig
+    base_model_prefix = "d_e_i_m"
+    main_input_name = "pixel_values"
+    _no_split_modules = [r"DEIMHybridEncoder", r"DEIMDecoderLayer"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # initialize linear layer bias value according to a given probability value.
+        if isinstance(module, (DEIMForObjectDetection, DEIMDecoder)):
+            if module.class_embed is not None:
+                for layer in module.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.constant_(layer.bias, bias)
+
+            if module.bbox_embed is not None:
+                for layer in module.bbox_embed:
+                    nn.init.constant_(layer.layers[-1].weight, 0)
+                    nn.init.constant_(layer.layers[-1].bias, 0)
+
+        if isinstance(module, DEIMMultiscaleDeformableAttention):
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
+            grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
+            scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
+            grid_init *= scaling
+            with torch.no_grad():
+                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+
+        if isinstance(module, DEIMModel):
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
+            nn.init.xavier_uniform_(module.enc_score_head.weight)
+            nn.init.constant_(module.enc_score_head.bias, bias)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+        if isinstance(module, DEIMGate):
+            bias = float(-math.log((1 - 0.5) / 0.5))
+            init.constant_(module.gate.bias, bias)
+            init.constant_(module.gate.weight, 0)
+
+        if isinstance(module, DEIMLQE):
+            init.constant_(module.reg_conf.layers[-1].bias, 0)
+            init.constant_(module.reg_conf.layers[-1].weight, 0)
+
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
+            nn.init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+
+
+class DEIMIntegral(nn.Module):
+    """
+    A static layer that calculates integral results from a distribution.
+
+    This layer computes the target location using the formula: `sum{Pr(n) * W(n)}`,
+    where Pr(n) is the softmax probability vector representing the discrete
+    distribution, and W(n) is the non-uniform Weighting Function.
+
+    Args:
+        max_num_bins (int): Max number of the discrete bins. Default is 32.
+                       It can be adjusted based on the dataset or task requirements.
+    """
+
+    def __init__(self, config: DEIMConfig):
+        super().__init__()
+        self.max_num_bins = config.max_num_bins
+
+    def forward(self, pred_corners: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
+        batch_size, num_queries, _ = pred_corners.shape
+        pred_corners = F.softmax(pred_corners.reshape(-1, self.max_num_bins + 1), dim=1)
+        pred_corners = F.linear(pred_corners, project.to(pred_corners.device)).reshape(-1, 4)
+        pred_corners = pred_corners.reshape(batch_size, num_queries, -1)
+        return pred_corners
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the DEIMDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+    """
+)
+class DEIMDecoderOutput(ModelOutput):
+    r"""
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked initial reference points (initial reference points of each layer of the decoder).
+    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+        used to compute the weighted average in the cross-attention heads.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
+def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
+    """
+    Generates the non-uniform Weighting Function W(n) for bounding box regression.
+
+    Args:
+        max_num_bins (int): Max number of the discrete bins.
+        up (Tensor): Controls upper bounds of the sequence,
+                     where maximum offset is ±up * H / W.
+        reg_scale (float): Controls the curvature of the Weighting Function.
+                           Larger values result in flatter weights near the central axis W(max_num_bins/2)=0
+                           and steeper weights at both ends.
+    Returns:
+        Tensor: Sequence of Weighting Function.
+    """
+    upper_bound1 = abs(up[0]) * abs(reg_scale)
+    upper_bound2 = abs(up[0]) * abs(reg_scale) * 2
+    step = (upper_bound1 + 1) ** (2 / (max_num_bins - 2))
+    left_values = [-((step) ** i) + 1 for i in range(max_num_bins // 2 - 1, 0, -1)]
+    right_values = [(step) ** i - 1 for i in range(1, max_num_bins // 2)]
+    values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
+    values = torch.cat(values, 0)
+    return values
+
+
+def distance2bbox(points, distance: torch.Tensor, reg_scale: float) -> torch.Tensor:
+    """
+    Decodes edge-distances into bounding box coordinates.
+
+    Args:
+        points (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
+        distance (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4), representing distances from the point to the left, top, right, and bottom boundaries.
+        reg_scale (`float`):
+            Controls the curvature of the Weighting Function.
+    Returns:
+        `torch.Tensor`: Bounding boxes in (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
+    """
+    reg_scale = abs(reg_scale)
+    top_left_x = points[..., 0] - (0.5 * reg_scale + distance[..., 0]) * (points[..., 2] / reg_scale)
+    top_left_y = points[..., 1] - (0.5 * reg_scale + distance[..., 1]) * (points[..., 3] / reg_scale)
+    bottom_right_x = points[..., 0] + (0.5 * reg_scale + distance[..., 2]) * (points[..., 2] / reg_scale)
+    bottom_right_y = points[..., 1] + (0.5 * reg_scale + distance[..., 3]) * (points[..., 3] / reg_scale)
+
+    bboxes = torch.stack([top_left_x, top_left_y, bottom_right_x, bottom_right_y], -1)
+
+    return corners_to_center_format(bboxes)
+
+
+def get_contrastive_denoising_training_group(
+    targets,
+    num_classes,
+    num_queries,
+    class_embed,
+    num_denoising_queries=100,
+    label_noise_ratio=0.5,
+    box_noise_scale=1.0,
+):
+    """
+    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
+
+    Args:
+        targets (`list[dict]`):
+            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
+        num_classes (`int`):
+            Total number of classes in the dataset.
+        num_queries (`int`):
+            Number of query slots in the transformer.
+        class_embed (`callable`):
+            A function or a model layer to embed class labels.
+        num_denoising_queries (`int`, *optional*, defaults to 100):
+            Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
+            Scale of noise applied to bounding boxes.
+    Returns:
+        `tuple` comprising various elements:
+        - **input_query_class** (`torch.FloatTensor`) --
+          Class queries with applied label noise.
+        - **input_query_bbox** (`torch.FloatTensor`) --
+          Bounding box queries with applied box noise.
+        - **attn_mask** (`torch.FloatTensor`) --
+           Attention mask for separating denoising and reconstruction queries.
+        - **denoising_meta_values** (`dict`) --
+          Metadata including denoising positive indices, number of groups, and split sizes.
+    """
+
+    if num_denoising_queries <= 0:
+        return None, None, None, None
+
+    num_ground_truths = [len(t["class_labels"]) for t in targets]
+    device = targets[0]["class_labels"].device
+
+    max_gt_num = max(num_ground_truths)
+    if max_gt_num == 0:
+        return None, None, None, None
+
+    num_groups_denoising_queries = num_denoising_queries // max_gt_num
+    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    # pad gt to max_num of a batch
+    batch_size = len(num_ground_truths)
+
+    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
+    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
+
+    for i in range(batch_size):
+        num_gt = num_ground_truths[i]
+        if num_gt > 0:
+            input_query_class[i, :num_gt] = targets[i]["class_labels"]
+            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
+            pad_gt_mask[i, :num_gt] = 1
+    # each group has positive and negative queries.
+    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
+    # positive and negative mask
+    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
+    negative_gt_mask[:, max_gt_num:] = 1
+    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
+    positive_gt_mask = 1 - negative_gt_mask
+    # contrastive denoising training positive index
+    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
+    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    denoise_positive_idx = torch.split(
+        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+    )
+    # total denoising queries
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
+
+    if label_noise_ratio > 0:
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        # randomly put a new one here
+        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
+        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
+
+    if box_noise_scale > 0:
+        known_bbox = center_to_corners_format(input_query_bbox)
+        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
+        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
+        rand_part = torch.rand_like(input_query_bbox)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part *= rand_sign
+        known_bbox += rand_part * diff
+        known_bbox.clip_(min=0.0, max=1.0)
+        input_query_bbox = corners_to_center_format(known_bbox)
+        input_query_bbox = inverse_sigmoid(input_query_bbox)
+
+    input_query_class = class_embed(input_query_class)
+
+    target_size = num_denoising_queries + num_queries
+    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    # match query cannot see the reconstruction
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+
+    # reconstructions cannot see each other
+    for i in range(num_groups_denoising_queries):
+        idx_block_start = max_gt_num * 2 * i
+        idx_block_end = max_gt_num * 2 * (i + 1)
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+
+    denoising_meta_values = {
+        "dn_positive_idx": denoise_positive_idx,
+        "dn_num_group": num_groups_denoising_queries,
+        "dn_num_split": [num_denoising_queries, num_queries],
+    }
+
+    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
+
+
+@auto_docstring(
+    custom_intro="""
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
+    decoded into scores and classes.
+    """
+)
+class DEIMForObjectDetection(DEIMPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _tied_weights_keys = ["bbox_embed", "class_embed"]
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+
+    def __init__(self, config: DEIMConfig):
+        super().__init__(config)
+
+        # D-FINE encoder-decoder model
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
+        self.model = DEIMModel(config)
+        scaled_dim = round(config.layer_scale * config.hidden_size)
+        num_pred = config.decoder_layers
+        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList(
+            [
+                DEIMMLP(config.hidden_size, config.hidden_size, 4 * (config.max_num_bins + 1), 3)
+                for _ in range(self.eval_idx + 1)
+            ]
+            + [
+                DEIMMLP(scaled_dim, scaled_dim, 4 * (config.max_num_bins + 1), 3)
+                for _ in range(config.decoder_layers - self.eval_idx - 1)
+            ]
+        )
+
+        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[list[dict]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple[torch.FloatTensor], DEIMObjectDetectionOutput]:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers.image_utils import load_image
+        >>> from transformers import AutoImageProcessor, DEIMForObjectDetection
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = load_image(url)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/DEIM-xlarge-coco")
+        >>> model = DEIMForObjectDetection.from_pretrained("ustc-community/DEIM-xlarge-coco")
+
+        >>> # prepare image for the model
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 300, 80]
+
+        >>> boxes = outputs.pred_boxes
+        >>> list(boxes.shape)
+        [1, 300, 4]
+
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)
+        >>> result = results[0]  # first image in batch
+
+        >>> for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected cat with confidence 0.958 at location [344.49, 23.4, 639.84, 374.27]
+        Detected cat with confidence 0.956 at location [11.71, 53.52, 316.64, 472.33]
+        Detected remote with confidence 0.947 at location [40.46, 73.7, 175.62, 117.57]
+        Detected sofa with confidence 0.918 at location [0.59, 1.88, 640.25, 474.74]
+        ```
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            pixel_values,
+            pixel_mask=pixel_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        denoising_meta_values = (
+            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
+        )
+
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+        predicted_corners = outputs.intermediate_predicted_corners if return_dict else outputs[4]
+        initial_reference_points = outputs.initial_reference_points if return_dict else outputs[5]
+
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
+
+        loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None, None, None
+        if labels is not None:
+            enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+            enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_bboxes,
+                denoising_meta_values=denoising_meta_values,
+                predicted_corners=predicted_corners,
+                initial_reference_points=initial_reference_points,
+                **kwargs,
+            )
+
+        if not return_dict:
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
+            else:
+                output = (logits, pred_boxes) + outputs
+            return ((loss, loss_dict) + output) if loss is not None else output
+
+        return DEIMObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=outputs.last_hidden_state,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_logits=outputs.intermediate_logits,
+            intermediate_reference_points=outputs.intermediate_reference_points,
+            intermediate_predicted_corners=outputs.intermediate_predicted_corners,
+            initial_reference_points=outputs.initial_reference_points,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            init_reference_points=outputs.init_reference_points,
+            enc_topk_logits=outputs.enc_topk_logits,
+            enc_topk_bboxes=outputs.enc_topk_bboxes,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            denoising_meta_values=outputs.denoising_meta_values,
+        )
+
+
 class DEIMGate(nn.Module):
     def __init__(self, d_model: int):
         super().__init__()
@@ -922,22 +2141,6 @@ class DEIMDecoderLayer(nn.Module):
         return outputs
 
 
-class DEIMMLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
-        super().__init__()
-        self.num_layers = num_layers
-        hidden_dims = [hidden_dim] * (num_layers - 1)
-        input_dims = [input_dim] + hidden_dims
-        output_dims = hidden_dims + [output_dim]
-        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
-
-    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
-        return stat_features
-
-
 class DEIMLQE(nn.Module):
     def __init__(self, config: DEIMConfig):
         super().__init__()
@@ -953,3 +2156,19 @@ class DEIMLQE(nn.Module):
         quality_score = self.reg_conf(stat.reshape(batch_size, length, -1))
         scores = scores + quality_score
         return scores
+
+
+class DEIMMLP(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
+        super().__init__()
+        self.num_layers = num_layers
+        hidden_dims = [hidden_dim] * (num_layers - 1)
+        input_dims = [input_dim] + hidden_dims
+        output_dims = hidden_dims + [output_dim]
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
+        self.act = ACT2CLS[act]()
+
+    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
+        for i, layer in enumerate(self.layers):
+            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+        return stat_features
