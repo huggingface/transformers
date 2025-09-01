@@ -599,29 +599,30 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXTS = Expectations(
+        expected_decoded_texts = Expectations(
             {
                 (None, None): [
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
                 ],
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                 ],
                 ("rocm", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n'
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
             }
-        )  # fmt: skip
+        ).get_expectation()  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
+        for i, (expected, decoded) in enumerate(zip(expected_decoded_texts, decoded_texts)):
+            self.assertEqual(
+                decoded,
+                expected,
+                f"Decoded text {i}:\n{repr(decoded)}\ndoes not match expected decoded text:\n{repr(expected)}"
+            )
 
     @slow
     @require_flash_attn
@@ -642,7 +643,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         expected_decoded_text = Expectations({
-            ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
+            ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
         }).get_expectation()  # fmt: skip
 

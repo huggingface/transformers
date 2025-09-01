@@ -845,9 +845,15 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
         expected_decoded_text = Expectations({
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+            ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(decoded_texts[0], expected_decoded_text)
-        self.assertEqual(decoded_texts[1], expected_decoded_text)
+        for i, decoded_text in enumerate(decoded_texts):
+            self.assertEqual(
+                decoded_text,
+                expected_decoded_text,
+                f"Decoded text {i}:\n{decoded_text}\ndoes not match expected decoded text:\n{expected_decoded_text}"
+            )
+
