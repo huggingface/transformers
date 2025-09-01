@@ -24,7 +24,7 @@ from torch import nn
 
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -377,11 +377,9 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_weights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, **kwargs
-        )
+        attn_output, _ = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = hidden_states + attn_output
         norm_hidden_states = self.rms_norm2(hidden_states)
@@ -518,12 +516,13 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         ```"""
         hidden_states = self.embeddings(pixel_values)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
         pooler_output = self.head(last_hidden_state) if self.use_head else None
@@ -593,7 +592,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
             **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
         # Get pooled output

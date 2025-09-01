@@ -335,11 +335,9 @@ class Ovis2VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_weights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, **kwargs
-        )
+        attn_output, _ = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = hidden_states + attn_output
         norm_hidden_states = self.rms_norm2(hidden_states)
