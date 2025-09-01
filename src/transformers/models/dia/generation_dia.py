@@ -272,7 +272,9 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+        self._validate_assistant(
+            assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer
+        )
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -346,12 +348,13 @@ class DiaGenerationMixin(GenerationMixin):
             and not self.config.is_encoder_decoder
         ):
             max_cache_length += inputs_tensor.shape[1]
-        self._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
-        )
 
         # 8. determine generation mode
-        generation_mode = generation_config.get_generation_mode(assistant_model)
+        generation_mode = generation_config.get_generation_mode(assistant_model=assistant_model)
+
+        self._prepare_cache_for_generation(
+            generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
+        )
 
         if streamer is not None and (generation_config.num_beams > 1):
             raise ValueError(
@@ -371,7 +374,7 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
+            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer
         )
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs

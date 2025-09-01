@@ -999,11 +999,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         input_ids: torch.LongTensor,
         inputs_tensor: torch.Tensor,
-        assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
-        target_tokenizer: "PreTrainedTokenizerBase",
-        assistant_tokenizer: "PreTrainedTokenizerBase",
         model_kwargs: dict,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        target_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
@@ -1300,7 +1300,6 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         stopping_criteria: Optional[StoppingCriteriaList],
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
-        **kwargs,
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
@@ -1869,7 +1868,7 @@ class GenerationMixin(ContinuousMixin):
         self,
         generation_config: GenerationConfig,
         model_kwargs: dict,
-        assistant_model: "PreTrainedModel",
+        generation_mode: GenerationMode,
         batch_size: int,
         max_cache_length: int,
     ) -> bool:
@@ -1923,7 +1922,10 @@ class GenerationMixin(ContinuousMixin):
 
         # TODO(joao): support static caches in assisted generation. assisted generation needs to roll back caches,
         # which is only supported in dynamic caches atm
-        if assistant_model is not None and generation_config.cache_implementation is not None:
+        if (
+            generation_mode == GenerationMode.ASSISTED_GENERATION
+            and generation_config.cache_implementation is not None
+        ):
             logger.warning_once(
                 "An assistant model is provided, using a dynamic cache instead of a cache of type="
                 f"'{generation_config.cache_implementation}'."
@@ -1933,7 +1935,6 @@ class GenerationMixin(ContinuousMixin):
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        generation_mode = generation_config.get_generation_mode(assistant_model)
         if (
             generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
             or generation_config.cache_implementation == "dynamic_full"
@@ -2125,15 +2126,13 @@ class GenerationMixin(ContinuousMixin):
 
     def _get_deprecated_gen_repo(
         self,
-        generation_config: GenerationConfig,
+        generation_mode: GenerationMode,
         trust_remote_code: bool,
         custom_generate: Optional[str] = None,
-        assistant_model: Optional["PreTrainedModel"] = None,
     ) -> Optional[str]:
         """
-        Returns the Hub repo for a deprecated generation strategy, if any.
+        Returns the Hub repo for a deprecated generation mode, if any.
         """
-        generation_mode = generation_config.get_generation_mode(assistant_model)
         moved_to_hub_modes = {
             GenerationMode.DOLA_GENERATION: "transformers-community/dola",
             GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
@@ -2155,6 +2154,36 @@ class GenerationMixin(ContinuousMixin):
                 f"since it loads https://hf.co/{repo}."
             )
         return repo
+
+    def _get_mode_processor_kwargs(
+        self,
+        custom_generate,
+        kwargs,
+        assistant_model,
+        negative_prompt_ids,
+        negative_prompt_attention_mask,
+        prefix_allowed_tokens_fn,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """
+        Extracts and returns the generation mode and logit processor related keyword arguments from the provided kwargs.
+        """
+        gen_mode_kwargs = {
+            "tokenizer": kwargs.pop("tokenizer", None),
+            "assistant_model": assistant_model,
+            "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
+        }
+        logits_processor_kwargs = {
+            "negative_prompt_ids": negative_prompt_ids,
+            "negative_prompt_attention_mask": negative_prompt_attention_mask,
+            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
+        }
+        # If custom_generate is a callable, we need to extract its parameters
+        if isinstance(custom_generate, Callable):
+            usual_mode_kwargs = inspect.signature(GenerationMixin._sample).parameters.keys()
+            custom_generate_kwargs = inspect.signature(custom_generate).parameters.keys()
+            new_custom_keys = custom_generate_kwargs - usual_mode_kwargs
+            gen_mode_kwargs = {k: kwargs.pop(k) for k in new_custom_keys if k in kwargs}
+        return gen_mode_kwargs, logits_processor_kwargs
 
     @torch.no_grad()
     def generate(
@@ -2292,23 +2321,29 @@ class GenerationMixin(ContinuousMixin):
             )
             return custom_generate_function(model=self, **generate_arguments)
 
-        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+        # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
+        gen_mode_kwargs, logits_processor_kwargs = self._get_mode_processor_kwargs(
+            custom_generate,
+            kwargs,
+            assistant_model,
+            negative_prompt_ids,
+            negative_prompt_attention_mask,
+            prefix_allowed_tokens_fn,
+        )
 
         generation_config, model_kwargs = self._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
         )
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+        self._validate_assistant(assistant_model=assistant_model)
+
+        generation_mode = generation_config.get_generation_mode(assistant_model)
 
         # Deprecation-related step: set Hub repo for deprecated strategies.
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecate_mode_repo := self._get_deprecated_gen_repo(
-            generation_config, trust_remote_code, custom_generate, assistant_model
-        ):
+        if deprecate_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
             return GenerationMixin.generate(
                 self,
                 inputs,
@@ -2324,8 +2359,7 @@ class GenerationMixin(ContinuousMixin):
                 use_model_defaults,
                 custom_generate=deprecate_mode_repo,
                 trust_remote_code=trust_remote_code,
-                tokenizer=tokenizer,
-                assistant_tokenizer=assistant_tokenizer,
+                **gen_mode_kwargs,
                 **kwargs,
             )
 
@@ -2406,7 +2440,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         if generation_config.token_healing:
-            input_ids = self.heal_tokens(input_ids, tokenizer)
+            input_ids = self.heal_tokens(input_ids, gen_mode_kwargs.get("tokenizer"))
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -2444,13 +2478,10 @@ class GenerationMixin(ContinuousMixin):
         ):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
+            generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        # 8. determine generation mode
-        generation_mode = generation_config.get_generation_mode(assistant_model)
-
-        if streamer is not None and (generation_config.num_beams > 1):
+        if streamer is not None and generation_mode == GenerationMode.BEAM_SEARCH:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
             )
@@ -2466,26 +2497,26 @@ class GenerationMixin(ContinuousMixin):
                 UserWarning,
             )
 
-        # 9. prepare logits processors and stopping criteria
+        # 8. prepare logits processors and stopping criteria
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
             device=inputs_tensor.device,
             model_kwargs=model_kwargs,
-            negative_prompt_ids=negative_prompt_ids,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
+            **logits_processor_kwargs,
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
+            generation_config=generation_config,
+            stopping_criteria=stopping_criteria,
+            tokenizer=gen_mode_kwargs.get("tokenizer"),
         )
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
-        # 10. go into different generation modes
+        # 9. go into different generation modes
         if isinstance(custom_generate, Callable):
             result = custom_generate(
                 self,
@@ -2516,19 +2547,19 @@ class GenerationMixin(ContinuousMixin):
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
-            # 11. Get the candidate generator, given the parameterization
+            # 10. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
                 generation_config=generation_config,
                 input_ids=input_ids,
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
-                target_tokenizer=tokenizer,
-                assistant_tokenizer=assistant_tokenizer,
+                target_tokenizer=gen_mode_kwargs.get("tokenizer"),
+                assistant_tokenizer=gen_mode_kwargs.get("assistant_tokenizer"),
                 model_kwargs=model_kwargs,
             )
 
-            # 12. run assisted generate
+            # 11. run assisted generate
             result = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
@@ -2541,7 +2572,7 @@ class GenerationMixin(ContinuousMixin):
             )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
+            # 10. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
             result = self._sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
@@ -2553,7 +2584,7 @@ class GenerationMixin(ContinuousMixin):
             )
 
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
-            # 11. run beam sample
+            # 10. run beam sample
             result = self._beam_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
