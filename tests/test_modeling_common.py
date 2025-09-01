@@ -174,11 +174,6 @@ def _test_eager_matches_sdpa_inference(
     This test is written as a regular function to be able to overload it easily with different tolerances.
     Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
     """
-    # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
-    # models have a custom mixin, which we detect to skip this test.
-    if any(".CLIPModelTesterMixin" in str(base) for base in self.__class__.__bases__):
-        self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
-
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
 
