@@ -217,6 +217,36 @@ class ProcessorTesterMixin:
                     if "tokenizer" not in attribute:
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
 
+    def test_processor_from_and_save_pretrained_as_nested_dict(self):
+        processor_first = self.get_processor()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Save with `legacy_serialization=False` so that all attrbiutes are saved in one json file
+            saved_files = processor_first.save_pretrained(tmpdirname, legacy_serialization=False)
+            check_json_file_has_correct_format(saved_files[0])
+
+            # Load it back and check if loaded correctly
+            processor_second = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
+
+            # Try to load each attribute separately from saved directory
+            for attribute in processor_first.attributes:
+                attribute_class_name = getattr(processor_first, f"{attribute}_class")
+                if isinstance(attribute_class_name, tuple):
+                    if attribute == "image_processor":
+                        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
+                        attribute_class_name = attribute_class_name[0]
+                    else:
+                        attribute_class_name = attribute_class_name[-1]
+
+                attribute_class = processor_class_from_name(attribute_class_name)
+                attribute_reloaded = attribute_class.from_pretrained(tmpdirname)
+                attribute_first = getattr(processor_first, attribute)
+
+                # tokenizer repr contains model-path from where we loaded
+                if "tokenizer" not in attribute:
+                    self.assertEqual(repr(attribute_first), repr(attribute_reloaded))
+
     def test_model_input_names(self):
         processor = self.get_processor()
 
