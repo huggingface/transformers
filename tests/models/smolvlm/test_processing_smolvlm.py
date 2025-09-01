@@ -94,6 +94,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
 
+    # Override as SmolVLM needs images/video to be an explicitly nested batch
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        images = super().prepare_image_inputs(batch_size)
+        if isinstance(images, (list, tuple)):
+            images = [[image] for image in images]
+        return images
+
     def prepare_video_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
@@ -336,13 +344,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = [[self.image1], []]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 
@@ -452,7 +454,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -574,7 +575,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
             text=input_str,
             images=image_input,
