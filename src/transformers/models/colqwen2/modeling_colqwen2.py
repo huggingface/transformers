@@ -217,11 +217,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             attentions=vlm_output.attentions,
         )
 
-    def _dtype_device(self, module):
-        for p in module.parameters():
-            return p.dtype, p.device
-        return next(self.parameters()).dtype, next(self.parameters()).device
-    
     def get_input_embeddings(self):
         return self.vlm.get_input_embeddings()
 
@@ -255,6 +250,11 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
+
+    def _dtype_device(self, module):
+        for p in module.parameters():
+            return p.dtype, p.device
+        return next(self.parameters()).dtype, next(self.parameters()).device
 
 
 __all__ = ["ColQwen2ForRetrieval", "ColQwen2PreTrainedModel"]
