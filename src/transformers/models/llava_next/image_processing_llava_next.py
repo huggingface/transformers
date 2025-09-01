@@ -678,7 +678,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        new_images = []
+        processed_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
@@ -712,10 +712,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values = np.array(pixel_values)
-            new_images.append(pixel_values)
+            processed_images.append(pixel_values)
 
         if do_pad:
-            processed_images = self._pad_for_batching(new_images)
+            processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
