@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import requests
-from pytest import mark
 
 from transformers import (
     AutoProcessor,
@@ -414,38 +413,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
-        previous_rope_scaling = self.model_tester.rope_scaling["mrope_section"][:]
-        self.model_tester.rope_scaling["mrope_section"] = [4, 2, 2]
-        try:
-            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
-        except Exception as e:
-            self.model_tester.rope_scaling["mrope_section"] = previous_rope_scaling
-            raise e
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
-        previous_rope_scaling = self.model_tester.rope_scaling["mrope_section"][:]
-        self.model_tester.rope_scaling["mrope_section"] = [4, 2, 2]
-        try:
-            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
-        except Exception as e:
-            self.model_tester.rope_scaling["mrope_section"] = previous_rope_scaling
-            raise e
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):

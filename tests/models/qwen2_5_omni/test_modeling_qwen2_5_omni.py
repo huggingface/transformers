@@ -23,7 +23,6 @@ from urllib.request import urlopen
 import librosa
 import pytest
 import requests
-from pytest import mark
 
 from transformers import (
     AutoProcessor,
@@ -36,7 +35,6 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -591,38 +589,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
             )
 
             self.assertTrue(torch.equal(position_ids, expected_position_ids))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
-        previous_rope_scaling = self.model_tester.text_config["rope_scaling"]["mrope_section"][:]
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = [2, 2, 4]
-        try:
-            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
-        except Exception as e:
-            self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-            raise e
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        # Since the flash_attn_inference_equivalence set hidden_size to 64, we need to double mrope sections
-        previous_rope_scaling = self.model_tester.text_config["rope_scaling"]["mrope_section"][:]
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = [2, 2, 4]
-        try:
-            self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
-        except Exception as e:
-            self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
-            raise e
-        self.model_tester.text_config["rope_scaling"]["mrope_section"] = previous_rope_scaling
 
 
 @require_torch
