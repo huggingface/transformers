@@ -17,8 +17,10 @@ rendered properly in your Markdown viewer.
 
 # ConvNeXt V2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
 ## Overview
@@ -37,26 +39,31 @@ alt="drawing" width="600"/>
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt-V2).
 
-## Resources
+> [!TIP]
+> This model was contributed by [adirik](https://huggingface.co/adirik).
+>
+> Click on the **ConvNeXt V2** models in the right sidebar for more examples of how to apply ConvNeXt V2 to different **image-classification** tasks.
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ConvNeXt V2.
+## Intended uses & limitations
 
-<PipelineTag pipeline="image-classification"/>
+**Use for**
+- Image classification out of the box (ImageNet-1k/22k fine-tuned checkpoints).
+- As a **backbone** to extract multi-scale feature maps for detection/segmentation tasks.
 
-- [`ConvNextV2ForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+**Limitations / caveats**
+- Most layers are `Conv2d`. Quantization methods that only target linear layers (e.g. 8/4-bit with bitsandbytes) will primarily affect the classification head and yield modest memory savings compared to transformer LLMs.
+- Accuracy is sensitive to input resolution and preprocessing. Match your evaluation transforms to the checkpoint’s training recipe (e.g., 224 vs 384).
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+## How to use (quickstart)
 
-## ConvNextV2Config
+<hfoptions id="usage">
 
-[[autodoc]] ConvNextV2Config
+<hfoption id="Pipeline">
 
-## ConvNextV2Model
+```python
+from transformers import pipeline
+from PIL import Image
 
-[[autodoc]] ConvNextV2Model
-    - forward
-
-## ConvNextV2ForImageClassification
-
-[[autodoc]] ConvNextV2ForImageClassification
-    - forward
+clf = pipeline("image-classification", model="facebook/convnextv2-tiny-1k-224")
+img = Image.open("cat.jpg")
+print(clf(img)[:3])  # top-3 predictions
