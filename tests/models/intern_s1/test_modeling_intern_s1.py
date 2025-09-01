@@ -29,6 +29,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
 
@@ -37,49 +38,49 @@ if is_torch_available():
 
 class InternS1VisionText2TextMoEModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=3,
-            seq_length=7,
-            image_seq_length=64,
-            vision_feature_layer=-1,
-            ignore_index=-100,
-            image_token_id=1,
-            num_channels=3,
-            image_size=64,
-            model_type="intern_s1",
-            is_training=True,
-            text_config={
-                "model_type": "qwen3_moe",
-                "vocab_size": 99,
-                "hidden_size": 16,
-                "intermediate_size": 37,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "num_key_value_heads": 2,
-                "output_channels": 32,
-                "hidden_act": "silu",
-                "max_position_embeddings": 512,
-                "rope_theta": 10000,
-                "mlp_ratio": 2,
-                "tie_word_embeddings": False,
-                "bos_token_id": 3,
-                "eos_token_id": 4,
-                "pad_token_id": 5,
-                "num_experts": 8,
-                "output_router_logits": True,
-            },
-            vision_config={
-                "hidden_size": 16,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 24,
-                "image_size": 64,
-                "patch_size": 4,
-                "num_channels": 3,
-                "hidden_act": "quick_gelu",
-                "use_absolute_position_embeddings": True,
-            },
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        image_seq_length=64,
+        vision_feature_layer=-1,
+        ignore_index=-100,
+        image_token_id=1,
+        num_channels=3,
+        image_size=64,
+        model_type="intern_s1",
+        is_training=True,
+        text_config={
+            "model_type": "qwen3_moe",
+            "vocab_size": 99,
+            "hidden_size": 16,
+            "intermediate_size": 37,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "output_channels": 32,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "rope_theta": 10000,
+            "mlp_ratio": 2,
+            "tie_word_embeddings": False,
+            "bos_token_id": 3,
+            "eos_token_id": 4,
+            "pad_token_id": 5,
+            "num_experts": 8,
+            "output_router_logits": True,
+        },
+        vision_config={
+            "hidden_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 24,
+            "image_size": 64,
+            "patch_size": 4,
+            "num_channels": 3,
+            "hidden_act": "quick_gelu",
+            "use_absolute_position_embeddings": True,
+        },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -164,28 +165,30 @@ class InternS1VisionText2TextMoEModelTester:
 
 
 class InternS1VisionText2TextDenseModelTester(InternS1VisionText2TextMoEModelTester):
-    def __init__(self, *args,
-                 text_config={
-                    "model_type": "qwen3",
-                    "vocab_size": 99,
-                    "hidden_size": 16,
-                    "head_dim": 4,
-                    "intermediate_size": 37,
-                    "num_hidden_layers": 2,
-                    "num_attention_heads": 4,
-                    "num_key_value_heads": 2,
-                    "output_channels": 32,
-                    "hidden_act": "silu",
-                    "max_position_embeddings": 512,
-                    "rope_theta": 10000,
-                    "mlp_ratio": 2,
-                    "tie_word_embeddings": False,
-                    "bos_token_id": 3,
-                    "eos_token_id": 4,
-                    "pad_token_id": 5
-                 },
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        *args,
+        text_config={
+            "model_type": "qwen3",
+            "vocab_size": 99,
+            "hidden_size": 16,
+            "head_dim": 4,
+            "intermediate_size": 37,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "output_channels": 32,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "rope_theta": 10000,
+            "mlp_ratio": 2,
+            "tie_word_embeddings": False,
+            "bos_token_id": 3,
+            "eos_token_id": 4,
+            "pad_token_id": 5,
+        },
+        **kwargs,
+    ):
         super().__init__(*args, text_config=text_config, **kwargs)
 
 
@@ -262,7 +265,7 @@ class InternS1IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=48, do_sample=False)
             decoded_output = processor.decode(
-                generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = (
             "\nOkay, let's see. The user wants a short description of the image. The image shows two "
