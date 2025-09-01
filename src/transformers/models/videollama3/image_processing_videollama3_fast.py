@@ -11,24 +11,20 @@ import torch
 import torch.nn.functional as F
 
 from transformers.feature_extraction_utils import BatchFeature
+from transformers.image_processing_utils_fast import DefaultFastImageProcessorKwargs
 from transformers.image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     SizeDict,
 )
 from transformers.processing_utils import Unpack
 from transformers.utils import TensorType, auto_docstring, logging
 from transformers.video_utils import VideoInput, make_batched_videos
 
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)

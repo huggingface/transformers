@@ -4,9 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videollama3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from transformers.configuration_utils import PretrainedConfig
 
-from ...configuration_utils import PretrainedConfig
-from ..qwen2.configuration_qwen2 import Qwen2Config
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class Videollama3VisionConfig(PretrainedConfig):
@@ -83,7 +83,7 @@ class Videollama3Config(PretrainedConfig):
     """
 
     model_type = "videollama3"
-    sub_configs = {"vision_config": Videollama3VisionConfig, "text_config": Qwen2Config}
+    sub_configs = {"vision_config": Videollama3VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -95,21 +95,21 @@ class Videollama3Config(PretrainedConfig):
         use_token_compression=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
         if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig`
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.use_token_compression = use_token_compression
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Videollama3VisionConfig", "Videollama3Config"]

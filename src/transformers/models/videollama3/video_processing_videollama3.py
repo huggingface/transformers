@@ -15,7 +15,6 @@ from transformers.image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
-    PILImageResampling,
     SizeDict,
     get_image_size,
 )
@@ -23,6 +22,7 @@ from transformers.processing_utils import Unpack
 from transformers.utils import TensorType
 from transformers.video_utils import group_videos_by_shape, reorder_videos
 
+from ...image_utils import PILImageResampling
 from ...processing_utils import VideosKwargs
 from ...utils import add_start_docstrings
 from ...utils.import_utils import requires
