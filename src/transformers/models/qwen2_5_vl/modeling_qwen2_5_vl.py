@@ -865,6 +865,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
         # It may already have been prepared by e.g. `generate`
