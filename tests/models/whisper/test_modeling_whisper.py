@@ -404,18 +404,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
         return beam_kwargs
 
-    def _get_diverse_beam_kwargs(self, num_return_sequences=1):
-        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
-        beam_kwargs = super()._get_diverse_beam_kwargs(num_return_sequences=num_return_sequences)
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-        return beam_kwargs
-
-    def _get_constrained_beam_kwargs(self, num_return_sequences=1):
-        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
-        beam_kwargs = super()._get_constrained_beam_kwargs(num_return_sequences=num_return_sequences)
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-        return beam_kwargs
-
     def setUp(self):
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
