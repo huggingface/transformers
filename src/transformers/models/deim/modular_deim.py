@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP
+from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP,DFinePreTrainedModel
 from ..d_fine.configuration_d_fine import DFineConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -481,39 +481,5 @@ class DEIMMLP(DFineMLP):
     pass
 
 
-class DEIMConfig(DFineConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`DEIMModel`].
-    It is used to instantiate a DEIM model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults
-    will yield a similar configuration to that of the DEIM model.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control
-    the model outputs. Read the documentation from [`PretrainedConfig`] for more
-    information.
-
-    Args:
-        weight_loss_mal (`float`, *optional*, defaults to `1.0`):
-            Relative weight of the Matching-Aware Loss in the object detection loss.
-        mal_alpha (`float`, *optional*, defaults to `None`):
-            Alpha parameter for Matching-Aware Loss (MAL). If None, MAL is not used
-            and VFL is used instead. When set, it controls the weight for negative
-            samples in MAL.
-        use_uni_set (`bool`, *optional*, defaults to `True`):
-            Whether to use unified matching indices across decoder layers for boxes
-            and local losses. This improves consistency in multi-layer supervision.
-    """
-
-    model_type = "deim"
-
-    def __init__(
-        self,
-        weight_loss_mal=1.0,
-        mal_alpha=None,
-        use_uni_set=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.weight_loss_mal = weight_loss_mal
-        self.mal_alpha = mal_alpha
-        self.use_uni_set = use_uni_set
+class DEIMPreTrainedModel(DFinePreTrainedModel):
+    pass
