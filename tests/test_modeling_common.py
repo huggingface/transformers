@@ -3529,7 +3529,9 @@ class ModelTesterMixin:
                 if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
                     first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
-                    first_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", first_inputs["input_ids"])[:1]
+                    first_inputs["decoder_input_ids"] = inputs_dict.get(
+                        "decoder_input_ids", first_inputs["input_ids"]
+                    )[:1]
 
                 # Create attention mask with padding
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
