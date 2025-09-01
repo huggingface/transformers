@@ -171,7 +171,28 @@ class InternS1VisionAttention(nn.Module):
         return outputs
 
 
-NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternS1VisionRMSNorm}
+class InternS1VisionEncoder(nn.Module):
+    def __init__(self, config: InternS1VisionConfig) -> None:
+        super().__init__()
+        self.config = config
+        dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
+        dpr_configs = []
+        for idx in range(config.num_hidden_layers):
+            copy_config = copy.deepcopy(config)
+            copy_config.drop_path_rate = dpr[idx]
+            dpr_configs.append(copy_config)
+        self.layers = nn.ModuleList([InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    @can_return_tuple
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for i, layer_module in enumerate(self.layers):
+            hidden_states = layer_module(hidden_states, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -185,6 +206,10 @@ class InternS1VisionPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": InternS1VisionEncoder,
+        "attentions": InternS1VisionAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -396,6 +421,9 @@ class InternS1DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
+NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternS1VisionRMSNorm}
+
+
 class InternS1VisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -418,14 +446,10 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         self.drop_path1 = InternS1DropPath(config.drop_path_rate)
         self.drop_path2 = InternS1DropPath(config.drop_path_rate)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        attention_output, attention_weights = self.attention(
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        attention_output, _ = self.attention(
             self.layernorm_before(hidden_states),  # in InternS1Vision, layernorm is applied before self-attention
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         attention_output = self.lambda_1 * attention_output
@@ -445,51 +469,7 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         # second residual connection
         layer_output = self.drop_path2(layer_output) + hidden_states
 
-        return layer_output, attention_weights
-
-
-class InternS1VisionEncoder(nn.Module):
-    def __init__(self, config: InternS1VisionConfig) -> None:
-        super().__init__()
-        self.config = config
-        dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
-        dpr_configs = []
-        for idx in range(config.num_hidden_layers):
-            copy_config = copy.deepcopy(config)
-            copy_config.drop_path_rate = dpr[idx]
-            dpr_configs.append(copy_config)
-        self.layer = nn.ModuleList([InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    @can_return_tuple
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return layer_output
 
 
 @auto_docstring
@@ -689,7 +669,7 @@ class InternS1Model(InternS1PreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -1031,7 +1011,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, InternS1CausalLMOutputWithPast]:
+    ) -> InternS1CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1042,7 +1022,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("internlm/Intern-S1")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "internlm/Intern-S1", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "internlm/Intern-S1", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [
