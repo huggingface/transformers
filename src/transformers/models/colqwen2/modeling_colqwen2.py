@@ -256,7 +256,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             parameters = next(self.vlm.visual.parameters())
         else:
             parameters = next(self.parameters())
-        print("YO!")
         dtype, device = parameters.dtype, parameters.device
         return dtype, device
 
