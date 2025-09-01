@@ -189,14 +189,9 @@ class GenerationConfigTest(unittest.TestCase):
             generation_config_bad_temperature.update(temperature=None)
         self.assertEqual(len(captured_logs.out), 0)
 
-        # Impossible sets of constraints/parameters will raise an exception
+        # Impossible sets of parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
-        with self.assertRaises(ValueError):
-            # dummy constraint
-            GenerationConfig(do_sample=True, num_beams=2, constraints=["dummy"])
-        with self.assertRaises(ValueError):
-            GenerationConfig(do_sample=True, num_beams=2, force_words_ids=[[[1, 2, 3]]])
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
