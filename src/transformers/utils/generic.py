@@ -1010,6 +1010,22 @@ def check_model_inputs(func):
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 
+        # Check and switch for "eager" attention implementation for capturing attention outputs
+        if recordable_keys.get("output_attentions", False):
+            config_attn = getattr(self.config, "_attn_implementation", None)
+            sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
+            sub_configs_attn = [
+                getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
+            ]
+            if config_attn != "eager" or any(attn != "eager" for attn in sub_configs_attn):
+                self.config._attn_implementation = "eager"
+                warnings.warn(
+                    "`output_attentions=True` is not supported with `attn_implementation` other than `eager`. "
+                    "Falling back to eager attention. This warning can be removed using the argument "
+                    "`attn_implementation='eager' when loading the model.",
+                    UserWarning,
+                )
+
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
             def wrapped_forward(*args, **kwargs):
