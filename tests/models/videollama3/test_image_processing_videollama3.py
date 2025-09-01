@@ -1,3 +1,4 @@
+import itertools
 import tempfile
 import unittest
 
@@ -33,15 +34,14 @@ class Videollama3ImageProcessingTester:
         num_frames=10,
         min_resolution=56,
         max_resolution=1024,
-        min_tokens=16,
-        max_tokens=16384,
+        min_pixels=14 * 14 * 16,
+        max_pixels=14 * 14 * 16384,
         do_normalize=True,
         image_mean=IMAGENET_STANDARD_MEAN,
         image_std=IMAGENET_STANDARD_STD,
         do_resize=True,
         patch_size=14,
-        image_merge_size=1,
-        video_merge_size=2,
+        merge_size=1,
         do_convert_rgb=True,
     ):
         self.parent = parent
@@ -50,13 +50,12 @@ class Videollama3ImageProcessingTester:
         self.max_resolution = max_resolution
         self.num_channels = num_channels
         self.num_frames = num_frames
-        self.image_mean = IMAGENET_STANDARD_MEAN
-        self.image_std = IMAGENET_STANDARD_STD
-        self.min_tokens = min_tokens
-        self.max_tokens = max_tokens
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
         self.patch_size = patch_size
-        self.image_merge_size = image_merge_size
-        self.video_merge_size = video_merge_size
+        self.merge_size = merge_size
         self.do_resize = do_resize
         self.do_normalize = do_normalize
         self.image_mean = image_mean
@@ -68,11 +67,10 @@ class Videollama3ImageProcessingTester:
             "do_resize": self.do_resize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "min_tokens": self.min_tokens,
-            "max_tokens": self.max_tokens,
+            "min_pixels": self.min_pixels,
+            "max_pixels": self.max_pixels,
             "patch_size": self.patch_size,
-            "image_merge_size": self.image_merge_size,
-            "video_merge_size": self.video_merge_size,
+            "merge_size": self.merge_size,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -121,28 +119,27 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "min_tokens"))
-            self.assertTrue(hasattr(image_processing, "max_tokens"))
+            self.assertTrue(hasattr(image_processing, "min_pixels"))
+            self.assertTrue(hasattr(image_processing, "max_pixels"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "image_merge_size"))
-            self.assertTrue(hasattr(image_processing, "video_merge_size"))
+            self.assertTrue(hasattr(image_processing, "merge_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.min_tokens, 16)
-            self.assertEqual(image_processor.max_tokens, 16384)
+            self.assertEqual(image_processor.min_pixels, 14 * 14 * 16)
+            self.assertEqual(image_processor.max_pixels, 14 * 14 * 16384)
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, min_tokens=16, max_tokens=16384
+                self.image_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
             )
-            self.assertEqual(image_processor.min_tokens, 16)
-            self.assertEqual(image_processor.max_tokens, 16384)
+            self.assertEqual(image_processor.min_pixels, 256 * 256)
+            self.assertEqual(image_processor.max_pixels, 640 * 640)
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution
-        best_resolution = smart_resize(561, 278, factor=14)
+        best_resolution = smart_resize(561, 278, factor=28)
         self.assertEqual(best_resolution, (560, 280))
 
     def test_call_pil(self):
@@ -157,20 +154,20 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             # Test not batched input
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (5329, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]])
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
             # Test batched
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (37303, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]] * 7)
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]] * 7)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processor_list:
@@ -184,20 +181,20 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             # Test not batched input
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (5329, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]])
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
             # Test batched
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (37303, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]] * 7)
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]] * 7)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
         for image_processing_class in self.image_processor_list:
@@ -212,20 +209,20 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             # Test not batched input
             process_out = image_processing(image_inputs[0], return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (5329, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]])
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
             # Test batched
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (37303, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]] * 7)
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]] * 7)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     @unittest.skip(reason="Videollama3ImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
@@ -239,30 +236,30 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             # Test batched as a list of images
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
-            grid_sizes = process_out.grid_sizes
+            image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (37303, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]] * 7)
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]] * 7)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
             # Test batched as a nested list of images, where each sublist is one batch
             image_inputs_nested = image_inputs[:3] + image_inputs[3:]
             process_out = image_processing(image_inputs_nested, return_tensors="pt")
             encoded_images_nested = process_out.pixel_values
-            grid_sizes_nested = process_out.grid_sizes
+            image_grid_thws_nested = process_out.image_grid_thw
             expected_output_image_shape = (37303, 588)
-            expected_grid_sizes = torch.Tensor([[1, 73, 73]] * 7)
+            expected_image_grid_thws = torch.Tensor([[1, 73, 73]] * 7)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
-            self.assertTrue((grid_sizes_nested == expected_grid_sizes).all())
+            self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
             # Image processor should return same pixel values, independently of ipnut format
             self.assertTrue((encoded_images_nested == encoded_images).all())
-            self.assertTrue((grid_sizes_nested == grid_sizes).all())
+            self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
     def test_video_inputs(self):
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
-            expected_dims_by_frames = {i: 38332 * i for i in range(1, 7)}
+            expected_dims_by_frames = {i: 37303 * i for i in range(1, 7)}
 
             for num_frames, expected_dims in expected_dims_by_frames.items():
                 image_processor_tester = Videollama3ImageProcessingTester(self, num_frames=num_frames)
@@ -278,13 +275,25 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
                 image_processor_loaded = image_processing_class.from_pretrained(
-                    tmpdirname, min_tokens=16, max_tokens=1024
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
                 )
 
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             process_out = image_processor_loaded(image_inputs, return_tensors="pt")
-            expected_output_video_shape = [7168, 588]
+            expected_output_video_shape = [112, 588]
             self.assertListEqual(list(process_out.pixel_values.shape), expected_output_video_shape)
+
+    def test_custom_pixels(self):
+        pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
+        for image_processing_class in self.image_processor_list:
+            image_processor_dict = self.image_processor_dict.copy()
+            for a_pixels, b_pixels in pixel_choices:
+                image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
+                image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
+                image_processor = image_processing_class(**image_processor_dict)
+                image_inputs = self.image_processor_tester.prepare_image_inputs()
+                # Just checking that it doesn't raise an error
+                image_processor(image_inputs, return_tensors="pt")
 
     @require_vision
     @require_torch
@@ -306,11 +315,9 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self.assertEqual(encoding_slow.grid_sizes.dtype, encoding_fast.grid_sizes.dtype)
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float())
-        self.assertEqual(encoding_slow.merge_sizes.dtype, encoding_fast.merge_sizes.dtype)
+        self.assertEqual(encoding_slow.image_grid_thw.dtype, encoding_fast.image_grid_thw.dtype)
         self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.merge_sizes.float(), encoding_fast.merge_sizes.float()
+            encoding_slow.image_grid_thw.float(), encoding_fast.image_grid_thw.float()
         )
 
     @require_vision
@@ -335,9 +342,21 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self.assertEqual(encoding_slow.grid_sizes.dtype, encoding_fast.grid_sizes.dtype)
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.grid_sizes.float(), encoding_fast.grid_sizes.float())
-        self.assertEqual(encoding_slow.merge_sizes.dtype, encoding_fast.merge_sizes.dtype)
+        self.assertEqual(encoding_slow.image_grid_thw.dtype, encoding_fast.image_grid_thw.dtype)
         self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.merge_sizes.float(), encoding_fast.merge_sizes.float()
+            encoding_slow.image_grid_thw.float(), encoding_fast.image_grid_thw.float()
         )
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 49)
+
+            num_patches = image_processing.get_number_of_image_patches(height=200, width=50, images_kwargs={})
+            self.assertEqual(num_patches, 56)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"patch_size": 28}
+            )
+            self.assertEqual(num_patches, 16)

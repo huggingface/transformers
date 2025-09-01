@@ -17,9 +17,11 @@ import inspect
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from transformers import AutoProcessor, Qwen2Tokenizer
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
@@ -38,6 +40,13 @@ if is_torch_available():
     import torch
 
 
+def prepare_image_inputs():
+    """This function prepares a list of PIL images"""
+    image_inputs = [np.random.randint(255, size=(3, 15, 50), dtype=np.uint8)]
+    image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+    return image_inputs
+
+
 @require_vision
 @require_torch
 @require_torchvision
@@ -48,7 +57,7 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Videollama3Processor.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", patch_size=4, max_tokens=64, min_tokens=8
+            "lkhl/VideoLLaMA3-2B-Image-HF", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
@@ -69,22 +78,27 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def test_model_input_names(self):
+    @require_vision
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        if batch_size is None:
+            return prepare_image_inputs()[0]
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return prepare_image_inputs() * batch_size
+
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
         processor = self.get_processor()
 
-        text = self.prepare_text_inputs(modality="image")
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-        audio_inputs = self.prepare_audio_inputs()
-        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs, "audio": audio_inputs}
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
 
-        call_signature = inspect.signature(processor.__call__)
-        input_args = [param.name for param in call_signature.parameters.values()]
-        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
-
-        inputs = processor(**inputs_dict, do_sample_frames=False, return_tensors="pt")
-
-        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
@@ -134,7 +148,7 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "grid_sizes", "merge_sizes"]
+            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "image_merge_sizes"]
         )
 
         # test if it raises when no input is passed
@@ -218,7 +232,12 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
 
         out_dict = processor.apply_chat_template(
-            batch_messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors=return_tensors
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+            num_frames=2,  # by default no more than 2 frames, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -227,29 +246,16 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if modality == "video":
             # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
             expected_video_token_count = 0
-            for thw in out_dict["grid_sizes_videos"]:
+            for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            expected_video_token_count = 0
-            for thw in out_dict["grid_sizes"]:
-                expected_video_token_count += thw[1] * thw[2]
-            mm_len = expected_video_token_count
+            mm_len = batch_size * 192
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
-
-    @require_av
-    @unittest.skip("VideoLLaMA3 can't sample frames from image frames")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @require_av
-    @unittest.skip("VideoLLaMA3 can't sample frames from image frames")
-    def test_apply_chat_template_video_2(self):
-        pass
 
     @require_av
     def test_apply_chat_template_video_frame_sampling(self):
@@ -291,18 +297,39 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "type": "video",
             "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
         }
-
-        # Load with `video_fps` arg
-        video_fps = 1
+        num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 120)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 180)
+
+        # Load with `fps` arg
+        fps = 1
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            fps=fps,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 80)
+
+        # Load with `fps` and `num_frames` args, should raise an error
+        with self.assertRaises(ValueError):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                fps=fps,
+                num_frames=num_frames,
+            )
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -310,7 +337,6 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1200)
@@ -329,10 +355,22 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
@@ -341,16 +379,16 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 58)
-        inputs = processor(text=input_str, images=image_input, max_tokens=56 * 56, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 800)
+        self.assertEqual(inputs[self.images_input_name].shape[0], 52)
+        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 52)
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
 
         _ = processor(

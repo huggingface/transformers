@@ -1,0 +1,1453 @@
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Optional, Union
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import LayerNorm
+
+from transformers.cache_utils import Cache
+from transformers.feature_extraction_utils import BatchFeature
+from transformers.image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    make_flat_list_of_images,
+    valid_images,
+    validate_preprocess_arguments,
+)
+from transformers.modeling_outputs import BaseModelOutput, ModelOutput
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.models.auto.modeling_auto import AutoModel
+from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
+from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from transformers.models.qwen2_vl.image_processing_qwen2_vl import (
+    Qwen2VLImageProcessor,
+    smart_resize,
+)
+from transformers.models.qwen2_vl.image_processing_qwen2_vl_fast import (
+    Qwen2VLFastImageProcessorKwargs,
+    Qwen2VLImageProcessorFast,
+)
+from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+    Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
+    Qwen2VLPreTrainedModel,
+    TransformersKwargs,
+    VisionRotaryEmbedding,
+    apply_rotary_pos_emb_vision,
+    eager_attention_forward,
+)
+from transformers.models.qwen2_vl.processing_qwen2_vl import (
+    Qwen2VLImagesKwargs,
+    Qwen2VLProcessor,
+    Qwen2VLProcessorKwargs,
+)
+from transformers.models.qwen2_vl.video_processing_qwen2_vl import (
+    Qwen2VLVideoProcessor,
+    Qwen2VLVideoProcessorInitKwargs,
+)
+from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
+from transformers.models.siglip.modeling_siglip import (
+    SiglipAttention,
+    SiglipEncoder,
+    SiglipEncoderLayer,
+    SiglipMLP,
+)
+from transformers.processing_utils import Unpack
+from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
+from transformers.utils import (
+    TensorType,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
+from transformers.video_utils import (
+    VideoInput,
+    group_videos_by_shape,
+    make_batched_videos,
+    reorder_videos,
+)
+
+from ...image_processing_utils_fast import (
+    DefaultFastImageProcessorKwargs,
+)
+
+
+logger = logging.get_logger(__name__)
+
+
+class Videollama3VisionConfig(SiglipVisionConfig):
+    """
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """
+
+    model_type = "videollama3_vision"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_channels=num_channels,
+            patch_size=patch_size,
+            hidden_act=hidden_act,
+            layer_norm_eps=layer_norm_eps,
+            attention_dropout=attention_dropout,
+            **kwargs,
+        )
+
+        self.initializer_range = initializer_range
+        del self.image_size
+
+
+class Videollama3Config(Qwen2VLConfig):
+    """
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2Config`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Videollama3VisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to -1):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to -1):
+            The video token index to encode the image prompt.
+        use_token_compression (`bool`, *optional*, defaults to `False`):
+            Whether to use temporal token compression to reduce the number of video tokens.
+    """
+
+    model_type = "videollama3"
+    sub_configs = {"vision_config": Videollama3VisionConfig, "text_config": Qwen2Config}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=151655,
+        video_token_id=151656,
+        use_token_compression=False,
+        **kwargs,
+    ):
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            video_token_id=video_token_id,
+            **kwargs,
+        )
+        self.use_token_compression = use_token_compression
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for VideoLLaMA3 outputs, with hidden states and attentions.
+    """
+)
+class Videollama3ModelOutputWithPast(ModelOutput):
+    """
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    compression_mask (`torch.BoolTensor` of shape `(batch_size, seq_len)`, *optional*):
+        The mask indicating which tokens are kept when token compression is enabled.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    compression_mask: Optional[torch.BoolTensor] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for VideoLLaMA3 causal language model (or autoregressive) outputs.
+    """
+)
+class Videollama3CausalLMOutputWithPast(ModelOutput):
+    """
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    compression_mask (`torch.BoolTensor` of shape `(batch_size, seq_len)`, *optional*):
+        The mask indicating which tokens are kept when token compression is enabled.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    compression_mask: Optional[torch.BoolTensor] = None
+
+
+class Videollama3VisionRotaryEmbedding(VisionRotaryEmbedding):
+    pass
+
+
+class Videollama3VisionEmbeddings(nn.Module):
+    def __init__(self, config: Videollama3VisionConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.view(-1, self.config.num_channels, self.patch_size, self.patch_size)
+        patch_embeds = self.patch_embedding(hidden_states)
+        embeddings = patch_embeds.view(-1, self.embed_dim)
+        return embeddings
+
+
+class Videollama3VisionMLP(SiglipMLP):
+    pass
+
+
+class Videollama3VisionAttention(SiglipAttention):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        del self.scale
+        del self.dropout
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        query_states = self.q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = self.k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if self.config._attn_implementation == "flash_attention_2":
+            # Flash Attention 2: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs, attn_weights = [], []
+            for q, k, v in zip(*splits):
+                attn_output, attn_weight = attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )
+                attn_outputs.append(attn_output)
+                attn_weights.append(attn_weight)
+
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class Videollama3VisionEncoderLayer(SiglipEncoderLayer):
+    def __init__(self, config: Videollama3VisionConfig):
+        super().__init__(config)
+        self.self_attn = Videollama3VisionAttention(config=config)
+        self.mlp = Videollama3VisionMLP(config=config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        output_attentions: Optional[bool] = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor]:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states,
+            cu_seqlens=cu_seqlens,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class Videollama3VisionEncoder(SiglipEncoder):
+    def __init__(self, config: Videollama3VisionConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([Videollama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple, BaseModelOutput]:
+        """
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
+        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+            The cosine and sine position embeddings for vision attention.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+        )
+
+
+class Videollama3PreTrainedModel(Qwen2VLPreTrainedModel):
+    config: Videollama3Config
+    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
+
+
+class Videollama3VisionModel(Videollama3PreTrainedModel):
+    config: Videollama3VisionConfig
+    _no_split_modules = ["Videollama3VisionEncoderLayer"]
+    _can_compile_fullgraph = False
+
+    def __init__(self, config: Videollama3VisionConfig):
+        super().__init__(config)
+        head_dim = config.hidden_size // config.num_attention_heads
+
+        self.rotary_pos_emb = Videollama3VisionRotaryEmbedding(head_dim // 2)
+        self.embeddings = Videollama3VisionEmbeddings(config)
+        self.encoder = Videollama3VisionEncoder(config)
+        self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.post_init()
+
+    def rot_pos_emb(self, grid_thw, merge_sizes):
+        pos_ids = []
+        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_thw = grid_thw[:, 1:].max()
+        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_thw)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+
+        return rotary_pos_emb
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.Tensor,
+        merge_sizes: torch.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple, BaseModelOutput]:
+        """
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
+        merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
+            The spatial downsampling ratio of each image or video feature.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        rotary_pos_emb = self.rot_pos_emb(grid_thw, merge_sizes)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+
+        hidden_states = self.embeddings(pixel_values.type(self.dtype))
+        encoder_outputs = self.encoder(
+            hidden_states,
+            cu_seqlens=cu_seqlens,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        hidden_states_chunks = last_hidden_state.split(grid_thw.prod(dim=1).tolist(), dim=0)
+        outputs = []
+
+        for hidden_states, (t, h, w), merge_size in zip(hidden_states_chunks, grid_thw, merge_sizes):
+            c = hidden_states.shape[-1]
+            hidden_states = hidden_states.view(t, h // merge_size, w // merge_size, merge_size, merge_size, c).permute(
+                0, 1, 3, 2, 4, 5
+            )
+            hidden_states = hidden_states.reshape(t, h, w, c).permute(0, 3, 1, 2)
+            hidden_states = torch.nn.functional.interpolate(
+                hidden_states, size=(h // merge_size, w // merge_size), mode="bilinear"
+            )
+            hidden_states = hidden_states.permute(0, 2, 3, 1).view(-1, c)
+            outputs.append(hidden_states)
+
+        last_hidden_state = torch.cat(outputs, dim=0)
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+class Videollama3Projector(nn.Module):
+    def __init__(self, config: Videollama3Config) -> None:
+        super().__init__()
+        in_hidden_size = config.vision_config.hidden_size
+        out_hidden_size = config.text_config.hidden_size
+        self.readout = nn.Sequential(
+            nn.Linear(in_hidden_size, out_hidden_size),
+            nn.GELU(),
+            nn.Linear(out_hidden_size, out_hidden_size),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.readout(x)
+        return x
+
+
+class Videollama3Model(Qwen2VLModel, PreTrainedModel):
+    _checkpoint_conversion_mapping = {}
+    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
+    _can_compile_fullgraph = False
+
+    def __init__(self, config: Videollama3Config):
+        PreTrainedModel.__init__(config)
+        self.vision_model = AutoModel.from_config(config.vision_config)
+        self.projector = Videollama3Projector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+
+        self.post_init()
+
+    def get_rope_index(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
+    ):
+        """
+        Encodes videos into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+                The spatial downsampling ratio of each video feature.
+        """
+        video_embeds = self.vision_model(
+            pixel_values=pixel_values_videos,
+            grid_thw=video_grid_thw,
+            merge_sizes=video_merge_sizes,
+            return_dict=True,
+        ).last_hidden_state
+        video_embeds = self.projector(video_embeds)
+
+        split_sizes = video_grid_thw.prod(dim=1) // (video_merge_sizes**2)
+        video_embeds = torch.split(video_embeds, split_sizes.tolist())
+
+        return video_embeds
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor,
+    ):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+                The spatial downsampling ratio of each image feature.
+        """
+        image_embeds = self.vision_model(
+            pixel_values=pixel_values,
+            grid_thw=image_grid_thw,
+            merge_sizes=image_merge_sizes,
+            return_dict=True,
+        ).last_hidden_state
+        image_embeds = self.projector(image_embeds)
+
+        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        image_embeds = torch.split(image_embeds, split_sizes.tolist())
+
+        return image_embeds
+
+    def _get_compression_mask(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
+        threshold: float = 0.1,
+        min_tokens: int = 1,
+    ) -> torch.BoolTensor:
+        videos = pixel_values_videos.split(video_grid_thw.prod(dim=1).tolist(), dim=0)
+        compression_masks = []
+
+        for images, grid_size, merge_size in zip(videos, video_grid_thw, video_merge_sizes):
+            t, h, w = grid_size
+            if t == 1:
+                num_tokens = images.size(0) // (merge_size**2)
+                compression_masks.append(torch.ones((num_tokens,), dtype=torch.bool, device=images.device))
+            else:
+                # NOTE: video token compressor
+                images = images.view(t, (h // merge_size) * (w // merge_size), -1)
+
+                pixel_diff = images[1:] - images[:-1]
+                pixel_diff = torch.abs(pixel_diff).mean(dim=-1) * 255
+                pixel_diff = torch.cat([torch.full_like(pixel_diff[0:1], threshold + 1), pixel_diff], dim=0)
+                mask = pixel_diff > threshold
+                padding_ids = torch.nonzero(mask.sum(dim=1) < min_tokens)[:, 0]
+                mask[padding_ids, :min_tokens] = 1
+                compression_masks.append(mask.flatten())
+
+        compression_mask = torch.cat(compression_masks)
+        return compression_mask
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        image_merge_sizes: Optional[torch.LongTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        video_merge_sizes: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, Videollama3ModelOutputWithPast]:
+        """
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
+            The temporal, height and width of feature shape of each video before vision encoder.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        compression_mask = None
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+            if self.config.use_token_compression and inputs_embeds.size(0) == 1:
+                video_mask = video_mask[..., 0]
+                video_compression_mask = self._get_compression_mask(
+                    pixel_values_videos=pixel_values_videos,
+                    video_grid_thw=video_grid_thw,
+                    video_merge_sizes=video_merge_sizes,
+                )
+                compression_mask = torch.logical_not(video_mask)
+                compression_mask[video_mask] = video_compression_mask
+                inputs_embeds = inputs_embeds[compression_mask].unsqueeze(0)
+
+                if attention_mask is not None:
+                    attention_mask = attention_mask[compression_mask].unsqueeze(0)
+                if position_ids is not None:
+                    position_ids = position_ids[compression_mask].unsqueeze(0)
+                if cache_position is not None:
+                    cache_position = cache_position[compression_mask[0]]
+
+            elif inputs_embeds.size(0) != 1:
+                logger.info(
+                    "Token compression is automatically disabled since the input batch size is not equal to 1."
+                )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        output = Videollama3ModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            compression_mask=compression_mask,
+        )
+        return output if return_dict else output.to_tuple()
+
+
+class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTrainedModel):
+    _checkpoint_conversion_mapping = {}
+    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
+    _can_compile_fullgraph = False
+
+    def __init__(self, config: Videollama3Config):
+        PreTrainedModel.__init__(config)
+        self.model = Videollama3Model(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
+
+    def visual(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    @property
+    def vision_model(self):
+        return self.model.vision_model
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        image_merge_sizes: Optional[torch.LongTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        video_merge_sizes: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, Videollama3CausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
+            The temporal, height and width of feature shape of each video before vision encoder.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            image_merge_sizes=image_merge_sizes,
+            pixel_values_videos=pixel_values_videos,
+            video_grid_thw=video_grid_thw,
+            video_merge_sizes=video_merge_sizes,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            if outputs.compression_mask is not None:
+                labels = labels[outputs.compression_mask].unsqueeze(0)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return Videollama3CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            compression_mask=outputs.compression_mask,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        image_merge_sizes: Optional[torch.LongTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        video_merge_sizes: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            image_merge_sizes=image_merge_sizes,
+            pixel_values_videos=pixel_values_videos,
+            video_grid_thw=video_grid_thw,
+            video_merge_sizes=video_merge_sizes,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        if model_inputs["cache_position"][0] != 0:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
+
+    def _get_image_nums_and_video_nums(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def _expand_inputs_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+
+class Videollama3ImagesKwargs(Qwen2VLImagesKwargs):
+    pass
+
+
+class Videollama3ProcessorKwargs(Qwen2VLProcessorKwargs):
+    image_kwargs: Videollama3ImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+        "videos_kwargs": {"return_metadata": True},
+    }
+
+
+class Videollama3Processor(Qwen2VLProcessor):
+    r"""
+    Constructs a VideoLLaMA3 processor which wraps a VideoLLaMA3 image processor and a Qwen2 tokenizer into a single processor.
+    [`Videollama3Processor`] offers all the functionalities of [`Videollama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
+    [`~Videollama3Processor.__call__`] and [`~Videollama3Processor.decode`] for more information.
+    Args:
+        image_processor ([`Videollama3ImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`Qwen2Tokenizer`], *optional*):
+            The tokenizer is a required input.
+        video_processor ([`Videollama3VideoProcessor`], *optional*):
+            The video processor is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+    """
+
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        videos: VideoInput = None,
+        **kwargs: Unpack[Videollama3ProcessorKwargs],
+    ) -> BatchFeature:
+        output_kwargs = self._merge_kwargs(
+            Videollama3ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        image_inputs = videos_inputs = {}
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
+            image_merge_sizes = image_inputs["image_merge_sizes"]
+        else:
+            image_grid_thw = image_merge_sizes = []
+
+        if videos is not None:
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_grid_thw = videos_inputs["video_grid_thw"]
+            video_merge_sizes = videos_inputs["video_merge_sizes"]
+            if "return_metadata" not in kwargs:
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+            timestamps = []
+            for metadata in video_metadata:
+                if metadata.fps is None:
+                    logger.warning_once(
+                        "VideoLLaMA4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                        "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
+                    )
+                metadata.fps = 1 if metadata.fps is None else metadata.fps
+                timestamps.append(metadata.timestamps)
+        else:
+            video_grid_thw = video_merge_sizes = timestamps = []
+
+        if not isinstance(text, list):
+            text = [text]
+
+        text = text.copy()  # below lines change text in-place
+
+        if images is not None:
+            image_index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    num_image_tokens = image_grid_thw[image_index].prod() // (image_merge_sizes[image_index] ** 2)
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                    image_index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        if videos is not None:
+            video_index = 0
+            for i in range(len(text)):
+                while self.video_token in text[i]:
+                    num_frame_tokens = video_grid_thw[video_index, 1:].prod() // (video_merge_sizes[video_index] ** 2)
+                    frame_prompts = [
+                        f"Time {t:.1f}s:" + "<|placeholder|>" * num_frame_tokens for t in timestamps[video_index]
+                    ]
+                    text[i] = text[i].replace(self.video_token, ",".join(frame_prompts), 1)
+                    video_index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+
+class Videollama3ImageProcessor(Qwen2VLImageProcessor):
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "image_merge_sizes",
+        "pixel_values_videos",
+        "video_grid_thw",
+        "video_merge_sizes",
+    ]
+
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: Optional[dict[str, int]] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: bool = True,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: int = 14,
+        temporal_patch_size: int = 1,
+        merge_size: int = 1,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            patch_size=patch_size,
+            temporal_patch_size=temporal_patch_size,
+            merge_size=merge_size,
+            **kwargs,
+        )
+
+        if self.temporal_patch_size != 1:
+            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
+
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        videos: VideoInput = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        resample: PILImageResampling = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
+        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+
+        if size is not None:
+            if "shortest_edge" not in size or "longest_edge" not in size:
+                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+            min_pixels = size["shortest_edge"]
+        elif min_pixels is not None and max_pixels is not None:
+            # backward compatibility: override size with min_pixels and max_pixels if they are provided
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
+        else:
+            size = {**self.size}
+
+        do_resize = do_resize if do_resize is not None else self.do_resize
+
+        resample = resample if resample is not None else self.resample
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
+        merge_size = merge_size if merge_size is not None else self.merge_size
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+
+        if images is not None:
+            images = self.fetch_images(images)
+            images = make_flat_list_of_images(images)
+
+        if images is not None and not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if temporal_patch_size != 1:
+            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
+
+        validate_preprocess_arguments(
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+        data = {}
+        if images is not None:
+            pixel_values, vision_grid_thws = [], []
+            for image in images:
+                patches, image_grid_thw = self._preprocess(
+                    image,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    patch_size=patch_size,
+                    temporal_patch_size=temporal_patch_size,
+                    merge_size=merge_size,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values.extend(patches)
+                vision_grid_thws.append(image_grid_thw)
+            data.update(
+                {
+                    "pixel_values": np.array(pixel_values),
+                    "image_grid_thw": np.array(vision_grid_thws),
+                    "image_merge_sizes": np.array([merge_size] * len(vision_grid_thws)),
+                }
+            )
+
+        # kept for BC only and should be removed after v5.0
+        if videos is not None:
+            logger.warning(
+                "`Videollama3ImageProcessor` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `Videollama3VideoProcessor`. "
+            )
+            videos = make_batched_videos(videos)
+            pixel_values_videos, vision_grid_thws_videos = [], []
+            for images in videos:
+                patches, video_grid_thw = self._preprocess(
+                    images,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    patch_size=patch_size,
+                    temporal_patch_size=temporal_patch_size,
+                    merge_size=merge_size,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values_videos.extend(patches)
+                vision_grid_thws_videos.append(video_grid_thw)
+            data.update(
+                {
+                    "pixel_values_videos": np.array(pixel_values_videos),
+                    "video_grid_thw": np.array(vision_grid_thws_videos),
+                    "video_merge_sizes": np.array([merge_size] * len(vision_grid_thws_videos)),
+                }
+            )
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+class Videollama3FastImageProcessorKwargs(Qwen2VLFastImageProcessorKwargs):
+    pass
+
+
+class Videollama3ImageProcessorFast(Qwen2VLImageProcessorFast):
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    temporal_patch_size = 1
+    merge_size = 1
+    valid_kwargs = Videollama3FastImageProcessorKwargs
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "image_merge_sizes",
+        "pixel_values_videos",
+        "video_grid_thw",
+        "video_merge_sizes",
+    ]
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        videos: VideoInput,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        # Prepare input images
+        batch_feature = BatchFeature()
+        if images is not None:
+            if kwargs["temporal_patch_size"] != 1:
+                raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
+            images = self._prepare_image_like_inputs(
+                images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            )
+            batch_feature = self._preprocess(images, **kwargs)
+            batch_feature["image_merge_sizes"] = torch.tensor(
+                [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
+                dtype=batch_feature.image_grid_thw.dtype,
+                device=batch_feature.image_grid_thw.device,
+            )
+        if videos is not None:
+            logger.warning(
+                "`Videollama3ImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `Videollama3VideoProcessor`. "
+            )
+            # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
+            videos = make_batched_videos(videos)
+            videos = [
+                torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
+                for video in videos
+            ]
+            video_outputs = self._preprocess(videos, **kwargs)
+            batch_feature.update(
+                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
+            )
+            batch_feature["video_merge_sizes"] = torch.tensor(
+                [kwargs["merge_size"]] * video_outputs.image_grid_thw.size(0),
+                dtype=video_outputs.image_grid_thw.dtype,
+                device=video_outputs.image_grid_thw.device,
+            )
+        return batch_feature
+
+
+class Videollama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
+    pass
+
+
+class Videollama3VideoProcessor(Qwen2VLVideoProcessor):
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    temporal_patch_size = 1
+    max_frames = 180
+    return_metadata = True
+    valid_kwargs = Videollama3VideoProcessorInitKwargs
+    model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes"]
+
+    def _preprocess(
+        self,
+        videos: list["torch.Tensor"],
+        do_convert_rgb: bool,
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
+        **kwargs,
+    ):
+        # Group videos by size for batched resizing
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+            resized_height, resized_width = height, width
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=patch_size * merge_size,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels // shape[0],
+                )
+                stacked_videos = self.resize(
+                    image=stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
+                )
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        processed_grids = {}
+        for shape, stacked_videos in grouped_videos.items():
+            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches = stacked_videos
+
+            # Check that videos have `num_frames` divisible by `temporal_patch_size`
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
+                patches = torch.cat([patches, repeats], dim=1)
+
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
+
+            processed_videos_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        video_grid_thw = torch.tensor(processed_grids)
+
+        return BatchFeature(
+            data={
+                "pixel_values_videos": pixel_values_videos,
+                "video_grid_thw": video_grid_thw,
+                "video_merge_sizes": torch.tensor(
+                    [merge_size] * video_grid_thw.size(0),
+                    dtype=video_grid_thw.dtype,
+                    device=video_grid_thw.device,
+                ),
+            },
+            tensor_type=return_tensors,
+        )
+
+
+__all__ = [
+    "Videollama3VisionConfig",
+    "Videollama3Config",
+    "Videollama3VisionModel",
+    "Videollama3Model",
+    "Videollama3ForConditionalGeneration",
+    "Videollama3Processor",
+    "Videollama3ImageProcessor",
+    "Videollama3ImageProcessorFast",
+    "Videollama3VideoProcessor",
+]

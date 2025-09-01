@@ -133,8 +133,8 @@ class Videollama3VisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "grid_sizes": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "merge_sizes": torch.tensor([1] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "image_merge_sizes": torch.tensor([1] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -163,32 +163,6 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def setUp(self):
         self.model_tester = Videollama3VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Videollama3Config, has_text_modality=False)
-
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        if "pixel_values" not in inputs_dict:
-            input_ids = inputs_dict["input_ids"]
-            num_image_tokens = torch.sum(input_ids == self.model_tester.image_token_id)
-            num_video_tokens = torch.sum(input_ids == self.model_tester.video_token_id)
-            patch_size = self.model_tester.patch_size
-            num_pixels = self.model_tester.num_channels * patch_size**2
-            if num_image_tokens > 0:
-                inputs_dict.update(
-                    {
-                        "pixel_values": floats_tensor([num_image_tokens, num_pixels]),
-                        "grid_sizes": torch.tensor([[1, num_image_tokens, 1]], device=input_ids.device),
-                        "merge_sizes": torch.tensor([[1]], device=input_ids.device),
-                    }
-                )
-            if num_video_tokens > 0:
-                inputs_dict.update(
-                    {
-                        "pixel_values_videos": floats_tensor([num_video_tokens, num_pixels]),
-                        "grid_sizes_videos": torch.tensor([[1, num_video_tokens, 1]], device=input_ids.device),
-                        "merge_sizes_videos": torch.tensor([[1]], device=input_ids.device),
-                    }
-                )
-        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -223,29 +197,37 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["grid_sizes"] = curr_input_dict["grid_sizes"][-1:, ...]
-            curr_input_dict["merge_sizes"] = curr_input_dict["merge_sizes"][-1:]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
+            curr_input_dict["image_merge_sizes"] = curr_input_dict["image_merge_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            grid_sizes = curr_input_dict["grid_sizes"][:1]
-            merge_sizes = curr_input_dict["merge_sizes"][:1]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            image_merge_sizes = curr_input_dict["image_merge_sizes"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
                 _ = model(
-                    input_ids=input_ids, pixel_values=pixel_values, grid_sizes=grid_sizes, merge_sizes=merge_sizes
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    image_merge_sizes=image_merge_sizes,
                 )
 
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            grid_sizes = torch.cat([grid_sizes, grid_sizes], dim=0)
-            merge_sizes = torch.cat([merge_sizes, merge_sizes], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, grid_sizes=grid_sizes, merge_sizes=merge_sizes)
+            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            image_merge_sizes = torch.cat([image_merge_sizes, image_merge_sizes], dim=0)
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                image_merge_sizes=image_merge_sizes,
+            )
 
     def attention_mask_padding_matches_padding_free_with_position_ids(
         self, attn_implementation: str, fa_kwargs: bool = False
@@ -275,7 +257,7 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation=attn_implementation,
                     )
                     .to(torch_device)
@@ -289,8 +271,8 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 padfree_positions = padfree_positions.long().unsqueeze(0).to(torch_device)
                 padfree_inputs_dict = {
                     "pixel_values": inputs_dict["pixel_values"],
-                    "grid_sizes": inputs_dict["grid_sizes"],
-                    "merge_sizes": inputs_dict["merge_sizes"],
+                    "image_grid_thw": inputs_dict["image_grid_thw"],
+                    "image_merge_sizes": inputs_dict["image_merge_sizes"],
                     "input_ids": inputs_dict["input_ids"][dummy_attention_mask.bool()].unsqueeze(0),
                     "position_ids": padfree_positions,
                 }
@@ -339,7 +321,7 @@ class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in Videollama3 models")
+    @unittest.skip(reason="Compile not yet supported because in VideoLLaMA3 models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
