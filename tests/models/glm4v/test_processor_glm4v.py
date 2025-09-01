@@ -141,7 +141,10 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            fps=2,  # by default no more than 2 frames per second, otherwise too slow
+            fps=2
+            if isinstance(input_data[0], str)
+            else None,  # by default no more than 2 frames per second, otherwise too slow
+            do_sample_frames=bool(isinstance(input_data[0], str)),  # don't sample frames if decoded video is used
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
