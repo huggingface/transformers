@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Tuple, List
 
 import numpy as np
 
@@ -61,7 +61,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return self.tokenizer(text, return_tensors="pt").input_ids[0]
 
-    def _get_num_windows(self, T, sr):
+    def _get_num_windows(self, T: int, sr: int) -> Tuple[int, int]:
         window_length = int(30.0 * sr)
         window_overlap = int(0.0 * sr)
         max_num_window = 20
@@ -78,7 +78,15 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return num_windows, full_length
 
-    def _load_sound_mask(self, audio_data, sample_rate=16000, window_length=30.0, window_overlap=0.0, max_num_window=20, audio_start=0.0):
+    def _load_sound_mask(
+        self,
+        audio_data: Optional[np.ndarray],
+        sample_rate: int = 16000,
+        window_length: float = 30.0,
+        window_overlap: float = 0.0,
+        max_num_window: int = 20,
+        audio_start: float = 0.0,
+    ) -> Optional[Tuple[List[List[List[float]]], torch.Tensor, torch.Tensor]]:
         if audio_data is None:
             return None
         window_length = int(window_length * sample_rate)
@@ -126,7 +134,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         text: TextInput,
         audio_data: np.ndarray,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
-    ):
+    ) -> Tuple[torch.Tensor, List[torch.Tensor], Dict[str, List[torch.Tensor]]]:
         media = []
         media_meta = defaultdict(list)
 

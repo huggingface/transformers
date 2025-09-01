@@ -5,7 +5,7 @@ import copy
 import math
 import os.path as osp
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 
 import torch
@@ -51,7 +51,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
@@ -104,7 +104,7 @@ class AudioFlamingo3Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int) -> torch.Tensor:
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
@@ -153,7 +153,7 @@ class AudioFlamingo3Attention(nn.Module):
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->AudioFlamingo3, WHISPER->AUDIOFLAMINGO3
 class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: AudioFlamingo3Config):
+    def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -177,7 +177,7 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -225,7 +225,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.audio_config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
@@ -256,7 +256,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     main_input_name = "input_features"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
-    def __init__(self, config: AudioFlamingo3EncoderConfig):
+    def __init__(self, config: AudioFlamingo3EncoderConfig) -> None:
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
@@ -289,7 +289,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     # Compatibility helpers (tower)
     # ----------------------------
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
         Computes output lengths after the two convs:
           conv1: stride=1
@@ -350,7 +350,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
 
-    def set_input_embeddings(self, value: nn.Module):
+    def set_input_embeddings(self, value: nn.Module) -> None:
         self.conv1 = value
 
     # ----------------------------
@@ -364,7 +364,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[AudioFlamingo3CausalLMOutputWithPast, Tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]]:
         """
         HF-native forward with mel-spectrogram features.
         input_features: (B, num_mel_bins, T_mel)
@@ -443,22 +443,22 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     # Legacy convenience properties
     # ----------------------------
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return self.conv1.weight.device
 
     @property
-    def dtype(self):
+    def dtype(self) -> torch.dtype:
         return self.conv1.weight.dtype
 
     @property
-    def hidden_size(self):
+    def hidden_size(self) -> int:
         return self.config.d_model
 
 
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     config_class = AudioFlamingo3Config
 
-    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
+    def __init__(self, config: Optional[AudioFlamingo3Config] = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(config)
 
         self.llm = AutoModelForCausalLM.from_config(config.llm_cfg)
@@ -620,14 +620,22 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         inputs, labels = self.__truncate_sequence(final_embedding, final_labels)
         return self.__batchify_sequence(inputs, labels)
 
-    def __truncate_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __truncate_sequence(
+        self,
+        inputs: Union[torch.Tensor, List[torch.Tensor], Tuple[torch.Tensor, ...]],
+        labels: Union[torch.Tensor, List[torch.Tensor], Tuple[torch.Tensor, ...]],
+    ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         if self.training and any(len(input) > self.model_max_length for input in inputs):
             warnings.warn(f"Truncating sequences to `model_max_length` ({self.model_max_length}).")
             inputs = [input[: self.model_max_length] for input in inputs]
             labels = [label[: self.model_max_length] for label in labels]
-        return inputs, labels
+        return list(inputs), list(labels)
 
-    def __batchify_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __batchify_sequence(
+        self,
+        inputs: List[torch.Tensor],
+        labels: List[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = len(inputs)
         device = inputs[0].device
         hidden_size = inputs[0].shape[1]
@@ -662,7 +670,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         attention_mask: Optional[torch.LongTensor] = None,
         media_meta: Dict[str, Dict[str, Any]] = None,
         **generation_kwargs,
-    ):
+    ) -> torch.LongTensor:
         inputs_embeds, _, attention_mask = self._embed(input_ids, media, None, attention_mask, media_meta)
         return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
 
@@ -685,7 +693,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
 
 class AudioFlamingo3MultiModalProjector(nn.Module):
-    def __init__(self, config: AudioFlamingo3Config):
+    def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(config.sound_hidden_size, config.hidden_size),
@@ -693,7 +701,7 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
             nn.Linear(config.hidden_size, config.hidden_size),
         )
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
         return self.layers(x)
 
 

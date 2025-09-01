@@ -13,21 +13,21 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        encoder_layerdrop=0.0,
-        d_model=1280,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_function="gelu",
-        activation_dropout=0.0,
-        scale_embedding=False,
-        initializer_range=0.02,
-        max_source_positions=1500,
+        num_mel_bins: int = 128,
+        encoder_layers: int = 32,
+        encoder_attention_heads: int = 20,
+        encoder_ffn_dim: int = 5120,
+        encoder_layerdrop: float = 0.0,
+        d_model: int = 1280,
+        dropout: float = 0.0,
+        attention_dropout: float = 0.0,
+        activation_function: str = "gelu",
+        activation_dropout: float = 0.0,
+        scale_embedding: bool = False,
+        initializer_range: float = 0.02,
+        max_source_positions: int = 1500,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(**kwargs)
 
         self.num_mel_bins = num_mel_bins
@@ -56,7 +56,7 @@ class AudioFlamingo3Config(PretrainedConfig):
         sound_tower_cfg=None,
         sound_mm_projector_cfg=None,
         **kwargs,
-    ):
+    ) -> None:
 
         if isinstance(sound_tower_cfg, dict):
             sound_tower_cfg["model_type"] = sound_tower_cfg.get("model_type", "audioflamingo3_encoder")
