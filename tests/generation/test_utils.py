@@ -673,6 +673,10 @@ class GenerationTesterMixin:
         # - assisted_decoding does not support `use_cache = False`
         # - assisted_decoding does not support `batch_size > 1`
 
+        # No idea why this cause problem!
+        if type(self).__name__ not in ["Gemma3nTextModelTest"]:
+            set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
@@ -694,6 +698,7 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+            set_config_for_less_flaky_test(config)
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -705,6 +710,7 @@ class GenerationTesterMixin:
 
             config.is_decoder = True
             model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
             config = model.config
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
@@ -741,8 +747,15 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
+            # default values of `has_similar_generate_outputs`
+            atol, rtol = 1e-5, 1e-5
+            # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
+            # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
+            if model.config.model_type == "gpt_oss" and torch_device == "cpu":
+                atol, rtol = 1e-4, 1e-4
+
             # The two outputs must match and their shape must be as expected
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted))
+            self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted, atol=atol, rtol=rtol))
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
@@ -4667,7 +4680,7 @@ def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bo
             output_1_first_mismatch_scores = output_1.scores[first_mismatch_idx][batch_idx]
             output_2_first_mismatch_scores = output_2.scores[first_mismatch_idx][batch_idx]
             has_matching_scores = torch.allclose(
-                output_1_first_mismatch_scores, output_2_first_mismatch_scores, rtol=atol, atol=rtol
+                output_1_first_mismatch_scores, output_2_first_mismatch_scores, atol=atol, rtol=rtol
             )
             if not has_matching_scores:
                 break
