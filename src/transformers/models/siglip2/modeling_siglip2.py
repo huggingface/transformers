@@ -936,16 +936,8 @@ class Siglip2Model(Siglip2PreTrainedModel):
                 f" {type(config.vision_config)}."
             )
 
-        text_config = config.text_config
-        vision_config = config.vision_config
-
-        # First, initialize the text and vision models with proper attention implementation
-        text_model = Siglip2TextModel._from_config(text_config)
-        vision_model = Siglip2VisionModel._from_config(vision_config)
-
-        # Second, get the text and vision submodules (for backward compatibility)
-        self.text_model = text_model.text_model
-        self.vision_model = vision_model.vision_model
+        self.text_model = Siglip2TextTransformer(config.text_config)
+        self.vision_model = Siglip2VisionTransformer(config.vision_config)
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
@@ -1154,16 +1146,11 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-
-        # Create the vision model with proper attention
-        # and take only vision_model submodule (for backward compatibility)
-        vision_model = Siglip2VisionModel._from_config(config.vision_config)
-        self.vision_model = vision_model.vision_model
-
-        # Classifier head
-        self.classifier = (
-            nn.Linear(config.vision_config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.vision_model = Siglip2VisionTransformer(config.vision_config)
+        if self.num_labels > 0:
+            self.classifier = nn.Linear(config.vision_config.hidden_size, config.num_labels)
+        else:
+            self.classifier = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
