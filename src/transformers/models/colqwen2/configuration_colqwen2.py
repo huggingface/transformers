@@ -67,7 +67,7 @@ class ColQwen2Config(PretrainedConfig):
         if vlm_config is None:
             vlm_config = CONFIG_MAPPING["qwen2_5_vl"]() if use_qwen2_5 else CONFIG_MAPPING["qwen2_vl"]()
             logger.info(
-                "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
+                f"`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2{".5" if use_qwen2_5 else ""}VLConfig` with default values."
             )
         elif isinstance(vlm_config, dict):
             vlm_config = deepcopy(vlm_config)

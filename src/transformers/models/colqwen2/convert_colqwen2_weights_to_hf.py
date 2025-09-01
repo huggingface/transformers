@@ -69,7 +69,7 @@ def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> d
                     original_state_dict[key] = f.get_tensor(key)
 
     # Some weights are tied, so `lm.head`` is not saved. Let's clone to load state dict.
-    if "lm_head.weight" not in original_state_dict:
+    if "lm_head.weight" not in original_state_dict and "model.embed_tokens.weight" in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
     return original_state_dict
@@ -104,7 +104,7 @@ def convert_colqwen2_weights_to_hf(
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
         model_id,
-        revision=revision,
+        revision=revision
     )
     if original_vlm_name_or_path is not None:
         original_config._name_or_path = original_vlm_name_or_path
@@ -124,7 +124,7 @@ def convert_colqwen2_weights_to_hf(
     )
     config.model_type = "colqwen2"
     config.is_composition = False
-
+    
     # Load the untrained model
     model = ColQwen2ForRetrieval(config=config).to("cpu").eval()
     print("Created model with new config and randomly initialized weights")
