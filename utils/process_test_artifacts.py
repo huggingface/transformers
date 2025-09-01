@@ -23,7 +23,7 @@ import math
 import os
 
 
-MAX_PARALLEL_NODES = 5  # TODO create a mapping!
+MAX_PARALLEL_NODES = 3  # TODO create a mapping!
 AVERAGE_TESTS_PER_NODES = 1
 
 
