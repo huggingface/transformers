@@ -1,11 +1,28 @@
-from typing import Dict, Optional, Sequence, Tuple, List
-
-import numpy as np
+# coding=utf-8
+# Copyright 2024 NVIDIA CORPORATION and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for AudioFlamingo3.
+"""
 
 import math
 from collections import defaultdict
+from typing import Dict, List, Optional, Sequence, Tuple
 
+import numpy as np
 import torch
+
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 
@@ -20,6 +37,19 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class AudioFlamingo3Processor(ProcessorMixin):
+    r"""
+    Constructs an AudioFlamingo3 processor which wraps an AudioFlamingo3 feature extractor and an AudioFlamingo3 tokenizer into a single processor.
+
+    [`AudioFlamingo3Processor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`AutoTokenizer`]. See the
+    [`~AudioFlamingo3Processor.__call__`] and [`~AudioFlamingo3Processor.decode`] for more information.
+
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
+            The feature extractor is a required input.
+        tokenizer ([`AutoTokenizer`], *optional*):
+            The tokenizer is a required input.
+    """
+
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
@@ -135,6 +165,25 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_data: np.ndarray,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> Tuple[torch.Tensor, List[torch.Tensor], Dict[str, List[torch.Tensor]]]:
+        """
+        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
+        and `kwargs` arguments to AutoTokenizer's [`~AutoTokenizer.__call__`] if `text` is not `None` to encode
+        the text. To prepare the audio(s), this method forwards the `audio_data` and `kwargs` arguments to
+        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio_data` is not `None`. Please refer to the docstring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`):
+                The sequence to be encoded. Can be a string.
+            audio_data (`np.ndarray`):
+                The audio to be prepared. Should be a NumPy array.
+
+        Returns:
+            [`Tuple[torch.Tensor, List[torch.Tensor], Dict[str, List[torch.Tensor]]]`]: A tuple containing:
+                - input_ids: Tokenized input IDs
+                - media: List of processed audio tensors
+                - media_meta: Dictionary with audio feature and embedding masks
+        """
         media = []
         media_meta = defaultdict(list)
 

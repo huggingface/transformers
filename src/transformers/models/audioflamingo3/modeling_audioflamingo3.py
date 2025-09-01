@@ -1,21 +1,35 @@
+# coding=utf-8
+# Copyright 2024 NVIDIA CORPORATION and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch AudioFlamingo3 model."""
 
-from collections import deque
 import copy
 import math
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from collections import deque
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
 from ... import (
+    AutoModel,
     AutoModelForCausalLM,
     GenerationConfig,
-    PreTrainedModel,
     GenerationMixin,
-    AutoModel,
+    PreTrainedModel,
 )
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -23,15 +37,34 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring, logging
 from .configuration_audioflamingo3 import (
-    AudioFlamingo3EncoderConfig,
     AudioFlamingo3Config,
+    AudioFlamingo3EncoderConfig,
 )
 
 logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
+    """
+)
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
+    """
+    Output class for AudioFlamingo3 causal language modeling.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`.
+    """
+
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -214,7 +247,12 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class AudioFlamingo3PreTrainedModel(PreTrainedModel):
-    config: AudioFlamingo3Config
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = AudioFlamingo3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AudioFlamingo3Attention"]
@@ -238,6 +276,11 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_docstring(
+    custom_intro="""
+    The audio model from AudioFlamingo3 without any head or projection on top.
+    """
+)
 class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers.
@@ -442,7 +485,27 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         return self.config.d_model
 
 
+@auto_docstring(
+    custom_intro="""
+    The AudioFlamingo3 model which consists of an audio backbone and a language model.
+    """
+)
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
+    """
+    AudioFlamingo3 model for conditional generation tasks. This model inherits from [`PreTrainedModel`]. Check the
+    superclass documentation for the generic methods the library implements for all its model (such as downloading
+    or saving, resizing the input embeddings, pruning heads etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config (AudioFlamingo3Config): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
     config_class = AudioFlamingo3Config
 
     def __init__(self, config: Optional[AudioFlamingo3Config] = None, *args: Any, **kwargs: Any) -> None:
@@ -680,6 +743,13 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
 
 class AudioFlamingo3MultiModalProjector(nn.Module):
+    """
+    Multi-modal projector for AudioFlamingo3 that projects audio features to the language model's embedding space.
+
+    Args:
+        config (AudioFlamingo3Config): Model configuration.
+    """
+
     def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
         self.layers = nn.Sequential(
