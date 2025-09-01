@@ -155,7 +155,7 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     try:
         kernel = get_kernel(repo_id, revision=rev)
     except Exception as e:
-        raise ValueError(f"An error occured while trying to load from '{repo_id}': {e}.")
+        raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:

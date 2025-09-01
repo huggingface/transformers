@@ -2052,7 +2052,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             dtype_64 = np.int64
             dtype_32 = np.int32
         else:
-            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not suported')
+            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not supported')
 
         for k, v in batch.items():
             if k in self._batch_dim_keys:

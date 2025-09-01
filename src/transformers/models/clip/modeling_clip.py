@@ -587,9 +587,6 @@ class CLIPTextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-        # For attention mask, it differs between `flash_attention_2` and other attention implementations
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @auto_docstring
     def forward(
         self,
@@ -619,7 +616,7 @@ class CLIPTextTransformer(nn.Module):
         )
 
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -646,7 +643,7 @@ class CLIPTextTransformer(nn.Module):
                 input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
             ]
         else:
-            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of extra new tokens is possible)
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
@@ -1039,6 +1036,7 @@ class CLIPModel(CLIPPreTrainedModel):
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config: CLIPTextConfig
 
+    _supports_flash_attn = False
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
     def __init__(self, config: CLIPTextConfig):

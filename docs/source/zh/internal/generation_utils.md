@@ -295,28 +295,6 @@ generation_output[:2]
 [[autodoc]] MaxTimeCriteria
     - __call__
 
-## Constraints
-
-可以使用[`Constraint`]来强制生成结果包含输出中的特定tokens或序列。请注意，这仅适用于我们的PyTorch实现。
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## BeamSearch
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
-
 ## Streamers
 
 [[autodoc]] TextStreamer
