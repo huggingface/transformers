@@ -2335,7 +2335,9 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, gen_mode_kwargs.get("tokenizer"), prefix_allowed_tokens_fn)
+        self._validate_assistant(
+            assistant_model, gen_mode_kwargs.get("tokenizer"), gen_mode_kwargs.get("assistant_tokenizer")
+        )
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
