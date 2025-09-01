@@ -793,7 +793,7 @@ class Attention(nn.Module):
             else:
                 curr_past_key_value = layer_state
 
-        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
+        # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions

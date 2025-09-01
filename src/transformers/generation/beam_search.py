@@ -677,7 +677,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         device = sent_beam_indices.device
 
         # initialize states
-        topk_contraint_states = self.make_constraint_states(orig_len)
+        topk_constraint_states = self.make_constraint_states(orig_len)
         advance_constraint_states = self.make_constraint_states(orig_len)
 
         sidx, eidx = batch_idx * orig_len, (batch_idx + 1) * orig_len
@@ -701,7 +701,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             # either way, we need to sort them into "banks" later, so store a "ConstraintListState" for all types of
             # hypotheses.
 
-            topk_state = topk_contraint_states[seq_idx]
+            topk_state = topk_constraint_states[seq_idx]
             topk_state.reset(full_hypotheses[seq_idx].tolist())
 
             advance_state = advance_constraint_states[seq_idx]
@@ -763,7 +763,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             new_tokens = torch.stack(track_new["new_tokens"]).to(device)
             new_scores = torch.stack(track_new["new_scores"]).to(device)
 
-            all_states = topk_contraint_states + track_new["new_states"]
+            all_states = topk_constraint_states + track_new["new_states"]
             all_tokens = torch.cat((sent_beam_tokens, new_tokens), -1)
             all_scores = torch.cat((sent_beam_scores, new_scores), -1)
             all_banks = torch.tensor([one.get_bank() for one in all_states], device=device)

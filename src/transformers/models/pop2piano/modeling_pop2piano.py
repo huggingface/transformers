@@ -1264,7 +1264,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
                 - 0 for tokens that are **padded**.
             composer (`str`, *optional*, defaults to `"composer1"`):
                 This value is passed to `Pop2PianoConcatEmbeddingToMel` to generate different embeddings for each
-                `"composer"`. Please make sure that the composet value is present in `composer_to_feature_token` in
+                `"composer"`. Please make sure that the composer value is present in `composer_to_feature_token` in
                 `generation_config`. For an example please see
                 https://huggingface.co/sweetcocoa/pop2piano/blob/main/generation_config.json .
             generation_config (`~generation.GenerationConfig`, *optional*):
