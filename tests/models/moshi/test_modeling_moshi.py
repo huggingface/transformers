@@ -362,10 +362,6 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple input modalities.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_save_load(self):
         super().test_save_load()
@@ -870,10 +866,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple modalities")
-    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @is_flaky(max_attempts=5, description="flaky on some models.")

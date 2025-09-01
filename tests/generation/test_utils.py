@@ -1591,27 +1591,36 @@ class GenerationTesterMixin:
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
-        """Tests that we can continue generation from `inputs_embeds` and past key values returned from a previous `generate` call."""
+        """
+        Tests that we can continue generation from `inputs_embeds` and past key values returned from a previous
+        `generate` call.
+        """
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
+            # To be more precise: technically we can run this test on all models that have `inputs_embeds` or
+            # `decoder_inputs_embeds` in their signatures, but the main use case of this feature is on LLMs.
+            # Let's prevent overwrites and additional test logic by adding this constraint.
+            if model_class.main_input_name != "input_ids":
+                self.skipTest(reason="This test is only for models that use `input_ids` as their main input")
+            if "inputs_embeds" not in inspect.signature(model_class.prepare_inputs_for_generation).parameters:
+                self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+            # these models have a different cache format/class
+            different_cache = ["gpt_bigcode", "zamba2"]
+            # these models require special input preparation logic for this test
+            non_llm = ["mllama", "idefics", "moshi"]
+            if any(model_name in model_class.__name__.lower() for model_name in different_cache + non_llm):
                 self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
-            if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
-                self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if "token_type_ids" in inputs_dict:
-                del inputs_dict["token_type_ids"]
-
+            # TODO (joao, raushan): this shouldn't be a constraint to this test, `decoder_inputs_embeds` exists
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
             if not hasattr(config.get_text_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device).eval()
-
-            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
-                self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+            if "token_type_ids" in inputs_dict:
+                del inputs_dict["token_type_ids"]
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs_dict)

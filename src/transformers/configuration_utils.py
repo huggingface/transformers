@@ -1224,7 +1224,8 @@ class PretrainedConfig(PushToHubMixin):
         for text_config_name in possible_text_config_names:
             if hasattr(self, text_config_name):
                 text_config = getattr(self, text_config_name, None)
-                if text_config is not None:
+                # Assumption: all text configs have a `vocab_size` attribute
+                if text_config is not None and "vocab_size" in text_config:
                     valid_text_config_names += [text_config_name]
 
         if len(valid_text_config_names) == 1:
