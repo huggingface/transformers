@@ -1007,11 +1007,17 @@ class ProcessorTesterMixin:
         )
 
     @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])  # video processor supports only torchvision
-    def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
-        input_data = MODALITY_INPUT_DATA["videos"]
+    @parameterized.expand([(1, "pt")])
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
         dummy_preloaded_video = np.array(self.prepare_video_inputs())
-        input_data.append(dummy_preloaded_video)
+        input_data = [dummy_preloaded_video]
+        self._test_apply_chat_template(
+            "video", batch_size, return_tensors, "videos_input_name", "video_processor", input_data
+        )
+
+    @require_av
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
+    def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
         )
