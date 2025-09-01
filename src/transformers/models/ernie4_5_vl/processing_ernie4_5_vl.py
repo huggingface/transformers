@@ -581,6 +581,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
             self.max_pixels = max_pixels
             self.size["max_pixels"] = int(max_pixels)
 
+    # TODO: should be removed
     def get_smarted_resize(self, height, width, min_pixels=None, max_pixels=None):
         """dummy"""
         actual_min_pixels = min_pixels if min_pixels is not None else self.min_pixels
@@ -1641,12 +1642,13 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         # Preprocess pixels
         ret = self.image_processor.preprocess(
             images=[img.convert("RGB")],
-            do_normalize=False,
-            do_rescale=False,
+            do_normalize=True,
+            do_rescale=True,
             predetermined_grid_thw=np.array([[patches_h, patches_w]]),
             do_convert_rgb=True,
             input_data_format=ChannelDimension.LAST,
         )
+
         outputs["images"].append(ret["pixel_values"])
         outputs["grid_thw"].append(ret["image_grid_thw"])
         outputs["image_type_ids"].append(0)
@@ -1673,12 +1675,13 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         ret = self.image_processor.preprocess(
             images=None,
             videos=pixel_stack,
-            do_normalize=False,
-            do_rescale=False,
+            do_normalize=True,
+            do_rescale=True,
             predetermined_grid_thw=np.array([[patches_h, patches_w]] * num_frames),
             do_convert_rgb=True,
             input_data_format=ChannelDimension.LAST,
         )
+
         outputs["images"].append(ret["pixel_values_videos"])
         outputs["grid_thw"].append(ret["video_grid_thw"])
         outputs["image_type_ids"].extend([1] * num_frames)

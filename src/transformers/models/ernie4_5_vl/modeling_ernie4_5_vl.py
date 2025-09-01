@@ -1019,10 +1019,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         super().__init__(config)
 
         self.language_model = Ernie4_5_VLTextModel(config.text_config)
-
         self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel(config.vision_config)
         self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config.vision_config)
-        self.image_preprocess = None  # TODO: move to preprocessor
 
         self.post_init()
 
@@ -1037,42 +1035,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
 
     def get_decoder(self):
         return self.language_model
-
-    # TODO: move to processor
-    def add_image_preprocess(self, processor):
-        logger.info("image preprocess is set")
-
-        image_preprocess = processor.image_processor
-        image_preprocess.image_mean_tensor = torch.tensor(image_preprocess.image_mean, dtype=torch.float32).reshape(
-            [1, 3, 1, 1]
-        )
-        image_preprocess.image_std_tensor = torch.tensor(image_preprocess.image_std, dtype=torch.float32).reshape(
-            [1, 3, 1, 1]
-        )
-        image_preprocess.rescale_factor = torch.tensor(image_preprocess.rescale_factor, dtype=torch.float32)
-        image_preprocess.image_mean_tensor = image_preprocess.image_mean_tensor.squeeze([-2, -1]).repeat_interleave(
-            self.config.vision_config.patch_size**2 * 1, -1
-        )
-        image_preprocess.image_std_tensor = image_preprocess.image_std_tensor.squeeze([-2, -1]).repeat_interleave(
-            self.config.vision_config.patch_size**2 * 1, -1
-        )
-
-        self.image_preprocess = image_preprocess
-
-    # TODO: move to processor
-    def forward_image_preprocess(self, images):
-        if self.image_preprocess is not None:
-            assert images.dtype == torch.uint8, images.dtype
-            current_device = images.device
-            self.image_preprocess.image_mean_tensor = self.image_preprocess.image_mean_tensor.to(current_device)
-            self.image_preprocess.image_std_tensor = self.image_preprocess.image_std_tensor.to(current_device)
-            images = self.image_preprocess.rescale_factor * images.to(torch.float32)
-            images = (images - self.image_preprocess.image_mean_tensor) / self.image_preprocess.image_std_tensor
-            images = images.to(torch.bfloat16)
-        else:
-            assert images.dtype == torch.bfloat16, images.dtype
-
-        return images
 
     # TODO: same with videos
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
@@ -1155,10 +1117,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if images is not None:
-            # TODO: change logic to preprocessor
-            pixel_values = self.forward_image_preprocess(images)
-
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw=grid_thw)
+            image_embeds = self.get_image_features(images, image_grid_thw=grid_thw)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
