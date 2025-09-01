@@ -25,7 +25,6 @@ from pytest import mark
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.testing_utils import (
-    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -97,13 +96,13 @@ class SiglipVisionModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
+        image_size=4,
         patch_size=2,
         num_channels=3,
         is_training=True,
         hidden_size=64,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
@@ -255,7 +254,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
@@ -273,7 +271,7 @@ class SiglipTextModelTester:
         vocab_size=99,
         hidden_size=64,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
