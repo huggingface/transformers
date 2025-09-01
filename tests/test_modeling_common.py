@@ -4792,15 +4792,6 @@ class ModelTesterMixin:
                 head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
-                # Some models use 3D RoPE where the sum of RoPE sections has to be equal to head dim
-                if (
-                    getattr(config, "rope_scaling", None) is not None
-                    and config.rope_scaling.get("mrope_section") is not None
-                ):
-                    mrope_section = config.rope_scaling["mrope_section"]
-                    mutiplier = max(requested_dim // head_dim, 1)
-                    config.rope_scaling = {"type": "default", "mrope_section": [i * mutiplier for i in mrope_section]}
-
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
