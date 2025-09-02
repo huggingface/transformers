@@ -210,6 +210,9 @@ class DbrxConfig(PretrainedConfig):
         else:
             self.ffn_config = ffn_config
 
+        self.num_experts = self.ffn_config.moe_num_experts
+        self.num_experts_per_tok = self.ffn_config.moe_top_k
+        self.norm_topk_prob = self.ffn_config.moe_norm_topk_prob
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
