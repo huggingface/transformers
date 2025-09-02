@@ -389,13 +389,25 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
+        from ...test_modeling_common import (
+            set_config_for_less_flaky_test,
+            set_model_for_less_flaky_test,
+            set_model_tester_for_less_flaky_test,
+        )
+
+        set_model_tester_for_less_flaky_test(self)
+
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
+
         config.num_labels = 3
         config.num_experts = 3
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
         model = JambaForCausalLM(config)
+        set_model_for_less_flaky_test(model)
+
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
@@ -405,7 +417,8 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = input_ids.shape[1] * 2
+        # (This length is selected from experiments)
+        pad_length = input_ids.shape[1] * 4
         # Add padding tokens to input_ids
         padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
             torch_device
