@@ -56,7 +56,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         cls.repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
         # determine if we already have this downloaded
-        cls.local_files_only = "hf-internal-testing" not in cls.repo_id
+        cls.local_files_only =
 
         cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(cls.repo_id, tokenizer_type="mistral")
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
@@ -91,6 +91,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         cls.ref_special_ids = {t["rank"] for t in cls.ref_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
 
+    @classmethod
     def tearDownClass(cls):
         del cls.tokenizer
         del cls.ref_tokenizer
