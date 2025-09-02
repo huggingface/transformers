@@ -395,7 +395,6 @@ class Siglip2VisionTransformer(nn.Module):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @can_return_tuple
     @auto_docstring
@@ -418,7 +417,7 @@ class Siglip2VisionTransformer(nn.Module):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:

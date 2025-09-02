@@ -200,6 +200,7 @@ class TrOCRAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -229,7 +230,7 @@ class TrOCRAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
