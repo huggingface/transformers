@@ -432,6 +432,7 @@ class Trainer:
         optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         optimizer_cls_and_kwargs: Optional[tuple[type[torch.optim.Optimizer], dict[str, Any]]] = None,
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        accelerator: Optional["Accelerator"] = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -463,7 +464,11 @@ class Trainer:
         self.deepspeed = None
         self.is_in_train = False
         self.model = model
-        self.create_accelerator_and_postprocess()
+        if accelerator is not None:
+            self.accelerator = accelerator
+            self.postprocess_accelerator()
+        else:
+            self.create_accelerator_and_postprocess()
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -1946,7 +1951,10 @@ class Trainer:
             # Simply calling `_reset_state` is enough and doesn't need a version pin.
             AcceleratorState()._reset_state()
 
-        self.create_accelerator_and_postprocess()
+        if getattr(self, "accelerator", None) is None:
+            self.create_accelerator_and_postprocess()
+        else:
+            self.postprocess_accelerator()
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", dict[str, Any]], step: int, metrics: dict[str, float]):
         if self.hp_search_backend is None or trial is None:
@@ -5538,6 +5546,71 @@ class Trainer:
             and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
+
+
+    def postprocess_accelerator(self):
+        """
+        Postprocess the accelerator when it's provided by the user instead of created internally.
+        This method sets up the same attributes and configurations that would be set up in 
+        create_accelerator_and_postprocess, but for a user provided accelerator.
+        """
+
+        self.gather_function = self.accelerator.gather_for_metrics
+
+        if "use_gather_object" in inspect.signature(self.gather_function).parameters:
+            self.gather_function = functools.partial(
+                self.gather_function, use_gather_object=self.args.eval_use_gather_object
+            )
+
+        # Set flags for distributed training backends based on accelerator state
+        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+        self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+
+        if self.is_fsdp_enabled:
+            fsdp_plugin = self.accelerator.state.fsdp_plugin
+            for param in ["limit_all_gathers", "activation_checkpointing"]:
+                if hasattr(self.args, 'fsdp_config') and self.args.fsdp_config is not None:
+                    setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
+            
+            if (hasattr(fsdp_plugin, 'activation_checkpointing') and 
+                fsdp_plugin.activation_checkpointing and 
+                hasattr(self.args, 'gradient_checkpointing') and 
+                self.args.gradient_checkpointing):
+                raise ValueError(
+                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
+                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
+                    "when using FSDP."
+                )
+
+        if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
+            self.propagate_args_to_deepspeed()
+
+        # `save_only_model` can't be used with DeepSpeed/FSDP along with `load_best_model_at_end`
+        if (
+            self.args.save_only_model
+            and (self.is_deepspeed_enabled or self.is_fsdp_enabled)
+            and self.args.load_best_model_at_end
+        ):
+            wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
+            raise ValueError(f"{wrapper} can't be used with `save_only_model` along with `load_best_model_at_end`.")
+
+        # `auto_find_batch_size` isn't supported yet with DeepSpeed Zero-3
+        if (
+            self.is_deepspeed_enabled
+            and self.accelerator.state.deepspeed_plugin.zero_stage == 3
+            and self.args.auto_find_batch_size
+        ):
+            raise ValueError(
+                "`auto_find_batch_size` isn't supported yet with DeepSpeed Zero-3. Please consider using Zero-2, Zero-1, or FSDP"
+            )
+        if (
+            self.args.save_only_model
+            and self.is_fsdp_enabled
+            and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
+        ):
+            raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
+    
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
