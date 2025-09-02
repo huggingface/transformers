@@ -56,6 +56,7 @@ if __name__ == "__main__":
 
     from transformers import AutoTokenizer
     from transformers.tokenization_mistral_common import MistralCommonTokenizer
+
     repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
     AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
     MistralCommonTokenizer.from_pretrained(repo_id)
@@ -63,7 +64,7 @@ if __name__ == "__main__":
 
     repo_id = "mistralai/Voxtral-Mini-3B-2507"
     AutoTokenizer.from_pretrained(repo_id)
-    MistralCommonTokenizer = MistralTokenizer.from_hf_hub(repo_id)
+    MistralTokenizer.from_hf_hub(repo_id)
 
     # Download files from URLs to local directory
     for url in URLS_FOR_TESTING_DATA:

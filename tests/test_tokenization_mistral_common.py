@@ -36,6 +36,7 @@ if is_mistral_common_available():
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+    from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
 
 IMG_URL = "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg"
@@ -56,7 +57,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         cls.repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
         # determine if we already have this downloaded
-        cls.local_files_only = True
+        cls.local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
 
         cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
             cls.repo_id,
@@ -71,11 +72,15 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
+        local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
+
         cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
-            repo_id, local_files_only=cls.local_files_only
+            repo_id,
+            local_files_only=local_files_only,
+            revision=None,
         )
         cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
-            repo_id, local_files_only=cls.local_files_only
+            repo_id, local_files_only=local_files_only
         )
 
         cls.fixture_conversations = [
