@@ -1,4 +1,4 @@
-# Copyright 2024 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,13 +20,16 @@ import numpy as np
 
 from transformers.models.lfm2_vl.processing_lfm2_vl import Lfm2VlProcessor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from PIL import Image
+
+    if is_torchvision_available():
+        pass
 
 
 @require_torch
@@ -39,7 +42,12 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
         processor_kwargs = cls.prepare_processor_dict()
         processor = Lfm2VlProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
+
+        # TODO: create a tiny dummy processor
+        # image_processor = Lfm2VlImageProcessorFast(tile_size=10)
+        # processor.image_processor = image_processor
         processor.save_pretrained(cls.tmpdirname)
+
         # Create images with different sizes
         cls.small_image = Image.new("RGB", (256, 256))
         cls.large_image = Image.new("RGB", (512, 1024))
@@ -88,6 +96,14 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "{% endif %}"
         )
         return {"chat_template": chat_template, "use_image_special_tokens": True}
+
+    # Override as Lfm2VL needs images/video to be an explicitly nested batch
+    def prepare_image_inputs(self, batch_size=None):
+        """This function prepares a list of PIL images for testing"""
+        images = super().prepare_image_inputs(batch_size)
+        if isinstance(images, (list, tuple)):
+            images = [[image] for image in images]
+        return images
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols, add_thumbnail, image_seq_len):
         text_split_images = [self.image_start_token_id]
@@ -557,8 +573,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @require_torch
-    @require_vision
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -588,8 +602,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[1], 128 * processor.image_processor.downsample_factor**2)
         self.assertEqual(len(inputs["input_ids"][0]), 130)
 
-    @require_torch
-    @require_vision
     def test_text_only_inference(self):
         """Test that the processor works correctly with text-only input."""
         processor_components = self.prepare_components()
@@ -633,8 +645,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
-    @require_torch
-    @require_vision
     def test_missing_images_error(self):
         """Test that appropriate error is raised when images are referenced but not provided."""
         processor = self.get_processor()
@@ -662,65 +672,3 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             processor(text=texts, images=None)
         self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
-
-    def test_special_mm_token_truncation(self):
-        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
-
-        processor = self.get_processor()
-
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
-        _ = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            truncation=None,
-            padding=True,
-        )
-
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                return_tensors="pt",
-                truncation=True,
-                padding=True,
-                max_length=20,
-            )
-
-    @unittest.skip("LFM2VL does not accept audio inputs")
-    def test_apply_chat_template_audio(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept audio inputs")
-    def test_apply_chat_template_audio_0(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept audio inputs")
-    def test_apply_chat_template_audio_1(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept audio inputs")
-    def test_apply_chat_template_audio_2(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept audio inputs")
-    def test_apply_chat_template_audio_3(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept video inputs")
-    def test_apply_chat_template_video(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept video inputs")
-    def test_apply_chat_template_video_0(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept video inputs")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @unittest.skip("LFM2VL does not accept video inputs")
-    def test_apply_chat_template_video_2(self):
-        pass

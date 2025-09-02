@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -30,23 +31,30 @@ logger = logging.get_logger(__name__)
 
 
 class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
-    downsample_factor: int
-    do_image_splitting: bool
-    min_tiles: int
-    max_tiles: int
-    use_thumbnail: bool
-    min_image_tokens: int
-    max_image_tokens: int
-    encoder_patch_size: int
-    tile_size: int
-    max_pixels_tolerance: float
+    downsample_factor: Optional[int]
+    do_image_splitting: Optional[bool]
+    min_tiles: Optional[int]
+    max_tiles: Optional[int]
+    use_thumbnail: Optional[bool]
+    min_image_tokens: Optional[int]
+    max_image_tokens: Optional[int]
+    encoder_patch_size: Optional[int]
+    tile_size: Optional[int]
+    max_pixels_tolerance: Optional[float]
+    patch_size: Optional[int]
+    do_pad: Optional[bool]
+    return_row_col_info: Optional[bool]
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Lfm2VlImagesKwargs
 
     _defaults = {
+        "images_kwargs": {
+            "return_row_col_info": True,
+        },
         "text_kwargs": {
+            "use_image_special_tokens": True,
             "add_special_tokens": False,
             "padding": False,
             "is_split_into_words": False,
@@ -61,16 +69,18 @@ class Lfm2VlProcessor(ProcessorMixin):
     [`Lfm2VlProcessor`] offers all the functionalities of [`Lfm2ImageProcessor`] and [`Lfm2Tokenizer`].
 
     Args:
-            image_processor (`Lfm2VlImageProcessor`):
-                An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
-            tokenizer (`PreTrainedTokenizerBase`):
-                An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-            chat_template (`str`): <fill_docstring>
-            use_image_special_tokens (`bool`): <fill_docstring>
+        image_processor (`Lfm2VlImageProcessor`):
+            An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
+        tokenizer (`PreTrainedTokenizerBase`):
+            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        use_image_special_tokens (`bool`):
+            Whether to use image special tokens or not when processing.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Lfm2VlImageProcessor"
+    image_processor_class = "Lfm2VlImageProcessorFast"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
@@ -81,114 +91,22 @@ class Lfm2VlProcessor(ProcessorMixin):
         use_image_special_tokens: bool,
         **kwargs,
     ):
-        self.image_token = getattr(tokenizer, "image_token", "<image>")
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         self.use_image_special_tokens = use_image_special_tokens
-        self.image_start_token = getattr(tokenizer, "image_start_token", "<|image_start|>")
-        self.image_end_token = getattr(tokenizer, "image_end_token", "<|image_end|>")
-        self.image_thumbnail_token = getattr(tokenizer, "image_thumbnail", "<|img_thumbnail|>")
+        self.image_start_token = tokenizer.image_start_token
+        self.image_end_token = tokenizer.image_end_token
+        self.image_thumbnail_token = tokenizer.image_thumbnail
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
-
-    def process_vision(
-        self,
-        text: list[str],
-        images: list[list[ImageInput]],
-        use_image_special_tokens: bool,
-        output_kwargs: dict,
-    ):
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-
-        n_images_in_images = [len(sublist) for sublist in images]
-
-        if n_images_in_images != n_images_in_text:
-            raise ValueError(
-                f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-            )
-
-        prompt_strings = []
-
-        for sample_text, sample_images in zip(text, images, strict=False):
-            split_sample = sample_text.split(self.image_token)
-            sample_text_with_image_tokens = ""
-            for i, image in enumerate(sample_images):
-                sample_text_with_image_tokens += split_sample[i]
-                if use_image_special_tokens:
-                    sample_text_with_image_tokens += self.image_start_token
-                (
-                    num_tokens_per_tile,
-                    num_rows,
-                    num_cols,
-                    num_thumbnail_tokens,
-                ) = self.image_processor.get_tile_grid_and_sizes(
-                    image,
-                    output_kwargs["images_kwargs"],
-                )
-                if num_rows > 1 or num_cols > 1:
-                    for row in range(num_rows):
-                        for col in range(num_cols):
-                            if use_image_special_tokens:
-                                sample_text_with_image_tokens += f"<|img_row_{row + 1}_col_{col + 1}|>"
-                            sample_text_with_image_tokens += self.image_token * num_tokens_per_tile
-
-                    if num_thumbnail_tokens > 0:
-                        if use_image_special_tokens:
-                            sample_text_with_image_tokens += self.image_thumbnail_token
-                        sample_text_with_image_tokens += self.image_token * num_thumbnail_tokens
-                else:
-                    sample_text_with_image_tokens += self.image_token * num_tokens_per_tile
-
-                if use_image_special_tokens:
-                    sample_text_with_image_tokens += self.image_end_token
-
-                sample_text_with_image_tokens += split_sample[i + 1]
-
-            prompt_strings.append(sample_text_with_image_tokens)
-
-        return prompt_strings
 
     def __call__(
         self,
         images: Optional[Union[ImageInput, list[ImageInput], list[list[ImageInput]]]] = None,
         text: Optional[Union[TextInput, list[TextInput]]] = None,
-        use_image_special_tokens: bool = True,
         **kwargs: Unpack[Lfm2VlProcessorKwargs],
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchFeature.
-
-        Example:
-
-        ```python
-        >>> import requests
-        >>> from transformers import AutoProcessor
-        >>> from transformers.image_utils import load_image
-        >>> processor = AutoProcessor.from_pretrained("", trust_remote_code=True)
-
-        >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-        >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
-
-        >>> image1, image2 = load_image(url1), load_image(url2)
-        >>> images = [image1, image2]
-
-        >>> conversation = [
-        ...     {
-        ...         "role": "user",
-        ...         "content": [
-        ...             {"type": "image", "url": image1},
-        ...             {"type": "image", "url": image2},
-        ...             {"type": "text", "text": "Compare the two images."},
-        ...         ],
-        ...     },
-        ... ]
-        >>> chat_inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> outputs = processor(images=images, text=chat_inputs, return_tensors="pt")
-        >>> input_ids = outputs.input_ids
-        >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
-        >>> print(input_tokens)
-        '['user\nCompare the two images.\nassistant\n']'
-        ```
-
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
@@ -214,30 +132,38 @@ class Lfm2VlProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = sum([sample.count(self.image_token) for sample in text])
-            if n_images_in_text > 0 and (images is None):
-                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images were passed")
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         inputs = {}
-
-        use_image_special_tokens = (
-            self.use_image_special_tokens if use_image_special_tokens is None else use_image_special_tokens
-        )
+        use_image_special_tokens = output_kwargs["text_kwargs"].pop("use_image_special_tokens")
 
         if images is not None:
-            images = make_nested_list_of_images(images)
-            vision_inputs = self.image_processor(
-                images,
+            images = self.image_processor.fetch_images(images)
+            batched_images = make_nested_list_of_images(images)
+            vision_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
+
+            n_images_in_text = sum([sample.count(self.image_token) for sample in text])
+            n_images_in_images = sum([len(sublist) for sublist in batched_images])
+            if n_images_in_text > 0 and images is None:
+                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images were passed")
+            elif n_images_in_images != n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+                )
+
+            text = self.expand_text_with_placeholders(
+                text,
+                batched_images,
+                image_rows=vision_inputs.pop("image_rows"),
+                image_cols=vision_inputs.pop("image_cols"),
+                image_sizes=vision_inputs.pop("image_sizes"),
+                use_image_special_tokens=use_image_special_tokens,
                 **output_kwargs["images_kwargs"],
             )
             inputs.update(vision_inputs)
-
-            text = self.process_vision(text, images, use_image_special_tokens, output_kwargs)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
@@ -246,6 +172,75 @@ class Lfm2VlProcessor(ProcessorMixin):
         inputs.update(text_inputs)
 
         return BatchFeature(inputs, tensor_type=return_tensors)
+
+    def expand_text_with_placeholders(
+        self,
+        text: list[str],
+        images: list[list[ImageInput]],
+        image_rows: list[list[int]],
+        image_cols: list[list[int]],
+        image_sizes: list[list[int]],
+        use_image_special_tokens: bool,
+        **images_kwargs,
+    ):
+        prompt_strings = []
+
+        for sample_text, sample_images, rows_list, cols_list, image_size_list in zip(
+            text, images, image_rows, image_cols, image_sizes
+        ):
+            split_sample = sample_text.split(self.image_token)
+            sample_text_with_image_tokens = ""
+            for i, (image, rows, cols, image_size) in enumerate(
+                zip(sample_images, rows_list, cols_list, image_size_list)
+            ):
+                sample_text_with_image_tokens += split_sample[i]
+                if use_image_special_tokens:
+                    sample_text_with_image_tokens += self.image_start_token
+
+                num_thumbnail_tokens, num_tokens_per_tile = self._get_image_num_tokens(image_size, **images_kwargs)
+
+                if rows > 1 or cols > 1:
+                    for row in range(rows):
+                        for col in range(cols):
+                            if use_image_special_tokens:
+                                sample_text_with_image_tokens += f"<|img_row_{row + 1}_col_{col + 1}|>"
+                            sample_text_with_image_tokens += self.image_token * num_tokens_per_tile
+
+                    if num_thumbnail_tokens > 0:
+                        if use_image_special_tokens:
+                            sample_text_with_image_tokens += self.image_thumbnail_token
+                        sample_text_with_image_tokens += self.image_token * num_thumbnail_tokens
+                else:
+                    sample_text_with_image_tokens += self.image_token * num_tokens_per_tile
+
+                if use_image_special_tokens:
+                    sample_text_with_image_tokens += self.image_end_token
+
+                sample_text_with_image_tokens += split_sample[i + 1]
+            prompt_strings.append(sample_text_with_image_tokens)
+
+        return prompt_strings
+
+    def _get_image_num_tokens(self, image_size: list[int], **images_kwargs) -> tuple[int, int]:
+        tile_size = images_kwargs.get("tile_size", self.image_processor.tile_size)
+        downsample_factor = images_kwargs.get("downsample_factor", self.image_processor.downsample_factor)
+        encoder_patch_size = images_kwargs.get("encoder_patch_size", self.image_processor.encoder_patch_size)
+        use_thumbnail = images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
+
+        thumbnail_tokens = 0
+        if use_thumbnail:
+            image_height, image_width = image_size
+            num_patches_height = image_height // encoder_patch_size
+            num_patches_width = image_width // encoder_patch_size
+            dwn_num_patches_height = math.ceil(num_patches_height / downsample_factor)
+            dwn_num_patches_width = math.ceil(num_patches_width / downsample_factor)
+            thumbnail_tokens = dwn_num_patches_height * dwn_num_patches_width
+
+        num_patches_tile = tile_size // encoder_patch_size
+        dwn_num_patches_tile = math.ceil(num_patches_tile / downsample_factor)
+        tile_tokens = dwn_num_patches_tile * dwn_num_patches_tile
+
+        return thumbnail_tokens, tile_tokens
 
     def batch_decode(self, *args, **kwargs):
         """

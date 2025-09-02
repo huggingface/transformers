@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,15 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
-from transformers.models.lfm2_vl.image_processing_lfm2_vl import (
-    ceil_by_factor,
-    find_closest_aspect_ratio,
-    floor_by_factor,
-    round_by_factor,
-)
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -34,11 +27,13 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Lfm2VlImageProcessor
-
 
 if is_torch_available():
     import torch
+
+    if is_torchvision_available():
+        from transformers import Lfm2VlImageProcessorFast
+        from transformers.models.lfm2_vl.image_processing_lfm2_vl_fast import find_closest_aspect_ratio
 
 
 class Lfm2VlImageProcessingTester:
@@ -60,7 +55,6 @@ class Lfm2VlImageProcessingTester:
         encoder_patch_size=16,
         tile_size=512,
         max_pixels_tolerance=2.0,
-        resample=PILImageResampling.BILINEAR,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -79,7 +73,6 @@ class Lfm2VlImageProcessingTester:
         self.encoder_patch_size = encoder_patch_size
         self.tile_size = tile_size
         self.max_pixels_tolerance = max_pixels_tolerance
-        self.resample = resample
 
     def prepare_image_processor_dict(self):
         return {
@@ -93,7 +86,6 @@ class Lfm2VlImageProcessingTester:
             "encoder_patch_size": self.encoder_patch_size,
             "tile_size": self.tile_size,
             "max_pixels_tolerance": self.max_pixels_tolerance,
-            "resample": self.resample,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -112,7 +104,8 @@ class Lfm2VlImageProcessingTester:
 @require_torch
 @require_vision
 class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Lfm2VlImageProcessor if is_vision_available() else None
+    test_slow_image_processor = False
+    fast_image_processing_class = Lfm2VlImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -134,31 +127,30 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "encoder_patch_size"))
             self.assertTrue(hasattr(image_processing, "tile_size"))
             self.assertTrue(hasattr(image_processing, "max_pixels_tolerance"))
-            self.assertTrue(hasattr(image_processing, "resample"))
 
     @require_vision
     def test_smart_resize(self):
         # verify that smart resize output dims are divisible by encoder_patch_size * downsample_factor
-        img = Image.new("RGB", (300, 500))
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        w, h = image_processing._smart_resize(
-            img,
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
+        width, height = image_processing.smart_resize(
+            height=500,
+            width=300,
             downsample_factor=image_processing.downsample_factor,
             min_image_tokens=image_processing.min_image_tokens,
             max_image_tokens=image_processing.max_image_tokens,
             encoder_patch_size=image_processing.encoder_patch_size,
         )
         mod = image_processing.encoder_patch_size * image_processing.downsample_factor
-        self.assertEqual(w % mod, 0)
-        self.assertEqual(h % mod, 0)
+        self.assertEqual(width % mod, 0)
+        self.assertEqual(height % mod, 0)
 
     @require_vision
     def test_get_grid_layout(self):
         # splitting a 512×512 image into tiles of size processor.image_processor.tile_size
-        img = Image.new("RGB", (1024, 1024))
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
         rows, cols, _, _, num_patches = image_processing._get_grid_layout(
-            img,
+            height=1024,
+            width=1024,
             min_tiles=image_processing.min_tiles,
             max_tiles=image_processing.max_tiles,
             tile_size=image_processing.tile_size,
@@ -167,20 +159,14 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(num_patches, rows * cols)
 
         rows, cols, _, _, num_patches = image_processing._get_grid_layout(
-            img,
+            height=1024,
+            width=1024,
             min_tiles=8,
             max_tiles=8,
             tile_size=image_processing.tile_size,
         )
         self.assertEqual(num_patches, 8)
         self.assertEqual(num_patches, rows * cols)
-
-    def test_round_ceil_floor_by_factor(self):
-        # test the low‐level resizing utilities
-        self.assertEqual(round_by_factor(5, 4), 4)
-        self.assertEqual(round_by_factor(7, 4), 8)
-        self.assertEqual(ceil_by_factor(5, 4), 8)
-        self.assertEqual(floor_by_factor(7, 4), 4)
 
     def test_find_closest_aspect_ratio(self):
         # should pick (1,1) over (2,1) for a square image
@@ -192,7 +178,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for sample_images in image_inputs:
@@ -221,7 +207,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Lfm2Vl always processes images as RGB, so it always returns images with 3 channels
         # Initialize image_processing
         image_processor_dict = self.image_processor_dict
-        image_processing = self.image_processing_class(**image_processor_dict)
+        image_processing = self.fast_image_processing_class(**image_processor_dict)
         # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
@@ -249,7 +235,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pil(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for images in image_inputs:
@@ -276,42 +262,13 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pytorch(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         for images in image_inputs:
             for image in images:
                 self.assertIsInstance(image, torch.Tensor)
-
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            tuple(encoded_images.shape),
-            (1, image_processing.max_num_patches, 3 * image_processing.encoder_patch_size**2),
-        )
-
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            tuple(encoded_images.shape),
-            (
-                self.image_processor_tester.batch_size,
-                image_processing.max_num_patches,
-                3 * image_processing.encoder_patch_size**2,
-            ),
-        )
-
-    def test_do_resize_false(self):
-        # Initialize image_processing
-        image_processor_dict = self.image_processor_dict
-        image_processor_dict["do_resize"] = False
-        image_processing = self.image_processing_class(**image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for images in image_inputs:
-            for image in images:
-                self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
