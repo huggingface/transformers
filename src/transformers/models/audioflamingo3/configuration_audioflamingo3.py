@@ -125,12 +125,10 @@ class AudioFlamingo3Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        llm_cfg (`Union[AutoConfig, dict]`, *optional*):
+        text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text backbone.
-        sound_tower_cfg (`Union[AutoConfig, dict]`, *optional*):
+        encoder_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the audio backbone.
-        sound_mm_projector_cfg (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the multi-modal projector.
 
     Example:
 
@@ -141,7 +139,7 @@ class AudioFlamingo3Config(PretrainedConfig):
     >>> audio_config = AudioFlamingo3EncoderConfig()
 
     >>> # Initializing a AudioFlamingo3 configuration
-    >>> configuration = AudioFlamingo3Config(sound_tower_cfg=audio_config)
+    >>> configuration = AudioFlamingo3Config(encoder_config=audio_config)
 
     >>> # Initializing a model from the audioflamingo3 style configuration
     >>> model = AudioFlamingo3ForConditionalGeneration(configuration)
@@ -151,21 +149,20 @@ class AudioFlamingo3Config(PretrainedConfig):
     ```"""
 
     model_type = "audioflamingo3"
-    sub_configs = {"llm_cfg": AutoConfig, "sound_tower_cfg": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "encoder_config": AutoConfig}
 
     def __init__(
         self,
-        llm_cfg=None,
-        sound_tower_cfg=None,
-        sound_mm_projector_cfg=None,
+        text_config=None,
+        encoder_config=None,
         **kwargs,
     ) -> None:
 
-        if isinstance(sound_tower_cfg, dict):
-            sound_tower_cfg["model_type"] = sound_tower_cfg.get("model_type", "audioflamingo3_encoder")
-            sound_tower_cfg = CONFIG_MAPPING[sound_tower_cfg["model_type"]](**sound_tower_cfg)
-        elif sound_tower_cfg is None:
-            sound_tower_cfg = CONFIG_MAPPING["audioflamingo3_encoder"](
+        if isinstance(encoder_config, dict):
+            encoder_config["model_type"] = encoder_config.get("model_type", "audioflamingo3_encoder")
+            encoder_config = CONFIG_MAPPING[encoder_config["model_type"]](**encoder_config)
+        elif encoder_config is None:
+            encoder_config = CONFIG_MAPPING["audioflamingo3_encoder"](
                 d_model=1280,
                 encoder_attention_heads=20,
                 encoder_ffn_dim=5120,
@@ -177,17 +174,16 @@ class AudioFlamingo3Config(PretrainedConfig):
                 activation_function="gelu",
             )
 
-        self.sound_tower_cfg = sound_tower_cfg
+        self.encoder_config = encoder_config
 
-        if isinstance(llm_cfg, dict):
-            llm_cfg["model_type"] = llm_cfg.get("model_type", "qwen2")
-            llm_cfg = CONFIG_MAPPING[llm_cfg["model_type"]](**llm_cfg)
-        elif llm_cfg is None:
-            llm_cfg = CONFIG_MAPPING["qwen2"]()
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["qwen2"]()
 
-        self.llm_cfg = llm_cfg
+        self.text_config = text_config
 
-        self.sound_mm_projector_cfg = sound_mm_projector_cfg
         super().__init__(**kwargs)
 
 
