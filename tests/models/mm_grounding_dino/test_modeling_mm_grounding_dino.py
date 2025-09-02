@@ -645,7 +645,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
             # MMGroundingDino when sharing weights also uses the shared ones in MMGroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in MMGroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in MMGroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -746,7 +746,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         )
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering (idxs 195<->196 and 267<->268 on my machine)
-        # which causes different query position embedding assingments
+        # which causes different query position embedding assignments
         # which in turn significantly changes the decoder pass due to self attention
         model.config.num_queries = 100
         model.model.query_position_embeddings.weight.data = model.model.query_position_embeddings.weight.data[:100]
@@ -788,7 +788,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering
-        # which causes different query position embedding assingments
+        # which causes different query position embedding assignments
         # which in turn significantly changes the decoder pass due to self attention
         model.config.num_queries = 100
         model.model.query_position_embeddings.weight.data = model.model.query_position_embeddings.weight.data[:100]
