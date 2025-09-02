@@ -44,7 +44,6 @@ class PagedAttentionArgs:
     write_index: torch.Tensor
     read_index: torch.Tensor
     logits_indices: torch.Tensor
-    block_tables: dict[str, list[int]]
     cache: PagedAttentionCache
     use_cache: bool = False
 
@@ -98,15 +97,18 @@ class ContinuousBatchProcessor:
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
-        self.setup_static_tensors()
+        # Setup static tensors
+        self.total_query_length = 0
+        self.total_key_length = 0
+        self.setup_static_tensors(cache.num_groups)
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
 
     @traced(standalone=True)
-    def setup_static_tensors(self):
+    def setup_static_tensors(self, num_groups: int):
         T = self.max_batch_tokens
-        max_token_budget = self.cache.num_blocks * self.cache.block_size
+        num_pages = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
         # Prepare empty tensors
         self.tensor_metadata = tensor_metadata
@@ -114,8 +116,8 @@ class ContinuousBatchProcessor:
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
-        self.write_index = torch.empty((T,), **tensor_metadata)
-        self.read_index = torch.empty((max_token_budget,), **tensor_metadata)
+        self.write_index = torch.empty((num_groups, T), **tensor_metadata)
+        self.read_index = torch.empty((num_groups, num_pages), **tensor_metadata)
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -123,32 +125,26 @@ class ContinuousBatchProcessor:
         # Since attenention_mask is not always needed, we only allocate it if it is needed
         if self.return_attention_mask():
             self.attention_mask = torch.empty(
-                (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+                (1, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
             )
         else:
             self.attention_mask = None
-        # Initialize the tensors by pretending they are in full use
-        self.actual_tokens = T
-        self.cache_used = max_token_budget
-        self.reset_static_tensors()
-        # Reset stats to 0
-        self.actual_tokens = 0
-        self.cache_used = 0
+        self.reset_static_tensors(full_reset=True)
 
     @traced
     @torch.no_grad()
-    def reset_static_tensors(self):
+    def reset_static_tensors(self, full_reset: bool = False):
         """Reset static tensors for the next batch."""
         # Compute the slice to reset
-        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
-        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index.size(-1)
+        c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index.size(-1)
         # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
         self.cumulative_seqlens_q[: t + 1].zero_()
         self.cumulative_seqlens_k[: t + 1].zero_()
-        self.write_index[:t].fill_(-1)
-        self.read_index[:c].fill_(-1)
+        self.write_index[:, :t].fill_(-1)
+        self.read_index[:, :c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -159,8 +155,8 @@ class ContinuousBatchProcessor:
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
-        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        t = self.total_query_length if self.slice_inputs else self.write_index.size(-1)
+        c = self.total_key_length if self.slice_inputs else self.read_index.size(-1)
         # Prepare the kwargs
         kwargs = {
             "input_ids": self.input_ids[:, :t],
@@ -168,12 +164,11 @@ class ContinuousBatchProcessor:
             "position_ids": self.position_ids[:, :t],
             "cu_seq_lens_q": self.cumulative_seqlens_q[: t + 1],
             "cu_seq_lens_k": self.cumulative_seqlens_k[: t + 1],
-            "write_index": self.write_index[:t],
-            "read_index": self.read_index[:c],
+            "write_index": self.write_index[:, :t],
+            "read_index": self.read_index[:, :c],
             "logits_indices": self.logits_indices[:t],
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
-            "block_tables": self.cache._block_tables,
             "cache": self.cache,
             "use_cache": False,
         }
@@ -240,28 +235,31 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors()
         position_ids = []
         input_ids = []
-        read_index = []
-        write_index = []
+        read_index = [[] for _ in range(self.cache.num_groups)]
+        write_index = [[] for _ in range(self.cache.num_groups)]
         cumulative_seqlens_q = [0]
         cumulative_seqlens_k = [0]
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
+        self.total_query_length = 0
+        self.total_key_length = 0
         for state in self.requests_in_batch:
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
             past_length = state.position_offset
             query_length = len(next_input_ids)
             key_length = query_length + past_length
-            cache_index = list(range(key_length))
+            cache_index = list(range(key_length)) # TODO: remove this
+
+            self.total_query_length += query_length
+            self.total_key_length += key_length
 
             positions_to_add = cache_index[past_length:]
-            read_indices = self.cache._get_physical_indices(state, cache_index)
-            write_indices = read_indices[-query_length:]
+            self.cache.get_read_indices(state.request_id, past_length, query_length, read_index)
+            self.cache.get_write_indices(state.request_id, past_length, query_length, write_index)
 
             position_ids.extend(positions_to_add)
-            read_index.extend(read_indices)
-            write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
@@ -294,8 +292,8 @@ class ContinuousBatchProcessor:
         self,
         input_ids,
         position_ids,
-        read_index,
-        write_index,
+        read_index: list[list[int]],
+        write_index: list[list[int]],
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
@@ -303,14 +301,11 @@ class ContinuousBatchProcessor:
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[: len(write_index)] = to_tensor(write_index)
-        self.read_index[: len(read_index)] = to_tensor(read_index)
+        self.write_index[:, :len(write_index[0])] = to_tensor(write_index) # effectie read / write indices are gona depend on groups
+        self.read_index[:, :len(read_index[0])] = to_tensor(read_index)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
-
-        self.actual_tokens = len(input_ids)
-        self.cache_used = len(read_index)
 
         min_value = torch.finfo(self.model_dtype).min
         if self.attention_mask is not None:

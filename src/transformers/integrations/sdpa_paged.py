@@ -28,7 +28,10 @@ def sdpa_attention_paged_forward(
 ) -> tuple[torch.Tensor, None]:
     cache = kwargs.pop("cache", None)
     if cache is not None:
+        # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key = key.transpose(0, 1).unsqueeze(0)
+        value = value.transpose(0, 1).unsqueeze(0)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
