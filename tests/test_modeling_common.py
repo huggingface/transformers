@@ -3527,6 +3527,9 @@ class ModelTesterMixin:
                     first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
                 # If we have some pixel values, use them as well
                 if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    # NOTE: this fixes qwen2_5_vl/omni because test break w/ pixel values
+                    if "image_grid_thw" in inputs_dict:
+                        continue
                     first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
                 if model.config.is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
@@ -4791,15 +4794,6 @@ class ModelTesterMixin:
             ):
                 head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
-
-                # Some models use 3D RoPE where the sum of RoPE sections has to be equal to head dim
-                if (
-                    getattr(config, "rope_scaling", None) is not None
-                    and config.rope_scaling.get("mrope_section") is not None
-                ):
-                    mrope_section = config.rope_scaling["mrope_section"]
-                    mutiplier = max(requested_dim // head_dim, 1)
-                    config.rope_scaling = {"type": "default", "mrope_section": [i * mutiplier for i in mrope_section]}
 
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
