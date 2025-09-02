@@ -162,7 +162,5 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
         self._assert_slow_fast_tensors_equivalence(slow_outputs.pixel_values, fast_outputs.pixel_values)
         self._assert_slow_fast_tensors_equivalence(
-            slow_outputs.prompt_depth,
-            fast_outputs.prompt_depth.to(slow_outputs.prompt_depth.dtype)
+            slow_outputs.prompt_depth, fast_outputs.prompt_depth.to(slow_outputs.prompt_depth.dtype)
         )
-
