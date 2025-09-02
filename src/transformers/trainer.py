@@ -342,11 +342,6 @@ class Trainer:
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
-        accelerator ([`Accelerator`], *optional*):
-            The accelerator object to use for distributed training. If not provided, the [`Trainer`] will create one
-            internally using the provided [`TrainingArguments`]. When provided, the user has full control over the
-            accelerator configuration including mixed precision, gradient accumulation, DeepSpeed, FSDP, and other
-            distributed training settings.
 
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
             distributed fashion, your iterable dataset should either use a internal attribute `generator` that is a
@@ -397,6 +392,11 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        accelerator ([`Accelerator`], *optional*):
+            The accelerator object to use for distributed training. If not provided, the [`Trainer`] will create one
+            internally using the provided [`TrainingArguments`]. When provided, the user has full control over the
+            accelerator configuration including mixed precision, gradient accumulation, DeepSpeed, FSDP, and other
+            distributed training settings.
 
     Important attributes:
 
