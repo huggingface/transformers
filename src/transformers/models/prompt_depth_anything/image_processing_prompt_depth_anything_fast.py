@@ -165,7 +165,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     model_input_names = ["pixel_values", "prompt_depth"]
 
-    # Default values checked against the slow image processor
+    # Default values checked against the "slow" image processor
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -184,6 +184,17 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs]):
         super().__init__(**kwargs)
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Thin wrapper to expose custom kwargs in the signature for documentation and typing.
+        Delegates to BaseImageProcessorFast.preprocess.
+        """
+        return super().preprocess(images, **kwargs)
 
     def resize_with_aspect_ratio(
         self,
@@ -233,11 +244,13 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         height, width = get_image_size(image, ChannelDimension.FIRST)
 
-        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
-        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
+        pad_w_left, pad_w_right = _get_pad(width, size_divisor)
+        pad_h_top, pad_h_bottom = _get_pad(height, size_divisor)
 
-        # Use torchvision pad function: [left, right, top, bottom]
-        padding = [pad_size_top, pad_size_bottom, pad_size_left, pad_size_right]
+        # Use torchvision padding for fast processing
+        # /!\ NB: torchvision F.pad expects (left, top, right, bottom) for the last two dims (W then H)
+        # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
+        padding = [pad_w_left, pad_h_top, pad_w_right, pad_h_bottom]
         padded_image = F.pad(image, padding=padding)
 
         return padded_image
@@ -461,17 +474,26 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         return results
 
     def to_dict(self):
+        """
+        Return a plain config dict suitable for saving.
+
+        We drop fast-only runtime knobs (e.g. device, return_tensors, grouping/conversion flags,
+        and transient inputs like prompt_depth) so the saved config mirrors the slow processor,
+        stays portable across environments and passes all tests.
+        """
         encoder_dict = super().to_dict()
-        encoder_dict.pop("_valid_processor_keys", None)
-        # Remove fast-specific runtime attributes that shouldn't be saved
-        encoder_dict.pop("crop_size", None)
-        encoder_dict.pop("device", None)
-        encoder_dict.pop("disable_grouping", None)
-        encoder_dict.pop("do_center_crop", None)
-        encoder_dict.pop("do_convert_rgb", None)
-        encoder_dict.pop("input_data_format", None)
-        encoder_dict.pop("prompt_depth", None)
-        encoder_dict.pop("return_tensors", None)
+        for k in (
+            "_valid_processor_keys",
+            "crop_size",
+            "device",
+            "disable_grouping",
+            "do_center_crop",
+            "do_convert_rgb",
+            "input_data_format",
+            "prompt_depth",
+            "return_tensors",
+        ):
+            encoder_dict.pop(k, None)
         return encoder_dict
 
 
