@@ -100,6 +100,12 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip(
+        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
+    )
+    def test_load_with_mismatched_shapes(self):
+        pass
+
     def test_generation_beyond_sliding_window_tiny_model(self):
         """Test generation with a tiny randomly initialised model whose input length is larger than the `sliding_window`.
         The model is configured with both `full_attention` and `sliding_attention` layers to make sure the hybrid cache
