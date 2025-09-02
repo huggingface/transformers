@@ -39,6 +39,7 @@ if is_torch_available():
         GlmForTokenClassification,
         GlmModel,
     )
+    from transformers.models.glm.modeling_glm import GlmRotaryEmbedding
 
 
 @require_torch
@@ -72,6 +73,7 @@ class GlmModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = GlmModelTester
+    rotary_embedding_layer = GlmRotaryEmbedding
 
 
 @slow

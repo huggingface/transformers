@@ -44,6 +44,7 @@ if is_torch_available():
         SmolLM3ForTokenClassification,
         SmolLM3Model,
     )
+    from transformers.models.smollm3.modeling_smollm3 import SmolLM3RotaryEmbedding
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -79,6 +80,7 @@ class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = SmolLM3ModelTester
+    rotary_embedding_layer = SmolLM3RotaryEmbedding
     pipeline_model_mapping = (
         {
             "feature-extraction": SmolLM3Model,

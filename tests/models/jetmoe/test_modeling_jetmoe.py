@@ -39,6 +39,7 @@ if is_torch_available():
         JetMoeForSequenceClassification,
         JetMoeModel,
     )
+    from transformers.models.jetmoe.modeling_jetmoe import JetMoeRotaryEmbedding
 
 
 class JetMoeModelTester(CausalLMModelTester):
@@ -116,6 +117,7 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
     model_tester_class = JetMoeModelTester
+    rotary_embedding_layer = JetMoeRotaryEmbedding
     pipeline_model_mapping = (
         {
             "feature-extraction": JetMoeModel,

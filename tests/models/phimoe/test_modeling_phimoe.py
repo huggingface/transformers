@@ -98,6 +98,7 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = PhimoeModelTester
+    rotary_embedding_layer = None  # TODO: add RoPE tests, phimoe has custom rope parameterization
     pipeline_model_mapping = (
         {
             "feature-extraction": PhimoeModel,

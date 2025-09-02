@@ -47,6 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 class DbrxRotaryEmbedding(nn.Module):
+    # TODO: set `rotary_embedding_layer` in `DbrxModelTest` when this layer supports RoPE scaling
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):

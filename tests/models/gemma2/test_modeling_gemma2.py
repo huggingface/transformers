@@ -51,6 +51,7 @@ if is_torch_available():
         Gemma2ForTokenClassification,
         Gemma2Model,
     )
+    from transformers.models.gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 
 
 class Gemma2ModelTester(CausalLMModelTester):
@@ -97,6 +98,7 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
+    rotary_embedding_layer = Gemma2RotaryEmbedding
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)

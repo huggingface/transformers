@@ -80,7 +80,7 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = ArceeModelTester
-    rotary_embedding_layer = ArceeRotaryEmbedding  # Enables RoPE tests if set
+    rotary_embedding_layer = ArceeRotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

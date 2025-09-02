@@ -46,6 +46,7 @@ if is_torch_available():
         GemmaForTokenClassification,
         GemmaModel,
     )
+    from transformers.models.gemma.modeling_gemma import GemmaRotaryEmbedding
 
 
 @require_torch
@@ -77,6 +78,7 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
     model_tester_class = GemmaModelTester
+    rotary_embedding_layer = GemmaRotaryEmbedding
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None

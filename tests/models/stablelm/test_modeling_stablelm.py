@@ -78,7 +78,7 @@ class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
-    rotary_embedding_layer = StableLmRotaryEmbedding  # Enables RoPE tests if set
+    rotary_embedding_layer = StableLmRotaryEmbedding
 
 
 @require_torch

@@ -38,6 +38,7 @@ if is_torch_available():
         PersimmonForTokenClassification,
         PersimmonModel,
     )
+    from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -72,6 +73,7 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
     model_tester_class = PersimmonModelTester
+    rotary_embedding_layer = PersimmonRotaryEmbedding
 
     test_headmasking = False
     test_pruning = False

@@ -36,6 +36,7 @@ if is_torch_available():
         Dots1ForCausalLM,
         Dots1Model,
     )
+    from transformers.models.dots1.modeling_dots1 import Dots1RotaryEmbedding
 
 
 class Dots1ModelTester(CausalLMModelTester):
@@ -82,6 +83,7 @@ class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Dots1ModelTester
+    rotary_embedding_layer = Dots1RotaryEmbedding
 
 
 @require_torch_accelerator

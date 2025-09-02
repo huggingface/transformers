@@ -95,6 +95,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
     model_tester_class = DbrxModelTester
+    rotary_embedding_layer = None  # TODO: Enable RoPE tests when RoPE scaling is supported in the model
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

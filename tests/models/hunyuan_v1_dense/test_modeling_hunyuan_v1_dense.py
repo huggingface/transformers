@@ -30,7 +30,6 @@ if is_torch_available():
         HunYuanDenseV1ForSequenceClassification,
         HunYuanDenseV1Model,
     )
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -56,6 +55,7 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = HunYuanDenseV1ModelTester
+    rotary_embedding_layer = None  # TODO: add RoPE tests, HunYuan has unique RoPE parameters
     pipeline_model_mapping = (
         {
             "feature-extraction": HunYuanDenseV1Model,

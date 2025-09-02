@@ -69,7 +69,7 @@ class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Ernie4_5ModelTester
-    rotary_embedding_layer = Ernie4_5RotaryEmbedding  # Enables RoPE tests if set
+    rotary_embedding_layer = Ernie4_5RotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

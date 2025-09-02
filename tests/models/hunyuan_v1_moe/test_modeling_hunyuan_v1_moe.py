@@ -61,6 +61,7 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
+    rotary_embedding_layer = None  # TODO: add RoPE tests, HunYuan has unique RoPE parameters
     pipeline_model_mapping = (
         {
             "feature-extraction": HunYuanMoEV1Model,

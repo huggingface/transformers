@@ -34,6 +34,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import AutoTokenizer, Glm4MoeConfig, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers.models.glm4_moe.modeling_glm4_moe import Glm4MoeRotaryEmbedding
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
@@ -80,6 +81,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
+    rotary_embedding_layer = Glm4MoeRotaryEmbedding
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
     _torch_compile_train_cls = None
 

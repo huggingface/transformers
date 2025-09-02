@@ -33,6 +33,7 @@ if is_torch_available():
         ModernBertDecoderForSequenceClassification,
         ModernBertDecoderModel,
     )
+    from transformers.models.modernbert_decoder.modeling_modernbert_decoder import ModernBertDecoderRotaryEmbedding
 
 
 class ModernBertDecoderModelTester(CausalLMModelTester):
@@ -62,6 +63,7 @@ class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     model_tester_class = ModernBertDecoderModelTester
+    rotary_embedding_layer = ModernBertDecoderRotaryEmbedding
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

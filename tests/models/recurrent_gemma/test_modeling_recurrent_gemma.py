@@ -35,7 +35,6 @@ if is_torch_available():
 
     from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -61,6 +60,8 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
+    # RecurrentGemma doesn't have `max_position_embeddings`, so it doesn't make sense to test RoPE scaling
+    rotary_embedding_layer = None
 
     @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):

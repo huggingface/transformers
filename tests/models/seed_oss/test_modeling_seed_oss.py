@@ -41,6 +41,7 @@ if is_torch_available():
         SeedOssForTokenClassification,
         SeedOssModel,
     )
+    from transformers.models.seed_oss.modeling_seed_oss import SeedOssRotaryEmbedding
 
 
 class SeedOssModelTester(CausalLMModelTester):
@@ -56,6 +57,7 @@ class SeedOssModelTester(CausalLMModelTester):
 @require_torch
 class SeedOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = SeedOssModelTester
+    rotary_embedding_layer = SeedOssRotaryEmbedding
     all_model_classes = (
         (
             SeedOssModel,
