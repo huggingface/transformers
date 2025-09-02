@@ -18,7 +18,10 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
-from transformers import PromptDepthAnythingImageProcessor, PromptDepthAnythingImageProcessorFast
+from transformers import (
+    PromptDepthAnythingImageProcessor,
+    PromptDepthAnythingImageProcessorFast,
+)
 
 
 def create_test_images(batch_size=8, image_size=(384, 512), num_channels=3):
@@ -182,22 +185,29 @@ def run_benchmark():
 
                             depth_shape_match = slow_prompt_depth.shape == fast_prompt_depth.shape
                             depth_values_close = torch.allclose(
-                                slow_prompt_depth, fast_prompt_depth, rtol=1e-3, atol=1e-5
+                                slow_prompt_depth,
+                                fast_prompt_depth,
+                                rtol=1e-3,
+                                atol=1e-5,
                             )
                         else:
                             depth_shape_match = depth_values_close = True
 
                         if shape_match and values_close and depth_shape_match and depth_values_close:
                             print("✅ Output verification: PASSED")
-                            print("   (Shape checked ✓, pixel value equality checked ✓, depth value equality checked ✓)")
+                            print(
+                                "   (Shape checked ✓, pixel value equality checked ✓, depth value equality checked ✓)"
+                            )
                         else:
                             print("❌ Output verification: FAILED")
-                            print("   (One or more checks failed: shape, pixel values, or depth values differ beyond tolerances)")
+                            print(
+                                "   (One or more checks failed: shape, pixel values, or depth values differ beyond tolerances)"
+                            )
                             print(f"   Shape match: {shape_match}")
                             print(f"   Values close: {values_close}")
                             print(f"   Depth shape match: {depth_shape_match}")
                             print(f"   Depth values close: {depth_values_close}")
-                            
+
                             # Add detailed analysis when values are not close
                             if not values_close:
                                 diff = torch.abs(slow_pixel_values - fast_pixel_values)
@@ -206,13 +216,22 @@ def run_benchmark():
                                 print("   📊 Pixel value differences:")
                                 print(f"      Max absolute difference: {max_diff:.8f}")
                                 print(f"      Mean absolute difference: {mean_diff:.8f}")
-                                print(f"      Slow range: [{slow_pixel_values.min():.6f}, {slow_pixel_values.max():.6f}]")
-                                print(f"      Fast range: [{fast_pixel_values.min():.6f}, {fast_pixel_values.max():.6f}]")
+                                print(
+                                    f"      Slow range: [{slow_pixel_values.min():.6f}, {slow_pixel_values.max():.6f}]"
+                                )
+                                print(
+                                    f"      Fast range: [{fast_pixel_values.min():.6f}, {fast_pixel_values.max():.6f}]"
+                                )
 
                                 # Test different tolerances to understand what would work
                                 tolerances = [1e-2, 5e-2, 1e-1, 2e-1]
                                 for tol in tolerances:
-                                    is_close = torch.allclose(slow_pixel_values, fast_pixel_values, rtol=tol, atol=tol)
+                                    is_close = torch.allclose(
+                                        slow_pixel_values,
+                                        fast_pixel_values,
+                                        rtol=tol,
+                                        atol=tol,
+                                    )
                                     print(f"      Would pass with rtol={tol}, atol={tol}: {is_close}")
 
                                 # Find location of max difference
@@ -280,11 +299,27 @@ def create_visualization(results):
         configs = list(device_results.keys())
         speedups = [device_results[config]["speedup"] for config in configs]
 
+        # Calculate average speedup
+        avg_speedup = np.mean(speedups)
+
+        # Add average to the end of the data
+        all_configs = configs + ["Average"]
+        all_speedups = speedups + [avg_speedup]
+
+        # Create colors - steelblue for individual configs, orange for average
+        colors = ["steelblue"] * len(configs) + ["orange"]
+        alphas = [0.7] * len(configs) + [0.8]
+
         plt.figure(figsize=(12, 6))
-        bars = plt.bar(range(len(configs)), speedups, color="steelblue", alpha=0.7)
+
+        # Create bars individually to handle different colors and alphas
+        bars = []
+        for i, (config, speedup, color, alpha) in enumerate(zip(all_configs, all_speedups, colors, alphas)):
+            bar = plt.bar(i, speedup, color=color, alpha=alpha)
+            bars.extend(bar)
 
         # Add value labels on bars
-        for i, (bar, speedup) in enumerate(zip(bars, speedups)):
+        for i, (bar, speedup) in enumerate(zip(bars, all_speedups)):
             plt.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + 0.01,
@@ -297,7 +332,7 @@ def create_visualization(results):
         plt.xlabel("Configuration (batch_size x height x width)")
         plt.ylabel("Speedup (times faster)")
         plt.title(f"PromptDepthAnything Fast vs Slow Image Processor Speedup - {device.upper()}")
-        plt.xticks(range(len(configs)), configs, rotation=45, ha="right")
+        plt.xticks(range(len(all_configs)), all_configs, rotation=45, ha="right")
         plt.grid(axis="y", alpha=0.3)
         plt.tight_layout()
 
