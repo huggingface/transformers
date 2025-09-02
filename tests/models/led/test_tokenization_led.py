@@ -14,11 +14,11 @@
 import json
 import os
 import unittest
+from functools import cached_property
 
 from transformers import BatchEncoding, LEDTokenizer, LEDTokenizerFast
 from transformers.models.led.tokenization_led import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
