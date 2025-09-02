@@ -504,13 +504,6 @@ def _get_scheduler(serve_command):
     return sched
 
 
-def _contains_request_id(scheduler, request_id: str) -> bool:
-    active = getattr(scheduler, "active_requests", set()) or set()
-    waiting = getattr(scheduler, "waiting_request", set()) or set()
-    requests_to_cancel = getattr(scheduler, "requests_to_cancel", set()) or set()
-    return request_id in requests_to_cancel or (request_id not in active and request_id not in waiting)
-
-
 async def _open_stream_and_cancel(base_url: str, request_id: str):
     async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
         first_chunk = asyncio.Event()
@@ -629,13 +622,13 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         deadline = time.time() + 8.0  # generous but still CI-friendly
         last_seen = None
         while time.time() < deadline:
-            present = _contains_request_id(scheduler, request_id)
+            present = scheduler.request_is_cancelled(request_id)
             if not present:
                 break
             last_seen = time.time()
             time.sleep(0.1)  # don't spin the CPU
 
-        still_present = _contains_request_id(scheduler, request_id)
+        still_present = scheduler.request_is_cancelled(request_id)
         self.assertFalse(
             still_present,
             f"Request {request_id} still present in scheduler after cancellation "
