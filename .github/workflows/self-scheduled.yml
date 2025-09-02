@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Nvidia CI (job definitions)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -28,7 +28,16 @@ on:
       report_repo_id:
         required: true
         type: string
-
+      commit_sha:
+        required: false
+        type: string
+      runner_type:
+        required: false
+        type: string
+      models:
+        default: ""
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -46,8 +55,8 @@ env:
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     strategy:
       matrix:
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
@@ -65,7 +74,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Cleanup
         working-directory: /transformers
@@ -84,7 +93,7 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --models '${{ inputs.models }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
             echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
             echo "runner_map=$(python3 ../utils/get_runner_map.py)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
@@ -119,6 +128,9 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
       runner_map: ${{ needs.setup.outputs.runner_map }}
       docker: ${{ inputs.docker }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
+      runner_type: ${{ inputs.runner_type }}
+      report_repo_id: ${{ inputs.report_repo_id }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -137,6 +149,7 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
       runner_map: ${{ needs.setup.outputs.runner_map }}
       docker: ${{ inputs.docker }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
       report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit
 
@@ -155,7 +168,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -223,7 +236,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -292,7 +305,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
@@ -400,7 +413,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -464,6 +477,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          ref: ${{ inputs.commit_sha || github.sha }}
 
       - name: Install transformers
         run: pip install transformers
@@ -506,7 +520,7 @@ jobs:
       run_quantization_torch_gpu,
       run_extract_warnings
     ]
-    if: ${{ always() }}
+    if: always() && !cancelled()
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
@@ -518,6 +532,7 @@ jobs:
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
 
     secrets: inherit
 
@@ -528,7 +543,7 @@ jobs:
     uses: ./.github/workflows/check_failed_tests.yml
     with:
       docker: ${{ inputs.docker }}
-      start_sha: ${{ github.sha }}
+      start_sha: ${{ inputs.commit_sha || github.sha }}
       job: ${{ inputs.job }}
       slack_report_channel: ${{ inputs.slack_report_channel }}
       ci_event: ${{ inputs.ci_event }}

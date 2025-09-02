@@ -165,7 +165,7 @@ def main():
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
 
@@ -469,7 +469,7 @@ def main():
         new_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_mesh=tp_mesh,
-            torch_dtype=torch.bfloat16,  # Use same dtype
+            dtype=torch.bfloat16,  # Use same dtype
         )
         new_optimizer = optim.AdamW(new_model.parameters(), lr=LR)
 

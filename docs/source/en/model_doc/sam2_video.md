@@ -52,12 +52,12 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 #### Basic Video Tracking
 
 ```python
->>> from transformers import Sam2VideoModel, Sam2VideoProcessor
+>>> from transformers import Sam2VideoModel, Sam2VideoProcessor, infer_device
 >>> import torch
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
->>> model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(device, dtype=torch.bfloat16)
->>> processor = Sam2VideoProcessor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
+>>> device = infer_device()
+>>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(device, dtype=torch.bfloat16)
+>>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
 >>> # video_frames = [Image.open(f"frame_{i:05d}.jpg") for i in range(num_frames)]
@@ -71,7 +71,7 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -190,7 +190,7 @@ For real-time applications, SAM2 supports processing video frames as they arrive
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
@@ -226,7 +226,7 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing
@@ -274,10 +274,11 @@ Tracked 2 objects through 180 frames
 ```
 
 <!-- TODO replace with sam2 resources -->
-<!-- ## Resources -->
-<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+## Resources
 
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model. -->
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+
+- [Demo notebook 🌎](https://colab.research.google.com/drive/1Z0NGLE7p8qnc9UpuI8KBETHd2xBbOEhv?usp=sharing) for using the model, contributed by [Sangbum Choi](https://github.com/SangbumChoi).
 
 ## Sam2VideoConfig
 

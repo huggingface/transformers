@@ -16,6 +16,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 import numpy as np
 
@@ -23,7 +24,7 @@ from transformers import MllamaProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -55,6 +56,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_processor_dict(self):
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
+
+    # Override as Mllama needs images to be an explicitly nested batch
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        images = super().prepare_image_inputs(batch_size)
+        if isinstance(images, (list, tuple)):
+            images = [[image] for image in images]
+        return images
 
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
@@ -163,9 +172,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Describe this image in two sentences"},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
                     {"type": "text", "text": " Test sentence   "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
                     {"type": "text", "text": "ok\n"},
                 ],
             }
@@ -342,9 +351,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -366,9 +374,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
             text=input_str,
             images=image_input,
@@ -386,3 +393,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=3,
             )
+
+    @unittest.skip("Mllama can't process inouts with no image ttogether with multimodal inputs")
+    def test_processor_text_has_no_visual(self):
+        pass

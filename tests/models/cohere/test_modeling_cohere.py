@@ -20,7 +20,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -224,7 +223,6 @@ class CohereIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         self.assertEqual(tokenizer.batch_decode(output, skip_special_tokens=True), EXPECTED_TEXT)
 
-    @require_torch_sdpa
     def test_batched_small_model_logits(self):
         # Since the model is very large, we created a random cohere model so that we can do a simple
         # logits check on it.
@@ -238,7 +236,7 @@ class CohereIntegrationTest(unittest.TestCase):
         ).to(device=torch_device, dtype=torch.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = CohereForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(torch_device)
+        model = CohereForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
 
         tokenizer.pad_token = tokenizer.eos_token
 

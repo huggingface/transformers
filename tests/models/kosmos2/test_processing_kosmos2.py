@@ -185,29 +185,6 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "This is a test"
-        image_input = self.prepare_image_inputs()
-
-        # both image and text
-        inputs = processor(text=input_str, images=image_input)
-        self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
-        )
-
-        # only text
-        inputs = processor(text=input_str)
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
-
-        # only image
-        inputs = processor(images=image_input)
-        self.assertListEqual(list(inputs.keys()), ["pixel_values"])
-
     @require_torch
     def test_full_processor(self):
         url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg"

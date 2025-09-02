@@ -106,13 +106,11 @@ echo -e "In a shocking finding, scientists discovered a herd of unicorns living 
 - [`TFGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)
 - [`FlaxGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb)
 
+
 ## GPTJConfig
 
 [[autodoc]] GPTJConfig
     - all
-
-<frameworkcontent>
-<pt>
 
 ## GPTJModel
 
@@ -133,41 +131,3 @@ echo -e "In a shocking finding, scientists discovered a herd of unicorns living 
 
 [[autodoc]] GPTJForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFGPTJModel
-
-[[autodoc]] TFGPTJModel
-    - call
-
-## TFGPTJForCausalLM
-
-[[autodoc]] TFGPTJForCausalLM
-    - call
-
-## TFGPTJForSequenceClassification
-
-[[autodoc]] TFGPTJForSequenceClassification
-    - call
-
-## TFGPTJForQuestionAnswering
-
-[[autodoc]] TFGPTJForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxGPTJModel
-
-[[autodoc]] FlaxGPTJModel
-    - __call__
-
-## FlaxGPTJForCausalLM
-
-[[autodoc]] FlaxGPTJForCausalLM
-    - __call__
-</jax>
-</frameworkcontent>

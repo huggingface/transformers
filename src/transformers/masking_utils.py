@@ -20,7 +20,7 @@ import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
-from .utils import is_torch_xpu_available
+from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
 
@@ -38,6 +38,9 @@ _is_torch_xpu_available = is_torch_xpu_available()
 
 if _is_torch_greater_or_equal_than_2_6:
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
+
+
+logger = logging.get_logger(__name__)
 
 
 def and_masks(*mask_functions: list[Callable]) -> Callable:
@@ -87,10 +90,22 @@ def sliding_window_overlay(sliding_window: int) -> Callable:
     return inner_mask
 
 
-def chunked_overlay(chunk_size: int) -> Callable:
+def chunked_overlay(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     """
     This is an overlay depicting a chunked attention pattern. Add it on top of a causal mask for a proper chunked
     attention mask.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return (kv_idx - left_padding[batch_idx]) // chunk_size == (q_idx - left_padding[batch_idx]) // chunk_size
+
+    return inner_mask
+
+
+def _legacy_chunked_overlay(chunk_size: int) -> Callable:
+    """
+    Same as the above function, but do not correctly account for left padding tokens.
+    Only kept for compatibility with older torch versions (< 2.6).
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -106,11 +121,13 @@ def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
     return and_masks(sliding_window_overlay(sliding_window), causal_mask_function)
 
 
-def chunked_causal_mask_function(chunk_size: int) -> Callable:
+def chunked_causal_mask_function(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     """
     This return the mask_function function to create a chunked attention mask.
     """
-    return and_masks(chunked_overlay(chunk_size), causal_mask_function)
+    if not _is_torch_greater_or_equal_than_2_6:
+        return and_masks(_legacy_chunked_overlay(chunk_size), causal_mask_function)
+    return and_masks(chunked_overlay(chunk_size, left_padding), causal_mask_function)
 
 
 def padding_mask_function(padding_mask: torch.Tensor) -> Callable:
@@ -298,7 +315,7 @@ def sdpa_mask_recent_torch(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5)
+    >>> sdpa_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5)
     >>> tensor([[[[ True, False, False, False, False],
                   [ True,  True, False, False, False],
                   [ True,  True,  True, False, False],
@@ -319,7 +336,7 @@ def sdpa_mask_recent_torch(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=sliding_window_causal_mask_function(3))
+    >>> sdpa_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=sliding_window_causal_mask_function(3))
     >>> tensor([[[[ True, False, False, False, False],
                   [ True,  True, False, False, False],
                   [ True,  True,  True, False, False],
@@ -340,7 +357,7 @@ def sdpa_mask_recent_torch(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=chunked_causal_mask_function(3))
+    >>> sdpa_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=chunked_causal_mask_function(3, torch.zeros(1, dtype=int)))
     >>> tensor([[[[ True, False, False, False, False],
                 [ True,  True, False, False, False],
                 [ True,  True,  True, False, False],
@@ -736,7 +753,7 @@ def create_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
-    has an HybridCache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
+    has an hybrid cache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
     to what is needed in the `modeling_xxx.py` files).
 
     Args:
@@ -761,7 +778,7 @@ def create_causal_mask(
             An optional mask function to combine with the causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the full layers
+    # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
     else:
@@ -828,7 +845,7 @@ def create_sliding_window_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an HybridCache structure, this
+    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
     function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -854,7 +871,7 @@ def create_sliding_window_causal_mask(
             An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
@@ -923,7 +940,7 @@ def create_chunked_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an HybridCache structure, this
+    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
     function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -949,7 +966,7 @@ def create_chunked_causal_mask(
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
@@ -973,7 +990,25 @@ def create_chunked_causal_mask(
         )
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
-    mask_factory_function = chunked_causal_mask_function(chunk_size)
+    # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
+    # to start the chunk from the actual start of the sequence for the padded sequence
+    if attention_mask is not None:
+        # Only count the left padding tokens, not all of them
+        left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
+    else:
+        left_padding_tokens = torch.zeros(batch_size, device=cache_position.device, dtype=int)
+    # Raise a warning for older versions if the problematic left-padding situation arises
+    if (
+        not _is_torch_greater_or_equal_than_2_6
+        and kv_length + kv_offset > chunk_size
+        and (left_padding_tokens > 0).any()
+    ):
+        logger.warning_once(
+            "Due to limitations of your current torch version, we cannot correctly account for the left-padding "
+            "when computing the chunked attention pattern. This will lead to a wrong attention mask for the padded "
+            "sequences. Behavior will be undefined. Please upgrade to `torch>=2.6` to solve this issue."
+        )
+    mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Do not allow skip if we are compiling (this is to match BC)

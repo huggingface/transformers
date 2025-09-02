@@ -32,7 +32,6 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -578,6 +577,7 @@ class EomtImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -614,7 +614,7 @@ class EomtImageProcessor(BaseImageProcessor):
         )
 
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
             segmentation_maps = [to_numpy_array(mask) for mask in segmentation_maps]
 
             segmentation_maps = [

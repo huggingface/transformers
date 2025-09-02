@@ -32,13 +32,13 @@ class CLIPProcessor(ProcessorMixin):
     Args:
         image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`], *optional*):
+        tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
@@ -115,26 +115,6 @@ class CLIPProcessor(ProcessorMixin):
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
     @property
     def feature_extractor_class(self):

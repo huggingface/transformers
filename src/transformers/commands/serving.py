@@ -25,6 +25,7 @@ import threading
 import time
 from argparse import ArgumentParser, Namespace
 from collections.abc import Generator, Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
@@ -32,7 +33,7 @@ from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
-from PIL import Image
+from tokenizers.decoders import DecodeStream
 
 import transformers
 from transformers.models.auto.modeling_auto import (
@@ -45,6 +46,7 @@ from transformers.utils.import_utils import (
     is_openai_available,
     is_pydantic_available,
     is_uvicorn_available,
+    is_vision_available,
 )
 
 from .. import (
@@ -54,7 +56,6 @@ from .. import (
     ProcessorMixin,
     TextIteratorStreamer,
 )
-from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 from ..utils import is_torch_available, logging
 from . import BaseTransformersCLICommand
 
@@ -69,8 +70,13 @@ if is_torch_available():
         PreTrainedModel,
     )
 
+    from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
+
 if is_librosa_available():
     import librosa
+
+if is_vision_available():
+    from PIL import Image
 
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
@@ -309,16 +315,16 @@ class TimedModel:
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
         self.timeout_seconds = timeout_seconds
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
     def reset_timer(self):
         """Reset the timer for the deletion of the instances."""
         self._timer.cancel()
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
-    def _delete_model(self):
+    def delete_model(self):
         """Delete the wrapped model and processor and clean up resources."""
         if hasattr(self, "model") and self.model is not None:
             del self.model
@@ -331,9 +337,12 @@ class TimedModel:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            logger.info(
-                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
-            )
+            # XXX: in case we manually delete the model, like on server shutdown
+            self._timer.cancel()
+
+    def timeout_reached(self):
+        self.delete_model()
+        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
@@ -349,6 +358,10 @@ class ServeArguments:
     `transformers serve --help`
     """
 
+    continuous_batching: bool = field(
+        default=False,
+        metadata={"help": "Whether to use continuous batching for chat completions."},
+    )
     device: str = field(
         default="auto",
         metadata={
@@ -357,6 +370,13 @@ class ServeArguments:
         },
     )
     torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    dtype: Optional[str] = field(
         default="auto",
         metadata={
             "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
@@ -430,6 +450,12 @@ class ServeArguments:
         },
     )
 
+    def __post_init__(self):
+        """Only used for BC `torch_dtype` argument."""
+        # In this case only the BC torch_dtype was given
+        if self.torch_dtype is not None and self.dtype == "auto":
+            self.dtype = self.torch_dtype
+
 
 class ServeCommand(BaseTransformersCLICommand):
     @staticmethod
@@ -452,7 +478,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Store and process input arguments
         self.args = args
-        self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
+        self.use_continuous_batching = self.args.continuous_batching
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:
@@ -552,11 +578,13 @@ class ServeCommand(BaseTransformersCLICommand):
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
-        content: Optional[str] = None,
+        content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
+        decode_stream: Optional[DecodeStream] = None,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
     ) -> str:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -581,6 +609,8 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if decode_stream is not None and content is not None and tokenizer is not None:
+            content = decode_stream.step(tokenizer._tokenizer, content)
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
@@ -618,7 +648,29 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
-        app = FastAPI()
+        """
+        Setup and run the FastAPI server for transformers serve.
+
+        Models will be loaded and unloaded automatically based on usage and a timeout.
+
+        The server will expose the following endpoints:
+        - POST /v1/chat/completions: Generates chat completions.
+        - POST /v1/responses: Generates responses.
+        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
+        - GET /v1/models: Lists available models for 3rd party tools.
+
+        Requires FastAPI and Uvicorn to be installed.
+        """
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        app = FastAPI(lifespan=lifespan)
 
         # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
         # security purposes, it's disabled by default
@@ -629,6 +681,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 allow_credentials=True,
                 allow_methods=["*"],
                 allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+        else:
+            logger.warning_once(
+                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
             )
 
         @app.post("/v1/chat/completions")
@@ -675,7 +734,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
-    @functools.lru_cache(maxsize=None)
+    @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
         """
         This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
@@ -750,10 +809,7 @@ class ServeCommand(BaseTransformersCLICommand):
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
             use_cache=False,
-            num_blocks=1,
-            block_size=1024,
             do_sample=False,
-            max_batch_tokens=10,
             scheduler="fifo",
         )
 
@@ -774,34 +830,30 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_chat_completion(_inputs):
             try:
+                decode_stream = DecodeStream([id.item() for id in _inputs], False)
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )
-
-                queue_is_flushed = False
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
-                for result in self.running_continuous_batching_manager:
-                    if result.request_id != request_id:
-                        continue
-                    if req.get("request_id") is not None and not queue_is_flushed:
-                        if result.status == RequestStatus.FINISHED:
-                            continue
-                        else:
-                            queue_is_flushed = True
-
-                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     if result.status == RequestStatus.FINISHED:
                         yield self.build_chat_completion_chunk(
-                            request_id, finish_reason=finish_reason, model=model_id_and_revision
+                            request_id,
+                            finish_reason="stop",
+                            model=model_id_and_revision,
                         )
                         break
                     else:
                         yield self.build_chat_completion_chunk(
-                            request_id=request_id, content=result.next_token, model=model_id_and_revision
+                            request_id=request_id,
+                            content=result.generated_tokens[-1],
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
                         )
 
             except Exception as e:
@@ -811,7 +863,7 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(inputs[0])
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel) -> Modality:
+    def get_model_modality(model: "PreTrainedModel") -> Modality:
         model_classname = model.__class__.__name__
         if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
             modality = Modality.VLM
@@ -1452,11 +1504,11 @@ class ServeCommand(BaseTransformersCLICommand):
         if args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `torch_dtype`
-                bnb_4bit_compute_dtype=args.torch_dtype,
+                # For consistency with model weights, we use the same value as `dtype`
+                bnb_4bit_compute_dtype=args.dtype,
                 bnb_4bit_quant_type=args.bnb_4bit_quant_type,
                 bnb_4bit_use_double_quant=args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=args.torch_dtype,
+                bnb_4bit_quant_storage=args.dtype,
             )
         elif args.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
@@ -1513,13 +1565,13 @@ class ServeCommand(BaseTransformersCLICommand):
             trust_remote_code=args.trust_remote_code,
         )
 
-        torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
 
         model_kwargs = {
             "revision": revision,
             "attn_implementation": args.attn_implementation,
-            "torch_dtype": torch_dtype,
+            "dtype": dtype,
             "device_map": "auto",
             "trust_remote_code": args.trust_remote_code,
         }
@@ -1545,7 +1597,9 @@ class ServeCommand(BaseTransformersCLICommand):
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_processor(
+        self, model_id_and_revision: str
+    ) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1570,7 +1624,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", ProcessorMixin]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 

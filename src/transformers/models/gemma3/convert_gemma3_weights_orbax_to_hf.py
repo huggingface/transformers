@@ -278,9 +278,9 @@ def convert_siglip_weight(
             raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
-        next_path_seperator_idx = encoder_block_path.find("/")
-        layer_idx = encoder_block_path[:next_path_seperator_idx]
-        encoder_block_path = encoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = encoder_block_path.find("/")
+        layer_idx = encoder_block_path[:next_path_separator_idx]
+        encoder_block_path = encoder_block_path[next_path_separator_idx:]
         normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
 
         if encoder_block_path.startswith("/LayerNorm"):
@@ -393,9 +393,9 @@ def convert_transformer_weights(
         converted_weights = [weights]
     elif path.startswith(_TRANSFORMER_DECODER_BLOCK):
         decoder_block_path = path[_TRANSFORMER_DECODER_BLOCK_LEN:]
-        next_path_seperator_idx = decoder_block_path.find("/")
-        layer_idx = decoder_block_path[:next_path_seperator_idx]
-        decoder_block_path = decoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = decoder_block_path.find("/")
+        layer_idx = decoder_block_path[:next_path_separator_idx]
+        decoder_block_path = decoder_block_path[next_path_separator_idx:]
 
         base_path = f"language_model.model.layers.{layer_idx}"
 
@@ -479,13 +479,13 @@ def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tenso
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights, config.vision_config.torch_dtype)
+            update_tree(path, weights, config.vision_config.dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if config.vision_config is None:
                     path = path[len("language_model.") :]
 
-                update_tree(path, weights, config.text_config.torch_dtype)
+                update_tree(path, weights, config.text_config.dtype)
 
     if config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
@@ -502,12 +502,12 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
+    config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
 
     if variant == _VARIANT_GEMMA_3_1B:
         config.vision_config = None
     else:
-        config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+        config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
 
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat

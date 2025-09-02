@@ -119,14 +119,13 @@ In the following, we demonstrate how to use `helium-1-preview` for the inference
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 
 >>> prompt = "Give me a short introduction to large language model."
 
->>> model_inputs = tokenizer(prompt, return_tensors="pt").to(device)
+>>> model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
