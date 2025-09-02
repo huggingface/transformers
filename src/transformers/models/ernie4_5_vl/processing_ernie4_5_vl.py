@@ -14,44 +14,34 @@
 
 """Tokenization classes and Image processor class, Processor class for Ernie_45T_VL."""
 
-import copy
-import io
-import os
-import math
-import random
-import requests
 import base64
+import copy
 import datetime
 import hashlib
+import io
+import math
+import os
+import random
 import threading
 import uuid
-import decord
+from collections import defaultdict
+from pathlib import Path
 from shutil import copyfile
+from tempfile import NamedTemporaryFile as ntf
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import decord
 import numpy as np
+import requests
+import sentencepiece as spm
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from PIL.ExifTags import TAGS
-from collections import defaultdict
-from pathlib import Path
-from tempfile import NamedTemporaryFile as ntf
 
-import sentencepiece as spm
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.tokenization_utils_base import (
-    PaddingStrategy,
-    TextInput,
-)
-from transformers.utils import TensorType, logging
-from transformers.video_utils import VideoInput
-from transformers.processing_utils import ProcessorMixin
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
     convert_to_rgb,
-    normalize,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -64,10 +54,18 @@ from transformers.image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
+    make_flat_list_of_images,
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import PaddingStrategy
+from transformers.utils import TensorType, logging
+from transformers.video_utils import VideoInput
+
 
 logger = logging.get_logger(__name__)
 
@@ -375,52 +373,31 @@ def floor_by_factor(number: int, factor: int) -> int:
 
 
 def smart_resize(
-    height: int,
-    width: int,
-    factor: int = 28,
-    min_pixels: int = 4 * 28 * 28,
-    max_pixels: int = 16384 * 28 * 28,
+    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 6177 * 28 * 28
 ):
-    """
-    Rescales the image so that the following conditions are met:
+    """Rescales the image so that the following conditions are met:
 
     1. Both dimensions (height and width) are divisible by 'factor'.
 
     2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
 
     3. The aspect ratio of the image is maintained as closely as possible.
+
     """
-    MAX_RATIO = 200
-    if max(height, width) / min(height, width) > MAX_RATIO:
-        if height > width:
-            new_width = max(factor, round_by_factor(width, factor))
-            new_height = floor_by_factor(new_width * MAX_RATIO, factor)
-        else:
-            new_height = max(factor, round_by_factor(height, factor))
-            new_width = floor_by_factor(new_height * MAX_RATIO, factor)
-
-        logger.info(
-            f"absolute aspect ratio must be smaller than {MAX_RATIO}, got {max(height, width) / min(height, width)},\
-              resize to {max(new_height, new_width) / min(new_height, new_width)}"
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
-
-        height = new_height
-        width = new_width
-
-    h_bar = max(factor, round_by_factor(height, factor))
-    w_bar = max(factor, round_by_factor(width, factor))
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
     if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        h_bar = floor_by_factor(height / beta, factor)
-        w_bar = floor_by_factor(width / beta, factor)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
-        h_bar = ceil_by_factor(height * beta, factor)
-        w_bar = ceil_by_factor(width * beta, factor)
-
-    if min_pixels > h_bar * w_bar or h_bar * w_bar > max_pixels:
-        raise ValueError(f"encounter invalid h_bar: {h_bar}, w_bar: {w_bar}")
-
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
     return h_bar, w_bar
 
 
@@ -486,11 +463,13 @@ def make_batched_videos(videos) -> List[VideoInput]:
 
 class Ernie4_5_VLImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a adaptive image processor that dynamically resizes images based on the original images.
+    Constructs a Ernie 4.5 VL image processor that dynamically resizes images based on the original images.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions.
+        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}`):
+            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use when resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -499,51 +478,57 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel
             in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
         min_pixels (`int`, *optional*, defaults to `56 * 56`):
             The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 6177`):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_conv_size (`int`, *optional*, defaults to 2):
-            The temporal conv size in resampler.
+            The spatial patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = [
-        "pixel_values",
-        "image_grid_thw",
-        "pixel_values_videos",
-        "video_grid_thw",
-    ]
+    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(
         self,
         do_resize: bool = True,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[float, List[float]] = 1 / 255,
+        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 56 * 56,
-        max_pixels: int = 28 * 28 * 1280,
+        min_pixels: Optional[int] = 56 * 56,
+        max_pixels: Optional[int] = 6177 * 28 * 28,  # TODO: diff value
         patch_size: int = 14,
-        temporal_conv_size: int = 2,
         merge_size: int = 2,
+        # TODO: no `temporal_patch_size`
         **kwargs,
     ) -> None:
-        """init"""
         super().__init__(**kwargs)
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        else:
+            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        if min_pixels is not None:
+            size["shortest_edge"] = min_pixels
+        if max_pixels is not None:
+            size["longest_edge"] = max_pixels
+        self.min_pixels = size["shortest_edge"]
+        self.max_pixels = size["longest_edge"]
+        self.size = size
+
         self.do_resize = do_resize
         self.resample = resample
         self.do_rescale = do_rescale
@@ -551,39 +536,12 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
+
         self.patch_size = patch_size
-        self.temporal_conv_size = temporal_conv_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
-    # TODO: this seems not to be used at all
-    def set_pixels(self, min_pixels=None, max_pixels=None, msg=""):
-        """set_pixels"""
-        if min_pixels is not None:
-            assert (
-                isinstance(min_pixels, int) and min_pixels >= 0
-            ), "min_pixels must be positive int"
-            logger.info(
-                f"{msg} Ernie4_5_VLImageProcessor set min_pixels = {min_pixels}"
-            )
-            self.min_pixels = min_pixels
-            self.size["min_pixels"] = int(min_pixels)
-        if max_pixels is not None:
-            assert (
-                isinstance(max_pixels, int) and max_pixels > 0
-            ), "max_pixels must be positive int"
-            logger.info(
-                f"{msg} Ernie4_5_VLImageProcessor set max_pixels = {max_pixels}"
-            )
-            self.max_pixels = max_pixels
-            self.size["max_pixels"] = int(max_pixels)
-
-    # TODO: should be removed
     def get_smarted_resize(self, height, width, min_pixels=None, max_pixels=None):
-        """dummy"""
         actual_min_pixels = min_pixels if min_pixels is not None else self.min_pixels
         actual_max_pixels = max_pixels if max_pixels is not None else self.max_pixels
         resized_height, resized_width = smart_resize(
@@ -601,27 +559,34 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
-        do_resize: bool = True,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = False,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        predetermined_grid_thw=None,  # TODO: this is a diff to qwen2 vl
+        predetermined_grid_thw=None,
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
 
         Args:
-            images (`ImageInput` or `VideoInput`):
-                Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255.
-                If pixel values range from 0 to 1, set `do_rescale=False`.
+            images (`ImageInput`):
+                Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
+            vision_info (`list[Dict]`, *optional*):
+                Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -630,12 +595,16 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Mean to use if normalizing the image.
-                Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation to use if normalizing the image.
-                Can be a float or a list of floats corresponding to the number of channels in the image.
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
+                Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
+                Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
+            patch_size (`int`, *optional*, defaults to `self.patch_size`):
+                The spatial patch size of the vision encoder.
+            temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
+                The temporal patch size of the vision encoder.
+            merge_size (`int`, *optional*, defaults to `self.merge_size`):
+                The merge size of the vision encoder to llm encoder.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -647,8 +616,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 The channel dimension format for the input image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         images = make_list_of_images(images)
 
@@ -658,7 +626,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -678,7 +646,6 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
 
         for img_idx, image in enumerate(images):
             if do_resize:
-                # TODO: diff to qwen2 vl
                 if predetermined_grid_thw is not None:
                     (resized_height, resized_width) = predetermined_grid_thw[img_idx]
                     resized_height *= self.patch_size
@@ -693,59 +660,44 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                     )
 
                 image = resize(
-                    image,
-                    size=(resized_height, resized_width),
-                    resample=resample,
-                    data_format=input_data_format,
+                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
                 )
+
             if do_rescale:
-                image = rescale(
-                    image, scale=rescale_factor, data_format=input_data_format
-                )
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
-                image = normalize(
-                    image=image,
-                    mean=image_mean,
-                    std=image_std,
-                    data_format=input_data_format,
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
                 )
 
-            image = to_channel_dimension_format(
-                image, data_format, input_channel_dim=input_data_format
-            )  # [C, H, W]
-
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
+
         patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose([0, 3, 1, 2])
 
-        # TODO: no temporal patches? --> ie also different reshape
-
-        channel = patches.shape[1]  # [time, C, H, W]
+        channel = patches.shape[1]
         grid_t = patches.shape[0]
-        grid_h, grid_w = (
-            resized_height // self.patch_size,
-            resized_width // self.patch_size,
-        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         patches = patches.reshape(
             [
                 grid_t,
                 channel,
-                grid_h // self.merge_size,
-                self.merge_size,
-                self.patch_size,
-                grid_w // self.merge_size,
-                self.merge_size,
-                self.patch_size,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
             ]
         )
-        # [grid_t, grid_h/merge_size, grid_w/merge_size, merge_size, merge_size, C, psz, psz]
+        # [grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
         patches = patches.transpose([0, 2, 5, 3, 6, 1, 4, 7])
-
         flatten_patches = patches.reshape(
-            [grid_t * grid_h * grid_w, channel * self.patch_size * self.patch_size]
-        )  # [grid_t * grid_h * grid_w, C * psz * psz]
+            grid_t * grid_h * grid_w, channel * patch_size * patch_size
+        )
 
         return flatten_patches, (grid_t, grid_h, grid_w)
 
@@ -753,15 +705,20 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         videos: VideoInput = None,
-        do_resize: bool = True,
-        size: Optional[Union[int, List[int]]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = False,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -777,7 +734,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -789,18 +746,30 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
+            min_pixels (`int`, *optional*, defaults to `self.min_pixels`):
+                The min pixels of the image to resize the image.
+            max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
+                The max pixels of the image to resize the image.
+            patch_size (`int`, *optional*, defaults to `self.patch_size`):
+                The spatial patch size of the vision encoder.
+            temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
+                The temporal patch size of the vision encoder.
+            merge_size (`int`, *optional*, defaults to `self.merge_size`):
+                The merge size of the vision encoder to llm encoder.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -814,38 +783,56 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
-        # TODO: check for base options
+        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
+        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+
+        if size is not None:
+            if "shortest_edge" not in size or "longest_edge" not in size:
+                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+            min_pixels = size["shortest_edge"]
+        elif min_pixels is not None and max_pixels is not None:
+            # backward compatibility: override size with min_pixels and max_pixels if they are provided
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
+        else:
+            size = {**self.size}
+
         do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
+
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = (
-            rescale_factor if rescale_factor is not None else self.rescale_factor
-        )
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = (
-            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        )
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        temporal_patch_size = None
+        merge_size = merge_size if merge_size is not None else self.merge_size
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        # TODO: diff --> we should fetch and then batch
         if images is not None:
-            images = make_batched_images(images)
+            images = self.fetch_images(images)
+            images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor."
+                "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        # TODO: missing validation
+        validate_preprocess_arguments(
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         data = {}
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for img_idx, image in enumerate(images):
-                # TODO: predetermined ...
                 if predetermined_grid_thw is not None:
                     predetermined_grid_thw_one = [predetermined_grid_thw[img_idx]]
                 else:
@@ -854,12 +841,16 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
+                    patch_size=patch_size,
+                    temporal_patch_size=temporal_patch_size,
+                    merge_size=merge_size,
                     data_format=data_format,
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
@@ -873,7 +864,6 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
             )
 
-        # TODO: move to separate vid processor
         if videos is not None:
             videos = make_batched_videos(videos)
             pixel_values, vision_grid_thws = [], []
@@ -881,12 +871,16 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 patches, video_grid_thw = self._preprocess(
                     images,
                     do_resize=do_resize,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
+                    patch_size=patch_size,
+                    temporal_patch_size=temporal_patch_size,
+                    merge_size=merge_size,
                     data_format=data_format,
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
@@ -1641,11 +1635,11 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
 
         # Preprocess pixels
         ret = self.image_processor.preprocess(
-            images=[img.convert("RGB")],
+            images=[img],
             do_normalize=True,
             do_rescale=True,
-            predetermined_grid_thw=np.array([[patches_h, patches_w]]),
             do_convert_rgb=True,
+            #predetermined_grid_thw=np.array([[patches_h, patches_w]]),
             input_data_format=ChannelDimension.LAST,
         )
 

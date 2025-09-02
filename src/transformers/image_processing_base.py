@@ -403,6 +403,9 @@ class ImageProcessingMixin(PushToHubMixin):
         if "crop_size" in kwargs and "crop_size" in image_processor_dict:
             image_processor_dict["crop_size"] = kwargs.pop("crop_size")
 
+        # TODO: covnert config correctly, wrong size values atm in ernie vl
+        image_processor_dict.pop("size", None)
+
         image_processor = cls(**image_processor_dict)
 
         # Update image_processor with kwargs if needed
