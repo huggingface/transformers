@@ -117,7 +117,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
         self.write_index = torch.empty((num_groups, T), **tensor_metadata)
-        self.read_index = torch.empty((num_groups, num_pages), **tensor_metadata)
+        self.read_index = torch.empty((num_groups, num_pages + T), **tensor_metadata) # +T is because there are -1 for seqlen_q
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -301,8 +301,9 @@ class ContinuousBatchProcessor:
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[:, :len(write_index[0])] = to_tensor(write_index) # effectie read / write indices are gona depend on groups
-        self.read_index[:, :len(read_index[0])] = to_tensor(read_index)
+        self.write_index[:, :len(write_index[0])] = to_tensor(write_index)
+        max_len_read = max(len(read_index[i]) for i in range(len(read_index)))
+        self.read_index[:, :max_len_read] = to_tensor(read_index)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
