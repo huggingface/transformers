@@ -60,4 +60,7 @@ if __name__ == "__main__":
             print(f"Error downloading {filename}: {e}")
 
     # Used in as `tests/models/auto/test_modeling_auto.py::AutoModelTest::test_dynamic_saving_from_local_repo --> _ = Repository( ... )`
-    _ = Repository(local_dir="tiny-random-custom-architecture", clone_from="hf-internal-testing/tiny-random-custom-architecture")
+    # TODO: Remove this and the above test when `huggingface_hub v1.0` comes (where `Repository` will be removed).
+    _ = Repository(
+        local_dir="tiny-random-custom-architecture", clone_from="hf-internal-testing/tiny-random-custom-architecture"
+    )
