@@ -507,7 +507,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def _embed(
         self,
         input_ids: torch.Tensor,
-        media: List[torch.Tensor],
+        audio_features: List[torch.Tensor],
         labels: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         media_meta: Dict[str, Dict[str, Any]] = None,
@@ -515,10 +515,10 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
 
-        # Extract text and media embeddings
+        # Extract text and audio_features embeddings
         text_embeds = self.llm.model.embed_tokens(input_ids)
 
-        media_embeds = deque(self._sound_features(media, media_meta["sound_feature_masks"]))
+        media_embeds = deque(self._sound_features(audio_features, media_meta["sound_feature_masks"]))
 
         batch_size = labels.shape[0]
 
@@ -662,12 +662,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def generate(
         self,
         input_ids: Optional[torch.FloatTensor] = None,
-        media: Optional[List[torch.Tensor]] = None,
+        audio_features: Optional[List[torch.Tensor]] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         media_meta: Dict[str, Dict[str, Any]] = None,
         **generation_kwargs,
     ) -> torch.LongTensor:
-        inputs_embeds, _, attention_mask = self._embed(input_ids, media, None, attention_mask, media_meta)
+        inputs_embeds, _, attention_mask = self._embed(input_ids, audio_features, None, attention_mask, media_meta)
         return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
 
     @property
