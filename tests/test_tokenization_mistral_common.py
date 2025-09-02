@@ -13,10 +13,8 @@
 # limitations under the License.
 
 import gc
-import sys
 import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -27,9 +25,6 @@ from transformers.testing_utils import require_mistral_common
 from transformers.tokenization_mistral_common import MistralCommonTokenizer
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
-
-
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 
 if is_mistral_common_available():
