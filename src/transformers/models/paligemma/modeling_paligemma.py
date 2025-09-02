@@ -132,7 +132,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Base Paligemma model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
