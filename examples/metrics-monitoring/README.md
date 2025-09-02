@@ -13,7 +13,7 @@ cd examples/metrics-monitoring
 docker compose up
 ```
 
-Then, in your srcipt running CB, you will need to create a MeterProvider and TracerProvider as follows:
+Then, in your script running CB, you will need to create a MeterProvider and TracerProvider as follows:
 
 ```py
 from opentelemetry import metrics, trace

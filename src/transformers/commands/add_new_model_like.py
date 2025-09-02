@@ -93,7 +93,7 @@ COPYRIGHT = f"""
 
 class ModelInfos:
     """
-    Retrieve the basic informations about an existing model classes.
+    Retrieve the basic information about an existing model classes.
     """
 
     def __init__(self, lowercase_name: str):
@@ -158,7 +158,7 @@ def add_model_to_auto_mappings(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         new_model_paper_name (`str`):
@@ -357,7 +357,7 @@ def find_modular_structure(
         module_name (`str`):
             The full path to the python module to copy with modular.
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_cased_name (`str`):
             The new cased model name.
     """
@@ -383,7 +383,7 @@ def create_modular_file(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         filenames_to_add (`list[tuple[str, bool]]`):
@@ -430,7 +430,7 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         filenames_to_add (`list[tuple[str, bool]]`):
@@ -486,7 +486,7 @@ def create_new_model_like(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         new_model_paper_name (`str`):
