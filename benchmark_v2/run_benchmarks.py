@@ -29,19 +29,23 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 
-def setup_logging(log_level: str = "INFO") -> logging.Logger:
+def setup_logging(log_level: str = "INFO", enable_file_logging: bool = False) -> logging.Logger:
     """Setup logging configuration."""
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError(f'Invalid log level: {log_level}')
     
+    handlers = [logging.StreamHandler(sys.stdout)]
+    
+    if enable_file_logging:
+        handlers.append(
+            logging.FileHandler(f'benchmark_run_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+        )
+    
     logging.basicConfig(
         level=numeric_level,
         format='[%(levelname)s - %(asctime)s] %(name)s: %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f'benchmark_run_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-        ]
+        handlers=handlers
     )
     
     return logging.getLogger(__name__)
@@ -167,7 +171,8 @@ def generate_summary_report(
     logger: logging.Logger
 ) -> str:
     """Generate a summary report of all benchmark runs."""
-    summary_file = os.path.join(output_dir, "benchmark_summary.json")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_file = os.path.join(output_dir, f"benchmark_summary_{timestamp}.json")
     
     summary_data = {
         "run_metadata": {
@@ -263,6 +268,12 @@ def main():
     )
     
     parser.add_argument(
+        "--enable-file-logging",
+        action="store_true",
+        help="Enable file logging (disabled by default)"
+    )
+    
+    parser.add_argument(
         "--commit-id",
         type=str,
         help="Git commit ID for metadata (if not provided, will auto-detect from git)"
@@ -271,7 +282,7 @@ def main():
     args = parser.parse_args()
     
     # Setup logging
-    logger = setup_logging(args.log_level)
+    logger = setup_logging(args.log_level, args.enable_file_logging)
     
     logger.info("Starting benchmark discovery and execution")
     logger.info(f"Output directory: {args.output_dir}")

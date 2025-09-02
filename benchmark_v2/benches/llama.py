@@ -31,10 +31,7 @@ class LLaMABenchmark(ModelBenchmark):
         super().__init__(logger)
         self._default_prompt = "Why dogs are so cute?"  # Custom prompt for LLaMA
     
-    @property
-    def model_type(self) -> str:
-        """Model type identifier."""
-        return "llama"
+
     
     def get_scenario_configs(self) -> List[Dict[str, Any]]:
         """

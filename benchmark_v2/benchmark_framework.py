@@ -24,7 +24,7 @@ from abc import ABC, abstractmethod
 from contextlib import nullcontext
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, TypedDict
 import logging
 
 import numpy as np
@@ -34,15 +34,33 @@ import gpustat
 import torch
 
 
-class CUDATimer:
-    """CUDA event-based timer for supposedly better prescision"""
+class WithGPU(TypedDict):
+    """GPU monitoring result with GPU metrics."""
+    gpu_utilization_mean: float
+    gpu_utilization_max: float
+    gpu_utilization_min: float
+    gpu_memory_used_mean: float
+    gpu_memory_used_max: float
+    gpu_memory_used_min: float
+    sample_count: int
+    gpu_monitoring_status: str
+
+
+class NoGPU(TypedDict):
+    """GPU monitoring result without GPU metrics."""
+    gpu_monitoring_status: str
+    gpu_monitoring_reason: str
+
+
+class ArchAwareTimer:
+    """Architecture-aware timer for supposedly better prescision"""
     
     def __init__(self, device: Optional[str] = None):
         """
-        Initialize CUDA timer.
+        Initialize architecture-aware timer.
         
         Args:
-            device: CUDA device to use. If None, uses current device.
+            device: Device to use. If None, uses current device.
         """
         self.device = device
         self.use_cuda = torch.cuda.is_available()
@@ -182,8 +200,8 @@ class BenchmarkScenario:
 @dataclass
 class TimingResult:
     """Result from a timing measurement."""
-    time_to_first_token: Optional[float] = None
-    latency: float = 0.0
+    time_to_first_token_seconds: Optional[float] = None
+    latency_seconds: float = 0.0
     tokens_per_second: Optional[float] = None
     time_per_output_token_seconds: Optional[float] = None
     total_tokens_generated: int = 0
@@ -236,9 +254,9 @@ class BenchmarkStatistics:
 class HardwareInfo:
     """Hardware information collected during benchmarking."""
     gpu_name: str
-    gpu_memory_total: int  # MB
+    gpu_memory_total_mb: int
     cpu_count: int
-    memory_total: int  # MB
+    memory_total_mb: int
     python_version: str
     torch_version: Optional[str] = None
     cuda_version: Optional[str] = None
@@ -265,7 +283,7 @@ class GPUMonitor:
         self.gpu_memory_used = []
         self.timestamps = []
         self.gpu_available = False
-        self.error_logged = False
+        self.warning_logged = False
         
         # Test GPU availability on initialization
         self._test_gpu_availability()
@@ -298,36 +316,36 @@ class GPUMonitor:
         self.thread.start()
         self.logger.debug("GPU monitoring started")
         
-    def stop(self):
+    def stop_and_collect(self) -> Union[WithGPU, NoGPU]:
         """Stop monitoring and return collected metrics."""
         if not self.gpu_available:
-            return {
-                "gpu_monitoring_status": "disabled",
-                "gpu_monitoring_reason": "no_gpus_available"
-            }
+            return NoGPU(
+                gpu_monitoring_status="disabled",
+                gpu_monitoring_reason="no_gpus_available"
+            )
             
         self.monitoring = False
         if self.thread:
             self.thread.join()
         
         if self.gpu_utilization:
-            metrics = {
-                "gpu_utilization_mean": statistics.mean(self.gpu_utilization),
-                "gpu_utilization_max": max(self.gpu_utilization),
-                "gpu_utilization_min": min(self.gpu_utilization),
-                "gpu_memory_used_mean": statistics.mean(self.gpu_memory_used),
-                "gpu_memory_used_max": max(self.gpu_memory_used),
-                "gpu_memory_used_min": min(self.gpu_memory_used),
-                "sample_count": len(self.gpu_utilization),
-                "gpu_monitoring_status": "success"
-            }
+            metrics = WithGPU(
+                gpu_utilization_mean=statistics.mean(self.gpu_utilization),
+                gpu_utilization_max=max(self.gpu_utilization),
+                gpu_utilization_min=min(self.gpu_utilization),
+                gpu_memory_used_mean=statistics.mean(self.gpu_memory_used),
+                gpu_memory_used_max=max(self.gpu_memory_used),
+                gpu_memory_used_min=min(self.gpu_memory_used),
+                sample_count=len(self.gpu_utilization),
+                gpu_monitoring_status="success"
+            )
             self.logger.debug(f"GPU monitoring completed: {len(self.gpu_utilization)} samples collected")
             return metrics
         else:
-            return {
-                "gpu_monitoring_status": "failed",
-                "gpu_monitoring_reason": "no_samples_collected"
-            }
+            return NoGPU(
+                gpu_monitoring_status="failed",
+                gpu_monitoring_reason="no_samples_collected"
+            )
     
     def _monitor_loop(self):
         """Background monitoring loop."""
@@ -345,15 +363,15 @@ class GPUMonitor:
                     consecutive_failures = 0  # Reset failure counter on success
                 else:
                     consecutive_failures += 1
-                    if consecutive_failures >= max_consecutive_failures and not self.error_logged:
+                    if consecutive_failures >= max_consecutive_failures and not self.warning_logged:
                         self.logger.warning("GPU monitoring: No GPU data returned by gpustat")
-                        self.error_logged = True
+                        self.warning_logged = True
                         
             except Exception as e:
                 consecutive_failures += 1
-                if consecutive_failures >= max_consecutive_failures and not self.error_logged:
+                if consecutive_failures >= max_consecutive_failures and not self.warning_logged:
                     self.logger.warning(f"GPU monitoring failed after {max_consecutive_failures} attempts: {e}")
-                    self.error_logged = True
+                    self.warning_logged = True
                     
             time.sleep(self.sample_interval)
 
@@ -379,9 +397,9 @@ def get_hardware_info() -> HardwareInfo:
     
     return HardwareInfo(
         gpu_name=gpu_name,
-        gpu_memory_total=gpu_memory_total,
+        gpu_memory_total_mb=gpu_memory_total,
         cpu_count=psutil.cpu_count(),
-        memory_total=int(psutil.virtual_memory().total / (1024 * 1024)),  # MB
+        memory_total_mb=int(psutil.virtual_memory().total / (1024 * 1024)),
         python_version=f"{sys.version.split()[0]}",
         torch_version=torch_version,
         cuda_version=cuda_version
@@ -521,10 +539,7 @@ class ModelBenchmark(AbstractModelBenchmark):
         """Default prompt for text generation. Override in subclasses if needed."""
         return self._default_prompt
     
-    @property
-    def model_type(self) -> str:
-        """Model type identifier. Override in subclasses."""
-        return "transformers"
+
     
     def get_attention_configs(self, include_sdpa_variants: bool = True) -> List[Dict[str, Any]]:
         """
@@ -850,7 +865,7 @@ class ModelBenchmark(AbstractModelBenchmark):
         generation_kwargs = self._get_generation_kwargs(config, max_new_tokens=1)
         
         # Use CUDA timer for high-precision measurement
-        with CUDATimer(device=config.device) as timer:
+        with ArchAwareTimer(device=config.device) as timer:
             # Use SDPA context if specified
             with SDPAContext(config.sdpa_backend, self.logger):
                 with torch.no_grad():
@@ -866,7 +881,7 @@ class ModelBenchmark(AbstractModelBenchmark):
         generation_kwargs = self._get_generation_kwargs(config, max_new_tokens=config.num_tokens_to_generate)
         
         # Use CUDA timer for high-precision measurement
-        with CUDATimer(device=config.device) as timer:
+        with ArchAwareTimer(device=config.device) as timer:
             # Use SDPA context if specified
             with SDPAContext(config.sdpa_backend, self.logger):
                 with torch.no_grad():
@@ -882,7 +897,7 @@ class ModelBenchmark(AbstractModelBenchmark):
         time_per_output_token = latency / tokens_generated if tokens_generated > 0 else None
         
         return TimingResult(
-            latency=latency,
+            latency_seconds=latency,
             tokens_per_second=tokens_per_second,
             time_per_output_token_seconds=time_per_output_token,
             total_tokens_generated=tokens_generated,
@@ -1035,7 +1050,7 @@ class BenchmarkRunner:
                 latency_measurements = []
                 ttft_measurements = []
                 tokens_per_sec_measurements = []
-                tpot_measurements = []  # Time Per Output Token
+                itl_measurements = []  # Inter-Token Latency
                 measurement_failures = 0
                 
                 for i in range(config.measurement_iterations):
@@ -1046,16 +1061,16 @@ class BenchmarkRunner:
                         
                         # Measure full latency
                         timing_result = benchmark.measure_latency(config)
-                        latency_measurements.append(timing_result.latency)
+                        latency_measurements.append(timing_result.latency_seconds)
                         
                         if timing_result.tokens_per_second is not None:
                             tokens_per_sec_measurements.append(timing_result.tokens_per_second)
                         
                         if timing_result.time_per_output_token_seconds is not None:
-                            tpot_measurements.append(timing_result.time_per_output_token_seconds)
+                            itl_measurements.append(timing_result.time_per_output_token_seconds)
                         
-                        tpot_str = f", tpot={timing_result.time_per_output_token_seconds:.4f}s/token" if timing_result.time_per_output_token_seconds else ""
-                        self.logger.debug(f"Iteration {i+1}: latency={timing_result.latency:.4f}s, ttft={ttft:.4f}s{tpot_str}")
+                        itl_str = f", itl={timing_result.time_per_output_token_seconds:.4f}s/token" if timing_result.time_per_output_token_seconds else ""
+                        self.logger.debug(f"Iteration {i+1}: latency={timing_result.latency_seconds:.4f}s, ttft={ttft:.4f}s{itl_str}")
                         
                     except Exception as e:
                         measurement_failures += 1
@@ -1064,7 +1079,7 @@ class BenchmarkRunner:
                 # Stop GPU monitoring
                 gpu_metrics = {}
                 if gpu_monitor:
-                    gpu_metrics = gpu_monitor.stop()
+                    gpu_metrics = gpu_monitor.stop_and_collect()
                 
                 # If we don't have enough successful measurements, skip this scenario
                 if not latency_measurements or len(latency_measurements) < config.measurement_iterations // 2:
@@ -1085,20 +1100,20 @@ class BenchmarkRunner:
                 }
                 
                 if latency_measurements:
-                    latency_stats = BenchmarkStatistics.from_measurements("latency", latency_measurements)
-                    scenario_results["measurements"]["latency"] = asdict(latency_stats)
+                    latency_stats = BenchmarkStatistics.from_measurements("latency_seconds", latency_measurements)
+                    scenario_results["measurements"]["latency_seconds"] = asdict(latency_stats)
                 
                 if ttft_measurements:
-                    ttft_stats = BenchmarkStatistics.from_measurements("time_to_first_token", ttft_measurements)
-                    scenario_results["measurements"]["time_to_first_token"] = asdict(ttft_stats)
+                    ttft_stats = BenchmarkStatistics.from_measurements("time_to_first_token_seconds", ttft_measurements)
+                    scenario_results["measurements"]["time_to_first_token_seconds"] = asdict(ttft_stats)
                 
                 if tokens_per_sec_measurements:
                     tps_stats = BenchmarkStatistics.from_measurements("tokens_per_second", tokens_per_sec_measurements, "tokens/sec")
                     scenario_results["measurements"]["tokens_per_second"] = asdict(tps_stats)
                 
-                if tpot_measurements:
-                    tpot_stats = BenchmarkStatistics.from_measurements("time_per_output_token_seconds", tpot_measurements, "seconds/token")
-                    scenario_results["measurements"]["time_per_output_token_seconds"] = asdict(tpot_stats)
+                if itl_measurements:
+                    itl_stats = BenchmarkStatistics.from_measurements("time_per_output_token_seconds", itl_measurements, "seconds/token")
+                    scenario_results["measurements"]["time_per_output_token_seconds"] = asdict(itl_stats)
                 
                 # Log summary
                 if latency_measurements:
@@ -1107,8 +1122,8 @@ class BenchmarkRunner:
                     self.logger.info(f"TTFT: {ttft_stats.mean:.4f}±{ttft_stats.std:.4f}s (mean±std)")
                 if tokens_per_sec_measurements:
                     self.logger.info(f"Throughput: {tps_stats.mean:.2f}±{tps_stats.std:.2f} tokens/sec (mean±std)")
-                if tpot_measurements:
-                    self.logger.info(f"TPOT: {tpot_stats.mean:.4f}±{tpot_stats.std:.4f}s/token (mean±std)")
+                if itl_measurements:
+                    self.logger.info(f"ITL: {itl_stats.mean:.4f}±{itl_stats.std:.4f}s/token (mean±std)")
                 
                 # Add note about partial results if some measurements failed
                 if measurement_failures > 0:
