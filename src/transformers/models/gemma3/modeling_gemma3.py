@@ -1304,7 +1304,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     It uses the generic sequence classification implementation for efficiency and consistency.
     """
 
-    pass
+    config: Gemma3TextConfig
 
 
 __all__ = [
