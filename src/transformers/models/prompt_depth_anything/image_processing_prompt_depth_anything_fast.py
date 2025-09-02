@@ -206,6 +206,10 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
+        # Set default interpolation to BICUBIC to match the slow processor
+        if interpolation is None:
+            interpolation = F.InterpolationMode.BICUBIC
+
         if not keep_aspect_ratio:
             # Standard resize
             return self.resize(image=image, size=size, interpolation=interpolation)
