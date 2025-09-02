@@ -686,7 +686,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         left_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
-            truncation="left",
+            truncation_side="left",
             revision=None,
         )
         tokens, none, overflowing_tokens = left_tokenizer.truncate_sequences(
