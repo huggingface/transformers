@@ -3,7 +3,7 @@ import os
 import requests
 from huggingface_hub import Repository, hf_hub_download
 
-from transformers import is_mistral_common_available
+from transformers.utils.import_utils import is_mistral_common_available
 
 
 if is_mistral_common_available():
