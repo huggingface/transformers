@@ -272,7 +272,7 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(
+        self._validate_generation_mode(
             assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer
         )
 

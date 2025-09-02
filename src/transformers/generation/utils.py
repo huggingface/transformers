@@ -1492,35 +1492,44 @@ class GenerationMixin(ContinuousMixin):
 
         return transition_scores
 
-    def _validate_assistant(self, assistant_model, tokenizer, assistant_tokenizer):
-        if assistant_model is None:
-            return
+    def _validate_generation_mode(self, generation_mode, generation_mode_kwargs):
+        if "synced_gpus" not in generation_mode_kwargs:
+            generation_mode_kwargs["synced_gpus"] = (
+                is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+            ) and dist.get_world_size() > 1
 
-        if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
-            attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
-            attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
-            are_equal = all(
-                getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
+        if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
+            raise ValueError(
+                "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
             )
-            if not are_equal:
-                raise ValueError(
-                    "The main model and the assistant don't have compatible encoder-dependent input shapes. "
-                    "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
-                )
 
-        doc_reference = (
-            "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
-        )
-        if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
-            if assistant_tokenizer is not None:
-                raise ValueError(
-                    f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
+        if generation_mode == GenerationMode.ASSISTED_GENERATION:
+            assistant_model = generation_mode_kwargs.get("assistant_model")
+            if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
+                attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
+                attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
+                are_equal = all(
+                    getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
                 )
-        else:
-            if tokenizer is None or assistant_tokenizer is None:
-                raise ValueError(
-                    f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
-                )
+                if not are_equal:
+                    raise ValueError(
+                        "The main model and the assistant don't have compatible encoder-dependent input shapes. "
+                        "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
+                    )
+
+            doc_reference = (
+                "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
+            )
+            if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+                if "assistant_tokenizer" in generation_mode_kwargs:
+                    raise ValueError(
+                        f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
+                    )
+            else:
+                if "tokenizer" not in generation_mode_kwargs or "assistant_tokenizer" not in generation_mode_kwargs:
+                    raise ValueError(
+                        f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                    )
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
@@ -2155,35 +2164,33 @@ class GenerationMixin(ContinuousMixin):
             )
         return repo
 
-    def _get_mode_processor_kwargs(
+    def _extract_generation_mode_kwargs(
         self,
         custom_generate,
         kwargs,
+        synced_gpus,
         assistant_model,
-        negative_prompt_ids,
-        negative_prompt_attention_mask,
-        prefix_allowed_tokens_fn,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        streamer,
+    ) -> dict[str, Any]:
         """
-        Extracts and returns the generation mode and logit processor related keyword arguments from the provided kwargs.
+        Extracts and returns the generation mode related keyword arguments from the provided kwargs.
         """
-        gen_mode_kwargs = {
+        generation_mode_kwargs = {
             "tokenizer": kwargs.pop("tokenizer", None),
-            "assistant_model": assistant_model,
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
+            "synced_gpus": synced_gpus,
+            "assistant_model": assistant_model,
+            "streamer": streamer,
         }
-        gen_mode_kwargs = {k: v for k, v in gen_mode_kwargs.items() if v is not None}
+        generation_mode_kwargs = {k: v for k, v in generation_mode_kwargs.items() if v is not None}
+        # Custom_generate callables can have their own set of arguments
+        # To extract them, we compare the signature with the standard _sample method
         if isinstance(custom_generate, Callable):
             usual_mode_kwargs = inspect.signature(GenerationMixin._sample).parameters.keys()
             custom_generate_kwargs = inspect.signature(custom_generate).parameters.keys()
             new_custom_keys = custom_generate_kwargs - usual_mode_kwargs
-            gen_mode_kwargs = {k: kwargs.pop(k) for k in new_custom_keys if k in kwargs}
-        logits_processor_kwargs = {
-            "negative_prompt_ids": negative_prompt_ids,
-            "negative_prompt_attention_mask": negative_prompt_attention_mask,
-            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
-        }
-        return gen_mode_kwargs, logits_processor_kwargs
+            generation_mode_kwargs = {k: kwargs.pop(k) for k in new_custom_keys if k in kwargs}
+        return generation_mode_kwargs
 
     @torch.no_grad()
     def generate(
@@ -2322,24 +2329,21 @@ class GenerationMixin(ContinuousMixin):
             return custom_generate_function(model=self, **generate_arguments)
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
-        gen_mode_kwargs, logits_processor_kwargs = self._get_mode_processor_kwargs(
+        generation_mode_kwargs = self._extract_generation_mode_kwargs(
             custom_generate,
             kwargs,
+            synced_gpus,
             assistant_model,
-            negative_prompt_ids,
-            negative_prompt_attention_mask,
-            prefix_allowed_tokens_fn,
+            streamer,
         )
 
         generation_config, model_kwargs = self._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
         )
-        self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(
-            assistant_model, gen_mode_kwargs.get("tokenizer"), gen_mode_kwargs.get("assistant_tokenizer")
-        )
-
         generation_mode = generation_config.get_generation_mode(assistant_model)
+
+        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
 
         # Deprecation-related step: set Hub repo for deprecated strategies.
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
@@ -2348,27 +2352,22 @@ class GenerationMixin(ContinuousMixin):
         if deprecate_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
             return GenerationMixin.generate(
                 self,
-                inputs,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
-                gen_mode_kwargs.pop("assistant_model"),
-                streamer,
-                negative_prompt_ids,
-                negative_prompt_attention_mask,
-                use_model_defaults,
+                inputs=inputs,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                assistant_model=assistant_model,
+                negative_prompt_ids=negative_prompt_ids,
+                negative_prompt_attention_mask=negative_prompt_attention_mask,
+                use_model_defaults=use_model_defaults,
                 custom_generate=deprecate_mode_repo,
                 trust_remote_code=trust_remote_code,
-                **gen_mode_kwargs,
+                **generation_mode_kwargs,
                 **kwargs,
             )
 
         # 2. Set generation parameters if not already defined
-        if synced_gpus is None:
-            synced_gpus = (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
-
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -2442,7 +2441,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         if generation_config.token_healing:
-            input_ids = self.heal_tokens(input_ids, gen_mode_kwargs.get("tokenizer"))
+            input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -2483,11 +2482,6 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        if streamer is not None and generation_mode == GenerationMode.BEAM_SEARCH:
-            raise ValueError(
-                "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
-            )
-
         if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
@@ -2504,15 +2498,17 @@ class GenerationMixin(ContinuousMixin):
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
             device=inputs_tensor.device,
             model_kwargs=model_kwargs,
-            **logits_processor_kwargs,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config,
             stopping_criteria=stopping_criteria,
-            tokenizer=gen_mode_kwargs.get("tokenizer"),
+            tokenizer=generation_mode_kwargs.get("tokenizer"),
         )
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
@@ -2526,10 +2522,8 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                streamer=streamer,
+                **generation_mode_kwargs,
                 **model_kwargs,
-                **gen_mode_kwargs,
             )
         elif generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
@@ -2555,10 +2549,10 @@ class GenerationMixin(ContinuousMixin):
                 generation_config=generation_config,
                 input_ids=input_ids,
                 inputs_tensor=inputs_tensor,
-                assistant_model=assistant_model,
+                assistant_model=generation_mode_kwargs.pop("assistant_model", None),
                 logits_processor=logits_processor,
-                target_tokenizer=gen_mode_kwargs.get("tokenizer"),
-                assistant_tokenizer=gen_mode_kwargs.get("assistant_tokenizer"),
+                target_tokenizer=generation_mode_kwargs.pop("tokenizer", None),
+                assistant_tokenizer=generation_mode_kwargs.pop("assistant_tokenizer", None),
                 model_kwargs=model_kwargs,
             )
 
@@ -2569,8 +2563,7 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                streamer=streamer,
+                **generation_mode_kwargs,
                 **model_kwargs,
             )
 
@@ -2581,8 +2574,7 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                streamer=streamer,
+                **generation_mode_kwargs,
                 **model_kwargs,
             )
 
@@ -2593,7 +2585,7 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
-                synced_gpus=synced_gpus,
+                **generation_mode_kwargs,
                 **model_kwargs,
             )
 
@@ -2716,7 +2708,7 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -3482,7 +3474,7 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
