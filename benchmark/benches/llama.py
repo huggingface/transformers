@@ -32,6 +32,7 @@ try:
     import torch
 
     from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
@@ -65,7 +66,13 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
 
 
 def run_benchmark(
-    logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, metrics_recorder=None, num_tokens_to_generate=100
+    logger: Logger,
+    repository: str,
+    branch: str,
+    commit_id: str,
+    commit_msg: str,
+    metrics_recorder=None,
+    num_tokens_to_generate=100,
 ):
     # Check if required ML dependencies are available
     if not TRANSFORMERS_AVAILABLE:

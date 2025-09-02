@@ -5573,13 +5573,15 @@ class Trainer:
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
             for param in ["limit_all_gathers", "activation_checkpointing"]:
-                if hasattr(self.args, 'fsdp_config') and self.args.fsdp_config is not None:
+                if hasattr(self.args, "fsdp_config") and self.args.fsdp_config is not None:
                     setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
 
-            if (hasattr(fsdp_plugin, 'activation_checkpointing') and
-                fsdp_plugin.activation_checkpointing and
-                hasattr(self.args, 'gradient_checkpointing') and
-                self.args.gradient_checkpointing):
+            if (
+                hasattr(fsdp_plugin, "activation_checkpointing")
+                and fsdp_plugin.activation_checkpointing
+                and hasattr(self.args, "gradient_checkpointing")
+                and self.args.gradient_checkpointing
+            ):
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
@@ -5613,7 +5615,6 @@ class Trainer:
             and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
-
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """

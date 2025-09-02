@@ -22,7 +22,9 @@ imperfect = 0
 wrong = 0
 
 
-def check_diff(spm_diff: list[int], tok_diff: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> bool:
+def check_diff(
+    spm_diff: list[int], tok_diff: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase
+) -> bool:
     if spm_diff == list(reversed(tok_diff)):
         # AAA -> AA+A vs A+AA case.
         return True
@@ -54,7 +56,9 @@ def check_LTR_mark(line: str, idx: int, fast: PreTrainedTokenizerBase) -> bool:
     return False
 
 
-def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> bool:
+def check_details(
+    line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase
+) -> bool:
     # Encoding can be the same with same result AAA -> A + AA vs AA + A
     # We can check that we use at least exactly the same number of tokens.
     for i, (spm_id, tok_id) in enumerate(zip(spm_ids, tok_ids)):
@@ -90,7 +94,9 @@ def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTr
                     if tok_ids[first + k : first + k + min_width] == spm_ids[first + i : first + i + min_width]
                 ]
                 for j in possible_matches:
-                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], slow, fast) and check_details(
+                    if check_diff(
+                        spm_ids[first : first + i], tok_ids[first : first + j], slow, fast
+                    ) and check_details(
                         line,
                         spm_ids[first + i : last],
                         tok_ids[first + j : last],
@@ -140,9 +146,9 @@ def test_string(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase, te
     if skip_assert:
         return
 
-    assert (
-        slow_ids == fast_ids
-    ), f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    assert slow_ids == fast_ids, (
+        f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    )
 
 
 def test_tokenizer(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> None:

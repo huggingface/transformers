@@ -26,6 +26,7 @@ import pandas as pd
 try:
     from psycopg2.extensions import register_adapter
     from psycopg2.extras import Json
+
     register_adapter(dict, Json)
     PSYCOPG2_AVAILABLE = True
 except ImportError:
@@ -38,8 +39,14 @@ class ImportModuleException(Exception):
 
 class MetricsRecorder:
     def __init__(
-        self, connection, logger: logging.Logger, repository: str, branch: str, commit_id: str, commit_msg: str,
-        collect_csv_data: bool = True
+        self,
+        connection,
+        logger: logging.Logger,
+        repository: str,
+        branch: str,
+        commit_id: str,
+        commit_msg: str,
+        collect_csv_data: bool = True,
     ):
         self.conn = connection
         self.use_database = connection is not None
@@ -55,23 +62,39 @@ class MetricsRecorder:
         # For CSV export - store all data in pandas DataFrames (only if CSV collection is enabled)
         if self.collect_csv_data:
             # Initialize empty DataFrames with proper schemas
-            self.benchmarks_df = pd.DataFrame(columns=[
-                'benchmark_id', 'repository', 'branch', 'commit_id', 'commit_message',
-                'metadata', 'created_at'
-            ])
-            self.device_measurements_df = pd.DataFrame(columns=[
-                'benchmark_id', 'cpu_util', 'mem_megabytes', 'gpu_util',
-                'gpu_mem_megabytes', 'time'
-            ])
-            self.model_measurements_df = pd.DataFrame(columns=[
-                'benchmark_id', 'time', 'model_load_time', 'first_eager_forward_pass_time_secs',
-                'second_eager_forward_pass_time_secs', 'first_eager_generate_time_secs',
-                'second_eager_generate_time_secs', 'time_to_first_token_secs',
-                'time_to_second_token_secs', 'time_to_third_token_secs',
-                'time_to_next_token_mean_secs', 'first_compile_generate_time_secs',
-                'second_compile_generate_time_secs', 'third_compile_generate_time_secs',
-                'fourth_compile_generate_time_secs'
-            ])
+            self.benchmarks_df = pd.DataFrame(
+                columns=[
+                    "benchmark_id",
+                    "repository",
+                    "branch",
+                    "commit_id",
+                    "commit_message",
+                    "metadata",
+                    "created_at",
+                ]
+            )
+            self.device_measurements_df = pd.DataFrame(
+                columns=["benchmark_id", "cpu_util", "mem_megabytes", "gpu_util", "gpu_mem_megabytes", "time"]
+            )
+            self.model_measurements_df = pd.DataFrame(
+                columns=[
+                    "benchmark_id",
+                    "time",
+                    "model_load_time",
+                    "first_eager_forward_pass_time_secs",
+                    "second_eager_forward_pass_time_secs",
+                    "first_eager_generate_time_secs",
+                    "second_eager_generate_time_secs",
+                    "time_to_first_token_secs",
+                    "time_to_second_token_secs",
+                    "time_to_third_token_secs",
+                    "time_to_next_token_mean_secs",
+                    "first_compile_generate_time_secs",
+                    "second_compile_generate_time_secs",
+                    "third_compile_generate_time_secs",
+                    "fourth_compile_generate_time_secs",
+                ]
+            )
         else:
             self.benchmarks_df = None
             self.device_measurements_df = None
@@ -95,15 +118,19 @@ class MetricsRecorder:
         # Store benchmark data for CSV export (if enabled)
         if self.collect_csv_data:
             # Add row to pandas DataFrame
-            new_row = pd.DataFrame([{
-                'benchmark_id': benchmark_id,
-                'repository': self.repository,
-                'branch': self.branch,
-                'commit_id': self.commit_id,
-                'commit_message': self.commit_msg,
-                'metadata': json.dumps(metadata),
-                'created_at': datetime.utcnow().isoformat()
-            }])
+            new_row = pd.DataFrame(
+                [
+                    {
+                        "benchmark_id": benchmark_id,
+                        "repository": self.repository,
+                        "branch": self.branch,
+                        "commit_id": self.commit_id,
+                        "commit_message": self.commit_msg,
+                        "metadata": json.dumps(metadata),
+                        "created_at": datetime.utcnow().isoformat(),
+                    }
+                ]
+            )
             self.benchmarks_df = pd.concat([self.benchmarks_df, new_row], ignore_index=True)
 
         mode_info = []
@@ -123,14 +150,18 @@ class MetricsRecorder:
         # Store device measurements for CSV export (if enabled)
         if self.collect_csv_data:
             # Add row to pandas DataFrame
-            new_row = pd.DataFrame([{
-                'benchmark_id': benchmark_id,
-                'cpu_util': cpu_util,
-                'mem_megabytes': mem_megabytes,
-                'gpu_util': gpu_util,
-                'gpu_mem_megabytes': gpu_mem_megabytes,
-                'time': datetime.utcnow().isoformat()
-            }])
+            new_row = pd.DataFrame(
+                [
+                    {
+                        "benchmark_id": benchmark_id,
+                        "cpu_util": cpu_util,
+                        "mem_megabytes": mem_megabytes,
+                        "gpu_util": gpu_util,
+                        "gpu_mem_megabytes": gpu_mem_megabytes,
+                        "time": datetime.utcnow().isoformat(),
+                    }
+                ]
+            )
             self.device_measurements_df = pd.concat([self.device_measurements_df, new_row], ignore_index=True)
 
         # Store in database if available
@@ -149,10 +180,7 @@ class MetricsRecorder:
         # Store model measurements for CSV export (if enabled)
         if self.collect_csv_data:
             # Add row to pandas DataFrame with flattened measurements
-            row_data = {
-                'benchmark_id': benchmark_id,
-                'time': datetime.utcnow().isoformat()
-            }
+            row_data = {"benchmark_id": benchmark_id, "time": datetime.utcnow().isoformat()}
             # Flatten the measurements dict into the row
             row_data.update(measurements)
 
@@ -241,28 +269,34 @@ class MetricsRecorder:
         # Add model measurements (join on benchmark_id)
         if len(self.model_measurements_df) > 0:
             # Drop 'time' column from model measurements to avoid conflicts
-            model_df = self.model_measurements_df.drop(columns=['time'], errors='ignore')
-            summary_df = summary_df.merge(model_df, on='benchmark_id', how='left')
+            model_df = self.model_measurements_df.drop(columns=["time"], errors="ignore")
+            summary_df = summary_df.merge(model_df, on="benchmark_id", how="left")
 
         # Calculate device measurement aggregates using pandas groupby
         if len(self.device_measurements_df) > 0:
-            device_agg = self.device_measurements_df.groupby('benchmark_id').agg({
-                'cpu_util': ['mean', 'max', 'std', 'count'],
-                'mem_megabytes': ['mean', 'max', 'std'],
-                'gpu_util': ['mean', 'max', 'std'],
-                'gpu_mem_megabytes': ['mean', 'max', 'std']
-            }).round(3)
+            device_agg = (
+                self.device_measurements_df.groupby("benchmark_id")
+                .agg(
+                    {
+                        "cpu_util": ["mean", "max", "std", "count"],
+                        "mem_megabytes": ["mean", "max", "std"],
+                        "gpu_util": ["mean", "max", "std"],
+                        "gpu_mem_megabytes": ["mean", "max", "std"],
+                    }
+                )
+                .round(3)
+            )
 
             # Flatten column names
             device_agg.columns = [f"{col[0]}_{col[1]}" for col in device_agg.columns]
             device_agg = device_agg.reset_index()
 
             # Rename count column to be more descriptive
-            if 'cpu_util_count' in device_agg.columns:
-                device_agg = device_agg.rename(columns={'cpu_util_count': 'device_measurement_count'})
+            if "cpu_util_count" in device_agg.columns:
+                device_agg = device_agg.rename(columns={"cpu_util_count": "device_measurement_count"})
 
             # Merge with summary
-            summary_df = summary_df.merge(device_agg, on='benchmark_id', how='left')
+            summary_df = summary_df.merge(device_agg, on="benchmark_id", how="left")
 
         # Export the comprehensive summary
         summary_df.to_csv(summary_file, index=False)
@@ -313,18 +347,13 @@ def parse_arguments() -> tuple[str, str, str, str, bool, str]:
         help="The commit message associated with the commit, truncated to 70 characters.",
     )
 
-    parser.add_argument(
-        "--csv",
-        action="store_true",
-        default=False,
-        help="Enable CSV output files generation."
-    )
+    parser.add_argument("--csv", action="store_true", default=False, help="Enable CSV output files generation.")
 
     parser.add_argument(
         "--csv-output-dir",
         type=str,
         default="benchmark_results",
-        help="Directory for CSV output files (default: benchmark_results)."
+        help="Directory for CSV output files (default: benchmark_results).",
     )
 
     args = parser.parse_args()
@@ -356,6 +385,7 @@ def create_database_connection():
 
     try:
         import psycopg2
+
         conn = psycopg2.connect("dbname=metrics")
         logger.info("Successfully connected to database")
         return conn
@@ -364,8 +394,9 @@ def create_database_connection():
         return None
 
 
-def create_global_metrics_recorder(repository: str, branch: str, commit_id: str, commit_msg: str,
-                                   generate_csv: bool = False) -> MetricsRecorder:
+def create_global_metrics_recorder(
+    repository: str, branch: str, commit_id: str, commit_msg: str, generate_csv: bool = False
+) -> MetricsRecorder:
     """
     Create a global metrics recorder that will be used across all benchmarks.
     """
@@ -415,7 +446,7 @@ if __name__ == "__main__":
             try:
                 logger.debug(f"checking if benches/{entry.name} has run_benchmark function")
                 module = import_from_path(entry.name.split(".")[0], entry.path)
-                if hasattr(module, 'run_benchmark'):
+                if hasattr(module, "run_benchmark"):
                     benchmark_modules.append(entry.name)
                     logger.debug(f"discovered benchmark: {entry.name}")
                 else:
@@ -443,7 +474,9 @@ if __name__ == "__main__":
                 module.run_benchmark(logger, repository, branch, commit_id, commit_msg, global_metrics_recorder)
             except TypeError:
                 # Fall back to the old signature for backward compatibility
-                logger.warning(f"Module {module_name} using old run_benchmark signature - database connection will be created per module")
+                logger.warning(
+                    f"Module {module_name} using old run_benchmark signature - database connection will be created per module"
+                )
                 module.run_benchmark(logger, repository, branch, commit_id, commit_msg)
 
             successful_benchmarks += 1
