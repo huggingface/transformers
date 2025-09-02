@@ -25,7 +25,7 @@ from ...utils.metrics import traced
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 @staticmethod
