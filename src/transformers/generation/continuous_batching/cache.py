@@ -22,7 +22,7 @@ from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import CacheManager, FullAttentionCacheManager, SlidingAttentionCacheManager
-from .classes import get_device_and_memory_breakdown, logger
+from .requests import get_device_and_memory_breakdown, logger
 
 
 def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:

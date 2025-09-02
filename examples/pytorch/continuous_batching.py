@@ -20,13 +20,14 @@ from typing import Optional
 
 import datasets
 import torch
+from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
 
-# MODEL_ID = "meta-llama/Llama-3.2-3b-Instruct"
-MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+# MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+MODEL_ID = "google/gemma-2b"
 
 
 def generate_simple(
@@ -42,7 +43,7 @@ def generate_simple(
     model = model.cuda().eval()
 
     decoded_outputs = {}
-    for input_ids in simple_batch_inputs:
+    for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
         key = ";".join(map(str, input_ids))
         input_ids = torch.tensor([input_ids]).to("cuda")
         # attention_mask = torch.ones_like(input_ids)
@@ -138,7 +139,7 @@ def batch_generate(
         # Compare with classic generate if asked
         if expected_outputs is not None:
             expected_output = expected_outputs.pop(key)
-            matches = output_text == expected_output
+            matches = output_text == expected_output  # TODO: rework this for a better distance metric
             data[-1]["ref"] = expected_output
             data[-1]["matches"] = matches
             data[-1].pop("key")
@@ -222,7 +223,7 @@ if __name__ == "__main__":
 
     # Prepare generation config
     generation_config = GenerationConfig(
-        max_new_tokens=50,
+        max_new_tokens=512,
         use_cuda_graph=args.use_cuda_graph,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,

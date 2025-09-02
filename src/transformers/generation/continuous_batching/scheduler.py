@@ -18,7 +18,7 @@ from collections import deque
 
 from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
-from .classes import RequestState, RequestStatus
+from .requests import RequestState, RequestStatus
 
 
 class Scheduler(ABC):
