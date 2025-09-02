@@ -86,9 +86,9 @@ class Videollama3ImageProcessor(BaseImageProcessor):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
+        temporal_patch_size (`int`, *optional*, defaults to 1):
             The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
+        merge_size (`int`, *optional*, defaults to 1):
             The merge size of the vision encoder to llm encoder.
     """
 

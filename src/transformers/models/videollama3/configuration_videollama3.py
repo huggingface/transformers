@@ -74,9 +74,9 @@ class Videollama3Config(PretrainedConfig):
             The config object or dictionary of the text backbone.
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Videollama3VisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to -1):
+        image_token_id (`int`, *optional*, defaults to 151655):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to -1):
+        video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
     """
 

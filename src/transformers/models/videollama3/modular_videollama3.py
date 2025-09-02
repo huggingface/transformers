@@ -63,6 +63,7 @@ from transformers.utils import (
     can_return_tuple,
     logging,
 )
+from transformers.utils.generic import check_model_inputs
 from transformers.video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -172,9 +173,9 @@ class Videollama3Config(PretrainedConfig):
             The config object or dictionary of the text backbone.
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Videollama3VisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to -1):
+        image_token_id (`int`, *optional*, defaults to 151655):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to -1):
+        video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
     """
 
@@ -223,7 +224,7 @@ class Videollama3Config(PretrainedConfig):
     """
 )
 class Videollama3ModelOutputWithPast(ModelOutput):
-    """
+    r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
@@ -253,7 +254,7 @@ class Videollama3ModelOutputWithPast(ModelOutput):
     """
 )
 class Videollama3CausalLMOutputWithPast(ModelOutput):
-    """
+    r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -456,7 +457,7 @@ class Videollama3VisionEncoder(SiglipEncoder):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
-        """
+        r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
@@ -480,6 +481,7 @@ class Videollama3PreTrainedModel(Qwen2VLPreTrainedModel):
 
 class Videollama3VisionModel(Videollama3PreTrainedModel):
     config: Videollama3VisionConfig
+    main_input_name = "pixel_values"
     _no_split_modules = ["Videollama3VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Videollama3VisionEncoderLayer,
@@ -496,6 +498,9 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_init()
+
+    def get_input_embeddings(self) -> Videollama3VisionEmbeddings:
+        return self.embeddings.patch_embedding
 
     def rot_pos_emb(self, grid_thw, merge_sizes):
         pos_ids = []
@@ -551,7 +556,7 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -560,7 +565,7 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
         merge_sizes: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
-        """
+        r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
@@ -708,9 +713,9 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Videollama3ModelOutputWithPast]:
-        """
+        r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
@@ -823,7 +828,7 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTr
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
@@ -1493,6 +1498,7 @@ __all__ = [
     "Videollama3VisionConfig",
     "Videollama3Config",
     "Videollama3VisionModel",
+    "Videollama3PreTrainedModel",
     "Videollama3Model",
     "Videollama3ForConditionalGeneration",
     "Videollama3Processor",

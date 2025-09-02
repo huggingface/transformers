@@ -4,10 +4,15 @@ import copy
 import tempfile
 import unittest
 
+import torch.nn as nn
+from parameterized import parameterized
+
 from transformers import (
     Videollama3Config,
     Videollama3ForConditionalGeneration,
     Videollama3Model,
+    Videollama3VisionConfig,
+    Videollama3VisionModel,
     is_torch_available,
     is_vision_available,
 )
@@ -19,6 +24,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -32,6 +38,143 @@ if is_torch_available():
 
 if is_vision_available():
     pass
+
+
+class Videollama3VisionModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        patch_size=2,
+        num_channels=3,
+        image_size=14,
+        is_training=True,
+        hidden_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=37,
+        attention_dropout=0.1,
+        initializer_range=0.02,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.scope = scope
+
+    def get_config(self):
+        return Videollama3VisionConfig(
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            attention_dropout=self.attention_dropout,
+            initializer_range=self.initializer_range,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        patch_size = config.patch_size
+        pixel_values = floats_tensor(
+            [
+                self.batch_size * (self.image_size**2) // (patch_size**2),
+                self.num_channels * (patch_size**2),
+            ]
+        )
+        return config, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        num_patches = self.image_size // config.patch_size
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "grid_thw": torch.tensor([[1, num_patches, num_patches]] * self.batch_size, device=torch_device),
+            "merge_sizes": torch.tensor([1] * self.batch_size, device=torch_device),
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class Videollama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as SIGLIP does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (Videollama3VisionModel,) if is_torch_available() else ()
+    additional_model_inputs = ["grid_thw", "merge_sizes"]
+    # fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
+
+    def setUp(self):
+        self.model_tester = Videollama3VisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Videollama3VisionConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    @unittest.skip(reason="Videollama3VisionModel does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel uses flattened input")
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel uses flattened input")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel uses flattened input")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Videollama3VisionModel uses flattened input")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 
 class Videollama3VisionText2TextModelTester:
