@@ -25,6 +25,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
 
+# MODEL_ID = "meta-llama/Llama-3.2-3b-Instruct"
 MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 
 
@@ -221,7 +222,7 @@ if __name__ == "__main__":
 
     # Prepare generation config
     generation_config = GenerationConfig(
-        max_new_tokens=512,
+        max_new_tokens=50,
         use_cuda_graph=args.use_cuda_graph,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
@@ -244,14 +245,14 @@ if __name__ == "__main__":
         )
 
     # Run warmup batch generation
-    batch_generate(
-        model,
-        simple_batch_inputs[: min(5, args.samples)],
-        generation_config,
-        tokenizer,
-        displayed_samples=-1,
-        slice_inputs=args.slice_inputs,
-    )
+    # batch_generate(
+    #     model,
+    #     simple_batch_inputs[: min(5, args.samples)],
+    #     generation_config,
+    #     tokenizer,
+    #     displayed_samples=-1,
+    #     slice_inputs=args.slice_inputs,
+    # )
 
     # Run batch generation
     gen_time, tok_per_sec = batch_generate(
@@ -266,4 +267,5 @@ if __name__ == "__main__":
     )
 
 # Example usage:
+# python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --slice-inputs --samples 3 --compare
 # python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json

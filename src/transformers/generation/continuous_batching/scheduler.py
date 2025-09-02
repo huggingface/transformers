@@ -97,13 +97,13 @@ class FIFOScheduler(Scheduler):
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
-        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
-        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
+        occupancy = state.allocated_blocks * self.cache.block_size - current_len
+        if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
+            if allocated is None:
                 return False
-            state.allocated_blocks.extend(allocated)
+            state.allocated_blocks += allocated
         return True
 
     @traced(span_name="prepare_request")
@@ -155,7 +155,7 @@ class FIFOScheduler(Scheduler):
         for state in self.active_requests.values():
             if state.status == RequestStatus.DECODING:
                 priority_states.append(state)
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+            if state.status in [RequestStatus.SPLIT_PENDING_REMAINDER, RequestStatus.PREFILLING_SPLIT]:
                 second_priority_states.append(state)
 
         # Add waiting requests to second priority
@@ -223,13 +223,13 @@ class PrefillFirstScheduler(Scheduler):
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
-        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
-        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
+        occupancy = state.allocated_blocks * self.cache.block_size - current_len
+        if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
+            if allocated is None:
                 return False
-            state.allocated_blocks.extend(allocated)
+            state.allocated_blocks += allocated
         return True
 
     @traced(span_name="prepare_request")
