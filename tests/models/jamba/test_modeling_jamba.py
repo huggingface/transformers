@@ -389,25 +389,13 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
-        from ...test_modeling_common import (
-            set_config_for_less_flaky_test,
-            set_model_for_less_flaky_test,
-            set_model_tester_for_less_flaky_test,
-        )
-
-        set_model_tester_for_less_flaky_test(self)
-
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        set_config_for_less_flaky_test(config)
-
         config.num_labels = 3
         config.num_experts = 3
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
         model = JambaForCausalLM(config)
-        set_model_for_less_flaky_test(model)
-
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
