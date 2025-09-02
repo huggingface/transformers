@@ -241,43 +241,6 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 'Das Haus ist wunderbar.'
 ```
 
-### Diverse beam search decoding
-
-多様なビームサーチデコーディング戦略は、ビームサーチ戦略の拡張であり、選択肢からより多様なビームシーケンスを生成できるようにします。この仕組みの詳細については、[Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) をご参照ください。このアプローチには、`num_beams`、`num_beam_groups`、および `diversity_penalty` という3つの主要なパラメータがあります。多様性ペナルティは、出力がグループごとに異なることを保証し、ビームサーチは各グループ内で使用されます。
-
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
->>> checkpoint = "google/pegasus-xsum"
->>> prompt = (
-...     "The Permaculture Design Principles are a set of universal design principles "
-...     "that can be applied to any location, climate and culture, and they allow us to design "
-...     "the most efficient and sustainable human habitation and food production systems. "
-...     "Permaculture is a design system that encompasses a wide variety of disciplines, such "
-...     "as ecology, landscape design, environmental science and energy conservation, and the "
-...     "Permaculture design principles are drawn from these various disciplines. Each individual "
-...     "design principle itself embodies a complete conceptual framework based on sound "
-...     "scientific principles. When we bring all these separate  principles together, we can "
-...     "create a design system that both looks at whole systems, the parts that these systems "
-...     "consist of, and how those parts interact with each other to create a complex, dynamic, "
-...     "living system. Each design principle serves as a tool that allows us to integrate all "
-...     "the separate parts of a design, referred to as elements, into a functional, synergistic, "
-...     "whole system, where the elements harmoniously interact and work together in the most "
-...     "efficient way possible."
-... )
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-
->>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The Design Principles are a set of universal design principles that can be applied to any location, climate and
-culture, and they allow us to design the'
-```
-
 ### Assisted Decoding
 
 アシストデコーディングは、上記のデコーディング戦略を変更したもので、同じトークナイザー（理想的にははるかに小さなモデル）を使用して、いくつかの候補トークンを貪欲に生成するアシスタントモデルを使用します。その後、主要なモデルは候補トークンを1つの前向きパスで検証し、デコーディングプロセスを高速化します。現在、アシストデコーディングでは貪欲検索とサンプリングのみがサポートされており、バッチ入力はサポートされていません。アシストデコーディングの詳細については、[このブログ記事](https://huggingface.co/blog/assisted-generation) をご覧ください。

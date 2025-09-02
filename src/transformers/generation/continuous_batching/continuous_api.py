@@ -20,13 +20,11 @@ from functools import partial
 from typing import Optional
 
 import torch
-from tokenizers.decoders import DecodeStream
 from torch import nn
 from tqdm import tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -101,9 +99,6 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         self.setup_static_tensors()
-
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(self.config._name_or_path)
-        self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
@@ -227,18 +222,18 @@ class ContinuousBatchProcessor:
         self.output_queue.put(state.to_generation_output())
 
     @traced
-    def prepare_next_batch(self):
+    def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
         if not self.scheduler.has_pending_requests():
-            return None
+            return False
 
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
         if not self.requests_in_batch:
-            return None
+            return False
 
         # Get the request objects for this batch
         self.reset_static_tensors()
@@ -290,6 +285,8 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
+
+        return True
 
     @traced
     def _build_tensors(
@@ -357,7 +354,6 @@ class ContinuousBatchProcessor:
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
         if self.streaming:
-            state.next_token = self.decode_stream.step(self.tokenizer, state.static_outputs[-1])
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
@@ -463,7 +459,6 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
-        self.decode_stream = DecodeStream(skip_special_tokens=True)
         self.slice_inputs = slice_inputs
 
     @traced
@@ -534,6 +529,7 @@ class ContinuousBatchingManager:
 
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
 
+        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
             prompt_ids=list(input_ids),
@@ -548,24 +544,25 @@ class ContinuousBatchingManager:
         return request_id
 
     def add_requests(self, inputs: list[list[int]], **kwargs):
-        for i, input_ids in enumerate(inputs):
-            # Assign a predictable request ID for ordering results later
-            req_id = f"batch_req_{i}"
-            self.add_request(input_ids, request_id=req_id, **kwargs)
+        for input_ids in inputs:
+            self.add_request(input_ids, **kwargs)
 
-    def get_result(self, timeout=None) -> Optional[GenerationOutput]:
+    def get_result(self, request_id=None, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
         Args:
             timeout: Maximum time to wait for a result
 
         Returns:
-            Optional[Dict]: The result data or None if timeout
+            Optional[GenerationOutput]: The result data or None if timeout
         """
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
             result = self.output_queue.get(block=True, timeout=timeout)
+            if request_id is not None and result.request_id != request_id:
+                self.output_queue.put(result)
+                return None
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -573,10 +570,15 @@ class ContinuousBatchingManager:
 
     def __iter__(self):
         """Iterate over results as they become available."""
-        while (
-            self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
-        ):
-            result = self.get_result(timeout=0.1)  # allow the model to run for 10 seconds
+        while self._generation_thread is not None and self._generation_thread.is_alive():
+            result = self.get_result(timeout=0.1)
+            if result is not None:
+                yield result
+
+    def request_id_iter(self, request_id):
+        """Iterate over results matching a specific request id as they become available."""
+        while self._generation_thread is not None and self._generation_thread.is_alive():
+            result = self.get_result(request_id=request_id, timeout=0.1)
             if result is not None:
                 yield result
 
@@ -637,6 +639,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
+                # FIXME: this is unused, why was it added?
                 num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
@@ -681,7 +684,8 @@ class ContinuousBatchingManager:
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
-        batch_processor.prepare_next_batch()
+        if not batch_processor.prepare_next_batch():
+            return
         device, total, reserved, allocated = get_device_and_memory_breakdown()
         logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
@@ -829,7 +833,6 @@ class ContinuousMixin:
                                 results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
-                            logger.debug(manager.batch_processor.tokenizer.decode(result.generated_tokens))
                         else:
                             if not manager.is_running():
                                 logger.error("Generation thread terminated unexpectedly.")

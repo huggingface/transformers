@@ -469,10 +469,25 @@ def _test_eager_matches_sdpa_inference(
                 logits_sdpa = _logits_sdpa
                 logits_eager = _logits_eager
 
+            # Avoid test flakiness with bf16!
+            # bf16 is not good at precision when the magnitude is larger. We have some models like `SiglipVision` with
+            # this test passing all the time for fp32/fp16 but flaky with bf16. Furthermore, `llama` and `clip` have
+            # this test passing all the time for bf16: it turns out their outputs are of smaller size (0.1 and 1.0)
+            # while `siglip` has outputs with maximal values around 3.0/4.0.
+            outputs_magnitude = float(
+                (torch.max(logits_sdpa.abs().amax(), logits_eager.abs().amax())).detach().to("cpu")
+            )
+            # The choice of `3e-2` in `outputs_magnitude * 1e-2` might not work if a model has even more larger outputs.
+            # (we can try to analyze the `rtol` more closely element-wise in the future and adjust the `rtol` instead of `atol`).
+            computed_atol = outputs_magnitude * 3e-2
+            if dtype == torch.bfloat16:
+                atol = max(atol, computed_atol)
+
             results = [
                 torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
                 for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
             ]
+
             # If 80% batch elements have matched results, it's fine
             if np.mean(results) < 0.8:
                 mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
@@ -3469,12 +3484,13 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        # This flag is used to know if the test was skipped for all `self.all_model_classes` or not
+        _has_run_at_least_one_model = False
+
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
             # Custom kernel which needs the mask interface to be properly usable on these models
             if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
-                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+                continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3485,103 +3501,120 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
-            # TODO it is unclear why saving and reloading with dtype works while
-            # casting with `.to(dtype=..., device=...)` does not.
-            # Discovered on tests with `Bart` models.
             model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                continue
+
+            # If we end up here, at least one model class was not skipped
+            _has_run_at_least_one_model = True
             with tempfile.TemporaryDirectory() as tmpdirname:
+                # Save the model so we can reload with correct attention
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
 
-                # Some models have support for FA but not SDPA - making sure we have a valid attention
-                initial_attention_implementation = "sdpa"
-                if model.config._attn_implementation != "sdpa":
-                    initial_attention_implementation = "eager"
+                # Create first inputs without attention mask
+                main_input = inputs_dict[model.main_input_name]
+                # Only keep first batch sequence
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    # Fix the dtype
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                # Some models have main input name which is different from input_ids, but require input_ids... e.g. BarkFine
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                # If we have some pixel values, use them as well
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    # NOTE: this fixes qwen2_5_vl/omni because test break w/ pixel values
+                    if "image_grid_thw" in inputs_dict:
+                        continue
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
+                    if decoder_input_ids is not None:
+                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
 
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
+                # Create attention mask with padding
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
                 if dummy_attention_mask is not None:
                     dummy_attention_mask = dummy_attention_mask[:1]
                     if padding_side == "left":
                         dummy_attention_mask[:, 1:] = 1
-                        dummy_attention_mask[:, :1] = 0
+                        dummy_attention_mask[:, 0] = 0
                     else:
                         dummy_attention_mask[:, :-1] = 1
-                        dummy_attention_mask[:, -1:] = 0
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+                        dummy_attention_mask[:, -1] = 0
 
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, output_hidden_states=True)
+                # Create second inputs with attention mask and padding
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
 
-                model.set_attn_implementation(initial_attention_implementation)
-                logits = (
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
+
+                # First run without attention mask
+                outputs = model(**first_inputs)
+                logits_1_eager = (
                     outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
-
-                model.set_attn_implementation(initial_attention_implementation)
-                logits = (
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_eager = (
                     outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
+
+                # Switch to FA
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+                outputs = model(**first_inputs)
+                logits_1_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
                     if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
+                    else outputs.decoder_hidden_states[-1]
+                )
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
                 )
 
+                # Check the results
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=4e-2, rtol=4e-2)
                 if padding_side == "left":
-                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                    # check with inference + dropout
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=4e-2, rtol=4e-2)
+                    # Check it can run in training mode
                     model.train()
-                    model.set_attn_implementation(attn_implementation)
-                    _ = model(dummy_input, **other_inputs)
+                    _ = model(**second_inputs)
                 else:
-                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=4e-2, rtol=4e-2)
+
+        # In this case, the test should appear as skipped, not successful
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
 
     @require_kernels
     @require_torch_gpu
@@ -4762,15 +4795,6 @@ class ModelTesterMixin:
                 head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
-                # Some models use 3D RoPE where the sum of RoPE sections has to be equal to head dim
-                if (
-                    getattr(config, "rope_scaling", None) is not None
-                    and config.rope_scaling.get("mrope_section") is not None
-                ):
-                    mrope_section = config.rope_scaling["mrope_section"]
-                    mutiplier = max(requested_dim // head_dim, 1)
-                    config.rope_scaling = {"type": "default", "mrope_section": [i * mutiplier for i in mrope_section]}
-
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
@@ -4791,7 +4815,10 @@ class ModelTesterMixin:
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
-            if hasattr(config, "rope_scaling") and len(config.rope_scaling.get("mrope_section", None)) > 0:
+            if (
+                getattr(config, "rope_scaling", None) is not None
+                and len(config.rope_scaling.get("mrope_section", [])) > 0
+            ):
                 scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
                 config.rope_scaling["mrope_section"] = [
                     section * scaling_factor for section in config.rope_scaling["mrope_section"]

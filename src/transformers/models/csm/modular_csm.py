@@ -96,7 +96,7 @@ class CsmOutputWithPast(ModelOutput):
     backbone_loss: Optional[torch.FloatTensor] = None
 
 
-# manually specify names for correct naming when converting from modualr
+# manually specify names for correct naming when converting from modular
 class CsmRMSNorm(LlamaRMSNorm):
     pass
 
@@ -495,7 +495,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     ) -> Optional[torch.Tensor]:
         """
         Merges the input_ids and input_values to produce a single inputs_embeds tensor:
-        1 - Infers the codec model on the input_values to retreive codebook token.
+        1 - Infers the codec model on the input_values to retrieve codebook token.
         2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
         3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
 

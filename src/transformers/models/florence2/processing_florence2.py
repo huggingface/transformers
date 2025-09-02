@@ -795,7 +795,7 @@ class Florence2PostProcessor:
                     instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
             else:
-                raise ValueError("task {} is not supported".format(task))
+                raise ValueError(f"task {task} is not supported")
 
         return parsed_dict
 
