@@ -47,8 +47,6 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PegasusTokenizer.from_pretrained("google/pegasus-large")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)
@@ -157,8 +155,6 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)

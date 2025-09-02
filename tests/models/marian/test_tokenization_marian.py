@@ -67,8 +67,6 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MarianTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return MarianTokenizer.from_pretrained(pretrained_name, **kwargs)

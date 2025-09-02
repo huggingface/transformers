@@ -49,8 +49,6 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)

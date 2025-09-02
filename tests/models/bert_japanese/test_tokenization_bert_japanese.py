@@ -420,8 +420,6 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         return BertJapaneseTokenizer.from_pretrained(cls.tmpdirname, subword_tokenizer_type="character", **kwargs)
 

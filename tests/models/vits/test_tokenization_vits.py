@@ -53,8 +53,6 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         kwargs["phonemize"] = False

@@ -72,8 +72,6 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -393,8 +391,6 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname

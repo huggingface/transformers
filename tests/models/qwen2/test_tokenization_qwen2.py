@@ -93,8 +93,6 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)
@@ -103,8 +101,6 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return Qwen2Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)
