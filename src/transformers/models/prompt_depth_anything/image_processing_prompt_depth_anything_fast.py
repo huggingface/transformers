@@ -12,12 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for PromptDepthAnything."""
+"""Fast Image processor class for PromptDepthAnything."""
 
 import math
 from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils import BatchFeature
+from ...processing_utils import Unpack
 
 
 if TYPE_CHECKING:
@@ -181,30 +182,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     prompt_scale_to_meter = 0.001
     valid_kwargs = PromptDepthAnythingFastImageProcessorKwargs
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        prompt_depth: Optional[ImageInput] = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            prompt_depth (`ImageInput`, *optional*):
-                Prompt depth to preprocess, which can be sparse depth obtained from multi-view geometry or
-                low-resolution depth from a depth sensor. If it is None, the output depth will be a monocular relative depth.
-        """
-        # Handle prompt_depth processing
-        if prompt_depth is not None:
-            kwargs["prompt_depth"] = prompt_depth
-
-        return super().preprocess(images, **kwargs)
 
     def resize_with_aspect_ratio(
         self,
@@ -263,69 +242,50 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         return padded_image
 
-    def _preprocess_image_like_inputs(
+    def _further_process_kwargs(
         self,
-        images: ImageInput,
-        *args,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
         prompt_depth: Optional[ImageInput] = None,
+        prompt_scale_to_meter: Optional[float] = None,
         **kwargs,
-    ) -> BatchFeature:
+    ) -> dict:
         """
-        Preprocess image-like inputs including prompt depth.
+        Process custom kwargs for PromptDepthAnything.
         """
-        # Prepare input images
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
+        kwargs = super()._further_process_kwargs(**kwargs)
 
-        # Process prompt depth if provided
-        processed_prompt_depths = None
+        # Handle prompt_depth by storing it for later use in _preprocess
         if prompt_depth is not None:
-            prompt_depths = self._prepare_image_like_inputs(
-                images=prompt_depth,
-                do_convert_rgb=False,  # Depth maps should not be converted to RGB
-                input_data_format=input_data_format,
-                device=device,
-                expected_ndims=2,  # Depth maps are typically 2D
-            )
+            kwargs["prompt_depth"] = prompt_depth
+        if prompt_scale_to_meter is not None:
+            kwargs["prompt_scale_to_meter"] = prompt_scale_to_meter
 
-            # Validate prompt_depths has same length as images
-            if len(prompt_depths) != len(images):
-                raise ValueError(
-                    f"Number of prompt depth images ({len(prompt_depths)}) does not match number of input images ({len(images)})"
-                )
+        return kwargs
 
-            prompt_scale_to_meter = kwargs.get("prompt_scale_to_meter", self.prompt_scale_to_meter)
-            processed_prompt_depths = []
+    def _validate_preprocess_kwargs(
+        self,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        do_pad: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        prompt_depth: Optional[ImageInput] = None,
+        prompt_scale_to_meter: Optional[float] = None,
+        **kwargs,
+    ):
+        """
+        Validate the kwargs for the preprocess method, including PromptDepthAnything-specific parameters.
+        """
+        # Call parent validation
+        super()._validate_preprocess_kwargs(**kwargs)
 
-            for depth in prompt_depths:
-                # Scale to meters
-                depth = depth * prompt_scale_to_meter
+        # Custom validation for PromptDepthAnything parameters
+        if do_pad and size_divisor is None:
+            raise ValueError("size_divisor must be provided when do_pad is True")
 
-                # Handle case where depth is constant (min == max)
-                if depth.min() == depth.max():
-                    # Add small variation to avoid numerical issues
-                    depth[0, 0] = depth[0, 0] + 1e-6
+        if ensure_multiple_of is not None and ensure_multiple_of < 1:
+            raise ValueError("ensure_multiple_of must be >= 1")
 
-                # Add channel dimension if needed (depth maps are typically 2D)
-                if depth.ndim == 2:
-                    depth = depth.unsqueeze(0)
-
-                processed_prompt_depths.append(depth)
-
-        result = self._preprocess(images, *args, **kwargs)
-
-        # Add prompt depth to the result if it was processed
-        if processed_prompt_depths is not None:
-            # Stack processed depths if return_tensors is set
-            if kwargs.get("return_tensors"):
-                processed_prompt_depths = torch.stack(processed_prompt_depths, dim=0)
-            result.data["prompt_depth"] = processed_prompt_depths
-
-        return result
+        if prompt_scale_to_meter is not None and prompt_scale_to_meter <= 0:
+            raise ValueError("prompt_scale_to_meter must be > 0")
 
     def _preprocess(
         self,
@@ -346,6 +306,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         ensure_multiple_of: Optional[int] = None,
         do_pad: Optional[bool] = None,
         size_divisor: Optional[int] = None,
+        prompt_depth: Optional[ImageInput] = None,
+        prompt_scale_to_meter: Optional[float] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -356,6 +318,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         ensure_multiple_of = ensure_multiple_of if ensure_multiple_of is not None else self.ensure_multiple_of
         do_pad = do_pad if do_pad is not None else self.do_pad
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
+        prompt_scale_to_meter = (
+            prompt_scale_to_meter if prompt_scale_to_meter is not None else self.prompt_scale_to_meter
+        )
 
         # Default values for required parameters
         if disable_grouping is None:
@@ -366,6 +331,40 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             image_mean = self.image_mean
         if image_std is None:
             image_std = self.image_std
+
+        # Process prompt depth if provided
+        processed_prompt_depths = None
+        if prompt_depth is not None:
+            # Convert prompt depth to tensor format similar to images
+            prompt_depths = self._prepare_image_like_inputs(
+                images=prompt_depth,
+                do_convert_rgb=False,  # Depth maps should not be converted to RGB
+                input_data_format=None,  # Let it infer
+                device=images[0].device if images else None,
+                expected_ndims=2,  # Depth maps are typically 2D
+            )
+
+            # Validate prompt_depths has same length as images
+            if len(prompt_depths) != len(images):
+                raise ValueError(
+                    f"Number of prompt depth images ({len(prompt_depths)}) does not match number of input images ({len(images)})"
+                )
+
+            processed_prompt_depths = []
+            for depth in prompt_depths:
+                # Scale to meters
+                depth = depth * prompt_scale_to_meter
+
+                # Handle case where depth is constant (min == max)
+                if depth.min() == depth.max():
+                    # Add small variation to avoid numerical issues
+                    depth[0, 0] = depth[0, 0] + 1e-6
+
+                # Add channel dimension if needed (depth maps are typically 2D)
+                if depth.ndim == 2:
+                    depth = depth.unsqueeze(0)
+
+                processed_prompt_depths.append(depth)
 
         # Group images by size for batched processing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -407,7 +406,17 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        # Prepare result data
+        result_data = {"pixel_values": processed_images}
+
+        # Add prompt depth to the result if it was processed
+        if processed_prompt_depths is not None:
+            # Stack processed depths if return_tensors is set
+            if return_tensors:
+                processed_prompt_depths = torch.stack(processed_prompt_depths, dim=0)
+            result_data["prompt_depth"] = processed_prompt_depths
+
+        return BatchFeature(data=result_data, tensor_type=return_tensors)
 
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
     def post_process_depth_estimation(
