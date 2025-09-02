@@ -1010,7 +1010,7 @@ def check_model_inputs(func):
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 
-        # Check and switch for "eager" attention implementation for capturing attention outputs
+        # Check attention implementation is properly set for capturing attention outputs
         if recordable_keys.get("output_attentions", False):
             supported_attn = ["eager", "eager_paged", "flex_attention"]
             config_attn = getattr(self.config, "_attn_implementation", None)
