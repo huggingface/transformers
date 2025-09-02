@@ -1012,15 +1012,16 @@ def check_model_inputs(func):
 
         # Check and switch for "eager" attention implementation for capturing attention outputs
         if recordable_keys.get("output_attentions", False):
+            supported_attn = ["eager", "eager_paged", "flex_attention"]
             config_attn = getattr(self.config, "_attn_implementation", None)
             sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
             sub_configs_attn = [
                 getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
             ]
-            if config_attn != "eager" or any(attn != "eager" for attn in sub_configs_attn):
+            if config_attn not in supported_attn or any(attn not in supported_attn for attn in sub_configs_attn):
                 warnings.warn(
-                    "`output_attentions=True` is not supported with `attn_implementation` other than `eager`. "
-                    "Please set `attn_implementation='eager' when loading the model to enable capturing attention outputs.",
+                    f"`output_attentions=True` is not supported with `attn_implementation` other than {supported_attn}. "
+                    "Please use `model.set_attn_implementation('eager')` to enable capturing attention outputs.",
                     UserWarning,
                 )
 
