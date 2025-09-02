@@ -41,7 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoConfig, AutoModel
+from ..auto import AutoModel, AutoFeatureExtractor
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaRMSNorm,
@@ -261,7 +261,7 @@ class Xcodec2MLP(nn.Module):
         dim = config.hidden_size
 
         self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # Assuming no bias like original
-        self.silu = nn.SiLU()  # Or ACT2FN[config.hidden_act] if using config activation
+        self.silu = nn.SiLU()  # TODO: Or ACT2FN[config.hidden_act] if using config activation
         self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # Assuming no bias
 
     def forward(self, x):
@@ -592,7 +592,7 @@ def init_weights(m):
         nn.init.constant_(m.bias, 0)
 
 
-class Xcodec2CodecEncoder_Transformer(nn.Module):
+class Xcodec2CodecEncoder(nn.Module):
     def __init__(
         self,
         ngf=48,
@@ -734,7 +734,7 @@ class ResnetBlock(nn.Module):
         return x + h
 
 
-class VocosBackbone(Backbone):
+class Xcodec2VocosBackbone(Backbone):
     """
     Vocos backbone module built with ConvNeXt blocks. Supports additional conditioning with Adaptive Layer Normalization
 
@@ -969,7 +969,10 @@ def maybe(fn):
     return inner
 
 
-class FSQ(Module):
+class Xcodec2FSQ(Module):
+    """
+    Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
+    """
     def __init__(
         self,
         levels: List[int],
@@ -1158,9 +1161,10 @@ class FSQ(Module):
         return out, indices
 
 
-class ResidualFSQ(Module):
-    """Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf"""
-
+class Xcodec2ResidualFSQ(Module):
+    """
+    Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
+    """
     def __init__(
         self,
         *,
@@ -1197,7 +1201,7 @@ class ResidualFSQ(Module):
         for ind in range(num_quantizers):
             scales.append((levels_tensor - 1) ** -ind)
 
-            fsq = FSQ(levels=levels, dim=codebook_dim, **kwargs)
+            fsq = Xcodec2FSQ(levels=levels, dim=codebook_dim, **kwargs)
 
             self.layers.append(fsq)
 
@@ -1322,11 +1326,11 @@ class Xcodec2CodecDecoderVocos(nn.Module):
         super().__init__()
         self.hop_length = config.hop_length
 
-        self.quantizer = ResidualFSQ(
+        self.quantizer = Xcodec2ResidualFSQ(
             dim=config.vq_dim, levels=[4, 4, 4, 4, 4, 4, 4, 4], num_quantizers=config.num_quantizers
         )
 
-        self.backbone = VocosBackbone(config=config)
+        self.backbone = Xcodec2VocosBackbone(config=config)
 
         self.head = ISTFTHead(
             dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same"
@@ -1514,7 +1518,7 @@ XCODEC2_INPUTS_DOCSTRING = r"""
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`:
             Discrete code indices computed using `model.encode`.
         return_dict (`bool`, *optional*):
-            whether to return a `XcodecOutput` or a plain tuple.
+            whether to return a `Xcodec2Output` or a plain tuple.
 """
 
 # Taking inspiration form modeling code of original authors: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
@@ -1529,19 +1533,15 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         super().__init__(config)
 
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
-        self.SemanticEncoder_module = Xcodec2SemanticEncoder(
+        self.semantic_feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")   # TODO extract name from config
+        self.semantic_encoder = Xcodec2SemanticEncoder(
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
 
-        self.CodecEnc = Xcodec2CodecEncoder_Transformer()
-        self.generator = Xcodec2CodecDecoderVocos(config=config)
-
-        self.fc_prior = nn.Linear(2048, 2048)
-        self.fc_post_a = nn.Linear(2048, 1024)
-
-        from ..auto.feature_extraction_auto import AutoFeatureExtractor
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
-        self.feature_extractor = feature_extractor
+        self.acoustic_encoder = Xcodec2CodecEncoder()
+        self.decoder = Xcodec2CodecDecoderVocos(config=config)
+        self.fc_prior = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)
 
         self.post_init()
 
@@ -1564,44 +1564,45 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if input_values.ndim != 3:
-            raise ValueError(
-                f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}"
-            )
+        channels = input_values.shape[1]
+        if channels != 1:
+            raise ValueError(f"Audio must be mono, but got {channels}")
 
-        _, channels, input_length = input_values.shape
-
-        if channels < 1 or channels > 2:
-            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
-
+        # TODO move to feature extractor
         wav = input_values.squeeze(1)
         pad_for_wav = 320 - (wav.shape[1] % 320)
         wav = torch.nn.functional.pad(wav, (0, pad_for_wav))
 
-        input_features = self.feature_extractor(
-            F.pad(wav, (160, 160)).tolist(),
-            sampling_rate=self.feature_extractor.sampling_rate,
+        # 1) Get semantic embedding
+        # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
+        input_features = self.semantic_feature_extractor(
+            input_values.cpu(),
+            sampling_rate=self.semantic_feature_extractor.sampling_rate,
             return_tensors="pt",
         ).input_features.to(self.dtype)
-
-        semantic_output = self.semantic_model(input_features.to(self.device))
+        # -- extract 16th layer of semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
+        semantic_output = self.semantic_model(
+            input_features.to(self.device),
+            output_hidden_states=True
+        )
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
+        # 2) Get acoustic embedding
         vq_emb = self.CodecEnc(wav.unsqueeze(1))
         vq_emb = vq_emb.transpose(1, 2)
-
         if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
             min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
             vq_emb = vq_emb[:, :, :min_len]
             semantic_encoded = semantic_encoded[:, :, :min_len]
 
+        # 3) Concat embeddings and apply final layers
         concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)
-
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
-
-        _, vq_code, _ = self.generator(concat_emb, vq=True)
+        
+        # 4) Get codes for generator
+        _, vq_code, _ = self.decoder(concat_emb, vq=True)
 
         if not return_dict:
             return vq_code
@@ -1632,14 +1633,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        vq_post_emb = self.generator.quantizer.get_output_from_indices(
+        vq_post_emb = self.decoder.quantizer.get_output_from_indices(
             audio_codes.transpose(1, 2)
             if isinstance(audio_codes, torch.Tensor)
             else audio_codes.audio_codes.transpose(1, 2)
         )
         vq_post_emb = vq_post_emb.transpose(1, 2)
         vq_post_emb = self.fc_post_a(vq_post_emb.transpose(1, 2)).transpose(1, 2)
-        recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]
+        recon_audio = self.decoder(vq_post_emb.transpose(1, 2), vq=False)[0]
 
         if not return_dict:
             return recon_audio
@@ -1679,11 +1680,12 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        length = input_values.shape[-1]
 
         if audio_codes is None:
             audio_codes = self.encode(input_values, return_dict=False)
 
-        audio_values = self.decode(audio_codes, return_dict=False)
+        audio_values = self.decode(audio_codes, return_dict=False)[0][..., :length]
 
         if not return_dict:
             return (audio_codes, audio_values)

@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Xcodec model."""
+"""Testing suite for the PyTorch Xcodec2 model."""
 
 import inspect
 import math
@@ -182,7 +182,7 @@ class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_output_hidden_state(self):
         pass
 
-    # Copied from transformers.tests.encodec.test_modeling_encodec.XcodecModelTest._create_and_check_torchscript
+    # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTest._create_and_check_torchscript
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             self.skipTest(reason="test_torchscript is set to False")
@@ -281,7 +281,7 @@ class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    # Copied from transformers.tests.encodec.test_modeling_encodecEncodecModelTest.test_determinism
+    # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTest.test_determinism
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

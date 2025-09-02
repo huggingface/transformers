@@ -121,16 +121,16 @@ def convert_checkpoint(
     if config_path is not None:
         with open(config_path, "r") as f:
             model_config = json.load(f)
-        # NOTE: `semantic_hidden_size` not needed as inside `semantic_model_config.hidden_size` (below)
+        # # NOTE: `semantic_hidden_size` not needed as inside `semantic_model_config.hidden_size` (below)
         # semantic_hidden_size = model_config["semantic_hidden_size"]
         encoder_hidden_size = model_config["codec_encoder_hidden_size"]
         decoder_hidden_size = model_config["codec_decoder_hidden_size"]
-        use_vocos = model_config["use_vocos"]
+        # # NOTE: not needed as always used: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L35
+        # use_vocos = model_config["use_vocos"]
     else:
         # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
         encoder_hidden_size = 1024
         decoder_hidden_size = 1024
-        use_vocos = True
 
     # create config
     # -- use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
@@ -139,7 +139,6 @@ def convert_checkpoint(
     config = Xcodec2Config(
         encoder_hidden_size=encoder_hidden_size,
         decoder_hidden_size=decoder_hidden_size,
-        use_vocos=use_vocos,
         semantic_model_config=semantic_model_config
     )
 

@@ -47,16 +47,10 @@ class Xcodec2Config(PretrainedConfig):
             Hidden size for the audio decoder model.
         semantic_model_config (`Union[Dict, Wav2Vec2BertConfig]`, *optional*):
             An instance of the configuration object for the semantic (Wav2Vec2BertConfig) model.
-
-        
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        use_vocos (`bool`, *optional*, defaults to `True`):
-            Whether to use VOCOS.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Intermediate representation dimension.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for the model.
         num_key_value_heads (`int`, *optional*, defaults to 16):
@@ -71,12 +65,6 @@ class Xcodec2Config(PretrainedConfig):
             Epsilon for RMS normalization.
         head_dim (`int`, *optional*, defaults to 64):
             Head dimension for the model.
-        dilations (`tuple`, *optional*, defaults to `[1, 3, 9]`):
-            Dilation values for the model.
-        depth (`int`, *optional*, defaults to 12):
-            Depth for the model.
-        hop_length (`int`, *optional*, defaults to 320):
-            The hop length for STFT.
         vq_dim (`int`, *optional*, defaults to 2048):
             Dimension for the VQ codebook.
         vq_commit_weight (`float`, *optional*, defaults to 0.25):
@@ -107,11 +95,8 @@ class Xcodec2Config(PretrainedConfig):
         downsampling_ratios: tuple = [2, 2, 4, 4, 5],
         decoder_hidden_size: int = 1024,
         semantic_model_config: Union[dict, Wav2Vec2BertConfig] = None,
-
         initializer_range: float = 0.02,
         sampling_rate: int = 16000,
-        use_vocos: bool = True,
-        hidden_size: int = 1024,
         num_attention_heads: int = 16,
         num_key_value_heads: int = 16,
         num_hidden_layers: int = 12,
@@ -119,8 +104,6 @@ class Xcodec2Config(PretrainedConfig):
         attention_bias: bool = False,
         rms_norm_eps: float = 1e-6,
         head_dim: int = 64,
-        dilations: tuple = [1, 3, 9],
-        depth: int = 12,
         vq_dim: int = 2048,
         vq_commit_weight: float = 0.25,
         vq_weight_init: bool = False,
@@ -133,7 +116,6 @@ class Xcodec2Config(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.encoder_hidden_size = encoder_hidden_size
-        self.decoder_hidden_size = decoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
 
         if semantic_model_config is None:
@@ -141,7 +123,7 @@ class Xcodec2Config(PretrainedConfig):
         elif isinstance(semantic_model_config, dict):
             if "_name_or_path" in semantic_model_config:
                 # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
+                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"],)
             else:
                 # assume HubertConfig as probably created from scratch
                 logger.warning(
@@ -157,27 +139,28 @@ class Xcodec2Config(PretrainedConfig):
 
         self.initializer_range = initializer_range
         self.sampling_rate = sampling_rate
-        self.use_vocos = use_vocos
-        self.hidden_size = hidden_size
+
+        # decoder parameters, which uses transformer
+        self.decoder_hidden_size = decoder_hidden_size
+        self.head_dim = head_dim
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
         self.rms_norm_eps = rms_norm_eps
-        self.head_dim = head_dim
-        self.dilations = dilations
-        self.depth = depth
-        # single codebook is main feature of xcodec2
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_theta = rope_theta
+
+        # single codebook VQ
         self.num_quantizers = 1
         self.vq_dim = vq_dim
         self.vq_commit_weight = vq_commit_weight
         self.vq_weight_init = vq_weight_init
         self.vq_full_commit_loss = vq_full_commit_loss
+        # TODO not being used, remove or figure out if something hardcoded
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
 
     @property
     def frame_rate(self) -> int:
@@ -189,11 +172,19 @@ class Xcodec2Config(PretrainedConfig):
 
     @property
     def intermediate_size(self) -> int:
-        return self.encoder_hidden_size + self.decoder_hidden_size + self.semantic_hidden_size + self.hidden_size
+        # Semantic and acoustic features are combined for a "fused feature embedding"
+        # See Encoder section on p. 3 of https://arxiv.org/pdf/2502.04128
+        return self.encoder_hidden_size + self.semantic_hidden_size
 
     @property
     def hop_length(self) -> int:
         return int(np.prod(self.downsampling_ratios))
+    
+    @property
+    def hidden_size(self) -> int:
+        # Decoder consists of a Transformer for acoustic reconstruction
+        # See Decoder > Acoustic Reconstruction on p. 3 of https://arxiv.org/pdf/2502.04128
+        return self.decoder_hidden_size
     
 
 __all__ = ["Xcodec2Config"]
