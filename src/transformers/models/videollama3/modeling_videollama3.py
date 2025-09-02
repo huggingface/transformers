@@ -409,7 +409,6 @@ class Videollama3PreTrainedModel(PreTrainedModel):
 class Videollama3VisionModel(Videollama3PreTrainedModel):
     config: Videollama3VisionConfig
     _no_split_modules = ["Videollama3VisionEncoderLayer"]
-    # _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": Videollama3VisionEncoderLayer,
         "attentions": Videollama3VisionAttention,
@@ -514,7 +513,6 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
             hidden_states,
             cu_seqlens=cu_seqlens,
             position_embeddings=position_embeddings,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1083,8 +1081,12 @@ class Videollama3ForConditionalGeneration(Videollama3PreTrainedModel, Generation
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "video_compression_mask":
-                    samples = torch.split(video_compression_mask, list(video_nums))
-                    lengths = [mask.sum() for mask in samples]
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    merge_sizes = torch.split(video_merge_sizes, list(video_nums))
+                    lengths = [
+                        (torch.prod(sample, dim=1) // merge_size**2).sum()
+                        for sample, merge_size in zip(samples, merge_sizes)
+                    ]
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )

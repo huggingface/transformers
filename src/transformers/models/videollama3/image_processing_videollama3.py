@@ -445,12 +445,6 @@ class Videollama3ImageProcessor(BaseImageProcessor):
                 }
             )
 
-        if videos is not None:
-            raise ValueError(
-                "`Videollama3ImageProcessor` works only with image inputs and doesn't process videos anymore. "
-                "Your videos should be forwarded to `Videollama3VideoProcessor`. "
-            )
-
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
