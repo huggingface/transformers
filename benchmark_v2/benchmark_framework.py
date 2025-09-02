@@ -277,7 +277,7 @@ class GPUMonitor:
     def __init__(self, sample_interval: float = 0.1, logger: logging.Logger = None):
         self.sample_interval = sample_interval
         self.logger = logger or logging.getLogger(__name__)
-        self.monitoring = False
+        self.stop_event = threading.Event()
         self.thread = None
         self.gpu_utilization = []
         self.gpu_memory_used = []
@@ -308,10 +308,12 @@ class GPUMonitor:
             self.logger.debug("GPU monitoring disabled: no GPUs available")
             return
             
-        self.monitoring = True
+        # Clear the stop event to enable monitoring
+        self.stop_event.clear()
         self.gpu_utilization = []
         self.gpu_memory_used = []
         self.timestamps = []
+        self.warning_logged = False  # Reset warning flag for new monitoring session
         self.thread = threading.Thread(target=self._monitor_loop)
         self.thread.start()
         self.logger.debug("GPU monitoring started")
@@ -324,7 +326,8 @@ class GPUMonitor:
                 gpu_monitoring_reason="no_gpus_available"
             )
             
-        self.monitoring = False
+        # Signal the monitoring thread to stop
+        self.stop_event.set()
         if self.thread:
             self.thread.join()
         
@@ -348,11 +351,12 @@ class GPUMonitor:
             )
     
     def _monitor_loop(self):
-        """Background monitoring loop."""
+        """Background monitoring loop using threading.Event for communication."""
         consecutive_failures = 0
         max_consecutive_failures = 5
         
-        while self.monitoring:
+        # Continue monitoring until stop_event is set
+        while not self.stop_event.is_set():
             try:
                 gpu_stats = gpustat.GPUStatCollection.new_query()
                 if gpu_stats and len(gpu_stats) > 0:
@@ -372,8 +376,12 @@ class GPUMonitor:
                 if consecutive_failures >= max_consecutive_failures and not self.warning_logged:
                     self.logger.warning(f"GPU monitoring failed after {max_consecutive_failures} attempts: {e}")
                     self.warning_logged = True
-                    
-            time.sleep(self.sample_interval)
+            
+            # Use Event.wait() with timeout instead of time.sleep()
+            # This allows for immediate response to stop signal while still maintaining sample interval
+            if self.stop_event.wait(timeout=self.sample_interval):
+                # Event was set, break out of loop immediately
+                break
 
 
 def get_hardware_info() -> HardwareInfo:
