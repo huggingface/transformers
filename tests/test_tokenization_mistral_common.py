@@ -56,7 +56,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         cls.repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
         # determine if we already have this downloaded
-        cls.local_files_only =
+        cls.local_files_only = True
 
         cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(cls.repo_id, tokenizer_type="mistral")
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
@@ -66,11 +66,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
-        local_files_only = "mistralai" not in repo_id
         cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(repo_id)
-        cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
-            repo_id, local_files_only=local_files_only
-        )
+        cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(repo_id)
 
         cls.fixture_conversations = [
             [
