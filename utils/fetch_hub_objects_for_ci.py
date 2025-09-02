@@ -1,7 +1,7 @@
 import os
 
 import requests
-from huggingface_hub import hf_hub_download
+from huggingface_hub import Repository, hf_hub_download
 
 from transformers.testing_utils import _run_pipeline_tests
 
@@ -58,3 +58,6 @@ if __name__ == "__main__":
             print(f"Successfully downloaded: {filename}")
         except requests.exceptions.RequestException as e:
             print(f"Error downloading {filename}: {e}")
+
+    # Used in as `tests/models/auto/test_modeling_auto.py::AutoModelTest::test_dynamic_saving_from_local_repo --> _ = Repository( ... )`
+    _ = Repository(local_dir="tiny-random-custom-architecture", clone_from="hf-internal-testing/tiny-random-custom-architecture")
