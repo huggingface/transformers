@@ -99,7 +99,7 @@ class GenericForSequenceClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
@@ -174,7 +174,7 @@ class GenericForQuestionAnswering:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -235,7 +235,7 @@ class GenericForTokenClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
