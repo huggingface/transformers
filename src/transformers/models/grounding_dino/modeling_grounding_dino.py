@@ -1874,7 +1874,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
     special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
     for special_token in SPECIAL_TOKENS:
-        special_tokens_mask |= input_ids == special_token
+        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
 
     # idxs: each row is a list of indices of special tokens
     idxs = torch.nonzero(special_tokens_mask)
