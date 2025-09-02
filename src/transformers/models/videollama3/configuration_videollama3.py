@@ -78,8 +78,6 @@ class Videollama3Config(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to -1):
             The video token index to encode the image prompt.
-        use_token_compression (`bool`, *optional*, defaults to `False`):
-            Whether to use temporal token compression to reduce the number of video tokens.
     """
 
     model_type = "videollama3"
@@ -92,22 +90,30 @@ class Videollama3Config(PretrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
-        use_token_compression=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif isinstance(vision_config, PretrainedConfig):
+            self.vision_config = vision_config
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
+        else:
+            raise ValueError(
+                f"vision_config must be of type `dict` or `PretrainedConfig`, but got {type(vision_config)}."
+            )
 
         if isinstance(text_config, dict):
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif isinstance(text_config, PretrainedConfig):
+            self.text_config = text_config
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
+        else:
+            raise ValueError(f"text_config must be of type `dict` or `PretrainedConfig`, but got {type(text_config)}.")
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.use_token_compression = use_token_compression
 
         super().__init__(**kwargs)
 

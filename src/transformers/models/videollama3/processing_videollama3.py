@@ -135,8 +135,11 @@ class Videollama3Processor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_grid_thw = videos_inputs["video_grid_thw"]
-            video_merge_sizes = videos_inputs["video_merge_sizes"]
+            num_video_tokens = [
+                grid_thw.prod() // merge_size**2
+                for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
+            ]
+            video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
             if "return_metadata" not in kwargs:
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
@@ -152,7 +155,7 @@ class Videollama3Processor(ProcessorMixin):
                 metadata.fps = 1 if metadata.fps is None else metadata.fps
                 timestamps.append(metadata.timestamps)
         else:
-            video_grid_thw = video_merge_sizes = timestamps = []
+            video_compression_masks = timestamps = []
 
         if not isinstance(text, list):
             text = [text]
@@ -172,9 +175,13 @@ class Videollama3Processor(ProcessorMixin):
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_frame_tokens = video_grid_thw[video_index, 1:].prod() // (video_merge_sizes[video_index] ** 2)
+                    frame_compression_masks = video_compression_masks[video_index].split(
+                        len(video_compression_masks[video_index]) // len(timestamps[video_index])
+                    )
+                    num_frame_tokens = [x.sum() for x in frame_compression_masks]
                     frame_prompts = [
-                        f"Time {t:.1f}s:" + "<|placeholder|>" * num_frame_tokens for t in timestamps[video_index]
+                        f"Time {t:.1f}s:" + "<|placeholder|>" * n
+                        for n, t in zip(num_frame_tokens, timestamps[video_index])
                     ]
                     text[i] = text[i].replace(self.video_token, ",".join(frame_prompts), 1)
                     video_index += 1

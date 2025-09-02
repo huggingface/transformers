@@ -18,7 +18,7 @@ from transformers.image_utils import (
     validate_preprocess_arguments,
 )
 from transformers.utils import TensorType, logging
-from transformers.video_utils import VideoInput, make_batched_videos
+from transformers.video_utils import VideoInput
 
 from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
@@ -445,41 +445,10 @@ class Videollama3ImageProcessor(BaseImageProcessor):
                 }
             )
 
-        # kept for BC only and should be removed after v5.0
         if videos is not None:
-            logger.warning(
+            raise ValueError(
                 "`Videollama3ImageProcessor` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
                 "Your videos should be forwarded to `Videollama3VideoProcessor`. "
-            )
-            videos = make_batched_videos(videos)
-            pixel_values_videos, vision_grid_thws_videos = [], []
-            for images in videos:
-                patches, video_grid_thw = self._preprocess(
-                    images,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    patch_size=patch_size,
-                    temporal_patch_size=temporal_patch_size,
-                    merge_size=merge_size,
-                    data_format=data_format,
-                    do_convert_rgb=do_convert_rgb,
-                    input_data_format=input_data_format,
-                )
-                pixel_values_videos.extend(patches)
-                vision_grid_thws_videos.append(video_grid_thw)
-            data.update(
-                {
-                    "pixel_values_videos": np.array(pixel_values_videos),
-                    "video_grid_thw": np.array(vision_grid_thws_videos),
-                    "video_merge_sizes": np.array([merge_size] * len(vision_grid_thws_videos)),
-                }
             )
 
         return BatchFeature(data=data, tensor_type=return_tensors)

@@ -256,18 +256,11 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue((encoded_images_nested == encoded_images).all())
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
+    @unittest.skip(
+        reason="`Videollama3ImageProcessor` works only with image inputs and doesn't process videos anymore."
+    )
     def test_video_inputs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            expected_dims_by_frames = {i: 37303 * i for i in range(1, 7)}
-
-            for num_frames, expected_dims in expected_dims_by_frames.items():
-                image_processor_tester = Videollama3ImageProcessingTester(self, num_frames=num_frames)
-                video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
-                process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-                encoded_video = process_out.pixel_values_videos
-                expected_output_video_shape = (expected_dims, 588)
-                self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+        pass
 
     def test_custom_image_size(self):
         for image_processing_class in self.image_processor_list:

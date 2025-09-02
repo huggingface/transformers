@@ -39,6 +39,7 @@ class Videollama3VideoProcessorInitKwargs(VideosKwargs):
     merge_size: Optional[int]
     min_frames: Optional[int]
     max_frames: Optional[int]
+    use_token_compression: Optional[bool]
 
 
 @add_start_docstrings(
@@ -80,7 +81,8 @@ class Videollama3VideoProcessor(BaseVideoProcessor):
     max_frames = 180
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = Videollama3VideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes"]
+    model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
+    use_token_compression = True
     return_metadata = True
 
     def __init__(self, **kwargs: Unpack[Videollama3VideoProcessorInitKwargs]):
@@ -187,6 +189,7 @@ class Videollama3VideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
+        use_token_compression: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         device: Optional["torch.Tensor"] = None,
         **kwargs,
@@ -262,16 +265,26 @@ class Videollama3VideoProcessor(BaseVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
+        video_merge_sizes = torch.tensor([merge_size] * video_grid_thw.size(0)).to(video_grid_thw)
+
+        if use_token_compression:
+            video_compression_mask = self._get_compression_mask(
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                video_merge_sizes=video_merge_sizes,
+            )
+        else:
+            num_video_tokens = video_grid_thw.prod(-1).sum() // (merge_size**2)
+            video_compression_mask = torch.ones(
+                (num_video_tokens,), dtype=torch.bool, device=pixel_values_videos.device
+            )
 
         return BatchFeature(
             data={
                 "pixel_values_videos": pixel_values_videos,
                 "video_grid_thw": video_grid_thw,
-                "video_merge_sizes": torch.tensor(
-                    [merge_size] * video_grid_thw.size(0),
-                    dtype=video_grid_thw.dtype,
-                    device=video_grid_thw.device,
-                ),
+                "video_merge_sizes": video_merge_sizes,
+                "video_compression_mask": video_compression_mask,
             },
             tensor_type=return_tensors,
         )
@@ -305,6 +318,50 @@ class Videollama3VideoProcessor(BaseVideoProcessor):
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames // temporal_patch_size
         return grid_t * grid_h * grid_w
+
+    def _get_compression_mask(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
+        threshold: Optional[float] = 0.1,
+        min_tokens: Optional[int] = 1,
+    ) -> torch.BoolTensor:
+        """
+        Get the compression mask for video tokens based on pixel differences.
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+                The spatial downsampling ratio of each video feature.
+            threshold (`float`, *optional*, defaults to 0.1):
+                The threshold to determine whether a token should be kept based on pixel differences.
+            min_tokens (`int`, *optional*, defaults to 1):
+                The minimum number of tokens to keep for each frame.
+        """
+        videos = pixel_values_videos.split(video_grid_thw.prod(dim=1).tolist(), dim=0)
+        compression_masks = []
+
+        for images, grid_size, merge_size in zip(videos, video_grid_thw, video_merge_sizes):
+            t, h, w = grid_size
+            if t == 1:
+                num_tokens = images.size(0) // (merge_size**2)
+                compression_masks.append(torch.ones((num_tokens,), dtype=torch.bool, device=images.device))
+            else:
+                # NOTE: video token compressor
+                images = images.view(t, (h // merge_size) * (w // merge_size), -1)
+
+                pixel_diff = images[1:] - images[:-1]
+                pixel_diff = torch.abs(pixel_diff).mean(dim=-1) * 255
+                pixel_diff = torch.cat([torch.full_like(pixel_diff[0:1], threshold + 1), pixel_diff], dim=0)
+                mask = pixel_diff > threshold
+                padding_ids = torch.nonzero(mask.sum(dim=1) < min_tokens)[:, 0]
+                mask[padding_ids, :min_tokens] = 1
+                compression_masks.append(mask.flatten())
+
+        return torch.cat(compression_masks)
 
 
 __all__ = ["Videollama3VideoProcessor"]
