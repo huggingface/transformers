@@ -19,7 +19,6 @@ import re
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 from parameterized import parameterized
 
@@ -43,7 +42,6 @@ from ...test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     merge_model_tokenizer_mappings,
-    use_cache_if_possible,
 )
 
 

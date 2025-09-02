@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from functools import lru_cache
 
-from tests.test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow

@@ -20,7 +20,6 @@ import random
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 import numpy as np
 
@@ -33,7 +32,7 @@ from transformers import (
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
 from transformers.testing_utils import require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 global_rng = random.Random()

@@ -25,7 +25,6 @@ import tempfile
 import traceback
 import unittest
 from collections import OrderedDict
-from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union

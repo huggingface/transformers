@@ -16,11 +16,10 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import ClvpTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, slow, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin, slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):

@@ -15,11 +15,10 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):

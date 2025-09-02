@@ -17,13 +17,12 @@ import json
 import os
 import re
 import unittest
-from functools import lru_cache
 
 from transformers import CodeGenTokenizer, CodeGenTokenizerFast
 from transformers.models.codegen.tokenization_codegen import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

@@ -18,13 +18,12 @@ import os
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 from transformers import VitsTokenizer
 from transformers.models.vits.tokenization_vits import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

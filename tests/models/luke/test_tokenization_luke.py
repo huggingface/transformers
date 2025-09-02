@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import unittest
-from functools import lru_cache
 
 from transformers import AddedToken, LukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")

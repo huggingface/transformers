@@ -14,14 +14,13 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import BatchEncoding, MvpTokenizer, MvpTokenizerFast
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors
 
 
 @require_tokenizers

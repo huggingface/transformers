@@ -14,13 +14,12 @@
 
 import copy
 import unittest
-from functools import lru_cache
 
 from transformers import NougatTokenizerFast
 from transformers.models.nougat.tokenization_nougat_fast import markdown_compatible, normalize_list_like_lines
 from transformers.testing_utils import require_levenshtein, require_nltk, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

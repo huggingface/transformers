@@ -16,7 +16,6 @@
 import os
 import pickle
 import unittest
-from functools import lru_cache
 
 from transformers import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
@@ -31,7 +30,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
 )
 from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @custom_tokenizers

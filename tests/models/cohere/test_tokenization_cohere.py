@@ -14,7 +14,6 @@
 
 import copy
 import unittest
-from functools import lru_cache
 
 from transformers import CohereTokenizerFast
 from transformers.testing_utils import (
@@ -23,7 +22,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers

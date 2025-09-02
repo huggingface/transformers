@@ -17,14 +17,13 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers.models.blenderbot_small.tokenization_blenderbot_small import (
     VOCAB_FILES_NAMES,
     BlenderbotSmallTokenizer,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

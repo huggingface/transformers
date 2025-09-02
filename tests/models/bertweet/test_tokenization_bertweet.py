@@ -14,11 +14,10 @@
 
 import os
 import unittest
-from functools import lru_cache
 
 from transformers.models.bertweet.tokenization_bertweet import VOCAB_FILES_NAMES, BertweetTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):

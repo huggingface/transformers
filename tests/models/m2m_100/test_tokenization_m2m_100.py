@@ -14,7 +14,6 @@
 
 import tempfile
 import unittest
-from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
@@ -33,7 +32,7 @@ from transformers.utils import is_sentencepiece_available
 if is_sentencepiece_available():
     from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_sentencepiece_available():

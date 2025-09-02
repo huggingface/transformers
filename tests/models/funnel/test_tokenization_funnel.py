@@ -15,13 +15,12 @@
 
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import FunnelTokenizer, FunnelTokenizerFast
 from transformers.models.funnel.tokenization_funnel import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
