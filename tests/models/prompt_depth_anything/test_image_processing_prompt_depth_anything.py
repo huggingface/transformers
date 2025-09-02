@@ -144,3 +144,25 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
             self.assertEqual(list(pixel_values.shape), [1, 3, 768, 1024])
             self.assertEqual(list(prompt_depth_values.shape), [1, 1, 192, 256])
+
+    def test_prompt_depth_equivalence(self):
+        """Test numerical equivalence of prompt_depth processing between fast and slow processors."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+
+        size = {"height": 756, "width": 756}
+        slow_processor = self.image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        fast_processor = self.fast_image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+
+        image = np.zeros((756, 1008, 3))
+        prompt_depth = np.random.random((192, 256))
+
+        slow_outputs = slow_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
+        fast_outputs = fast_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(slow_outputs.pixel_values, fast_outputs.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            slow_outputs.prompt_depth,
+            fast_outputs.prompt_depth.to(slow_outputs.prompt_depth.dtype)
+        )
+
