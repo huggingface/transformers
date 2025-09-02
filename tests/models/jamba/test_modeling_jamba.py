@@ -401,6 +401,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         result = model(input_ids, attention_mask=attention_mask)
         bs, seqlen = input_ids.shape
         self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
+        # After #40617, we still have 0.01 % of failure rate here.
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
@@ -422,6 +423,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
         # This is to mimic torch.testing.assert_not_close
+        # After #40617, we still have 0.003 % of failure rate here.
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
     def test_initialization(self):
