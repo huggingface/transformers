@@ -734,7 +734,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
-    @functools.lru_cache(maxsize=None)
+    @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
         """
         This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
