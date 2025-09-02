@@ -34,42 +34,42 @@ class Lfm2VlConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`AutoConfig | dict`,  *optional*, defaults to `Siglip2ImageConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`AutoConfig | dict`, *optional*, defaults to `Lfm2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 396):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        projector_hidden_size (`int`, *optional*, defaults to 2056):
-            The hidden size of the multimodal projector.
-        projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-        downsample_factor (`int`, *optional*, defaults to 2):
-            The downsample_factor factor of the vision backbone.
-        vision_feature_layer (`int`, *optional*, defaults to -1):
-            The layer of the vision tower to use as features.
-        min_image_tokens (`int`, *optional*, defaults to 64):
-            The minimum number of image tokens for smart resize.
-        max_image_tokens (`int`, *optional*, defaults to 256):
-            The maximum number of image tokens for smart resize.
-        encoder_patch_size (`int`, *optional*, defaults to 16):
-            The patch size of the encoder.
-        use_image_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether to use image special tokens.
-        do_image_splitting (`bool`, *optional*, defaults to `True`):
-            Whether to split large images into tiles.
-        min_tiles (`int`, *optional*, defaults to 2):
-            The minimum number of tiles to split the image into.
-        max_tiles (`int`, *optional*, defaults to 10):
-            The maximum number of tiles to split the image into.
-        tile_size (`int`, *optional*, defaults to 512):
-            The size of the tile to split the image into.
-        max_pixels_tolerance (`float`, *optional*, defaults to 2.0):
-            The maximum tolerance for the number of pixels in the image before splitting.
-        use_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to append the thumbnail of the image when splitting.
+            vision_config (`AutoConfig | dict`,  *optional*, defaults to `Siglip2ImageConfig`):
+                The config object or dictionary of the vision backbone.
+            text_config (`AutoConfig | dict`, *optional*, defaults to `Lfm2Config`):
+                The config object or dictionary of the text backbone.
+            image_token_id (`int`, *optional*, defaults to 396):
+                The image token index to encode the image prompt.
+            projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+                The activation function used by the multimodal projector.
+            projector_hidden_size (`int`, *optional*, defaults to 2560):
+                The hidden size of the multimodal projector.
+            projector_bias (`bool`, *optional*, defaults to `True`):
+                Whether to use bias in the multimodal projector.
+            downsample_factor (`int`, *optional*, defaults to 2):
+                The downsample_factor factor of the vision backbone.
+            vision_feature_layer (`int`, *optional*, defaults to -1):
+                The layer of the vision tower to use as features.
+            min_image_tokens (`int`, *optional*, defaults to 64):
+                The minimum number of image tokens for smart resize.
+            max_image_tokens (`int`, *optional*, defaults to 256):
+                The maximum number of image tokens for smart resize.
+            encoder_patch_size (`int`, *optional*, defaults to 16):
+                The patch size of the encoder.
+            use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether to use image special tokens.
+            do_image_splitting (`bool`, *optional*, defaults to `True`):
+                Whether to split large images into tiles.
+            min_tiles (`int`, *optional*, defaults to 2):
+                The minimum number of tiles to split the image into.
+            max_tiles (`int`, *optional*, defaults to 10):
+                The maximum number of tiles to split the image into.
+            tile_size (`int`, *optional*, defaults to 512):
+                The size of the tile to split the image into.
+            max_pixels_tolerance (`float`, *optional*, defaults to 2.0):
+                The maximum tolerance for the number of pixels in the image before splitting.
+            use_thumbnail (`bool`, *optional*, defaults to `True`):
+                Whether to append the thumbnail of the image when splitting.
     """
 
     model_type = "lfm2-vl"

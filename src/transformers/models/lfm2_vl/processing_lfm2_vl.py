@@ -61,10 +61,12 @@ class Lfm2VlProcessor(ProcessorMixin):
     [`Lfm2VlProcessor`] offers all the functionalities of [`Lfm2ImageProcessor`] and [`Lfm2Tokenizer`].
 
     Args:
-        image_processor (`Lfm2VlImageProcessor`):
-            An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+            image_processor (`Lfm2VlImageProcessor`):
+                An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
+            tokenizer (`PreTrainedTokenizerBase`):
+                An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+            chat_template (`str`): <fill_docstring>
+            use_image_special_tokens (`bool`): <fill_docstring>
     """
 
     attributes = ["image_processor", "tokenizer"]

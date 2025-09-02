@@ -204,56 +204,23 @@ class Lfm2VlImageProcessor(BaseImageProcessor):
     [`Lfm2VlImageProcessor`] offers all the functionalities of [`Siglip2ImageProcessor`], and extends it with smart resize and image splitting.
 
     Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            downsample_factor (`int`, *optional*, defaults to 2):
-                The downsample_factor factor of the vision backbone.
-            min_image_tokens (`int`, *optional*, defaults to 64):
-                The minimum number of image tokens for smart resize.
-            max_image_tokens (`int`, *optional*, defaults to 256):
-                The maximum number of image tokens for smart resize.
-            encoder_patch_size (`int`, *optional*, defaults to 16):
-                The patch size of the encoder.
-            do_image_splitting (`bool`, *optional*, defaults to `True`):
-                Whether to split large images into tiles.
-            min_tiles (`int`, *optional*, defaults to 2):
-                The minimum number of tiles to split the image into.
-            max_tiles (`int`, *optional*, defaults to 10):
-                The maximum number of tiles to split the image into.
-            tile_size (`int`, *optional*, defaults to 512):
-                The size of the tile to split the image into.
-            max_pixels_tolerance (`float`, *optional*, defaults to 2.0):
-                The maximum tolerance for the number of pixels in the image before splitting.
-            use_thumbnail (`bool`, *optional*, defaults to `True`):
-                Whether to append the thumbnail of the image when splitting.
-            resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`.
-            do_rescale (`bool`, *optional*, defaults to `True`):
-                Siglip2ImageProcessor's `do_rescale` parameter. Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `1 / 255`):
-                Siglip2ImageProcessor's `rescale_factor` parameter. Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Siglip2ImageProcessor's `do_normalize` parameter. Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `None`):
-                Siglip2ImageProcessor's `image_mean` parameter. Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `None`):
-                Siglip2ImageProcessor's `image_std` parameter. Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                Siglip2ImageProcessor's `return_tensors` parameter. The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                Siglip2ImageProcessor's `input_data_format` parameter. The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Siglip2ImageProcessor's `do_convert_rgb` parameter. Whether to convert the image to RGB.
+            downsample_factor (`int`, *optional*, defaults to 2): <fill_docstring>
+            do_image_splitting (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            min_tiles (`int`, *optional*, defaults to 2): <fill_docstring>
+            max_tiles (`int`, *optional*, defaults to 10): <fill_docstring>
+            use_thumbnail (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            min_image_tokens (`int`, *optional*, defaults to 64): <fill_docstring>
+            max_image_tokens (`int`, *optional*, defaults to 256): <fill_docstring>
+            encoder_patch_size (`int`, *optional*, defaults to 16): <fill_docstring>
+            tile_size (`int`, *optional*, defaults to 512): <fill_docstring>
+            max_pixels_tolerance (`float`, *optional*, defaults to 2.0): <fill_docstring>
+            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`): <fill_docstring>
+            do_rescale (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            rescale_factor (`float`, *optional*, defaults to 0.0): <fill_docstring>
+            do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            image_mean (`Union`, *optional*): <fill_docstring>
+            image_std (`Union`, *optional*): <fill_docstring>
+            do_convert_rgb (`Optional`, *optional*): <fill_docstring>
     """
 
     def __init__(
