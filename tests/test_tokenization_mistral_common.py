@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -24,6 +27,9 @@ from transformers.testing_utils import require_mistral_common
 from transformers.tokenization_mistral_common import MistralCommonTokenizer
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 
 if is_mistral_common_available():
@@ -47,20 +53,25 @@ class TestMistralCommonTokenizer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
-            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503",
-            tokenizer_type="mistral",
-        )
+
+        cls.repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
+        # determine if we already have this downloaded
+        cls.local_files_only = "hf-internal-testing" not in cls.repo_id
+
+        cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(cls.repo_id, tokenizer_type="mistral")
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
-            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
+            cls.repo_id, local_files_only=cls.local_files_only
         )
         # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
-        cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained("mistralai/Voxtral-Mini-3B-2507")
+        repo_id = "mistralai/Voxtral-Mini-3B-2507"
+        local_files_only = "mistralai" not in repo_id
+        cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(repo_id)
         cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
-            "mistralai/Voxtral-Mini-3B-2507"
+            repo_id, local_files_only=local_files_only
         )
+
         cls.fixture_conversations = [
             [
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -79,6 +90,16 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ]
 
         cls.ref_special_ids = {t["rank"] for t in cls.ref_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
+
+    def tearDownClass(cls):
+        del cls.tokenizer
+        del cls.ref_tokenizer
+        del cls.tokenizer_audio
+        del cls.ref_tokenizer_audio
+        del cls.fixture_conversations
+        del cls.tokenized_fixture_conversations
+        del cls.ref_special_ids
+        gc.collect()
 
     def _ref_piece_to_id(self, piece: str) -> int:
         pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
@@ -377,7 +398,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 4:
         # padding_side="right"
         right_tokenizer = MistralCommonTokenizer.from_pretrained(
-            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503",
+            self.repo_id,
+            local_files_only=self.local_files_only,
             padding_side="right",
         )
         right_paddings = [
@@ -527,7 +549,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 4:
         # padding_side="right"
         right_tokenizer = MistralCommonTokenizer.from_pretrained(
-            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503",
+            self.repo_id,
+            local_files_only=self.local_files_only,
             padding_side="right",
         )
         right_paddings = [
@@ -646,7 +669,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 6:
         # truncation_side="left"
         left_tokenizer = MistralCommonTokenizer.from_pretrained(
-            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503",
+            self.repo_id,
+            local_files_only=self.local_files_only,
             truncation_side="left",
         )
         tokens, none, overflowing_tokens = left_tokenizer.truncate_sequences(

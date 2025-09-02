@@ -2,6 +2,7 @@ import os
 
 import requests
 from huggingface_hub import Repository, hf_hub_download
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 
@@ -48,6 +49,18 @@ if __name__ == "__main__":
             local_dir="tiny-random-custom-architecture",
             clone_from="hf-internal-testing/tiny-random-custom-architecture",
         )
+
+    # For `tests/test_tokenization_mistral_common.py:TestMistralCommonTokenizer`, which eventually calls
+    # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
+    from mistral_common import MistralTokenizer
+
+    from transformers import AutoTokenizer
+    repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
+    AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
+    MistralTokenizer.from_hf_hub(repo_id)
+    repo_id = "mistralai/Voxtral-Mini-3B-2507"
+    AutoTokenizer.from_pretrained(repo_id)
+    MistralCommonTokenizer = MistralTokenizer.from_hf_hub(repo_id)
 
     # Download files from URLs to local directory
     for url in URLS_FOR_TESTING_DATA:
