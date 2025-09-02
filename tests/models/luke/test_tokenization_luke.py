@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import unittest
-from functools import lru_cache
 
 from transformers import AddedToken, LukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
@@ -39,8 +38,6 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, task=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         tokenizer = LukeTokenizer(
