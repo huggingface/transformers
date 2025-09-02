@@ -24,20 +24,7 @@ Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It 
 
 ## Virtual environment
 
-A virtual environment helps manage different projects and avoids compatibility issues between dependencies. Take a look at the [Install packages in a virtual environment using pip and venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) guide if you're unfamiliar with Python virtual environments.
-
-<hfoptions id="virtual">
-<hfoption id="venv">
-
-Create and activate a virtual environment in your project directory with [venv](https://docs.python.org/3/library/venv.html).
-
-```bash
-python -m venv .env
-source .env/bin/activate
-```
-
-</hfoption>
-<hfoption id="uv">
+A [virtual environment](https://docs.astral.sh/uv/pip/environments/) helps manage different projects and avoids compatibility issues between dependencies.
 
 [uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
@@ -46,33 +33,15 @@ uv venv .env
 source .env/bin/activate
 ```
 
-</hfoption>
-</hfoptions>
-
 ## Python
 
-You can install Transformers with pip or uv.
-
-<hfoptions id="install">
-<hfoption id="pip">
-
-[pip](https://pip.pypa.io/en/stable/) is a package installer for Python. Install Transformers with pip in your newly created virtual environment.
-
-```bash
-pip install transformers
-```
-
-</hfoption>
-<hfoption id="uv">
+Install Transformers with the following command.
 
 [uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
 ```bash
 uv pip install transformers
 ```
-
-</hfoption>
-</hfoptions>
 
 For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally).
 
@@ -82,11 +51,11 @@ Run the command below to check if your system detects an NVIDIA GPU.
 nvidia-smi
 ```
 
-To install a CPU-only version of Transformers and a machine learning framework, run the following command.
+To install a CPU-only version of Transformers, run the following command.
 
 ```bash
-pip install 'transformers[torch]'
-uv pip install 'transformers[torch]'
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install transformers
 ```
 
 Test whether the install was successful with the following command. It should return a label and score for the provided text.
@@ -105,7 +74,7 @@ The downside is that the latest version may not always be stable. If you encount
 Install from source with the following command.
 
 ```bash
-pip install git+https://github.com/huggingface/transformers
+uv pip install git+https://github.com/huggingface/transformers
 ```
 
 Check if the install was successful with the command below. It should return a label and score for the provided text.
@@ -122,7 +91,7 @@ An [editable install](https://pip.pypa.io/en/stable/topics/local-project-install
 ```bash
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install -e .
+uv pip install -e .
 ```
 
 > [!WARNING]
