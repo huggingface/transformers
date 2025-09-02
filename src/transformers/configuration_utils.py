@@ -1269,8 +1269,9 @@ class PretrainedConfig(PushToHubMixin):
         """
 
         warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. "
+            "Please instantiate the config class directly with "
+            "`MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
             FutureWarning,
         )
 
@@ -1287,8 +1288,9 @@ class PretrainedConfig(PushToHubMixin):
         """
 
         warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. "
+            "Please instantiate the config class directly with "
+            "`MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
             FutureWarning,
         )
 
