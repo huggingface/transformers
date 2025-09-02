@@ -3,7 +3,7 @@ from collections import deque
 from math import ceil
 from typing import Optional
 
-from .classes import logger
+from .requests import logger
 
 
 class CacheManager(ABC):
