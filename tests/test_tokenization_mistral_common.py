@@ -63,6 +63,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             cls.repo_id,
             tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
+            # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
             revision=None,
         )
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
@@ -409,7 +410,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = AutoTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -561,7 +562,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = AutoTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -682,8 +683,11 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 6:
         # truncation_side="left"
-        left_tokenizer = AutoTokenizer.from_pretrained(
-            self.repo_id, local_files_only=self.local_files_only, revision=None
+        left_tokenizer = MistralCommonTokenizer.from_pretrained(
+            self.repo_id,
+            local_files_only=self.local_files_only,
+            truncation="left",
+            revision=None,
         )
         tokens, none, overflowing_tokens = left_tokenizer.truncate_sequences(
             ids, truncation_strategy="longest_first", num_tokens_to_remove=2
