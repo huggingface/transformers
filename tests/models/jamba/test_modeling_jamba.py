@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
     get_device_properties,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -385,6 +386,8 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    # After #40617, we still have 0.01 % of failure rate here.
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
