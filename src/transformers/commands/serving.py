@@ -128,10 +128,11 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string) and passing the request_id
         """
 
         generation_config: str
+        request_id: str
 
     class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
         """
@@ -873,8 +874,8 @@ class ServeCommand(BaseTransformersCLICommand):
                     await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
             except asyncio.CancelledError:
                 if request_id is not None:
-                    logger.warning(f"Request {request_id} was cancelled. Cleaning up.")
                     self.running_continuous_batching_manager.cancel_request(request_id)
+                    logger.warning(f"Request {request_id} was cancelled.")
 
         return cancellation_wrapper(inputs[0])
 
