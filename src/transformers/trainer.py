@@ -2674,7 +2674,7 @@ class Trainer:
                         if num_items_in_batch is not None and self.args.n_gpu > 1 and "labels" in inputs:
                             try:
                                 # Each GPU gets 1/n_gpu portion of the tokens
-                                full_batch_tokens = (inputs["labels"].ne(-100)).sum() # Count all non-padding tokens
+                                full_batch_tokens = (inputs["labels"].ne(-100)).sum()  # Count all non-padding tokens
                                 tokens_per_gpu = full_batch_tokens // self.args.n_gpu
                                 current_num_items_in_batch = tokens_per_gpu
 
