@@ -274,6 +274,7 @@ class Speech2TextAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -301,7 +302,7 @@ class Speech2TextAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
@@ -608,7 +609,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `torch.FloatTensor`. See
@@ -874,7 +875,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "

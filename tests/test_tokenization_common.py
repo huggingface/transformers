@@ -25,7 +25,6 @@ import tempfile
 import traceback
 import unittest
 from collections import OrderedDict
-from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -301,15 +300,11 @@ class TokenizerTesterMixin:
             raise ValueError("This tokenizer class has no tokenizer to be tested.")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

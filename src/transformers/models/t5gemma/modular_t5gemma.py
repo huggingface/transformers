@@ -236,7 +236,7 @@ class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
 class T5GemmaSelfAttention(Gemma2Attention):
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Requied by flash attention: encoder selfattention is non-causal
+        # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
 
@@ -480,7 +480,7 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["T5GemmaBlock"]
 
     def _init_weights(self, module):
-        # TODO: support intialization for encoders and decoders separately(?)
+        # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
@@ -573,7 +573,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everwhere, we need to pop them from kwargs if present
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
         kwargs.pop("past_key_values", None)
 
         if inputs_embeds is None:

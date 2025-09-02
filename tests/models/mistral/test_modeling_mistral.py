@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -103,13 +102,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
 
 
 @require_torch_accelerator

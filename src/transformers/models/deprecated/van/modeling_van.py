@@ -315,7 +315,7 @@ class VanEncoder(nn.Module):
             x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")
         ]
 
-        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
+        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expansion, drop_path_rate) in enumerate(
             zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
         ):
             is_first_stage = num_stage == 0
@@ -330,7 +330,7 @@ class VanEncoder(nn.Module):
                     patch_size=patch_size,
                     stride=stride,
                     depth=depth,
-                    mlp_ratio=mlp_expantion,
+                    mlp_ratio=mlp_expansion,
                     drop_path_rate=drop_path_rate,
                 )
             )

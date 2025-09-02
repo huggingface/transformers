@@ -173,7 +173,6 @@ from .import_utils import (
     is_huggingface_hub_greater_or_equal,
     is_in_notebook,
     is_ipex_available,
-    is_jieba_available,
     is_jinja_available,
     is_jumanpp_available,
     is_kenlm_available,

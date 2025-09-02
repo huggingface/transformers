@@ -33,7 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -258,7 +258,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
         if images is not None:
             images = self.fetch_images(images)
-            images = make_list_of_images(images)
+            images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
             raise ValueError(

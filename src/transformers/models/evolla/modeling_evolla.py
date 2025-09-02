@@ -41,15 +41,9 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import (
-    ALL_ATTENTION_FUNCTIONS,
-    ModuleUtilsMixin,
-    PreTrainedModel,
-    find_pruneable_heads_and_indices,
-    get_parameter_dtype,
-    prune_linear_layer,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModuleUtilsMixin, PreTrainedModel, get_parameter_dtype
 from ...processing_utils import Unpack
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -981,7 +975,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
         # Compute the scaled dot-product attention scores
         attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
-        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
+        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stabilize score
         attention_scores = attn_weights.masked_fill(
             (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
         )  # [bs, numheads, querylength, keylength]
@@ -1439,7 +1433,7 @@ class EvollaModel(EvollaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

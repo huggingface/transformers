@@ -217,7 +217,7 @@ class T5GemmaSelfAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        # Requied by flash attention: encoder selfattention is non-causal
+        # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
         self.q_proj = nn.Linear(
@@ -599,7 +599,7 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        # TODO: support intialization for encoders and decoders separately(?)
+        # TODO: support initialization for encoders and decoders separately(?)
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
@@ -716,7 +716,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everwhere, we need to pop them from kwargs if present
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
         kwargs.pop("past_key_values", None)
 
         if inputs_embeds is None:
