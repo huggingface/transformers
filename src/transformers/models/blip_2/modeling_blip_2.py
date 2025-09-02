@@ -15,6 +15,7 @@
 """PyTorch BLIP-2 model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -31,11 +32,20 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithPast,
+    Seq2SeqLMOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    filter_out_non_signature_kwargs,
+    logging,
+    torch_int,
+)
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -1269,19 +1279,17 @@ class Blip2Model(Blip2PreTrainedModel):
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1299,165 +1307,164 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
+        legacy_output (`bool`, *optional*, defaults to `True`):
+            Whether to return a model output object or a tensor of features.
 
         Returns:
-            text_outputs (`CausalLMOutputWithPast`, or `tuple(torch.FloatTensor)` if `return_dict=False`):
-                The language model outputs. If `return_dict=True`, the output is a [`CausalLMOutputWithPast`] that
-                contains the language model logits, the past key values and the hidden states if
-                `output_hidden_states=True`.
+            text_outputs (`CausalLMOutputWithPast` or `torch.FloatTensor`):
+                The language model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
         ```python
         >>> import torch
         >>> from transformers import AutoTokenizer, Blip2Model
 
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
-
         >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip2-opt-2.7b")
+
         >>> inputs = tokenizer(["a photo of a cat"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
 
         if self.config.use_decoder_only_language_model:
-            text_outputs = self.language_model(
+            text_outputs: CausalLMOutputWithPast = self.language_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                **kwargs,
+                return_dict=True,
             )
         else:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-
-            text_outputs = self.language_model(
+            text_outputs: Seq2SeqLMOutput = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 labels=labels,
-                **kwargs,
+                return_dict=True,
             )
 
-        return text_outputs
+        return text_outputs if legacy_output else text_outputs.logits
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ):
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
+        legacy_output (`bool`, *optional*, defaults to `True`):
+            Whether to return a model output object or a tensor of features.
+
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
-                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
-                contains the image features, the pooled image features and the hidden states if
-                `output_hidden_states=True`.
+            vision_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
+                The vision model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
         ```python
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
+        >>> from transformers.image_utils import load_image
 
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
+
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>> image_outputs = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_outputs = model.get_image_features(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_text_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
 
-        return vision_outputs
+        return vision_outputs if legacy_output else vision_outputs.pooler_output
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_qformer_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ):
+        legacy_output: bool = True,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        legacy_output (`bool`, *optional*, defaults to `True`):
+            Whether to return a model output object or a tensor of features.
+
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
-                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
-                contains the image features, the pooled image features and the hidden states if
-                `output_hidden_states=True`.
+            qformer_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
+                The Q-Former outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+
         Examples:
+
         ```python
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import Blip2Processor, Blip2Model
+        >>> from transformers import AutoProcessor, Blip2Model
+        >>> from transformers.image_utils import load_image
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
+
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>> qformer_outputs = model.get_qformer_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     qformer_outputs = model.get_qformer_features(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        if legacy_output:
+            warnings.warn(
+                "Deprecation notice: In Transformers v4.59, the default return value of `get_qformer_features` will change. "
+                "Currently, this method returns a model output object, but starting in v4.59, it will return a tensor instead. "
+                "To opt in to the new behavior now, set `legacy_output=False`."
+            )
+
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
         )
 
-        image_embeds = vision_outputs[0]
+        image_embeds = vision_outputs.last_hidden_state
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_outputs = self.qformer(
+        query_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.qformer(
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        return query_outputs
+        return query_outputs if legacy_output else query_outputs.last_hidden_state
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1747,9 +1754,8 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
         >>> from transformers import AutoProcessor, Blip2VisionModelWithProjection
+        >>> from transformers.image_utils import load_image
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -1760,11 +1766,12 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
 
-        >>> outputs = model(**inputs)
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
         >>> print(image_embeds.shape)
         torch.Size([1, 32, 256])
@@ -1947,7 +1954,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(

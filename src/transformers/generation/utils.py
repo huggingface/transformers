@@ -33,7 +33,6 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
-from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -53,8 +52,6 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
-from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
-from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -82,7 +79,6 @@ from .logits_process import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
-    HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
     LogitsProcessorList,
@@ -371,8 +367,6 @@ class GenerationMixin(ContinuousMixin):
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
@@ -1114,14 +1108,6 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
-        if generation_config.diversity_penalty is not None and generation_config.diversity_penalty > 0.0:
-            processors.append(
-                HammingDiversityLogitsProcessor(
-                    diversity_penalty=generation_config.diversity_penalty,
-                    num_beams=generation_config.num_beams,
-                    num_beam_groups=generation_config.num_beam_groups,
-                )
-            )
         if (
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
@@ -1196,7 +1182,7 @@ class GenerationMixin(ContinuousMixin):
             processors.append(
                 PrefixConstrainedLogitsProcessor(
                     prefix_allowed_tokens_fn,
-                    generation_config.num_beams // generation_config.num_beam_groups,
+                    generation_config.num_beams,
                 )
             )
         if generation_config.forced_bos_token_id is not None:
@@ -1999,7 +1985,7 @@ class GenerationMixin(ContinuousMixin):
             elif "dynamic" in generation_config.cache_implementation:
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
-        # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
+        # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
@@ -2138,6 +2124,39 @@ class GenerationMixin(ContinuousMixin):
 
         return can_compile
 
+    def _get_deprecated_gen_repo(
+        self,
+        generation_config: GenerationConfig,
+        trust_remote_code: bool,
+        custom_generate: Optional[str] = None,
+        assistant_model: Optional["PreTrainedModel"] = None,
+    ) -> Optional[str]:
+        """
+        Returns the Hub repo for a deprecated generation strategy, if any.
+        """
+        generation_mode = generation_config.get_generation_mode(assistant_model)
+        moved_to_hub_modes = {
+            GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+            GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+            GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
+            GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
+        }
+        if custom_generate is not None or generation_mode not in moved_to_hub_modes:
+            return None
+
+        repo = moved_to_hub_modes[generation_mode]
+        logger.warning_once(
+            f"{generation_mode.name.replace('_', ' ').title()} was moved to a `custom_generate` repo: https://hf.co/{repo}. "
+            f"To prevent loss of backward compatibility, add `custom_generate='{repo}'` "
+            "to your `generate` call before v4.62.0."
+        )
+        if not trust_remote_code:
+            raise ValueError(
+                f"{generation_mode.name.replace('_', ' ').title()} requires `trust_remote_code=True` in your `generate` call, "
+                f"since it loads https://hf.co/{repo}."
+            )
+        return repo
+
     @torch.no_grad()
     def generate(
         self,
@@ -2254,6 +2273,7 @@ class GenerationMixin(ContinuousMixin):
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+
         if custom_generate is not None and isinstance(custom_generate, str):
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
@@ -2282,6 +2302,33 @@ class GenerationMixin(ContinuousMixin):
         )
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+
+        # Deprecation-related step: set Hub repo for deprecated strategies.
+        # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
+        # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
+        # TODO joao, manuel: remove this in v4.62.0
+        if deprecate_mode_repo := self._get_deprecated_gen_repo(
+            generation_config, trust_remote_code, custom_generate, assistant_model
+        ):
+            return GenerationMixin.generate(
+                self,
+                inputs,
+                generation_config,
+                logits_processor,
+                stopping_criteria,
+                prefix_allowed_tokens_fn,
+                synced_gpus,
+                assistant_model,
+                streamer,
+                negative_prompt_ids,
+                negative_prompt_attention_mask,
+                use_model_defaults,
+                custom_generate=deprecate_mode_repo,
+                trust_remote_code=trust_remote_code,
+                tokenizer=tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
+                **kwargs,
+            )
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -2493,47 +2540,6 @@ class GenerationMixin(ContinuousMixin):
                 streamer=streamer,
                 **model_kwargs,
             )
-        # TODO joao, manuel: remove this in v4.62.0
-        elif generation_mode == GenerationMode.DOLA_GENERATION:
-            logger.warning_once(
-                "DoLa generation was moved to a `custom_generate` repo: https://hf.co/transformers-community/dola. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/dola'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                raise ValueError(
-                    "DoLa generation requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/dola."
-                )
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/dola",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            )
-        # TODO joao, manuel: remove this in v4.62.0
-        elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
-            logger.warning_once(
-                "Contrastive search was moved to a `custom_generate` repo: https://hf.co/transformers-community/contrastive-search. "
-                "To prevent loss of backward compatibility, add `custom_generate='transformers-community/contrastive-search'` "
-                "to your `generate` call before v4.62.0."
-            )
-            if not trust_remote_code:
-                logger.warning_once(
-                    "Contrastive search requires `trust_remote_code=True` in your `generate` call, since "
-                    "it loads https://hf.co/transformers-community/contrastive-search."
-                )
-            # Avoid calling the model-defined `generate` method, since some models (e.g. Janus, Whisper) override it.
-            return GenerationMixin.generate(
-                self,
-                inputs,
-                custom_generate="transformers-community/contrastive-search",
-                generation_config=generation_config,
-                trust_remote_code=trust_remote_code,
-                **kwargs,
-            )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             # 11. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
@@ -2551,99 +2557,6 @@ class GenerationMixin(ContinuousMixin):
             # 11. run beam sample
             result = self._beam_search(
                 input_ids,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                **model_kwargs,
-            )
-
-        elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
-            logger.warning_once(
-                "Group Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
-                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
-            )
-            # 11. prepare beam search scorer
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=inputs_tensor.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                num_beam_groups=generation_config.num_beam_groups,
-                max_length=generation_config.max_length,
-            )
-            result = self._group_beam_search(
-                input_ids,
-                beam_scorer,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                synced_gpus=synced_gpus,
-                **model_kwargs,
-            )
-
-        elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
-            logger.warning_once(
-                "Constrained Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
-                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
-            )
-            final_constraints = []
-            if generation_config.constraints is not None:
-                final_constraints = generation_config.constraints
-
-            if generation_config.force_words_ids is not None:
-
-                def typeerror():
-                    raise ValueError(
-                        "`force_words_ids` has to either be a `list[list[list[int]]]` or `list[list[int]]` "
-                        f"of positive integers, but is {generation_config.force_words_ids}."
-                    )
-
-                if (
-                    not isinstance(generation_config.force_words_ids, list)
-                    or len(generation_config.force_words_ids) == 0
-                ):
-                    typeerror()
-
-                for word_ids in generation_config.force_words_ids:
-                    if isinstance(word_ids[0], list):
-                        if not isinstance(word_ids, list) or len(word_ids) == 0:
-                            typeerror()
-                        if any(not isinstance(token_ids, list) for token_ids in word_ids):
-                            typeerror()
-                        if any(
-                            any((not isinstance(token_id, int) or token_id < 0) for token_id in token_ids)
-                            for token_ids in word_ids
-                        ):
-                            typeerror()
-
-                        constraint = DisjunctiveConstraint(word_ids)
-                    else:
-                        if not isinstance(word_ids, list) or len(word_ids) == 0:
-                            typeerror()
-                        if any((not isinstance(token_id, int) or token_id < 0) for token_id in word_ids):
-                            typeerror()
-
-                        constraint = PhrasalConstraint(word_ids)
-                    final_constraints.append(constraint)
-
-            # 11. prepare beam search scorer
-            constrained_beam_scorer = ConstrainedBeamSearchScorer(
-                constraints=final_constraints,
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=inputs_tensor.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                max_length=generation_config.max_length,
-            )
-            # 12. run beam search
-            result = self._constrained_beam_search(
-                input_ids,
-                constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
@@ -3528,541 +3441,6 @@ class GenerationMixin(ContinuousMixin):
         else:
             return sequences
 
-    def _group_beam_search(
-        self,
-        input_ids: torch.LongTensor,
-        beam_scorer: BeamScorer,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
-        generation_config: GenerationConfig,
-        synced_gpus: bool,
-        **model_kwargs,
-    ):
-        r"""
-        Generates sequences of token ids for models with a language modeling head using **diverse beam search
-        decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        Parameters:
-            input_ids (`torch.LongTensor` of shape `(batch_size*num_beams, sequence_length)`):
-                The sequence used as a prompt for the generation.
-            beam_scorer (`BeamScorer`):
-                An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
-                sorted during generation. For more information, the documentation of [`BeamScorer`] should be read.
-            logits_processor (`LogitsProcessorList`):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
-                used to modify the prediction scores of the language modeling head applied at each generation step.
-            stopping_criteria (`StoppingCriteriaList`):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
-                used to tell if the generation loop should stop.
-            generation_config ([`~generation.GenerationConfig`]):
-                The generation configuration to be used as parametrization of the decoding method.
-            synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
-                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            model_kwargs:
-                Additional model specific kwargs that will be forwarded to the `forward` function of the model. If
-                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
-
-        Return:
-            [`~generation.GenerateBeamDecoderOnlyOutput`], [`~generation.GenerateBeamEncoderDecoderOutput`] or
-            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
-        """
-        # init values
-        pad_token_id = generation_config._pad_token_tensor
-        eos_token_id = generation_config._eos_token_tensor
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
-
-        num_beams = beam_scorer.num_beams
-        num_beam_groups = beam_scorer.num_beam_groups
-        num_sub_beams = num_beams // num_beam_groups
-        batch_size = len(beam_scorer._beam_hyps) // num_beam_groups
-        device = input_ids.device
-
-        batch_beam_size, cur_len = input_ids.shape
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
-
-        if return_dict_in_generate and output_scores:
-            beam_indices = [tuple(() for _ in range(num_sub_beams * batch_size)) for _ in range(num_beam_groups)]
-        else:
-            beam_indices = None
-
-        if num_beams * batch_size != batch_beam_size:
-            raise ValueError(
-                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
-            )
-
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
-
-        # initialise score of first beam of each group with 0 and the rest with -1e9. This ensures that the beams in
-        # the same group don't produce same tokens every time.
-        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
-        beam_scores[:, ::num_sub_beams] = 0
-        beam_scores = beam_scores.view((batch_size * num_beams,))
-
-        this_peer_finished = False
-
-        decoder_prompt_len = input_ids.shape[1]  # record the prompt length of decoder
-        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            # predicted tokens in cur_len step
-            current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
-
-            # indices which will form the beams in the next time step
-            reordering_indices = torch.zeros(batch_size * num_beams, dtype=torch.long, device=device)
-
-            # do one decoder step on all beams of all sentences in batch
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
-            outputs = self(**model_inputs, return_dict=True)
-
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
-            if synced_gpus and this_peer_finished:
-                cur_len = cur_len + 1
-                continue
-
-            if output_scores:
-                processed_score = torch.zeros_like(outputs.logits[:, -1, :])
-            if output_logits:
-                # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-                # (the clone itself is always small)
-                raw_logit_score = outputs.logits[:, -1, :].to(copy=True, device=input_ids.device)
-
-            for beam_group_idx in range(num_beam_groups):
-                group_start_idx = beam_group_idx * num_sub_beams
-                group_end_idx = min(group_start_idx + num_sub_beams, num_beams)
-                group_size = group_end_idx - group_start_idx
-
-                # indices of beams of current group among all sentences in batch
-                batch_group_indices = []
-
-                for batch_idx in range(batch_size):
-                    batch_group_indices.extend(
-                        [batch_idx * num_beams + idx for idx in range(group_start_idx, group_end_idx)]
-                    )
-                group_input_ids = input_ids[batch_group_indices]
-
-                # select outputs of beams of current group only
-                # No need to clone() the logits here as they will not retain outputs.logits at the end of the loop
-                # .float() is needed to retain precision for later logits manipulations
-                next_token_logits = outputs.logits[batch_group_indices, -1, :].to(
-                    dtype=torch.float32, device=input_ids.device
-                )
-
-                next_token_scores = nn.functional.log_softmax(
-                    next_token_logits, dim=-1
-                )  # (batch_size * group_size, vocab_size)
-                vocab_size = next_token_scores.shape[-1]
-
-                next_token_scores_processed = logits_processor(
-                    group_input_ids, next_token_scores, current_tokens=current_tokens, beam_group_idx=beam_group_idx
-                )
-                next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1)
-                next_token_scores = next_token_scores.expand_as(next_token_scores_processed)
-
-                if output_scores:
-                    processed_score[batch_group_indices] = next_token_scores_processed
-
-                # reshape for beam search
-                next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
-
-                # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-                n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
-                next_token_scores, next_tokens = torch.topk(
-                    next_token_scores, max(2, 1 + n_eos_tokens) * group_size, dim=1, largest=True, sorted=True
-                )
-
-                next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
-                next_tokens = next_tokens % vocab_size
-
-                # stateless
-                process_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
-                beam_outputs = beam_scorer.process(
-                    group_input_ids,
-                    next_token_scores,
-                    next_tokens,
-                    next_indices,
-                    pad_token_id=pad_token_id,
-                    eos_token_id=eos_token_id,
-                    beam_indices=process_beam_indices,
-                    group_index=beam_group_idx,
-                    decoder_prompt_len=decoder_prompt_len,
-                )
-                beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
-                beam_next_tokens = beam_outputs["next_beam_tokens"]
-                beam_idx = beam_outputs["next_beam_indices"]
-
-                if return_dict_in_generate and output_scores:
-                    beam_indices[beam_group_idx] = tuple(
-                        beam_indices[beam_group_idx][beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices[0]))
-                    )
-
-                input_ids[batch_group_indices] = group_input_ids[beam_idx]
-                group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-                current_tokens[batch_group_indices] = group_input_ids[:, -1]
-
-                # (beam_idx // group_size) -> batch_idx
-                # (beam_idx % group_size) -> offset of idx inside the group
-                reordering_indices[batch_group_indices] = (
-                    num_beams * torch.div(beam_idx, group_size, rounding_mode="floor")
-                    + group_start_idx
-                    + (beam_idx % group_size)
-                )
-
-            # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (processed_score,)
-                if output_logits:
-                    raw_logits += (raw_logit_score,)
-                if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
-
-            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
-
-            # This is needed to properly delete outputs.logits which may be very large for first iteration
-            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-            # IMPORTANT: Note that this should appear BEFORE the call to _reorder_cache() to save the maximum memory
-            # (that way the memory peak does not include outputs.logits)
-            del outputs
-
-            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values", None) is not None:
-                if hasattr(self, "_reorder_cache"):
-                    model_kwargs["past_key_values"] = self._reorder_cache(
-                        model_kwargs["past_key_values"], reordering_indices
-                    )
-                else:
-                    model_kwargs["past_key_values"].reorder_cache(reordering_indices)
-
-            # increase cur_len
-            cur_len = cur_len + 1
-
-            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                this_peer_finished = True
-
-        final_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
-        sequence_outputs = beam_scorer.finalize(
-            input_ids,
-            beam_scores,
-            next_tokens,
-            next_indices,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            max_length=stopping_criteria.max_length,
-            beam_indices=final_beam_indices,
-            decoder_prompt_len=decoder_prompt_len,
-        )
-
-        if return_dict_in_generate:
-            if not output_scores:
-                sequence_outputs["sequence_scores"] = None
-
-            if self.config.is_encoder_decoder:
-                return GenerateBeamEncoderDecoderOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    logits=raw_logits,
-                    beam_indices=sequence_outputs["beam_indices"],
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateBeamDecoderOnlyOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    logits=raw_logits,
-                    beam_indices=sequence_outputs["beam_indices"],
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return sequence_outputs["sequences"]
-
-    def _constrained_beam_search(
-        self,
-        input_ids: torch.LongTensor,
-        constrained_beam_scorer: ConstrainedBeamSearchScorer,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
-        generation_config: GenerationConfig,
-        synced_gpus: bool,
-        **model_kwargs,
-    ) -> Union[GenerateBeamOutput, torch.LongTensor]:
-        r"""
-        Generates sequences of token ids for models with a language modeling head using **constrained beam search
-        decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        Parameters:
-            input_ids (`torch.LongTensor` of shape `(batch_size*num_beams, sequence_length)`):
-                The sequence used as a prompt for the generation.
-            constrained_beam_scorer (`ConstrainedBeamSearchScorer`):
-                A derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
-                sorted during generation, while satisfying a list of positive constraints. For more information, the
-                documentation of [`ConstrainedBeamSearchScorer`] should be read.
-            logits_processor (`LogitsProcessorList`):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
-                used to modify the prediction scores of the language modeling head applied at each generation step.
-            stopping_criteria (`StoppingCriteriaList`):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
-                used to tell if the generation loop should stop.
-            generation_config ([`~generation.GenerationConfig`]):
-                The generation configuration to be used as parametrization of the decoding method.
-            synced_gpus (`bool`):
-                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
-                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
-                an encoder-decoder model the kwargs should include `encoder_outputs`.
-
-        Return:
-            [`~generation.GenerateBeamDecoderOnlyOutput`], [`~generation.GenerateBeamEncoderDecoderOutput`] or
-            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
-        """
-        # init values
-        pad_token_id = generation_config._pad_token_tensor
-        eos_token_id = generation_config._eos_token_tensor
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
-
-        batch_size = len(constrained_beam_scorer._beam_hyps)
-        num_beams = constrained_beam_scorer.num_beams
-
-        batch_beam_size, cur_len = input_ids.shape[:2]
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
-
-        if num_beams * batch_size != batch_beam_size:
-            raise ValueError(
-                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
-            )
-
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        beam_indices = (
-            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
-        )
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
-
-        # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
-        # of the first beam are considered to avoid sampling the exact same tokens across all beams.
-        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view((batch_size * num_beams,))
-
-        this_peer_finished = False
-
-        decoder_prompt_len = input_ids.shape[1]  # record the prompt length of decoder
-        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
-            outputs = self(**model_inputs, return_dict=True)
-
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
-            if synced_gpus and this_peer_finished:
-                cur_len = cur_len + 1
-                continue
-
-            # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-            # (the clone itself is always small)
-            # .float() is needed to retain precision for later logits manipulations
-            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
-            next_token_scores = nn.functional.log_softmax(
-                next_token_logits, dim=-1
-            )  # (batch_size * num_beams, vocab_size)
-
-            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
-                next_token_scores_processed
-            )
-
-            scores_for_all_vocab = next_token_scores.clone()
-
-            # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (next_token_scores,)
-                if output_logits:
-                    raw_logits += (next_token_logits,)
-                if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
-
-            # reshape for beam search
-            vocab_size = next_token_scores.shape[-1]
-            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
-
-            # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-            n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
-            next_token_scores, next_tokens = torch.topk(
-                next_token_scores, max(2, 1 + n_eos_tokens) * num_beams, dim=1, largest=True, sorted=True
-            )
-
-            next_indices = (next_tokens / vocab_size).long()
-            next_tokens = next_tokens % vocab_size
-
-            # stateless
-            beam_outputs = constrained_beam_scorer.process(
-                input_ids,
-                next_token_scores,
-                next_tokens,
-                next_indices,
-                scores_for_all_vocab,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                beam_indices=beam_indices,
-                decoder_prompt_len=decoder_prompt_len,
-            )
-            beam_scores = beam_outputs["next_beam_scores"]
-            beam_next_tokens = beam_outputs["next_beam_tokens"]
-            beam_idx = beam_outputs["next_beam_indices"]
-
-            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-
-            # This is needed to properly delete outputs.logits which may be very large for first iteration
-            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-            # IMPORTANT: Note that this should appear BEFORE the call to _reorder_cache() to save the maximum memory
-            # (that way the memory peak does not include outputs.logits)
-            del outputs
-
-            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values", None) is not None:
-                if hasattr(self, "_reorder_cache"):
-                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                else:
-                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
-
-            if return_dict_in_generate and output_scores:
-                beam_indices = tuple(beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices)))
-
-            # increase cur_len
-            cur_len = cur_len + 1
-
-            if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                this_peer_finished = True
-
-        sequence_outputs = constrained_beam_scorer.finalize(
-            input_ids,
-            beam_scores,
-            next_tokens,
-            next_indices,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            max_length=stopping_criteria.max_length,
-            beam_indices=beam_indices,
-            decoder_prompt_len=decoder_prompt_len,
-        )
-
-        if return_dict_in_generate:
-            if not output_scores:
-                sequence_outputs["sequence_scores"] = None
-            if self.config.is_encoder_decoder:
-                return GenerateBeamEncoderDecoderOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    logits=raw_logits,
-                    beam_indices=sequence_outputs["beam_indices"],
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateBeamDecoderOnlyOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    logits=raw_logits,
-                    beam_indices=sequence_outputs["beam_indices"],
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return sequence_outputs["sequences"]
-
     def _assisted_decoding(
         self,
         input_ids: torch.LongTensor,
@@ -4454,52 +3832,3 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
-
-
-def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConfig) -> ModelOutput:
-    """
-    Stack a list of ModelOutput objects (or its subclasses) along the batch_size dimension. The function infers the
-    specific ModelOutput subclass from the list provided.
-    """
-    if not model_outputs:
-        raise ValueError("Input list is empty.")
-
-    # Infer the class from the first object in the list
-    model_output_cls = type(model_outputs[0])
-
-    # Ensure all objects are of the same type
-    if not all(isinstance(obj, model_output_cls) for obj in model_outputs):
-        raise ValueError("All elements in the list should be of the same type.")
-
-    # Helper function to concat tensors or tuples of tensors
-    def _concat(data):
-        """
-        Reverse of `_split` function above.
-        """
-        if any(data is None for data in data):
-            return None
-        if isinstance(data[0], torch.Tensor):
-            return torch.cat(data, dim=0)
-        elif isinstance(data[0], tuple):
-            # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
-            if isinstance(data[0][0], tuple):
-                return tuple(
-                    tuple(torch.cat([attr[i][j] for attr in data], dim=0) for j in range(len(data[0][0])))
-                    for i in range(len(data[0]))
-                )
-            else:
-                return tuple(torch.cat([attr[i] for attr in data], dim=0) for i in range(len(data[0])))
-        elif isinstance(data[0], (int, float)):
-            # If the elements are integers or floats, return a tensor
-            return torch.tensor(data)
-        else:
-            raise TypeError(f"Unexpected attribute type: {type(data[0])}")
-
-    # Use a dictionary comprehension to gather attributes from all objects and concatenate them
-    concatenated_data = {
-        k: _concat([getattr(model_output, k) for model_output in model_outputs])
-        for k in model_output_cls.__dataclass_fields__
-    }
-
-    # Return a new object of the inferred class with the concatenated attributes
-    return model_output_cls(**concatenated_data)

@@ -28,7 +28,7 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -51,7 +51,7 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    Utility function to extract patches from a given image tensor. Returns a tensor of shape
     (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
@@ -407,7 +407,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

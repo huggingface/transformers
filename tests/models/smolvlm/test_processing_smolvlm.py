@@ -26,7 +26,7 @@ from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -93,6 +93,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_seq_len": 2,
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
+
+    # Override as SmolVLM needs images/video to be an explicitly nested batch
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        images = super().prepare_image_inputs(batch_size)
+        if isinstance(images, (list, tuple)):
+            images = [[image] for image in images]
+        return images
 
     def prepare_video_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of numpy videos."""
@@ -336,13 +344,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = [[self.image1], []]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 
@@ -395,7 +397,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -452,7 +456,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -574,7 +577,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[image_input[0]], [image_input[1]]]
         _ = processor(
             text=input_str,
             images=image_input,
@@ -593,12 +595,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=20,
             )
 
-    @unittest.skip("SmolVLM cannot accept image URL as video frames, because it needs to know video fps and duration")
-    def test_apply_chat_template_video_1(self):
-        pass
-
     @unittest.skip(
         "SmolVLM cannot accept list of decoded video frames, because it needs to know video fps and duration"
     )
-    def test_apply_chat_template_video_2(self):
+    def test_apply_chat_template_decoded_video_0(self):
         pass

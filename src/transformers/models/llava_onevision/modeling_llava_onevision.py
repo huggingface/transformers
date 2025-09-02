@@ -39,13 +39,9 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    logging,
 )
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -111,38 +107,31 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class LlavaOnevisionPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
+@auto_docstring
+class LlavaOnevisionPreTrainedModel(PreTrainedModel):
+    config: LlavaOnevisionConfig
+    base_model_prefix = ""
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
-        mode = config.spatial_pool_mode
-        stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
+    _supports_flash_attn = True
+    _supports_sdpa = True
 
-        if mode == "average":
-            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        elif mode == "max":
-            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
-        elif mode == "conv":
-            self.pool = nn.Conv2d(
-                in_channels=config.vision_config.hidden_size,
-                out_channels=out_channels,
-                kernel_size=stride,
-                stride=stride,
-            )
-        else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
-    def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
-        ori_height = int(ori_width * self.image_size // self.image_size)
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
-        image_features_spatial_pool = self.pool(image_features_spatial)
-
-        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, LlavaOnevisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):
@@ -272,33 +261,6 @@ def unpad_image(tensor, original_size):
         unpadded_tensor = tensor[:, :, padding : current_width - padding]
 
     return unpadded_tensor
-
-
-@auto_docstring
-class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config: LlavaOnevisionConfig
-    base_model_prefix = ""
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, LlavaOnevisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 @auto_docstring(
@@ -497,7 +459,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         video_features: torch.FloatTensor = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
