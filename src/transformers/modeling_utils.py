@@ -5203,9 +5203,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
                 )
 
-            from kernels import Device, kernelize
+            from kernels import Device, kernelize, Mode
 
-            kernelize(model, device=Device(type=model.device.type))
+            mode = Mode.INFERENCE if not model.training else Mode.TRAINING
+            kernelize(model, device=Device(type=model.device.type), mode=mode)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
