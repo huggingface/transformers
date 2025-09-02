@@ -342,6 +342,11 @@ class Trainer:
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
+        accelerator ([`Accelerator`], *optional*):
+            The accelerator object to use for distributed training. If not provided, the [`Trainer`] will create one
+            internally using the provided [`TrainingArguments`]. When provided, the user has full control over the
+            accelerator configuration including mixed precision, gradient accumulation, DeepSpeed, FSDP, and other
+            distributed training settings.
 
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
             distributed fashion, your iterable dataset should either use a internal attribute `generator` that is a
@@ -5547,12 +5552,10 @@ class Trainer:
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
 
-
     def postprocess_accelerator(self):
         """
         Postprocess the accelerator when it's provided by the user instead of created internally.
-        This method sets up the same attributes and configurations that would be set up in 
-        create_accelerator_and_postprocess, but for a user provided accelerator.
+        This method sets up the same attributes and configurations that would be set up in create_accelerator_and_postprocess, but for a user provided accelerator.
         """
 
         self.gather_function = self.accelerator.gather_for_metrics
@@ -5572,10 +5575,10 @@ class Trainer:
             for param in ["limit_all_gathers", "activation_checkpointing"]:
                 if hasattr(self.args, 'fsdp_config') and self.args.fsdp_config is not None:
                     setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            
-            if (hasattr(fsdp_plugin, 'activation_checkpointing') and 
-                fsdp_plugin.activation_checkpointing and 
-                hasattr(self.args, 'gradient_checkpointing') and 
+
+            if (hasattr(fsdp_plugin, 'activation_checkpointing') and
+                fsdp_plugin.activation_checkpointing and
+                hasattr(self.args, 'gradient_checkpointing') and
                 self.args.gradient_checkpointing):
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
@@ -5610,7 +5613,7 @@ class Trainer:
             and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
-    
+
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """

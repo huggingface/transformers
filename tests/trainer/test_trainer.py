@@ -20,6 +20,7 @@ import math
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,11 +30,10 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
-from datasets import Dataset
-import shutil
 
 import numpy as np
 import pytest
+from datasets import Dataset
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -6186,7 +6186,7 @@ class DummyModelForCustomAccelerate(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear = nn.Linear(10, 2)
-        
+
     def forward(self, input_ids, labels=None, **kwargs):
         logits = self.linear(input_ids.float())
         loss = None
@@ -6216,14 +6216,14 @@ class TestTrainerCustomAccelerator(unittest.TestCase):
             save_strategy="no",
             eval_strategy="no"
         )
-    
+
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     def test_trainer_accepts_custom_accelerator(self):
         """Test that Trainer accepts a custom accelerator"""
         custom_accelerator = Accelerator(mixed_precision="no")
-        
+
         trainer = Trainer(
             model=self.model,
             args=self.args,
@@ -6231,7 +6231,7 @@ class TestTrainerCustomAccelerator(unittest.TestCase):
             accelerator=custom_accelerator
         )
         assert trainer.accelerator is custom_accelerator
-    
+
     def test_trainer_without_accelerator_works(self):
         """Test that existing functionality still works"""
         trainer = Trainer(
@@ -6239,14 +6239,14 @@ class TestTrainerCustomAccelerator(unittest.TestCase):
             args=self.args,
             train_dataset=self.dataset
         )
-        
+
         assert trainer.accelerator is not None
         assert isinstance(trainer.accelerator, Accelerator)
-    
+
     def test_postprocessing_sets_required_attributes(self):
         """Test that postprocessing sets all required attributes"""
         custom_accelerator = Accelerator(mixed_precision="no")
-        
+
         trainer = Trainer(
             model=self.model,
             args=self.args,
@@ -6260,14 +6260,14 @@ class TestTrainerCustomAccelerator(unittest.TestCase):
         assert isinstance(trainer.is_deepspeed_enabled, bool)
         assert isinstance(trainer.is_fsdp_enabled, bool)
         assert isinstance(trainer.is_tp_enabled, bool)
-    
+
     def test_custom_accelerator_preserves_settings(self):
         """Test that custom accelerator settings are preserved"""
         custom_accelerator = Accelerator(
             mixed_precision="fp16",
             gradient_accumulation_steps=4
         )
-        
+
         trainer = Trainer(
             model=self.model,
             args=self.args,
@@ -6277,26 +6277,26 @@ class TestTrainerCustomAccelerator(unittest.TestCase):
 
         assert trainer.accelerator.mixed_precision == "fp16"
         assert trainer.accelerator.gradient_accumulation_steps == 4
-    
+
     def test_gather_function_setup(self):
         """Test that gather function is properly configured"""
         custom_accelerator = Accelerator(mixed_precision="no")
-        
+
         trainer = Trainer(
             model=self.model,
             args=self.args,
             train_dataset=self.dataset,
             accelerator=custom_accelerator
         )
-        
+
         assert trainer.gather_function is not None
-        assert (trainer.gather_function == custom_accelerator.gather_for_metrics or 
+        assert (trainer.gather_function == custom_accelerator.gather_for_metrics or
                 hasattr(trainer.gather_function, 'func'))
-    
+
     def test_training_works_with_custom_accelerator(self):
         """Test that training actually works with custom accelerator"""
         custom_accelerator = Accelerator(mixed_precision="no")
-        
+
         trainer = Trainer(
             model=self.model,
             args=self.args,

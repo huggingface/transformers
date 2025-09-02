@@ -16,10 +16,9 @@
 import argparse
 import copy
 import os
-import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-import glob
+from typing import Any, Optional
+
 import yaml
 
 
@@ -82,15 +81,15 @@ class EmptyJob:
 @dataclass
 class CircleCIJob:
     name: str
-    additional_env: Dict[str, Any] = None
-    docker_image: List[Dict[str, str]] = None
-    install_steps: List[str] = None
+    additional_env: dict[str, Any] = None
+    docker_image: list[dict[str, str]] = None
+    install_steps: list[str] = None
     marker: Optional[str] = None
     parallelism: Optional[int] = 0
     pytest_num_workers: int = 8
-    pytest_options: Dict[str, Any] = None
+    pytest_options: dict[str, Any] = None
     resource_class: Optional[str] = "xlarge"
-    tests_to_run: Optional[List[str]] = None
+    tests_to_run: Optional[list[str]] = None
     num_test_files_per_worker: Optional[int] = 10
     # This should be only used for doctest job!
     command_timeout: Optional[int] = None
@@ -149,7 +148,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
-        junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
@@ -198,9 +197,9 @@ class CircleCIJob:
                         fi"""
                 },
             },
-            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
-            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
-            {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
+            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
+            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
+            {"run": {"name": "Errors",                       "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
