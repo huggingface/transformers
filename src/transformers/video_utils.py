@@ -115,7 +115,7 @@ def is_valid_video_frame(frame):
 def is_valid_video(video):
     if not isinstance(video, (list, tuple)):
         return (is_numpy_array(video) or is_torch_tensor(video)) and video.ndim == 4
-    return all(is_valid_video_frame(frame) for frame in video)
+    return video and all(is_valid_video_frame(frame) for frame in video)
 
 
 def valid_videos(videos):
@@ -181,7 +181,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
     """
     # Early exit for deeply nested list of image frame paths. We shouldn't flatten them
     try:
-        if isinstance(videos[0][0][0], str):
+        if isinstance(videos[0][0], list) and isinstance(videos[0][0][0], str):
             return [image_paths for sublist in videos for image_paths in sublist]
     except (IndexError, TypeError):
         pass
@@ -202,7 +202,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
     for item in videos:
         if isinstance(item, str) or is_valid_video(item):
             flat_videos_list.append(item)
-        elif isinstance(item, list):
+        elif isinstance(item, list) and item:
             flat_videos_list.extend(make_batched_videos(item))
 
     flat_videos_list = convert_pil_frames_to_video(flat_videos_list)

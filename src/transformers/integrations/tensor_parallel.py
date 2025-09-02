@@ -40,7 +40,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
-    Sets up the device mesh and initilized the backend for tensor parallelism.
+    Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
     if tp_plan is None:
@@ -128,7 +128,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
 
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
-    not parrent classes for `post_init` calls
+    not parent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
