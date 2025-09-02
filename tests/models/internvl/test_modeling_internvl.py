@@ -231,10 +231,6 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("Qwen2 flash attention does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
 
 @slow
 @require_torch_accelerator

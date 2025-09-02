@@ -756,8 +756,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.layers = nn.ModuleList(
             [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
         )
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 

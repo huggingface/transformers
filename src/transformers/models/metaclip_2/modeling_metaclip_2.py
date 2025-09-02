@@ -17,7 +17,15 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    filter_out_non_signature_kwargs,
+    logging,
+    torch_int,
+)
 from ...utils.generic import check_model_inputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 
@@ -483,9 +491,6 @@ class MetaClip2TextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-        # For attention mask, it differs between `flash_attention_2` and other attention implementations
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -508,7 +513,7 @@ class MetaClip2TextTransformer(nn.Module):
         )
 
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -616,6 +621,7 @@ class MetaClip2TextModelOutput(ModelOutput):
 class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     config: MetaClip2TextConfig
 
+    _supports_flash_attn = False
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2TextConfig):
@@ -649,6 +655,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, MetaClip2TextModelWithProjection
 
         >>> model = MetaClip2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
@@ -656,7 +663,8 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
         ```"""
 
@@ -779,14 +787,13 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -796,39 +803,32 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
+        ```"""
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
         )
-
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
@@ -839,33 +839,25 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, MetaClip2Model
+        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
-
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
 
@@ -891,21 +883,22 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, MetaClip2Model
+        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
         ... )
 
-        >>> outputs = model(**inputs)
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
@@ -1116,19 +1109,20 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
+        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2VisionModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
         ```"""
 
