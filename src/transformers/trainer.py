@@ -2669,7 +2669,21 @@ class Trainer:
                         else contextlib.nullcontext
                     )
                     with context():
-                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                        # For multi-GPU, calculate what each GPU will actually see
+                        current_num_items_in_batch = num_items_in_batch
+                        if num_items_in_batch is not None and self.args.n_gpu > 1 and "labels" in inputs:
+                            try: # Safe try/except to avoid crashing for loss normalization purpose ...
+                                # Each GPU gets 1/n_gpu portion of the tokens
+                                full_batch_tokens = (inputs["labels"].ne(-100)).sum() # Count all non-padding tokens
+                                tokens_per_gpu = full_batch_tokens // self.args.n_gpu
+                                current_num_items_in_batch = tokens_per_gpu
+                                # Ensure proper tensor format
+                                if current_num_items_in_batch.dim() == 0:
+                                    current_num_items_in_batch = current_num_items_in_batch.unsqueeze(0)
+                            except (TypeError, AttributeError):
+                                current_num_items_in_batch = num_items_in_batch
+
+                        tr_loss_step = self.training_step(model, inputs, current_num_items_in_batch)
 
                     if (
                         args.logging_nan_inf_filter
