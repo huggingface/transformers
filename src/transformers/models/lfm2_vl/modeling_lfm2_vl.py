@@ -243,7 +243,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0] * image_features.shape[1]
+        n_image_features = image_features.shape[0]
         if inputs_embeds[special_image_mask].numel() != image_features.numel():
             raise ValueError(
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -269,7 +269,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Lfm2VlModelOutputWithPast]:
-        """
+        r"""
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
@@ -329,12 +329,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     """
 )
 class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Lfm2VlConfig):
@@ -361,14 +356,14 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        spatial_shapes: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         **kwargs,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
+            spatial_shapes=spatial_shapes,
+            pixel_attention_mask=pixel_attention_mask,
             **kwargs,
         )
 

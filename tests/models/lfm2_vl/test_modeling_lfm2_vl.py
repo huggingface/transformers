@@ -59,28 +59,25 @@ class Lfm2VlModelTester(CausalLMModelTester):
         scale_factor=2,
         num_images=2,
         vision_config={
-            "hidden_size": 768,
-            "intermediate_size": 3072,
-            "num_hidden_layers": 12,
-            "num_attention_heads": 12,
+            "hidden_size": 32,
+            "intermediate_size": 37,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
             "num_channels": 3,
-            "num_patches": 256,
-            "patch_size": 16,
+            "num_patches": 16,
+            "patch_size": 4,
             "hidden_act": "gelu_pytorch_tanh",
             "layer_norm_eps": 1e-6,
             "attention_dropout": 0.0,
         },
         text_config={
-            "vocab_size": 65536,
-            "hidden_size": 2560,
-            "intermediate_size": 12288,
-            "num_hidden_layers": 32,
-            "num_attention_heads": 32,
-            "num_key_value_heads": 8,
-            "max_position_embeddings": 128_000,
-            "initializer_range": 0.02,
-            "norm_eps": 0.00001,
-            "use_cache": True,
+            "vocab_size": 100,
+            "hidden_size": 32,
+            "intermediate_size": 37,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "max_position_embeddings": 100,
             "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
@@ -88,23 +85,12 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "rope_theta": 1000000.0,
             "conv_bias": False,
             "conv_L_cache": 3,
-            "block_multiple_of": 256,
-            "block_ffn_dim_multiplier": 1.0,
-            "block_auto_adjust_ff_dim": True,
-            "full_attn_idxs": [2, 5, 8, 10, 12, 14],
+            "block_multiple_of": 2,
+            "full_attn_idxs": [0],
         },
-        image_token_id=396,
-        downsample_factor=2,
-        max_image_tokens=256,
-        encoder_patch_size=16,
-        use_image_special_tokens=True,
-        do_image_splitting=True,
-        min_tiles=2,
-        max_tiles=10,
-        tile_size=512,
-        max_pixels_tolerance=2.0,
-        use_thumbnail=True,
-        seq_length=1024,
+        image_token_id=4,
+        downsample_factor=4,
+        projector_hidden_size=32,
     ):
         super().__init__(parent)
         self.vision_config = vision_config
@@ -115,23 +101,8 @@ class Lfm2VlModelTester(CausalLMModelTester):
         self.scale_factor = scale_factor
         self.num_images = num_images
         self.downsample_factor = downsample_factor
-        self.max_image_tokens = max_image_tokens
-        self.encoder_patch_size = encoder_patch_size
-        self.use_image_special_tokens = use_image_special_tokens
-        self.do_image_splitting = do_image_splitting
-        self.min_tiles = min_tiles
-        self.max_tiles = max_tiles
-        self.tile_size = tile_size
-        self.max_pixels_tolerance = max_pixels_tolerance
-        self.use_thumbnail = use_thumbnail
-        self.seq_length = seq_length
-
-        max_thumbnail_image_patches = max_image_tokens * downsample_factor**2
-        tile_size_patches = (tile_size // encoder_patch_size) ** 2 if do_image_splitting else 0
-        self.max_num_patches = max(
-            max_thumbnail_image_patches,
-            tile_size_patches,
-        )
+        self.projector_hidden_size = projector_hidden_size
+        self.image_seq_length = 4
 
     def get_config(self):
         return Lfm2VlConfig(
@@ -139,28 +110,19 @@ class Lfm2VlModelTester(CausalLMModelTester):
             text_config=self.text_config,
             image_token_id=self.image_token_id,
             downsample_factor=self.downsample_factor,
-            max_image_tokens=self.max_image_tokens,
-            encoder_patch_size=self.encoder_patch_size,
-            use_image_special_tokens=self.use_image_special_tokens,
-            do_image_splitting=self.do_image_splitting,
-            min_tiles=self.min_tiles,
-            max_tiles=self.max_tiles,
-            tile_size=self.tile_size,
-            max_pixels_tolerance=self.max_pixels_tolerance,
-            use_thumbnail=self.use_thumbnail,
+            projector_hidden_size=self.projector_hidden_size,
         )
 
     def prepare_config_and_inputs(self):
         # Create dummy pixel values: [num_images, num_patches, channels * patch_size^2]
-        pixel_values = floats_tensor(
-            [self.num_images, self.max_num_patches, 3 * self.encoder_patch_size * self.encoder_patch_size]
-        )
+        patch_size = self.vision_config["patch_size"]
+        pixel_values = floats_tensor([self.num_images, 64, 3 * patch_size * patch_size])
         # Compute square grid size in patches
-        patches = int(math.sqrt(self.max_num_patches))
+        patches = int(math.sqrt(64))
         # Spatial shapes: one (height_patches, width_patches) per image
         spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long)
         # Pixel attention mask: mark all patches as valid (no padding)
-        pixel_attention_mask = torch.ones((self.num_images, self.max_num_patches), dtype=torch.long)
+        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long)
         config = self.get_config()
         return config, pixel_values, spatial_shapes, pixel_attention_mask
 
@@ -170,8 +132,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
 
         # For simplicity just set the last n tokens to the image token
-        n_image_tokens_per_batch = self.max_image_tokens
-        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
+        input_ids[:, -self.image_seq_length :] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         pixel_values = pixel_values.to(torch_device)
         spatial_shapes = spatial_shapes.to(torch_device)
