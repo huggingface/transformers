@@ -2543,19 +2543,14 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 8b. Prefill pass
-        if generation_mode in (
-            GenerationMode.SAMPLE,
-            GenerationMode.GREEDY_SEARCH,
-            GenerationMode.BEAM_SEARCH,
-            GenerationMode.BEAM_SAMPLE,
-            # GenerationMode.ASSISTED_GENERATION,
-        ):
+        # Some decoding methods (e.g. assisted generation) do not admit the prefill pass
+        if "prefill_outputs" in inspect.signature(generation_call).parameters:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
             if generation_config.prefill_chunk_size is None:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 model_inputs.update({"output_attentions": generation_config.output_attentions})
                 model_inputs.update({"output_hidden_states": generation_config.output_hidden_states})
-                prefill_outputs = self(**model_inputs, return_dict=True)
+                generation_mode_kwargs["prefill_outputs"] = self(**model_inputs, return_dict=True)
             else:
                 model_kwargs = self._prefill_chunking(
                     input_ids,
