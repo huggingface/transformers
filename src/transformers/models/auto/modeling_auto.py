@@ -2208,14 +2208,14 @@ AutoModelForAudioTokenization = auto_class_update(
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         warnings.warn(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
             "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        return super().from_config(config)
+        return super().from_config(config, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -2230,13 +2230,13 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
 
 class AutoModelForVision2Seq(_AutoModelForVision2Seq):
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         warnings.warn(
             "The class `AutoModelForVision2Seq` is deprecated and will be removed in v5.0. Please use "
             "`AutoModelForImageTextToText` instead.",
             FutureWarning,
         )
-        return super().from_config(config)
+        return super().from_config(config, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):

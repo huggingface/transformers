@@ -16,8 +16,9 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -1326,7 +1327,7 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(config.memory_fuser_intermediate_dim, config.memory_fuser_embed_dim)
         self.scale = nn.Parameter(
-            config.memory_fuser_layer_scale_init_value * torch.ones((config.memory_fuser_embed_dim)),
+            config.memory_fuser_layer_scale_init_value * torch.ones(config.memory_fuser_embed_dim),
             requires_grad=True,
         )
 
@@ -1634,9 +1635,7 @@ class Sam2VideoModel(Sam2Model):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
         elif input_points is not None:
             num_objects = input_points.shape[1]
