@@ -362,7 +362,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = LongformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=37)
 
-    # Without this, 0.02% failure rate.
+    # Without this, 0.01% failure rate.
     @is_flaky(
         max_attempts=2,
         description="When `inputs_dict['attention_mask'][:, -1]` is all `0`s, we get shorter length along the last dimension of the output's `attentions`.",
