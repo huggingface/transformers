@@ -677,12 +677,11 @@ def main(*args):
         for linear_weight in st_linears:
             out_size, in_size = linear_weight.shape[:2]
             dense = models.Dense(in_size, out_size, bias=False, activation_function=None)
-            dense.linear.weight.data = torch.from_numpy(linear_weight.astype("float32")).type(
-                getattr(torch, _TRANSFORMER_DTYPE.value)
-            )
+            dense.linear.weight.data = torch.from_numpy(linear_weight.astype("float32"))
             linears.append(dense)
 
         model = SentenceTransformer(modules=[transformer, pooling, *linears, normalize], prompts=task_prompts)
+        model = model.to(getattr(torch, _TRANSFORMER_DTYPE.value))
         model.save_pretrained(output_path)
 
 
