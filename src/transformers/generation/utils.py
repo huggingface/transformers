@@ -2141,16 +2141,9 @@ class GenerationMixin(ContinuousMixin):
         """
         Returns the Hub repo for a deprecated generation mode, if any.
         """
-        moved_to_hub_modes = {
-            GenerationMode.DOLA_GENERATION: "transformers-community/dola",
-            GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
-            GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
-            GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
-        }
-        if custom_generate is not None or generation_mode not in moved_to_hub_modes:
+        if custom_generate is not None or not isinstance(repo := GENERATION_MODES_MAPPING[generation_mode], str):
             return None
 
-        repo = moved_to_hub_modes[generation_mode]
         logger.warning_once(
             f"{generation_mode.name.replace('_', ' ').title()} was moved to a `custom_generate` repo: https://hf.co/{repo}. "
             f"To prevent loss of backward compatibility, add `custom_generate='{repo}'` "
@@ -2340,6 +2333,9 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        generation_call = (
+            GENERATION_MODES_MAPPING[generation_mode] if not isinstance(custom_generate, Callable) else custom_generate
+        )
 
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_generation_mode(generation_mode, generation_mode_kwargs)
@@ -2378,6 +2374,8 @@ class GenerationMixin(ContinuousMixin):
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
+        if "inputs_tensor" in inspect.signature(generation_call).parameters.keys():
+            generation_mode_kwargs["inputs_tensor"] = inputs_tensor
         batch_size = inputs_tensor.shape[0]
 
         device = inputs_tensor.device
@@ -2513,80 +2511,16 @@ class GenerationMixin(ContinuousMixin):
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
-        # 9. go into different generation modes
-        if isinstance(custom_generate, Callable):
-            result = custom_generate(
-                self,
-                input_ids,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                **generation_mode_kwargs,
-                **model_kwargs,
-            )
-        elif generation_mode == GenerationMode.ASSISTED_GENERATION:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    "num_return_sequences has to be 1 when doing assisted generate, "
-                    f"but is {generation_config.num_return_sequences}."
-                )
-            if batch_size > 1:
-                raise ValueError("assisted generate is only supported for batch_size = 1")
-            if not model_kwargs["use_cache"]:
-                raise ValueError("assisted generate requires `use_cache=True`")
-            if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]:
-                raise ValueError("assisted generate is not supported with Static cache classes`")
-            if self._is_stateful:
-                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
-                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
-                raise ValueError(
-                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
-                )
-
-            # 10. Get the candidate generator, given the parameterization
-            candidate_generator = self._get_candidate_generator(
-                generation_config=generation_config,
-                input_ids=input_ids,
-                inputs_tensor=inputs_tensor,
-                assistant_model=generation_mode_kwargs.pop("assistant_model", None),
-                logits_processor=logits_processor,
-                target_tokenizer=generation_mode_kwargs.pop("tokenizer", None),
-                assistant_tokenizer=generation_mode_kwargs.pop("assistant_tokenizer", None),
-                model_kwargs=model_kwargs,
-            )
-
-            # 11. run assisted generate
-            result = self._assisted_decoding(
-                input_ids,
-                candidate_generator=candidate_generator,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                **generation_mode_kwargs,
-                **model_kwargs,
-            )
-
-        elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 10. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
-            result = self._sample(
-                input_ids,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                **generation_mode_kwargs,
-                **model_kwargs,
-            )
-
-        elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
-            # 10. run beam sample
-            result = self._beam_search(
-                input_ids,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                **generation_mode_kwargs,
-                **model_kwargs,
-            )
+        # 9. go into generation mode callable
+        result = generation_call(
+            self,
+            input_ids,
+            logits_processor=prepared_logits_processor,
+            stopping_criteria=prepared_stopping_criteria,
+            generation_config=generation_config,
+            **generation_mode_kwargs,
+            **model_kwargs,
+        )
 
         # Convert to legacy cache format if requested
         if (
@@ -3468,12 +3402,15 @@ class GenerationMixin(ContinuousMixin):
     def _assisted_decoding(
         self,
         input_ids: torch.LongTensor,
-        candidate_generator: CandidateGenerator,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        inputs_tensor: Optional[torch.FloatTensor] = None,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -3485,9 +3422,6 @@ class GenerationMixin(ContinuousMixin):
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            candidate_generator (`CandidateGenerator`):
-                A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
-                more information, the documentation of [`CandidateGenerator`] should be read.
             logits_processor (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -3502,6 +3436,15 @@ class GenerationMixin(ContinuousMixin):
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            inputs_tensor (`torch.FloatTensor`, *optional*):
+                The input tensor for generation. For decoder models, usually `input_ids`. For encoder-decoder models,
+                the tensor that produced `model_kwargs["encoder_outputs"]`.
+            assistant_model (`PreTrainedModel`, *optional*):
+                The model used to assist the generation process. If not provided, the main model will be used.
+            assistant_tokenizer (`PreTrainedTokenizerBase`, *optional*):
+                The tokenizer used for the assistant model. If not provided, the token space is assumed to be the same.
+            tokenizer (`PreTrainedTokenizerBase`, *optional*):
+                The tokenizer used for the main model. If not provided, the token space is assumed to be the same.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3513,6 +3456,35 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+        if generation_config.num_return_sequences > 1:
+            raise ValueError(
+                "num_return_sequences has to be 1 when doing assisted generate, "
+                f"but is {generation_config.num_return_sequences}."
+            )
+        if input_ids.shape[0] > 1:
+            raise ValueError("assisted generate is only supported for batch_size = 1")
+        if not model_kwargs["use_cache"]:
+            raise ValueError("assisted generate requires `use_cache=True`")
+        if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]:
+            raise ValueError("assisted generate is not supported with Static cache classes`")
+        if self._is_stateful:
+            # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
+            # which is not possible with stateful models (they can't reset to a previous subset of generated text)
+            raise ValueError(
+                f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
+            )
+
+        # 10. Get the candidate generator, given the parameterization
+        candidate_generator = self._get_candidate_generator(
+            generation_config=generation_config,
+            input_ids=input_ids,
+            inputs_tensor=inputs_tensor,
+            assistant_model=assistant_model,
+            logits_processor=logits_processor,
+            target_tokenizer=tokenizer,
+            assistant_tokenizer=assistant_tokenizer,
+            model_kwargs=model_kwargs,
+        )
         # init values
         do_sample = generation_config.do_sample
         output_attentions = generation_config.output_attentions
@@ -3856,3 +3828,17 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
+
+
+GENERATION_MODES_MAPPING = {
+    GenerationMode.SAMPLE: GenerationMixin._sample,
+    GenerationMode.GREEDY_SEARCH: GenerationMixin._sample,
+    GenerationMode.BEAM_SEARCH: GenerationMixin._beam_search,
+    GenerationMode.BEAM_SAMPLE: GenerationMixin._beam_search,
+    GenerationMode.ASSISTED_GENERATION: GenerationMixin._assisted_decoding,
+    # Deprecated methods
+    GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+    GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+    GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
+    GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
+}
