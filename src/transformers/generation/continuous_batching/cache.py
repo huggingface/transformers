@@ -25,6 +25,10 @@ from .cache_manager import CacheManager, FullAttentionCacheManager, SlidingAtten
 from .requests import get_device_and_memory_breakdown, logger
 
 
+NO_SLIDING_WINDOW = 1
+
+
+
 def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
@@ -157,24 +161,28 @@ class PagedAttentionCache:
             if group_type == "full_attention":
                 cm = FullAttentionCacheManager(i, self.block_size)
             elif group_type == "sliding_attention":
-                cm = SlidingAttentionCacheManager(i, self.block_size, generation_config.sliding_window)
+                cm = SlidingAttentionCacheManager(i, self.block_size, config.sliding_window)
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
-            assert i == 0, "Only one group of full attention layers is supported for now"
-            assert group_type == "full_attention", "Only full attention layers are supported for now"
+
+        # Add the sliding windows to the class
+        self.sliding_windows = {
+            layer: getattr(self.group_cache_managers[i], "sliding_window", NO_SLIDING_WINDOW)
+            for layer, (i, _) in self.layer_index_to_group_indices.items()
+        }
 
     @traced
     def allocate_blocks(self, n_blocks: int, request_id: str) -> int:
         """Allocates n_blocks for a given request_id. Returns the number of blocks allocated if allocation was
         successful and None otherwise."""
-        total_allocated = 0
+        max_allocated = 0
         for cm in self.group_cache_managers:
             allocated = cm.allocate_blocks(n_blocks, request_id, self._free_blocks)
             if allocated is None:
                 return None
-            total_allocated += allocated
-        return total_allocated
+            max_allocated = max(max_allocated, allocated)
+        return max_allocated
 
     @traced
     def free_blocks(self, request_id: str) -> None:
@@ -212,6 +220,7 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: torch.Tensor, # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: torch.Tensor, # shape [num_layer_groups, seqlen_q]
+        group_read_write_length: list[tuple[int, int]], # shape [num_layer_groups]
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]: # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """
@@ -221,8 +230,9 @@ class PagedAttentionCache:
         """
         # Retrieve the layer read and write indices
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
-        layer_read_index = read_index[group_idx]
-        layer_write_index = write_index[group_idx]
+        group_read_length, group_write_length = group_read_write_length[group_idx]
+        layer_read_index = read_index[group_idx, :group_read_length]
+        layer_write_index = write_index[group_idx, :group_write_length]
         # Reshape cache for easier indexing
         num_pages = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache.view(self.group_size, num_pages, self.num_key_value_heads, self.head_dim)
@@ -231,7 +241,7 @@ class PagedAttentionCache:
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
         # Add the cache to the key and value states
-        mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed
+        mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
         key_states_with_cache = k_cache_flat[layer_idx_in_group, layer_read_index, :, :]
         key_states_with_cache[mask] = key_states
         value_states_with_cache = v_cache_flat[layer_idx_in_group, layer_read_index, :, :]

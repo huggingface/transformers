@@ -21,7 +21,7 @@ def eager_paged_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: Optional[torch.Tensor], # shape [seqlen_q, seqlen_k]
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
