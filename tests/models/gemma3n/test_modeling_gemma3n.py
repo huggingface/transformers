@@ -596,9 +596,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
             # 1. If it doesn't support cache, skip the test
             if not hasattr(
-                config.get_sub_config(
-                    modality="text",
-                ),
+                config.get_sub_config(modality="text"),
                 "use_cache",
             ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")

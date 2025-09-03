@@ -997,9 +997,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # 1. If it doesn't support cache, skip the test
             if not hasattr(
-                config.get_sub_config(
-                    modality="text",
-                ),
+                config.get_sub_config(modality="text"),
                 "use_cache",
             ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -1128,9 +1126,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             if not hasattr(
-                config.get_sub_config(
-                    modality="text",
-                ),
+                config.get_sub_config(modality="text"),
                 "use_cache",
             ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")

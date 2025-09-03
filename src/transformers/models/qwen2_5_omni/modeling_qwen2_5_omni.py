@@ -1973,9 +1973,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             loss = self.loss_function(
                 logits=logits,
                 labels=labels,
-                vocab_size=self.config.get_sub_config(
-                    modality="text",
-                ).vocab_size,
+                vocab_size=self.config.get_sub_config(modality="text").vocab_size,
             )
 
         if not return_dict:

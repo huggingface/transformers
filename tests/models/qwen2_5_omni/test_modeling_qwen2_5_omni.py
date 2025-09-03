@@ -198,10 +198,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
         input_ids = (
             ids_tensor(
                 [self.batch_size, self.seq_length],
-                config.get_sub_config(
-                    modality="text",
-                ).vocab_size
-                - 3,
+                config.get_sub_config(modality="text").vocab_size - 3,
             )
             + 3
         )
@@ -366,7 +363,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_sub_config(
-                    modality="text",
+                    modality="text"
                 ).pad_token_id
 
                 model = (

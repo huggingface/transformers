@@ -3036,9 +3036,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # 0.02 is the standard default value across the library
             std = getattr(
-                self.config.get_sub_config(
-                    modality="text",
-                ),
+                self.config.get_sub_config(modality="text"),
                 "initializer_range",
                 0.02,
             )

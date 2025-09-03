@@ -280,15 +280,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
                 "layers.*.feed_forward.experts.down_proj": "local_colwise",
             }
-            if (
-                config.get_sub_config(
-                    modality="text",
-                )
-                is not None
-            ):
-                config.get_sub_config(
-                    modality="text",
-                ).base_model_tp_plan = text_plan
+            if config.get_sub_config(modality="text") is not None:
+                config.get_sub_config(modality="text").base_model_tp_plan = text_plan
             else:
                 config.base_model_tp_plan = text_plan
             return config

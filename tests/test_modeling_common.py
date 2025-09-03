@@ -2858,13 +2858,8 @@ class ModelTesterMixin:
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = (
-                config.get_sub_config(
-                    modality="text",
-                ).pad_token_id
-                if config.get_sub_config(
-                    modality="text",
-                ).pad_token_id
-                is not None
+                config.get_sub_config(modality="text").pad_token_id
+                if config.get_sub_config(modality="text").pad_token_id is not None
                 else 1
             )
 
@@ -4250,9 +4245,7 @@ class ModelTesterMixin:
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_sub_config(
-                    modality="text",
-                ).pad_token_id
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_sub_config(modality="text").pad_token_id
 
                 model = (
                     model_class.from_pretrained(
@@ -4359,9 +4352,7 @@ class ModelTesterMixin:
                 self.skipTest("Model is an encoder-decoder")
 
             if not hasattr(
-                config.get_sub_config(
-                    modality="text",
-                ),
+                config.get_sub_config(modality="text"),
                 "use_cache",
             ):
                 self.skipTest(f"{model_class.__name__} doesn't support caching")

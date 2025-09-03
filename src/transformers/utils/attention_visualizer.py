@@ -156,9 +156,7 @@ class AttentionMaskVisualizer:
             "sliding_window",
         ):
             self.sliding_window = getattr(
-                config.get_sub_config(
-                    modality="text",
-                ),
+                config.get_sub_config(modality="text"),
                 "sliding_window",
                 None,
             )

@@ -640,13 +640,8 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_sub_config(
-                    modality="text",
-                ).pad_token_id
-                if config.get_sub_config(
-                    modality="text",
-                ).pad_token_id
-                is not None
+                config.get_sub_config(modality="text").pad_token_id
+                if config.get_sub_config(modality="text").pad_token_id is not None
                 else 0
             )
             pad_size = (input_ids.shape[0], 32)
