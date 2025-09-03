@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from .modeling_higgs_audio import _ceil_to_nearest
 
 if is_soundfile_available():
     import soundfile as sf
@@ -440,7 +439,7 @@ class HiggsAudioProcessor(ProcessorMixin):
         processed_batch = batch
 
         # Get the max sequence length based on processed batch
-        max_seq_length = _ceil_to_nearest(max([len(sample.input_ids) for sample in processed_batch]), round_to)
+        max_seq_length = max([len(sample.input_ids) for sample in processed_batch])
 
         # Get the ids for audio-in and audio-out for each batch
         audio_in_ids_l = []

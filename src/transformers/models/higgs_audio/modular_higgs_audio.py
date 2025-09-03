@@ -55,10 +55,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def _ceil_to_nearest(n, round_to):
-    return (n + round_to - 1) // round_to * round_to
-
-
 def merge_input_ids_with_audio_features(
     audio_in_embed,
     audio_in_ids_start,
@@ -72,7 +68,6 @@ def merge_input_ids_with_audio_features(
     label_ids,
     pad_token_id,
     ignore_index=-100,
-    round_to=8,
     left_padding=True,
 ):
     """
@@ -103,8 +98,6 @@ def merge_input_ids_with_audio_features(
             The index of the pad token in the vocabulary
         ignore_index
             The index to ignore in the loss calculation
-        round_to
-            The number to round to for padding
         left_padding
             Whether to apply left padding
 
@@ -221,7 +214,7 @@ def merge_input_ids_with_audio_features(
         token_placeholder_num[audio_out_token_mask] = audio_out_codes_length.long()
 
     new_token_positions = torch.cumsum(token_placeholder_num, -1) - 1
-    max_token_num = _ceil_to_nearest(token_placeholder_num.sum(-1).max(), round_to)
+    max_token_num = token_placeholder_num.sum(-1).max()
     nb_audio_pad = max_token_num - 1 - new_token_positions[:, -1]
 
     if left_padding:
@@ -310,7 +303,6 @@ def merge_input_ids_with_audio_features(
     # Trim the tensor if there are redundant padding tokens
     if left_padding:
         first_non_zero_loc = final_attention_mask.sum(0).nonzero()[0]
-        first_non_zero_loc = (first_non_zero_loc // round_to) * round_to
         if first_non_zero_loc > 0:
             final_attention_mask = final_attention_mask[:, first_non_zero_loc:]
             final_embedding = final_embedding[:, first_non_zero_loc:]
@@ -323,7 +315,6 @@ def merge_input_ids_with_audio_features(
     else:
         # We have done right padding, so we need to trim the mask
         last_non_zero_loc = final_attention_mask.sum(0).nonzero()[-1] + 1
-        last_non_zero_loc = ((last_non_zero_loc + round_to - 1) // round_to) * round_to
         if last_non_zero_loc < max_token_num:
             final_attention_mask = final_attention_mask[:, :last_non_zero_loc]
             final_embedding = final_embedding[:, :last_non_zero_loc]
@@ -394,8 +385,6 @@ class HiggsAudioDecoderProjector(nn.Module):
                 Logits for text tokens
             audio_logits (`torch.Tensor` of shape `(num_audio_out_tokens, audio_num_codebooks * audio_codebook_size)`):
                 Logits for audio tokens. We ensure `num_text_tokens + num_audio_tokens == batch_size * seq_len`
-            audio_hidden_states  (`torch.Tensor` of shape `(num_audio_out_tokens, hidden_size)`):
-                Hidden states for audio out tokens
         """
         logits = self.text_lm_head(hidden_states)
 
@@ -1218,8 +1207,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         # 3. Merge text, audio-in embeddings, and audio-out embeddings
 
-        # use_cache is turned on during inference time, we should set round_to to 1 to avoid extra padding in the end.
-        round_to = 1
+        # use_cache is turned on during inference time
         left_padding = bool(use_cache or input_ids.shape[0] == 1)
         (
             inputs_embeds,
@@ -1242,7 +1230,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             attention_mask,
             label_ids,
             pad_token_id=self.padding_idx,
-            round_to=round_to,
             left_padding=left_padding,
         )
 

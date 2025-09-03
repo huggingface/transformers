@@ -27,7 +27,7 @@ class HiggsAudioConfig(PretrainedConfig):
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text backbone.
-        audio_adapter_type (`str`, *optional*, defaults to `"stack"`):
+        audio_adapter_type (`str`, *optional*, defaults to `"dual_ffn_fast_forward"`):
             The type of audio adapter to use. We support three types of adapter:
             - stack:
                 We stack additional Transformer layers after the main LLM backbone for audio generation.
@@ -39,12 +39,12 @@ class HiggsAudioConfig(PretrainedConfig):
                 the audio hidden states will be directly fast-forward to the next layer.
         audio_dual_ffn_layers (`list[int]`, *optional*):
             The layers in the LLM backbone to plug-in the dual FFN layer (mixture of audio FFN and text FFN).
-        encode_audio_in_tokens (`bool`, *optional*, defaults to `False`):
+        encode_audio_in_tokens (`bool`, *optional*, defaults to `True`):
             Whether to encode the input audio directly as discrete audio tokens.
             When True, the model uses `audio_in_token`
             positions filled with audio tokens extracted via the audio tokenizer.
             Note that `encode_audio_in_tokens` can be combined with `encode_whisper_embed`.
-        use_delay_pattern (`bool`, *optional*, defaults to `False`):
+        use_delay_pattern (`bool`, *optional*, defaults to `True`):
             Whether to use delay pattern in the audio decoder.
         use_audio_out_embed_projector (`bool`, *optional*, defaults to `False`):
             Whether to use an embedding projector to map audio out embeddings.
@@ -106,10 +106,39 @@ class HiggsAudioConfig(PretrainedConfig):
     def __init__(
         self,
         text_config=None,
-        audio_adapter_type="stack",
-        audio_dual_ffn_layers=None,
-        encode_audio_in_tokens=False,
-        use_delay_pattern=False,
+        audio_adapter_type="dual_ffn_fast_forward",
+        audio_dual_ffn_layers=[
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+        ],
+        encode_audio_in_tokens=True,
+        use_delay_pattern=True,
         use_audio_out_embed_projector=False,
         audio_num_codebooks=8,
         audio_codebook_size=1024,
