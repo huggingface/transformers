@@ -46,6 +46,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_int
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
@@ -1383,12 +1384,13 @@ class Phi4MultimodalAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.qkv_proj = nn.Linear(config.hidden_size, op_size, bias=False)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -1408,10 +1410,10 @@ class Phi4MultimodalAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1446,12 +1448,13 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
@@ -1464,7 +1467,7 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -1538,6 +1541,8 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
 
 class Phi4MultimodalRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Phi4MultimodalConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -1659,7 +1664,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1701,7 +1706,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -1729,12 +1734,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

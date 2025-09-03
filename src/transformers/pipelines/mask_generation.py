@@ -206,7 +206,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
 
         with self.device_placement():
             if self.framework == "pt":
@@ -275,13 +275,17 @@ class MaskGenerationPipeline(ChunkPipeline):
             low_resolution_masks = self.image_processor.post_process_masks(
                 low_resolution_masks,
                 original_sizes,
-                reshaped_input_sizes,
-                mask_threshold,
+                mask_threshold=mask_threshold,
+                reshaped_input_sizes=reshaped_input_sizes,
                 binarize=False,
                 **postprocess_kwargs,
             )
         masks = self.image_processor.post_process_masks(
-            low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
+            low_resolution_masks,
+            original_sizes,
+            mask_threshold=mask_threshold,
+            reshaped_input_sizes=reshaped_input_sizes,
+            binarize=False,
         )
         iou_scores = model_outputs["iou_scores"]
         masks, iou_scores, boxes = self.image_processor.filter_masks(

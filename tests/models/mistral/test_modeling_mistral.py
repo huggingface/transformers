@@ -18,8 +18,10 @@ import unittest
 
 import pytest
 from packaging import version
+from parameterized import parameterized
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, DynamicCache, MistralConfig, is_torch_available, set_seed
+from transformers.cache_utils import DynamicSlidingWindowLayer
 from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
@@ -31,8 +33,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -103,13 +103,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
-
 
 @require_torch_accelerator
 @require_read_token
@@ -131,9 +124,7 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
-        )
+        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto", dtype=torch.float16)
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -173,6 +164,7 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
@@ -181,14 +173,18 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
-        )
+        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto", dtype=torch.float16)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
+            input_ids,
+            max_new_tokens=20,
+            temperature=0,
+            dola_layers="low",
+            repetition_penalty=1.2,
+            trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -223,13 +219,12 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_7b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="sdpa", dtype=torch.float16
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -263,9 +258,7 @@ class MistralIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% Sriracha. I love it on everything. I have it on my"
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
-        )
+        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto", dtype=torch.float16)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -276,6 +269,7 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    @pytest.mark.torch_compile_test
     @slow
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -296,7 +290,7 @@ class MistralIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         tokenizer.pad_token = tokenizer.eos_token
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map=torch_device, torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -320,8 +314,8 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
-        forward_function = model.forward
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
+        forward_function = model.__call__
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
@@ -330,12 +324,64 @@ class MistralIntegrationTest(unittest.TestCase):
 
         # Sliding Window Cache + compile
         torch._dynamo.reset()
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @require_flash_attn
+    @slow
+    def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
+        """Test that we can correctly generate beyond the sliding window. This is non-trivial as Mistral will use
+        a DynamicCache with only sliding layers."""
+
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
+        model_id = "mistralai/Mistral-7B-v0.1"
+        EXPECTED_COMPLETIONS = [
+            "scenery, scenery, scenery, scenery, scenery,",
+            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+        ]
+
+        input_text = [
+            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, 15 more than 4096
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+
+        if attn_implementation == "eager":
+            input_text = input_text[:1]
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = MistralForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, device_map=torch_device, dtype=torch.float16
+        )
+
+        # Make sure prefill is larger than sliding window
+        batch_size, input_size = inputs.input_ids.shape
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        # Should already be Dynamic by default, but let's make sure!
+        out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
+        output_text = tokenizer.batch_decode(out.sequences[:batch_size, input_size:])
+
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS[:batch_size])
+
+        # Let's check that the dynamic cache has hybrid layers!
+        dynamic_cache = out.past_key_values
+        self.assertTrue(isinstance(dynamic_cache, DynamicCache))
+        for layer in dynamic_cache.layers:
+            self.assertTrue(isinstance(layer, DynamicSlidingWindowLayer))
+            self.assertEqual(layer.keys.shape[-2], model.config.sliding_window - 1)
 
 
 @slow
@@ -351,9 +397,7 @@ class Mask4DTestHard(unittest.TestCase):
         if cls.model_dtype is None:
             cls.model_dtype = torch.float16
         if cls.model is None:
-            cls.model = MistralForCausalLM.from_pretrained(cls.model_name, torch_dtype=cls.model_dtype).to(
-                torch_device
-            )
+            cls.model = MistralForCausalLM.from_pretrained(cls.model_name, dtype=cls.model_dtype).to(torch_device)
 
     @classmethod
     def tearDownClass(cls):

@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). It has been tested on Python 3.9+, PyTorch 2.1+, TensorFlow 2.6+, and Flax 0.4.1+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.9+ and PyTorch 2.2+.
 
 ## Virtual environment
 
@@ -74,7 +74,7 @@ uv pip install transformers
 </hfoption>
 </hfoptions>
 
-For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and [TensorFlow](https://www.tensorflow.org/install/pip).
+For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally).
 
 Run the command below to check if your system detects an NVIDIA GPU.
 
@@ -84,41 +84,10 @@ nvidia-smi
 
 To install a CPU-only version of Transformers and a machine learning framework, run the following command.
 
-<hfoptions id="cpu-only">
-<hfoption id="PyTorch">
-
 ```bash
 pip install 'transformers[torch]'
 uv pip install 'transformers[torch]'
 ```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-For Apple M1 hardware, you need to install CMake and pkg-config first.
-
-```bash
-brew install cmake
-brew install pkg-config
-```
-
-Install TensorFlow 2.0.
-
-```bash
-pip install 'transformers[tf-cpu]'
-uv pip install 'transformers[tf-cpu]'
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-```bash
-pip install 'transformers[flax]'
-uv pip install 'transformers[flax]'
-```
-
-</hfoption>
-</hfoptions>
 
 Test whether the install was successful with the following command. It should return a label and score for the provided text.
 

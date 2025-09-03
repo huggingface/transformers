@@ -168,13 +168,45 @@ class PerceptionLMModel(LlavaModel):
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
-    def check_mask_feature_size_match(self, media_mask, media_features):
-        media_token_count = media_mask.sum()
-        media_feature_size = media_features.size()[:-1].numel()
-        if media_token_count != media_feature_size:
-            raise ValueError(
-                f"The number of tokens in the media mask ({media_token_count}) does not match the number of features in the media features ({media_feature_size}. Features shape: {media_features.shape})"
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.size()[:-1].numel()}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.size()[:-1].numel()}"
+            )
+
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring
@@ -210,24 +242,20 @@ class PerceptionLMModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values.to(inputs_embeds),
+            image_features = self.get_image_features(pixel_values=pixel_values)
+            image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            self.check_mask_feature_size_match(special_image_mask, image_features)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
         if pixel_values_videos is not None:
-            video_features = self.get_image_features(
-                pixel_values=pixel_values_videos.to(inputs_embeds),
+            video_features = self.get_image_features(pixel_values=pixel_values_videos)
+            video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
-            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            self.check_mask_feature_size_match(special_video_mask, video_features)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            video_features = video_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(

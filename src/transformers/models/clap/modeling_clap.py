@@ -32,7 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -760,7 +760,7 @@ class ClapAudioPatchMerging(nn.Module):
         batch_size, dim, num_channels = input_feature.shape
 
         input_feature = input_feature.view(batch_size, height, width, num_channels)
-        # pad input to be disible by width and height, if needed
+        # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
         # [batch_size, height/2, width/2, num_channels]
         input_feature_0 = input_feature[:, 0::2, 0::2, :]
@@ -1611,15 +1611,13 @@ class ClapModel(ClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1629,45 +1627,31 @@ class ClapModel(ClapPreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, ClapModel
 
         >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
         >>> tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
+            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1] if return_dict is not None else text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_features = self.text_projection(text_outputs.pooler_output)
         text_features = F.normalize(text_features, dim=-1)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_audio_features(
         self,
-        input_features: Optional[torch.Tensor] = None,
+        input_features: torch.Tensor,
         is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1681,30 +1665,21 @@ class ClapModel(ClapPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, ClapModel
         >>> import torch
+        >>> from transformers import AutoFeatureExtractor, ClapModel
 
         >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("laion/clap-htsat-unfused")
         >>> random_audio = torch.rand((16_000))
+
         >>> inputs = feature_extractor(random_audio, return_tensors="pt")
-        >>> audio_features = model.get_audio_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     audio_features = model.get_audio_features(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        audio_outputs: BaseModelOutputWithPooling = self.audio_model(
+            input_features=input_features, is_longer=is_longer
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        audio_outputs = self.audio_model(
-            input_features=input_features,
-            is_longer=is_longer,
-            return_dict=return_dict,
-        )
-
-        pooled_output = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
-
-        audio_features = self.audio_projection(pooled_output)
+        audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_features = F.normalize(audio_features, dim=-1)
 
         return audio_features

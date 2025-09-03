@@ -58,7 +58,7 @@ Pytorch는 `torch.nn.functional`의 일부로 Scaled Dot Product Attention(SDPA)
 ```
 from transformers import BertModel
 
-model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = BertModel.from_pretrained("bert-base-uncased", dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
 

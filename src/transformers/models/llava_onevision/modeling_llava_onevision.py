@@ -39,14 +39,9 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
 )
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -112,38 +107,31 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class LlavaOnevisionPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
+@auto_docstring
+class LlavaOnevisionPreTrainedModel(PreTrainedModel):
+    config: LlavaOnevisionConfig
+    base_model_prefix = ""
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
-        mode = config.spatial_pool_mode
-        stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
+    _supports_flash_attn = True
+    _supports_sdpa = True
 
-        if mode == "average":
-            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        elif mode == "max":
-            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
-        elif mode == "conv":
-            self.pool = nn.Conv2d(
-                in_channels=config.vision_config.hidden_size,
-                out_channels=out_channels,
-                kernel_size=stride,
-                stride=stride,
-            )
-        else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
-    def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
-        ori_height = int(ori_width * self.image_size // self.image_size)
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
-        image_features_spatial_pool = self.pool(image_features_spatial)
-
-        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, LlavaOnevisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):
@@ -275,33 +263,6 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
-@auto_docstring
-class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config: LlavaOnevisionConfig
-    base_model_prefix = ""
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, LlavaOnevisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.data.normal_(mean=0.0, std=embed_std)
-
-
 @auto_docstring(
     custom_intro="""
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
@@ -395,7 +356,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 image_feature = image_feature[0]
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-                image_feature = image_feature.flatten(0, 1)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
@@ -491,6 +451,46 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         )
         return image_features
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -557,24 +557,10 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 batch_num_images=batch_num_images,
             )
             image_features = torch.cat(image_features, dim=0)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Video are simply embedded and further pooled to decrease seq len
@@ -588,25 +574,10 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
             )
             video_features = torch.cat((video_features, image_newline), dim=1)
-            video_features = video_features.flatten(0, 1)
-
-            if input_ids is None:
-                special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_video_mask = special_video_mask.all(-1)
-            else:
-                special_video_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (special_video_mask).sum()
-            special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
@@ -750,7 +721,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -809,7 +780,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 
-        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype="float16", device_map="cuda:0")
+        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype="float16", device_map="cuda:0")
         >>> processor = LlavaOnevisionProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
         >>> conversation = [

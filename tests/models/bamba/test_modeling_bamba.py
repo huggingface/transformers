@@ -297,6 +297,26 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, HybridMambaAttentionDynamicCache)
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+
+        self.assertListEqual(
+            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+            [expected_shape] * len(decoder_past_key_values.key_cache),
+        )
+        self.assertListEqual(
+            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+            [expected_shape] * len(decoder_past_key_values.value_cache),
+        )
+
     def setUp(self):
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=64)
@@ -308,7 +328,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -517,6 +537,9 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @unittest.skip(
+        "NotImplementedError: seq_idx support requires fast path support. Please install mamba_ssm and causal_conv1d"
+    )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -564,7 +587,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.float16,
+                        dtype=torch.float16,
                         attn_implementation="flash_attention_2",
                     )
                     .to(torch_device)
@@ -613,7 +636,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test

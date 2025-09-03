@@ -77,6 +77,9 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
+    if is_accelerate_available("1.10.1"):
+        from accelerate.parallelism_config import ParallelismConfig
+
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -123,7 +126,7 @@ def default_logdir() -> str:
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
-        val = int(os.environ.get(e, -1))
+        val = int(os.environ.get(e, "-1"))
         if val >= 0:
             return val
     return default
@@ -453,6 +456,8 @@ class TrainingArguments:
             Will eventually default to the list of argument names accepted by the model that contain the word "label",
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
+
+            You should only specify `label_names` if you're using custom label names or if your model's `forward` consumes multiple label tensors (e.g., extractive QA).
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training. When this option is
             enabled, the best checkpoint will always be saved. See
@@ -595,7 +600,8 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-
+        parallelism_config (`ParallelismConfig`, *optional*):
+            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1270,6 +1276,10 @@ class TrainingArguments:
             )
         },
     )
+    parallelism_config: Optional["ParallelismConfig"] = field(
+        default=None,
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
+    )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
@@ -1830,12 +1840,16 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
+                    device_str = "MUSA" if is_torch_musa_available() else "CUDA"
                     logger.info(
-                        "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
+                        f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = True
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = True
+                        torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1843,14 +1857,20 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = True
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = True
+                        torch.backends.cudnn.allow_tf32 = True
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = False
-                    torch.backends.cudnn.allow_tf32 = False
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = False
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = False
+                        torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
         # if training args is specified, it will override the one specified in the accelerate config
@@ -2524,17 +2544,17 @@ class TrainingArguments:
         )
         return warmup_steps
 
-    def _dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def _dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None and not isinstance(d["dtype"], str):
+            d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self._dict_torch_dtype_to_str(value)
+                self._dict_dtype_to_str(value)
 
     def to_dict(self):
         """
@@ -2559,7 +2579,10 @@ class TrainingArguments:
                 quantization_config = v.get("quantization_config")
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
-        self._dict_torch_dtype_to_str(d)
+            if k == "parallelism_config" and v is not None:
+                d[k] = v.to_json()
+
+        self._dict_dtype_to_str(d)
 
         return d
 

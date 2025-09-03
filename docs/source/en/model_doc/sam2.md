@@ -67,12 +67,14 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
+>>> from transformers import Sam2Processor, Sam2Model, infer_device
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large")
+>>> device = infer_device()
+
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
@@ -81,18 +83,16 @@ You can segment objects by providing a single point click on the object you want
 >>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
 >>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 
 >>> # The model outputs multiple mask predictions ranked by quality score
->>> print(f"Generated {masks.shape[0]} masks with shape {masks.shape}")
-Generated 3 masks with shape torch.Size([3, 1500, 2250])
+>>> print(f"Generated {masks.shape[1]} masks with shape {masks.shape}")
+Generated 3 masks with shape torch.Size(1, 3, 1500, 2250)
 ```
 
 #### Multiple Points for Refinement
@@ -104,14 +104,12 @@ You can provide multiple points to refine the segmentation:
 >>> input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
 >>> input_labels = [[[1, 1]]]  # Both positive clicks
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Bounding Box Input
@@ -122,14 +120,12 @@ SAM2 also supports bounding box inputs for segmentation:
 >>> # Define bounding box as [x_min, y_min, x_max, y_max]
 >>> input_boxes = [[[75, 275, 1725, 850]]]
 
->>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Multiple Objects Segmentation
@@ -141,15 +137,13 @@ You can segment multiple objects simultaneously:
 >>> input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
 >>> input_labels = [[[1], [1]]]  # Positive clicks for both objects
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
 >>> # Each object gets its own mask
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 >>> print(f"Generated masks for {masks.shape[0]} objects")
 Generated masks for 2 objects
 ```
@@ -161,12 +155,14 @@ Generated masks for 2 objects
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
+>>> from transformers import Sam2Processor, Sam2Model, infer_device
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large")
+>>> device = infer_device()
+
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> # Load multiple images
@@ -180,15 +176,13 @@ Process multiple images simultaneously for improved efficiency:
 >>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
 >>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
 >>> # Post-process masks for each image
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 >>> print(f"Processed {len(all_masks)} images, each with {all_masks[0].shape[0]} objects")
 Processed 2 images, each with 1 objects
 ```
@@ -208,16 +202,12 @@ Segment multiple objects within each image using batch inference:
 ...     [[1]]  # Dog image: positive click for the object
 ... ]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
->>> print(f"Truck image: {all_masks[0].shape[0]} objects, Dog image: {all_masks[1].shape[0]} objects")
-Truck image: 2 objects, Dog image: 1 objects
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 ```
 
 #### Batched Images with Batched Objects and Multiple Points
@@ -240,14 +230,12 @@ Handle complex batch scenarios with multiple points per object:
 ...     [[1], [1, 1]]  # Groceries image: positive clicks for refinement
 ... ]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 ```
 
 #### Batched Bounding Boxes
@@ -264,224 +252,14 @@ Process multiple images with bounding box inputs:
 >>> # Update images for this example
 >>> raw_images = [raw_images[0], groceries_image]  # truck and groceries
 
->>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 >>> print(f"Processed {len(input_boxes)} images with {len(input_boxes[0])} and {len(input_boxes[1])} boxes respectively")
 Processed 2 images with 4 and 4 boxes respectively
-```
-
-### Video Segmentation and Tracking
-
-SAM2's key strength is its ability to track objects across video frames. Here's how to use it for video segmentation:
-
-#### Basic Video Tracking
-
-```python
->>> from transformers import Sam2VideoModel, Sam2Processor
->>> import torch
-
->>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-large")
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
-
->>> # Load video frames (example assumes you have a list of PIL Images)
->>> # video_frames = [Image.open(f"frame_{i:05d}.jpg") for i in range(num_frames)]
-
->>> # For this example, we'll use the video loading utility
->>> from transformers.video_utils import load_video
->>> video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
->>> video_frames, _ = load_video(video_url)
-
->>> # Initialize video inference session
->>> inference_session = processor.init_video_session(
-...     video=video_frames,
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
-... )
-
->>> # Add click on first frame to select object
->>> ann_frame_idx = 0
->>> ann_obj_id = 1
->>> points = [[[[210, 350]]]]
->>> labels = [[[1]]]
-
->>> processor.add_inputs_to_inference_session(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-...     obj_ids=ann_obj_id,
-...     input_points=points,
-...     input_labels=labels,
-... )
-
->>> # Segment the object on the first frame
->>> outputs = model(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-... )
->>> print(f"Segmentation shape: {outputs.video_res_masks.shape}")
-Segmentation shape: torch.Size([1, 1, 480, 854])
-
->>> # Propagate through the entire video
->>> video_segments = {}
->>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
-...     video_segments[sam2_video_output.frame_idx] = sam2_video_output.video_res_masks
-
->>> print(f"Tracked object through {len(video_segments)} frames")
-Tracked object through 180 frames
-```
-
-#### Multi-Object Video Tracking
-
-Track multiple objects simultaneously across video frames:
-
-```python
->>> # Reset for new tracking session
->>> inference_session.reset_inference_session()
-
->>> # Add multiple objects on the first frame
->>> ann_frame_idx = 0
->>> obj_ids = [2, 3]
->>> input_points = [[[[200, 300]]], [[[400, 150]]]]  # Points for two objects
->>> input_labels = [[[1]], [[1]]]
-
->>> processor.add_inputs_to_inference_session(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-...     obj_ids=obj_ids,
-...     input_points=input_points,
-...     input_labels=input_labels,
-... )
-
->>> # Get masks for both objects on first frame
->>> outputs = model(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-... )
-
->>> # Propagate both objects through video
->>> video_segments = {}
->>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
-...     video_segments[sam2_video_output.frame_idx] = {
-...         obj_id: sam2_video_output.video_res_masks[i]
-...         for i, obj_id in enumerate(inference_session.obj_ids)
-...     }
-
->>> print(f"Tracked {len(inference_session.obj_ids)} objects through {len(video_segments)} frames")
-Tracked 2 objects through 180 frames
-```
-
-#### Refining Video Segmentation
-
-You can add additional clicks on any frame to refine the tracking:
-
-```python
->>> # Add refinement click on a later frame
->>> refine_frame_idx = 50
->>> ann_obj_id = 2  # Refining first object
->>> points = [[[[220, 280]]]]  # Additional point
->>> labels = [[[1]]]  # Positive click
-
->>> processor.add_inputs_to_inference_session(
-...     inference_session=inference_session,
-...     frame_idx=refine_frame_idx,
-...     obj_ids=ann_obj_id,
-...     input_points=points,
-...     input_labels=labels,
-... )
-
->>> # Re-propagate with the additional information
->>> video_segments = {}
->>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
-...     video_segments[sam2_video_output.frame_idx] = sam2_video_output.video_res_masks
-```
-
-### Streaming Video Inference
-
-For real-time applications, SAM2 supports processing video frames as they arrive:
-
-```python
->>> # Initialize session for streaming
->>> inference_session = processor.init_video_session(
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
-... )
-
->>> # Process frames one by one
->>> for frame_idx, frame in enumerate(video_frames[:10]):  # Process first 10 frames
-...     inputs = processor(images=frame, device="cuda" if torch.cuda.is_available() else "cpu", return_tensors="pt")
-...
-...     if frame_idx == 0:
-...         # Add point input on first frame
-...         processor.add_inputs_to_inference_session(
-...             inference_session=inference_session,
-...             frame_idx=0,
-...             obj_ids=1,
-...             input_points=[[[[210, 350], [250, 220]]]],
-...             input_labels=[[[1, 1]]],
-...             original_size=inputs.original_sizes[0], # need to be provided when using streaming video inference
-...         )
-...
-...     # Process current frame
-...     sam2_video_output = model(
-...         inference_session=inference_session,
-...         frame=inputs.pixel_values[0],
-...     )
-...
-...     print(f"Frame {frame_idx}: mask shape {sam2_video_output.video_res_masks.shape}")
-```
-
-#### Video Batch Processing for Multiple Objects
-
-Track multiple objects simultaneously in video by adding them all at once:
-
-```python
->>> # Initialize video session
->>> inference_session = processor.init_video_session(
-...     video=video_frames,
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
-... )
-
->>> # Add multiple objects on the first frame using batch processing
->>> ann_frame_idx = 0
->>> obj_ids = [2, 3]  # Track two different objects
->>> input_points = [
-...     [[[200, 300], [230, 250], [275, 175]]],  # Object 2: 3 points (2 positive, 1 negative)
-...     [[[400, 150]]]                           # Object 3: 1 point
-... ]
->>> input_labels = [
-...     [[1, 1, 0]],  # Object 2: positive, positive, negative for refinement
-...     [[1]]         # Object 3: positive
-... ]
-
->>> processor.add_inputs_to_inference_session(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-...     obj_ids=obj_ids,
-...     input_points=input_points,
-...     input_labels=input_labels,
-... )
-
->>> # Get masks for all objects on the first frame
->>> outputs = model(
-...     inference_session=inference_session,
-...     frame_idx=ann_frame_idx,
-... )
->>> print(f"Generated masks for {outputs.video_res_masks.shape[0]} objects")
-Generated masks for 2 objects
-
->>> # Propagate all objects through the video
->>> video_segments = {}
->>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
-...     video_segments[sam2_video_output.frame_idx] = {
-...         obj_id: sam2_video_output.video_res_masks[i]
-...         for i, obj_id in enumerate(inference_session.obj_ids)
-...     }
-
->>> print(f"Tracked {len(inference_session.obj_ids)} objects through {len(video_segments)} frames")
-Tracked 2 objects through 180 frames
 ```
 
 ### Using Previous Masks as Input
@@ -492,13 +270,13 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 >>> # Get initial segmentation
 >>> input_points = [[[[500, 375]]]]
 >>> input_labels = [[[1]]]
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
 >>> # Use the best mask as input for refinement
->>> mask_input = outputs.pred_masks[:, torch.argmax(outputs.iou_scores)]
+>>> mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores.squeeze())]
 
 >>> # Add additional points with the mask input
 >>> new_input_points = [[[[500, 375], [450, 300]]]]
@@ -508,21 +286,22 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 ...     input_labels=new_input_labels,
 ...     original_sizes=inputs["original_sizes"],
 ...     return_tensors="pt",
-... )
+... ).to(device)
 
 >>> with torch.no_grad():
 ...     refined_outputs = model(
 ...         **inputs,
 ...         input_masks=mask_input,
+...         image_embeddings=outputs.image_embeddings,
 ...         multimask_output=False,
 ...     )
 ```
 
-## Resources
 <!-- TODO replace with sam2 resources -->
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+<!-- ## Resources -->
+<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
 
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model.
+- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model. -->
 
 ## Sam2Config
 
@@ -549,20 +328,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Sam2Processor
     - __call__
     - post_process_masks
-    - init_video_session
-    - add_inputs_to_inference_session
 
 ## Sam2ImageProcessorFast
 
 [[autodoc]] Sam2ImageProcessorFast
-
-## Sam2VideoProcessor
-
-[[autodoc]] Sam2VideoProcessor
-
-## Sam2VideoInferenceSession
-
-[[autodoc]] Sam2VideoInferenceSession
 
 ## Sam2HieraDetModel
 
@@ -578,9 +347,3 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2Model
     - forward
-
-## Sam2VideoModel
-
-[[autodoc]] Sam2VideoModel
-    - forward
-    - propagate_in_video_iterator

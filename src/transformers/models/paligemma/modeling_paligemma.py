@@ -21,7 +21,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -32,7 +32,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
 from ..auto import AutoModel
@@ -114,7 +113,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -133,7 +132,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Base Paligemma model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
@@ -188,8 +187,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        elif isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -251,6 +248,30 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -309,7 +330,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
@@ -332,25 +353,10 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         causal_mask = self._update_causal_mask(
@@ -413,7 +419,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -553,7 +559,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
         is_training = token_type_ids is not None and labels is not None
-        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+        is_static_hybrid_cache = isinstance(past_key_values, StaticCache) and any(past_key_values.is_sliding)
+        if cache_position[0] == 0 and is_static_hybrid_cache:
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self.model._update_causal_mask(
                 attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training

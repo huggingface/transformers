@@ -27,7 +27,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -135,23 +135,29 @@ class SmolVLMVisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full(size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
+        boundaries = torch.arange(
+            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
+        )
+        position_ids = torch.full(
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+        )
 
         for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
-            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
+
+            fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
+            fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
 
             bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
             bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
 
             pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
+            position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
 
-        position_ids = position_ids.to(self.position_embedding.weight.device)
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
 
@@ -405,7 +411,6 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         self.encoder = SmolVLMEncoder(config)
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -445,10 +450,10 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
-            patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        if self.config._attn_implementation != "flash_attention_2":
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+        elif not torch.any(~patch_attention_mask):
+            patch_attention_mask = None
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -563,8 +568,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         )
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
-
         self.post_init()
 
     def enable_input_require_grads(self):
@@ -655,6 +658,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
                 The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
         pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
         # Remove padding images - padding images are full 0.
@@ -747,7 +751,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
@@ -837,6 +841,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         self.image_token_id = self.config.image_token_id
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
+        self.model.text_model.generation_config = GenerationConfig.from_model_config(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -916,7 +921,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct")
-        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

@@ -17,9 +17,8 @@
 import warnings
 from typing import Optional, Union
 
-from transformers.models.owlvit.image_processing_owlvit_fast import OwlViTImageProcessorFast
-
 from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
 )
@@ -40,6 +39,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from ..owlvit.image_processing_owlvit_fast import OwlViTImageProcessorFast
 
 
 if is_torch_available():
@@ -78,11 +78,11 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     do_center_crop = None
 
     def __init__(self, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        OwlViTImageProcessorFast().__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        return OwlViTImageProcessorFast().preprocess(images, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
 
     def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
         """

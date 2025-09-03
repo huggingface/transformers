@@ -256,6 +256,14 @@ class MllamaVisionText2TextModelTester:
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -352,6 +360,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -383,6 +392,22 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @pytest.mark.generate

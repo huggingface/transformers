@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-01-14 and added to Hugging Face Transformers on 2025-06-04.*
 
 # MiniMax
 
@@ -66,7 +67,7 @@ The pre-trained model can be used as follows:
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -93,12 +94,12 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
@@ -115,9 +116,9 @@ The Flash Attention-2 model uses also a more memory efficient cache slicing mech
 
 ## Shrinking down MiniMax using quantization
 
-As the MiniMax model has 456 billion parameters, that would require about 912GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), about 228 GB of RAM is required.
+As the MiniMax model has 456 billion parameters, that would require about 912GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization). If the model is quantized to 4 bits (or half a byte per parameter), about 228 GB of RAM is required.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization.md) for alternative quantization methods):
+Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization) for alternative quantization methods):
 
 ```python
 >>> import torch
@@ -141,7 +142,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]

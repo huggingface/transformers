@@ -147,7 +147,7 @@ chat = [
     {"role": "user", "content": "Hey, can you tell me any fun things to do in New York?"}
 ]
 
-pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", dtype=torch.bfloat16, device_map="auto")
 response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
@@ -242,7 +242,7 @@ pipeline(
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
 - The training API is optimized to work with PyTorch models provided by Transformers. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
-- The [example scripts]((https://github.com/huggingface/transformers/tree/main/examples)) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
+- The [example scripts](https://github.com/huggingface/transformers/tree/main/examples) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
 
 ## 100 projects using Transformers
 
@@ -280,8 +280,8 @@ Expand each modality below to see a few example models for various use cases.
 - Automatic mask generation with [SAM](https://huggingface.co/facebook/sam-vit-base)
 - Depth estimation with [DepthPro](https://huggingface.co/apple/DepthPro-hf)
 - Image classification with [DINO v2](https://huggingface.co/facebook/dinov2-base)
-- Keypoint detection with [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor)
-- Keypoint matching with [SuperGlue](https://huggingface.co/magic-leap-community/superglue)
+- Keypoint detection with [SuperPoint](https://huggingface.co/magic-leap-community/superpoint)
+- Keypoint matching with [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor)
 - Object detection with [RT-DETRv2](https://huggingface.co/PekingU/rtdetr_v2_r50vd)
 - Pose Estimation with [VitPose](https://huggingface.co/usyd-community/vitpose-base-simple)
 - Universal segmentation with [OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_swin_large)

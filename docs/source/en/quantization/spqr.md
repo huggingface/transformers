@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # SpQR
 
-The [SpQR]((https://hf.co/papers/2306.03078)) quantization algorithm involves a 16x16 tiled bi-level group 3-bit quantization structure with sparse outliers.
+The [SpQR](https://hf.co/papers/2306.03078) quantization algorithm involves a 16x16 tiled bi-level group 3-bit quantization structure with sparse outliers.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/spqr-diagram.png">
@@ -33,7 +33,7 @@ import torch
 
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "elvircrn/Llama-2-7b-SPQR-3Bit-16x16-red_pajama-hf",
-    torch_dtype=torch.half,
+    dtype=torch.half,
     device_map="auto"
 )
 tokenizer = AutoTokenizer.from_pretrained("elvircrn/Llama-2-7b-SPQR-3Bit-16x16-red_pajama-hf")

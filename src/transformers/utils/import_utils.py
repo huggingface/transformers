@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from packaging import version
 
@@ -76,6 +76,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = importlib.metadata.version("amd-quark")
                 except Exception:
                     package_exists = False
+            elif pkg_name == "triton":
+                try:
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
+                except Exception:
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -111,6 +121,7 @@ HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
+TRITON_MIN_VERSION = "1.0.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -120,6 +131,7 @@ _vptq_available, _vptq_version = _is_package_available("vptq", return_version=Tr
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -155,7 +167,6 @@ _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
-_jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
@@ -225,12 +236,12 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-_triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
+_triton_available, _triton_version = _is_package_available("triton", return_version=True)
 
 _torch_version = "N/A"
 _torch_available = False
@@ -359,31 +370,35 @@ if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
         logger.info(f"Torch XLA version {_torch_xla_version} available.")
 
 
-def is_kenlm_available():
+def is_kenlm_available() -> Union[tuple[bool, str], bool]:
     return _kenlm_available
 
 
-def is_kernels_available():
+def is_kernels_available() -> Union[tuple[bool, str], bool]:
     return _kernels_available
 
 
-def is_cv2_available():
+def is_cv2_available() -> Union[tuple[bool, str], bool]:
     return _cv2_available
 
 
-def is_yt_dlp_available():
+def is_yt_dlp_available() -> Union[tuple[bool, str], bool]:
     return _yt_dlp_available
 
 
-def is_torch_available():
+def is_torch_available() -> Union[tuple[bool, str], bool]:
     return _torch_available
 
 
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+def is_libcst_available() -> Union[tuple[bool, str], bool]:
+    return _libcst_available
+
+
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
-def is_torch_accelerator_available():
+def is_torch_accelerator_available() -> bool:
     if is_torch_available():
         import torch
 
@@ -392,7 +407,7 @@ def is_torch_accelerator_available():
     return False
 
 
-def is_torch_deterministic():
+def is_torch_deterministic() -> bool:
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
     """
@@ -407,19 +422,23 @@ def is_torch_deterministic():
     return False
 
 
-def is_hadamard_available():
+def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
+    return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
+
+
+def is_hadamard_available() -> Union[tuple[bool, str], bool]:
     return _hadamard_available
 
 
-def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
-def is_pygments_available():
+def is_pygments_available() -> Union[tuple[bool, str], bool]:
     return _pygments_available
 
 
-def get_torch_version():
+def get_torch_version() -> str:
     return _torch_version
 
 
@@ -431,25 +450,14 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
+    # Mostly retained for backward compatibility in remote code, since sdpa works correctly on all torch versions >= 2.2
+    if not is_torch_available() or _torch_version == "N/A":
         return False
-    elif _torch_version == "N/A":
-        return False
-
-    # NOTE: MLU is OK with non-contiguous inputs.
-    if is_torch_mlu_available():
-        return True
-    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
-    if is_torch_npu_available():
-        return True
-    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
-    return version.parse(_torch_version) >= version.parse("2.1.1")
+    return True
 
 
-def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+def is_torch_flex_attn_available() -> bool:
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -457,11 +465,11 @@ def is_torch_flex_attn_available():
     return version.parse(_torch_version) >= version.parse("2.5.0")
 
 
-def is_torchvision_available():
+def is_torchvision_available() -> bool:
     return _torchvision_available
 
 
-def is_torchvision_v2_available():
+def is_torchvision_v2_available() -> bool:
     if not is_torchvision_available():
         return False
 
@@ -469,63 +477,63 @@ def is_torchvision_v2_available():
     return version.parse(_torchvision_version) >= version.parse("0.15")
 
 
-def is_galore_torch_available():
+def is_galore_torch_available() -> Union[tuple[bool, str], bool]:
     return _galore_torch_available
 
 
-def is_apollo_torch_available():
+def is_apollo_torch_available() -> Union[tuple[bool, str], bool]:
     return _apollo_torch_available
 
 
-def is_torch_optimi_available():
+def is_torch_optimi_available() -> Union[tuple[bool, str], bool]:
     return _torch_optimi_available
 
 
-def is_lomo_available():
+def is_lomo_available() -> Union[tuple[bool, str], bool]:
     return _lomo_available
 
 
-def is_grokadamw_available():
+def is_grokadamw_available() -> Union[tuple[bool, str], bool]:
     return _grokadamw_available
 
 
-def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION):
+def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
     return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
 
 
-def is_pyctcdecode_available():
+def is_pyctcdecode_available() -> Union[tuple[bool, str], bool]:
     return _pyctcdecode_available
 
 
-def is_librosa_available():
+def is_librosa_available() -> Union[tuple[bool, str], bool]:
     return _librosa_available
 
 
-def is_essentia_available():
+def is_essentia_available() -> Union[tuple[bool, str], bool]:
     return _essentia_available
 
 
-def is_pydantic_available():
+def is_pydantic_available() -> Union[tuple[bool, str], bool]:
     return _pydantic_available
 
 
-def is_fastapi_available():
+def is_fastapi_available() -> Union[tuple[bool, str], bool]:
     return _fastapi_available
 
 
-def is_uvicorn_available():
+def is_uvicorn_available() -> Union[tuple[bool, str], bool]:
     return _uvicorn_available
 
 
-def is_openai_available():
+def is_openai_available() -> Union[tuple[bool, str], bool]:
     return _openai_available
 
 
-def is_pretty_midi_available():
+def is_pretty_midi_available() -> Union[tuple[bool, str], bool]:
     return _pretty_midi_available
 
 
-def is_torch_cuda_available():
+def is_torch_cuda_available() -> bool:
     if is_torch_available():
         import torch
 
@@ -534,7 +542,7 @@ def is_torch_cuda_available():
         return False
 
 
-def is_cuda_platform():
+def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
 
@@ -543,7 +551,7 @@ def is_cuda_platform():
         return False
 
 
-def is_rocm_platform():
+def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
 
@@ -552,7 +560,7 @@ def is_rocm_platform():
         return False
 
 
-def is_mamba_ssm_available():
+def is_mamba_ssm_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         import torch
 
@@ -563,7 +571,7 @@ def is_mamba_ssm_available():
     return False
 
 
-def is_mamba_2_ssm_available():
+def is_mamba_2_ssm_available() -> bool:
     if is_torch_available():
         import torch
 
@@ -578,7 +586,7 @@ def is_mamba_2_ssm_available():
     return False
 
 
-def is_causal_conv1d_available():
+def is_causal_conv1d_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         import torch
 
@@ -588,19 +596,19 @@ def is_causal_conv1d_available():
     return False
 
 
-def is_xlstm_available():
+def is_xlstm_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         return _is_package_available("xlstm")
     return False
 
 
-def is_mambapy_available():
+def is_mambapy_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         return _is_package_available("mambapy")
     return False
 
 
-def is_torch_mps_available(min_version: Optional[str] = None):
+def is_torch_mps_available(min_version: Optional[str] = None) -> bool:
     if is_torch_available():
         import torch
 
@@ -627,14 +635,17 @@ def is_torch_bf16_gpu_available() -> bool:
         return True
     if is_torch_npu_available():
         return torch.npu.is_bf16_supported()
+    if is_torch_mps_available():
+        # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
+        return torch.backends.mps.is_macos_or_newer(14, 0)
     return False
 
 
-def is_torch_bf16_cpu_available() -> bool:
+def is_torch_bf16_cpu_available() -> Union[tuple[bool, str], bool]:
     return is_torch_available()
 
 
-def is_torch_bf16_available():
+def is_torch_bf16_available() -> bool:
     # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
     # has become ambiguous and therefore deprecated
     warnings.warn(
@@ -646,7 +657,7 @@ def is_torch_bf16_available():
 
 
 @lru_cache
-def is_torch_fp16_available_on_device(device):
+def is_torch_fp16_available_on_device(device: str) -> bool:
     if not is_torch_available():
         return False
 
@@ -678,7 +689,7 @@ def is_torch_fp16_available_on_device(device):
 
 
 @lru_cache
-def is_torch_bf16_available_on_device(device):
+def is_torch_bf16_available_on_device(device: str) -> bool:
     if not is_torch_available():
         return False
 
@@ -701,12 +712,17 @@ def is_torch_bf16_available_on_device(device):
     return True
 
 
-def is_torch_tf32_available():
+def is_torch_tf32_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
+    if is_torch_musa_available():
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
+        return False
     if not torch.cuda.is_available() or torch.version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
@@ -714,55 +730,55 @@ def is_torch_tf32_available():
     return True
 
 
-def is_torch_fx_available():
+def is_torch_fx_available() -> Union[tuple[bool, str], bool]:
     return is_torch_available()
 
 
-def is_peft_available():
+def is_peft_available() -> Union[tuple[bool, str], bool]:
     return _peft_available
 
 
-def is_bs4_available():
+def is_bs4_available() -> Union[tuple[bool, str], bool]:
     return _bs4_available
 
 
-def is_tf_available():
+def is_tf_available() -> bool:
     return _tf_available
 
 
-def is_coloredlogs_available():
+def is_coloredlogs_available() -> Union[tuple[bool, str], bool]:
     return _coloredlogs_available
 
 
-def is_tf2onnx_available():
+def is_tf2onnx_available() -> Union[tuple[bool, str], bool]:
     return _tf2onnx_available
 
 
-def is_onnx_available():
+def is_onnx_available() -> Union[tuple[bool, str], bool]:
     return _onnx_available
 
 
-def is_flax_available():
+def is_flax_available() -> bool:
     return _flax_available
 
 
-def is_flute_available():
+def is_flute_available() -> bool:
     try:
         return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.4.1"
     except importlib.metadata.PackageNotFoundError:
         return False
 
 
-def is_ftfy_available():
+def is_ftfy_available() -> Union[tuple[bool, str], bool]:
     return _ftfy_available
 
 
-def is_g2p_en_available():
+def is_g2p_en_available() -> Union[tuple[bool, str], bool]:
     return _g2p_en_available
 
 
 @lru_cache
-def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     """
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
     the USE_TORCH_XLA to false.
@@ -783,14 +799,14 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 
 @lru_cache
-def is_torch_neuroncore_available(check_device=True):
+def is_torch_neuroncore_available(check_device=True) -> bool:
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_xla_available()
     return False
 
 
 @lru_cache
-def is_torch_npu_available(check_device=False):
+def is_torch_npu_available(check_device=False) -> bool:
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
         return False
@@ -809,7 +825,7 @@ def is_torch_npu_available(check_device=False):
 
 
 @lru_cache
-def is_torch_mlu_available(check_device=False):
+def is_torch_mlu_available(check_device=False) -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
@@ -834,7 +850,7 @@ def is_torch_mlu_available(check_device=False):
 
 
 @lru_cache
-def is_torch_musa_available(check_device=False):
+def is_torch_musa_available(check_device=False) -> bool:
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_musa") is None:
         return False
@@ -857,7 +873,7 @@ def is_torch_musa_available(check_device=False):
 
 
 @lru_cache
-def is_torch_hpu_available():
+def is_torch_hpu_available() -> bool:
     "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
         not _torch_available
@@ -954,7 +970,7 @@ def is_torch_hpu_available():
 
 
 @lru_cache
-def is_habana_gaudi1():
+def is_habana_gaudi1() -> bool:
     if not is_torch_hpu_available():
         return False
 
@@ -964,15 +980,15 @@ def is_habana_gaudi1():
     return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
 
 
-def is_torchdynamo_available():
+def is_torchdynamo_available() -> Union[tuple[bool, str], bool]:
     return is_torch_available()
 
 
-def is_torch_compile_available():
+def is_torch_compile_available() -> Union[tuple[bool, str], bool]:
     return is_torch_available()
 
 
-def is_torchdynamo_compiling():
+def is_torchdynamo_compiling() -> Union[tuple[bool, str], bool]:
     if not is_torch_available():
         return False
 
@@ -991,7 +1007,7 @@ def is_torchdynamo_compiling():
             return False
 
 
-def is_torchdynamo_exporting():
+def is_torchdynamo_exporting() -> bool:
     if not is_torch_available():
         return False
 
@@ -1008,74 +1024,74 @@ def is_torchdynamo_exporting():
             return False
 
 
-def is_torch_tensorrt_fx_available():
+def is_torch_tensorrt_fx_available() -> bool:
     if importlib.util.find_spec("torch_tensorrt") is None:
         return False
     return importlib.util.find_spec("torch_tensorrt.fx") is not None
 
 
-def is_datasets_available():
+def is_datasets_available() -> Union[tuple[bool, str], bool]:
     return _datasets_available
 
 
-def is_detectron2_available():
+def is_detectron2_available() -> Union[tuple[bool, str], bool]:
     return _detectron2_available
 
 
-def is_rjieba_available():
+def is_rjieba_available() -> Union[tuple[bool, str], bool]:
     return _rjieba_available
 
 
-def is_psutil_available():
+def is_psutil_available() -> Union[tuple[bool, str], bool]:
     return _psutil_available
 
 
-def is_py3nvml_available():
+def is_py3nvml_available() -> Union[tuple[bool, str], bool]:
     return _py3nvml_available
 
 
-def is_sacremoses_available():
+def is_sacremoses_available() -> Union[tuple[bool, str], bool]:
     return _sacremoses_available
 
 
-def is_apex_available():
+def is_apex_available() -> Union[tuple[bool, str], bool]:
     return _apex_available
 
 
-def is_aqlm_available():
+def is_aqlm_available() -> Union[tuple[bool, str], bool]:
     return _aqlm_available
 
 
-def is_vptq_available(min_version: str = VPTQ_MIN_VERSION):
+def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
     return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
 
 
-def is_av_available():
+def is_av_available() -> bool:
     return _av_available
 
 
-def is_decord_available():
+def is_decord_available() -> bool:
     return _decord_available
 
 
-def is_torchcodec_available():
+def is_torchcodec_available() -> bool:
     return _torchcodec_available
 
 
-def is_ninja_available():
+def is_ninja_available() -> bool:
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
         return True
 
 
-def is_ipex_available(min_version: str = ""):
+def is_ipex_available(min_version: str = "") -> bool:
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
@@ -1096,7 +1112,7 @@ def is_ipex_available(min_version: str = ""):
 
 
 @lru_cache
-def is_torch_xpu_available(check_device=False):
+def is_torch_xpu_available(check_device: bool = False) -> bool:
     """
     Checks if XPU acceleration is available either via native PyTorch (>=2.6),
     `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
@@ -1125,7 +1141,7 @@ def is_torch_xpu_available(check_device=False):
 
 
 @lru_cache
-def is_bitsandbytes_available(check_library_only=False) -> bool:
+def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
     if not _bitsandbytes_available:
         return False
 
@@ -1155,7 +1171,7 @@ def is_bitsandbytes_multi_backend_available() -> bool:
     return "multi_backend" in getattr(bnb, "features", set())
 
 
-def is_flash_attn_2_available():
+def is_flash_attn_2_available() -> bool:
     if not is_torch_available():
         return False
 
@@ -1180,7 +1196,7 @@ def is_flash_attn_2_available():
 
 
 @lru_cache
-def is_flash_attn_3_available():
+def is_flash_attn_3_available() -> bool:
     if not is_torch_available():
         return False
 
@@ -1199,7 +1215,7 @@ def is_flash_attn_3_available():
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal_2_10():
+def is_flash_attn_greater_or_equal_2_10() -> bool:
     if not _is_package_available("flash_attn"):
         return False
 
@@ -1207,7 +1223,7 @@ def is_flash_attn_greater_or_equal_2_10():
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal(library_version: str):
+def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     if not _is_package_available("flash_attn"):
         return False
 
@@ -1215,7 +1231,7 @@ def is_flash_attn_greater_or_equal(library_version: str):
 
 
 @lru_cache
-def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
+def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
@@ -1233,7 +1249,7 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
 
 
 @lru_cache
-def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     """
     Accepts a library version and returns True if the current version of the library is less than or equal to the
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
@@ -1251,7 +1267,7 @@ def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
 
 
 @lru_cache
-def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
+def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     if not _is_package_available("huggingface_hub"):
         return False
 
@@ -1263,53 +1279,71 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
         return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
 
 
+@lru_cache
+def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("optimum.quanto"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
 
-def is_faiss_available():
+def is_faiss_available() -> bool:
     return _faiss_available
 
 
-def is_scipy_available():
+def is_scipy_available() -> Union[tuple[bool, str], bool]:
     return _scipy_available
 
 
-def is_sklearn_available():
+def is_sklearn_available() -> Union[tuple[bool, str], bool]:
     return _sklearn_available
 
 
-def is_sentencepiece_available():
+def is_sentencepiece_available() -> Union[tuple[bool, str], bool]:
     return _sentencepiece_available
 
 
-def is_seqio_available():
+def is_seqio_available() -> Union[tuple[bool, str], bool]:
     return _is_seqio_available
 
 
-def is_gguf_available(min_version: str = GGUF_MIN_VERSION):
+def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
     return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
-def is_protobuf_available():
+def is_protobuf_available() -> bool:
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
+def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
     return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
-def is_optimum_available():
+def is_optimum_available() -> Union[tuple[bool, str], bool]:
     return _optimum_available
 
 
-def is_auto_awq_available():
+def is_auto_awq_available() -> bool:
     return _auto_awq_available
 
 
-def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION):
+def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
     return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
 
 
@@ -1318,56 +1352,56 @@ def is_optimum_quanto_available():
     return _is_optimum_quanto_available
 
 
-def is_quark_available():
+def is_quark_available() -> Union[tuple[bool, str], bool]:
     return _quark_available
 
 
-def is_fp_quant_available():
+def is_fp_quant_available() -> bool:
     return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
 
 
-def is_qutlass_available():
+def is_qutlass_available() -> Union[tuple[bool, str], bool]:
     return _qutlass_available
 
 
-def is_compressed_tensors_available():
+def is_compressed_tensors_available() -> bool:
     return _compressed_tensors_available
 
 
-def is_auto_gptq_available():
+def is_auto_gptq_available() -> Union[tuple[bool, str], bool]:
     return _auto_gptq_available
 
 
-def is_gptqmodel_available():
+def is_gptqmodel_available() -> Union[tuple[bool, str], bool]:
     return _gptqmodel_available
 
 
-def is_eetq_available():
+def is_eetq_available() -> Union[tuple[bool, str], bool]:
     return _eetq_available
 
 
-def is_fbgemm_gpu_available():
+def is_fbgemm_gpu_available() -> Union[tuple[bool, str], bool]:
     return _fbgemm_gpu_available
 
 
-def is_levenshtein_available():
+def is_levenshtein_available() -> Union[tuple[bool, str], bool]:
     return _levenshtein_available
 
 
-def is_optimum_neuron_available():
+def is_optimum_neuron_available() -> Union[tuple[bool, str], bool]:
     return _optimum_available and _is_package_available("optimum.neuron")
 
 
-def is_safetensors_available():
+def is_safetensors_available() -> Union[tuple[bool, str], bool]:
     return _safetensors_available
 
 
-def is_tokenizers_available():
+def is_tokenizers_available() -> Union[tuple[bool, str], bool]:
     return _tokenizers_available
 
 
 @lru_cache
-def is_vision_available():
+def is_vision_available() -> bool:
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
         try:
@@ -1381,27 +1415,27 @@ def is_vision_available():
     return _pil_available
 
 
-def is_pytesseract_available():
+def is_pytesseract_available() -> Union[tuple[bool, str], bool]:
     return _pytesseract_available
 
 
-def is_pytest_available():
+def is_pytest_available() -> Union[tuple[bool, str], bool]:
     return _pytest_available
 
 
-def is_spacy_available():
+def is_spacy_available() -> Union[tuple[bool, str], bool]:
     return _spacy_available
 
 
-def is_tensorflow_text_available():
+def is_tensorflow_text_available() -> Union[tuple[bool, str], bool]:
     return is_tf_available() and _tensorflow_text_available
 
 
-def is_keras_nlp_available():
+def is_keras_nlp_available() -> Union[tuple[bool, str], bool]:
     return is_tensorflow_text_available() and _keras_nlp_available
 
 
-def is_in_notebook():
+def is_in_notebook() -> bool:
     try:
         # Check if we are running inside Marimo
         if "marimo" in sys.modules:
@@ -1421,19 +1455,19 @@ def is_in_notebook():
         return False
 
 
-def is_pytorch_quantization_available():
+def is_pytorch_quantization_available() -> Union[tuple[bool, str], bool]:
     return _pytorch_quantization_available
 
 
-def is_tensorflow_probability_available():
+def is_tensorflow_probability_available() -> Union[tuple[bool, str], bool]:
     return _tensorflow_probability_available
 
 
-def is_pandas_available():
+def is_pandas_available() -> Union[tuple[bool, str], bool]:
     return _pandas_available
 
 
-def is_sagemaker_dp_enabled():
+def is_sagemaker_dp_enabled() -> bool:
     # Get the sagemaker specific env variable.
     sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
     try:
@@ -1447,7 +1481,7 @@ def is_sagemaker_dp_enabled():
     return _smdistributed_available
 
 
-def is_sagemaker_mp_enabled():
+def is_sagemaker_mp_enabled() -> bool:
     # Get the sagemaker specific mp parameters from smp_options variable.
     smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
     try:
@@ -1471,52 +1505,52 @@ def is_sagemaker_mp_enabled():
     return _smdistributed_available
 
 
-def is_training_run_on_sagemaker():
+def is_training_run_on_sagemaker() -> bool:
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_available():
+def is_soundfile_available() -> Union[tuple[bool, str], bool]:
     return _soundfile_available
 
 
-def is_timm_available():
+def is_timm_available() -> Union[tuple[bool, str], bool]:
     return _timm_available
 
 
-def is_natten_available():
+def is_natten_available() -> Union[tuple[bool, str], bool]:
     return _natten_available
 
 
-def is_nltk_available():
+def is_nltk_available() -> Union[tuple[bool, str], bool]:
     return _nltk_available
 
 
-def is_torchaudio_available():
+def is_torchaudio_available() -> Union[tuple[bool, str], bool]:
     return _torchaudio_available
 
 
-def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION):
+def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
-def is_speech_available():
+def is_speech_available() -> Union[tuple[bool, str], bool]:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
 
 
-def is_spqr_available():
+def is_spqr_available() -> Union[tuple[bool, str], bool]:
     return _spqr_available
 
 
-def is_phonemizer_available():
+def is_phonemizer_available() -> Union[tuple[bool, str], bool]:
     return _phonemizer_available
 
 
-def is_uroman_available():
+def is_uroman_available() -> Union[tuple[bool, str], bool]:
     return _uroman_available
 
 
-def torch_only_method(fn):
+def torch_only_method(fn: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         if not _torch_available:
             raise ImportError(
@@ -1529,19 +1563,19 @@ def torch_only_method(fn):
     return wrapper
 
 
-def is_ccl_available():
+def is_ccl_available() -> bool:
     return _is_ccl_available
 
 
-def is_sudachi_available():
+def is_sudachi_available() -> bool:
     return _sudachipy_available
 
 
-def get_sudachi_version():
+def get_sudachi_version() -> bool:
     return _sudachipy_version
 
 
-def is_sudachi_projection_available():
+def is_sudachi_projection_available() -> bool:
     if not is_sudachi_available():
         return False
 
@@ -1550,58 +1584,50 @@ def is_sudachi_projection_available():
     return version.parse(_sudachipy_version) >= version.parse("0.6.8")
 
 
-def is_jumanpp_available():
+def is_jumanpp_available() -> bool:
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
 
-def is_cython_available():
+def is_cython_available() -> bool:
     return importlib.util.find_spec("pyximport") is not None
 
 
-def is_jieba_available():
-    return _jieba_available
-
-
-def is_jinja_available():
+def is_jinja_available() -> Union[tuple[bool, str], bool]:
     return _jinja_available
 
 
-def is_mlx_available():
+def is_mlx_available() -> Union[tuple[bool, str], bool]:
     return _mlx_available
 
 
-def is_num2words_available():
+def is_num2words_available() -> Union[tuple[bool, str], bool]:
     return _num2words_available
 
 
-def is_tiktoken_available():
+def is_tiktoken_available() -> Union[tuple[bool, str], bool]:
     return _tiktoken_available and _blobfile_available
 
 
-def is_liger_kernel_available():
+def is_liger_kernel_available() -> bool:
     if not _liger_kernel_available:
         return False
 
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
-def is_triton_available():
-    return _triton_available
-
-
-def is_rich_available():
+def is_rich_available() -> Union[tuple[bool, str], bool]:
     return _rich_available
 
 
-def is_matplotlib_available():
+def is_matplotlib_available() -> Union[tuple[bool, str], bool]:
     return _matplotlib_available
 
 
-def is_mistral_common_available():
+def is_mistral_common_available() -> Union[tuple[bool, str], bool]:
     return _mistral_common_available
 
 
-def check_torch_load_is_safe():
+def check_torch_load_is_safe() -> None:
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
             "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "
@@ -1991,9 +2017,9 @@ CYTHON_IMPORT_ERROR = """
 Cython`. Please note that you may need to restart your runtime after installation.
 """
 
-JIEBA_IMPORT_ERROR = """
-{0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
-jieba`. Please note that you may need to restart your runtime after installation.
+RJIEBA_IMPORT_ERROR = """
+{0} requires the rjieba library but it was not found in your environment. You can install it with pip: `pip install
+rjieba`. Please note that you may need to restart your runtime after installation.
 """
 
 PEFT_IMPORT_ERROR = """
@@ -2059,7 +2085,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
-        ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
+        ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
@@ -2428,7 +2454,7 @@ BASE_FILE_REQUIREMENTS = {
 }
 
 
-def fetch__all__(file_content):
+def fetch__all__(file_content) -> list[str]:
     """
     Returns the content of the __all__ variable in the file content.
     Returns None if not defined, otherwise returns a list of strings.
@@ -2460,7 +2486,7 @@ def fetch__all__(file_content):
 
     # __all__ is defined on multiple lines
     else:
-        _all = []
+        _all: list[str] = []
         for __all__line_index in range(1, len(lines)):
             if lines[__all__line_index].strip() == "]":
                 return _all
@@ -2739,7 +2765,7 @@ def spread_import_structure(nested_import_structure):
 
                     else:
                         # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
-                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # are frozensets, whereas some are not -> frozenset keys are at an unknown depth-level of the
                         # dictionary.
                         #
                         # We recursively propagate the frozenset for this specific dictionary so that the frozensets
@@ -2832,7 +2858,7 @@ def define_import_structure(module_path: str, prefix: Optional[str] = None) -> I
         return spread_dict
 
 
-def clear_import_cache():
+def clear_import_cache() -> None:
     """
     Clear cached Transformers modules to allow reloading modified code.
 

@@ -24,6 +24,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -69,7 +70,7 @@ class SmolLM3Config(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `16`.
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `16`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -273,15 +274,16 @@ class SmolLM3Attention(LlamaAttention):
             else None
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -293,9 +295,9 @@ class SmolLM3Attention(LlamaAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

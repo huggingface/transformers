@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-14 and added to Hugging Face Transformers on 2023-12-05.*
 
 # PatchTSMixer
 
@@ -38,7 +39,7 @@ This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](
 
 ## Usage example
 
-The code snippet below shows how to randomly initialize a PatchTSMixer model. The model is compatible with the [Trainer API](../trainer.md).
+The code snippet below shows how to randomly initialize a PatchTSMixer model. The model is compatible with the [Trainer API](../trainer).
 
 ```python
 

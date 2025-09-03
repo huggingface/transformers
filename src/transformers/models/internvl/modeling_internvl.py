@@ -36,14 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    torch_int,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
@@ -611,6 +604,7 @@ class InternVLModel(InternVLPreTrainedModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -637,6 +631,30 @@ class InternVLModel(InternVLPreTrainedModel):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         return vision_features
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -683,24 +701,10 @@ class InternVLModel(InternVLPreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -824,7 +828,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.get_decoder
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
@@ -840,7 +844,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -885,7 +889,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "OpenGVLab/InternVL3-1B-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [

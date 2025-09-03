@@ -1195,6 +1195,21 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1278,21 +1293,15 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         )
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
-        # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            special_image_mask = input_ids == self.config.image_token_id
             if attention_mask is None:
                 attention_mask = torch.ones_like(input_ids)
-        else:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        # step 3: use the language model, conditioned on the query outputs and the prompt
+        language_model_inputs = self.language_projection(query_output)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         if self.config.use_decoder_only_language_model:
@@ -1461,6 +1470,21 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             return language_model_inputs, vision_outputs, query_outputs
         return language_model_inputs
 
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1567,16 +1591,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         if self.config.use_decoder_only_language_model:
@@ -1678,16 +1694,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}

@@ -220,6 +220,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoX->GPTNeoXJapanese
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -453,7 +455,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:

@@ -692,7 +692,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
-                ("cuda", 8): [[-4.8927, -0.1910, -0.2169], [-4.9657, -0.3748, -0.3980], [-5.9579, -3.3812, -3.3153]],
+                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -818,7 +818,9 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         prompt = ". ".join(id2label.values()) + "."
 
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
-        image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
+        image_inputs = image_processor(
+            images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt"
+        )
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = GroundingDinoForObjectDetection.from_pretrained(

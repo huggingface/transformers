@@ -1046,6 +1046,30 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1069,18 +1093,12 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            if input_ids is None:
-                image_attention_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_attention_mask = image_attention_mask.all(-1)
-            else:
-                image_attention_mask = input_ids == self.config.image_token_id
-
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values)
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_attention_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         lm_output = self.language_model(
@@ -1126,12 +1144,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         hidden_state = self.model.generation_embeddings(inputs)
         hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring
@@ -1258,7 +1270,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if generation_config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             raise ValueError(
                 "Got incompatible mode for Image Generation, should be one of greedy or sampling. "
-                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+                "Ensure that beam search is de-activated by setting `num_beams=1`."
             )
 
         # Validate the configuration and model kwargs
@@ -1342,7 +1354,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
-                device=device,
                 model_kwargs=model_kwargs,
             )
 

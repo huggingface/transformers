@@ -4,8 +4,11 @@ from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_flash_attn_2_available
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func  # noqa: F401
+try:
+    if is_flash_attn_2_available():
+        from flash_attn import flash_attn_varlen_func  # noqa: F401
+except Exception:
+    pass
 
 
 def paged_attention_forward(
@@ -15,8 +18,8 @@ def paged_attention_forward(
     v: torch.Tensor,
     attention_mask: torch.Tensor = None,
     cache: PagedAttentionCache = None,
-    cumulative_seqlens_q=None,
-    cumulative_seqlens_k=None,
+    cu_seq_lens_q=None,
+    cu_seq_lens_k=None,
     max_seqlen_q=None,
     max_seqlen_k=None,
     block_tables=None,
@@ -32,9 +35,9 @@ def paged_attention_forward(
         q: (total_q, nheads, headdim), where total_q = total number of query tokens in the batch.
         k: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full k
         v: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full v
-        cumulative_seqlens_q: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
+        cu_seq_lens_q: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
            of the sequences in the batch, used to index into q.
-        cumulative_seqlens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
+        cu_seq_lens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
            of the sequences in the batch, used to index into kv.
         max_seqlen_q: int. Maximum query sequence length in the batch.
         max_seqlen_k: int. Maximum key sequence length in the batch.
@@ -45,23 +48,26 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
-    k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
+    k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
+    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
     if implementation is not None:
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
+    custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
         k.transpose(1, 2).squeeze(0).contiguous(),
         v.transpose(1, 2).squeeze(0).contiguous(),
-        cumulative_seqlens_q.to(torch.int32),
-        cumulative_seqlens_k.to(torch.int32).clone(),
+        cu_seq_lens_q.to(torch.int32),
+        cu_seq_lens_k.to(torch.int32).clone(),
         max_seqlen_q,
         max_seqlen_k,
         softmax_scale=module.scaling,
         causal=True,  # kind of a must, it automatically aligns the mask for q < k
-        window_size=(-1, -1),  # -1 means infinite context window
+        window_size=sliding_window,  # -1 means infinite context window
         # block_table=block_tables, -> torch.Tensor
-        # **kwargs,
+        **custom_kwargs,
     )
-
+    if isinstance(attn_output, tuple):
+        attn_output = attn_output[0]
     return attn_output, None

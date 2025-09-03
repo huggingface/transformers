@@ -220,15 +220,9 @@ def _compute_yarn_parameters(
     attention_factor = config.rope_scaling.get("attention_factor")
     mscale = config.rope_scaling.get("mscale")
     mscale_all_dim = config.rope_scaling.get("mscale_all_dim")
-
-    # NOTE: DeekSeek-V3 (and potentially other models) modify `max_position_embeddings` and have a
-    # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
-    # values to compute the default attention scaling factor, instead of using `factor`.
-    if "original_max_position_embeddings" in config.rope_scaling:
-        original_max_position_embeddings = config.rope_scaling["original_max_position_embeddings"]
-        factor = config.max_position_embeddings / original_max_position_embeddings
-    else:
-        original_max_position_embeddings = config.max_position_embeddings
+    original_max_position_embeddings = (
+        config.rope_scaling.get("original_max_position_embeddings") or config.max_position_embeddings
+    )
 
     def get_mscale(scale, mscale=1):
         if scale <= 1:
@@ -252,10 +246,13 @@ def _compute_yarn_parameters(
         """Inverse dimension formula to find the dimension based on the number of rotations"""
         return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
-    def find_correction_range(low_rot, high_rot, dim, base, max_position_embeddings):
+    def find_correction_range(low_rot, high_rot, dim, base, max_position_embeddings, truncate):
         """Find dimension range bounds based on rotations"""
-        low = math.floor(find_correction_dim(low_rot, dim, base, max_position_embeddings))
-        high = math.ceil(find_correction_dim(high_rot, dim, base, max_position_embeddings))
+        low = find_correction_dim(low_rot, dim, base, max_position_embeddings)
+        high = find_correction_dim(high_rot, dim, base, max_position_embeddings)
+        if truncate:
+            low = math.floor(low)
+            high = math.ceil(high)
         return max(low, 0), min(high, dim - 1)
 
     def linear_ramp_factor(min, max, dim):
@@ -272,7 +269,8 @@ def _compute_yarn_parameters(
     inv_freq_extrapolation = 1.0 / pos_freqs
     inv_freq_interpolation = 1.0 / (factor * pos_freqs)
 
-    low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings)
+    truncate = config.rope_scaling.get("truncate", True)
+    low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings, truncate)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
     inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).to(device=device, dtype=torch.float)
@@ -465,6 +463,7 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
         "original_max_position_embeddings",
         "mscale",
         "mscale_all_dim",
+        "truncate",
     }
     received_keys = set(rope_scaling.keys())
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
@@ -489,6 +488,33 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
         logger.warning(
             f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
             f"(defaults to 32 if None) and beta_slow={beta_slow} (defaults to 1 if None)"
+        )
+
+    # Models should set `config.rope_scaling["original_max_position_embeddings"]` to their original (pre-yarn) context
+    # length, with `config.max_position_embeddings` corresponding to their post-yarn context length.
+    # However, for BC purposes, we allow the former to be unset.
+    original_max_position_embeddings = config.rope_scaling.get("original_max_position_embeddings")
+    if original_max_position_embeddings is not None:
+        # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
+        implicit_factor = config.max_position_embeddings / original_max_position_embeddings
+        if implicit_factor != factor:
+            logger.warning_once(
+                f"The explicitly set RoPE scaling factor (config.rope_scaling['factor'] = {factor}) does not match "
+                "the ratio implicitly set by other parameters (implicit factor = "
+                "post-yarn context length / pre-yarn context length = "
+                "config.max_position_embeddings / config.rope_scaling['original_max_position_embeddings'] = "
+                f"{implicit_factor}). Using the explicit factor ({factor}) in YaRN. This may cause unexpected "
+                "behaviour in model usage, please correct the 'max_position_embeddings' fields in the model config."
+            )
+    # No `config.rope_scaling["original_max_position_embeddings"]`. Is `config.max_position_embeddings` the
+    # pre-yarn or the post-yarn context length?
+    # BC: we assume it is the pre-yarn context length.
+    else:
+        logger.warning_once(
+            "config.rope_scaling['original_max_position_embeddings'], the pre-yarn context length, is unset. We will "
+            "**assume** config.max_position_embeddings holds the pre-yarn context length. Some use cases may expect "
+            "config.max_position_embeddings to hold the post-yarn context length (pre-yarn context length * "
+            "factor) -- we recommend updating both fields for optimal downstream model usage."
         )
 
 

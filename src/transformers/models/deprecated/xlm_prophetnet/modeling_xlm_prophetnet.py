@@ -36,6 +36,7 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_xlm_prophetnet import XLMProphetNetConfig
 
 
@@ -650,13 +651,14 @@ class XLMProphetNetAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_attn_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_head_mask: Optional[Tensor] = None,
-        past_key_value: Optional[tuple[Tensor]] = None,
+        past_key_values: Optional[tuple[Tensor]] = None,
         output_attentions: bool = False,
     ) -> tuple[Tensor, Optional[Tensor]]:
         batch_size, tgt_len, hidden_size = hidden_states.size()
@@ -673,10 +675,10 @@ class XLMProphetNetAttention(nn.Module):
         # previous time steps are cached - no need to recompute key and value if they are static
         query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
-        if is_cross_attention and past_key_value is not None:
+        if is_cross_attention and past_key_values is not None:
             # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
+            key_states = past_key_values[0]
+            value_states = past_key_values[1]
         elif is_cross_attention:
             # cross_attentions
             key_states = self._shape(self.key_proj(key_value_states), -1, batch_size)
@@ -690,8 +692,8 @@ class XLMProphetNetAttention(nn.Module):
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+            # if encoder bi-directional self-attention `past_key_values` is always `None`
+            past_key_values = (key_states, value_states)
 
         # project states into the correct shape
         proj_shape = (batch_size, self.num_attn_heads, -1, self.head_dim)
@@ -746,7 +748,7 @@ class XLMProphetNetAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped, past_key_values
 
 
 class XLMProphetNetFeedForward(nn.Module):
@@ -808,10 +810,11 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
-        past_key_value: Optional[tuple[Tensor]] = None,
+        past_key_values: Optional[tuple[Tensor]] = None,
         attention_mask=None,
         layer_head_mask=None,
         extended_predict_attention_mask=None,
@@ -855,14 +858,14 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
         main_value_states, predict_value_states_list = value_states_list[0], value_states_list[1:]
 
         # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
-        if past_key_value is not None:
-            prev_main_key_states = past_key_value[0]
+        if past_key_values is not None:
+            prev_main_key_states = past_key_values[0]
             main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=2)
-            prev_main_value_states = past_key_value[1]
+            prev_main_value_states = past_key_values[1]
             main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=2)
 
         # Update cache
-        past_key_value = (main_key_states, main_value_states)
+        past_key_values = (main_key_states, main_value_states)
 
         # get seq_length of main stream only
         sequence_length = ngram_sequence_length // (1 + self.ngram)
@@ -984,7 +987,7 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
 
-        return attn_output, main_attn_probs, predict_attn_probs, past_key_value
+        return attn_output, main_attn_probs, predict_attn_probs, past_key_values
 
     def get_main_relative_pos_embeddings(
         self, hidden_states, attn_weights, position_ids, main_relative_position_buckets
@@ -1154,6 +1157,7 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = XLMProphetNetFeedForward(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1166,16 +1170,16 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
         position_ids=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache: bool = True,
         output_attentions: bool = False,
     ):
         # 1st residual block
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         ngram_attention_output, self_attn_weights, self_attn_weights_ngram, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             extended_predict_attention_mask=extended_predict_attention_mask,
@@ -1186,7 +1190,7 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
         # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-        cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+        cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
@@ -1195,7 +1199,7 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
+                past_key_values=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = self.cross_attn_layer_norm(attention_output + hidden_states)
@@ -1544,8 +1548,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
                 if self.config.ngram > 0:
                     all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=extended_attention_mask,
@@ -1557,7 +1559,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
                 main_relative_position_buckets=main_relative_position_buckets,
                 predict_relative_position_buckets=predict_relative_position_buckets,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values[idx] if past_key_values is not None else None,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
@@ -1730,9 +1732,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     @add_start_docstrings_to_model_forward(XLM_PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XLMProphetNetSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)

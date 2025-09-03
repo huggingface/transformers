@@ -33,7 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -234,7 +234,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -356,6 +356,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        images = self.fetch_images(images)
         images = make_batched_videos(images)
         logger.warning(
             "`LlavaNextVideoImageProcessor` is deprecated and will be removed in v5.0. "

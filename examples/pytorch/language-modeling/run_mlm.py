@@ -68,7 +68,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -141,7 +141,7 @@ class ModelArguments:
             )
         },
     )
-    torch_dtype: Optional[str] = field(
+    dtype: Optional[str] = field(
         default=None,
         metadata={
             "help": (
@@ -428,11 +428,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        torch_dtype = (
-            model_args.torch_dtype
-            if model_args.torch_dtype in ["auto", None]
-            else getattr(torch, model_args.torch_dtype)
-        )
+        dtype = model_args.dtype if model_args.dtype in ["auto", None] else getattr(torch, model_args.dtype)
         model = AutoModelForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -441,7 +437,7 @@ def main():
             revision=model_args.model_revision,
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
     else:
         logger.info("Training new model from scratch")

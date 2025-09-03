@@ -43,6 +43,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_stablelm import StableLmConfig
 
 
@@ -61,6 +62,8 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLm
 class StableLmRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: StableLmConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -218,12 +221,13 @@ class StableLmAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -261,7 +265,7 @@ class StableLmAttention(nn.Module):
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # Specific to RoPE models with partial rotation
             cache_kwargs = {
                 "sin": sin,
@@ -269,7 +273,7 @@ class StableLmAttention(nn.Module):
                 "partial_rotation_size": self.rotary_ndims,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # Repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -305,12 +309,13 @@ class StableLmAttention(nn.Module):
 
 
 class StableLmSdpaAttention(StableLmAttention):
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -326,7 +331,7 @@ class StableLmSdpaAttention(StableLmAttention):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -365,7 +370,7 @@ class StableLmSdpaAttention(StableLmAttention):
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # Specific to RoPE models with partial rotation
             cache_kwargs = {
                 "sin": sin,
@@ -373,7 +378,7 @@ class StableLmSdpaAttention(StableLmAttention):
                 "partial_rotation_size": self.rotary_ndims,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # Repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -427,12 +432,13 @@ class StableLmFlashAttention2(StableLmAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -477,14 +483,14 @@ class StableLmFlashAttention2(StableLmAttention):
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {
                 "sin": sin,
                 "cos": cos,
                 "partial_rotation_size": self.rotary_ndims,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -540,7 +546,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -556,7 +562,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
                 `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -580,7 +586,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -699,7 +705,7 @@ class StableLmModel(StableLmPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -733,7 +739,7 @@ class StableLmModel(StableLmPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -897,14 +903,6 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

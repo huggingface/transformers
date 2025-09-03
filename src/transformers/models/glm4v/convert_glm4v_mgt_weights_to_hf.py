@@ -589,7 +589,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "rms_norm_eps": model_config.get("layernorm_epsilon", 1e-05),
         "rope_theta": model_config.get("rotary_base", 10000.0),
         "tie_word_embeddings": False,
-        "torch_dtype": model_config.get("torch_dtype", "bfloat16"),
+        "dtype": model_config.get("dtype", "bfloat16"),
         "transformers_version": "4.53.0dev",
         "use_cache": model_config.get("use_cache", True),
         "vocab_size": model_config.get("vocab_size", 151552),

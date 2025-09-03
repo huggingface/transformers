@@ -142,7 +142,7 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
 
 class Qwen2_5_VLVisionAttention(VisionAttention):
     def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.dim = config.hidden_size
 
 
@@ -346,6 +346,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
     config: Qwen2_5_VLConfig
     base_model_prefix = ""
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -419,8 +421,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
+            if attention_mask is not None:
+                attention_mask = attention_mask == 1
             position_ids = torch.ones(
                 3,
                 input_ids.shape[0],
@@ -429,9 +431,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 device=input_ids.device,
             )
             image_index, video_index = 0, 0
-            attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
+                if attention_mask is not None:
+                    input_ids = input_ids[attention_mask[i]]
                 image_nums, video_nums = 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
@@ -508,9 +510,12 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+                if attention_mask is not None:
+                    position_ids[..., i, attention_mask[i]] = llm_positions.to(position_ids.device)
+                else:
+                    position_ids[..., i, :] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+            mrope_position_deltas = torch.tensor(mrope_position_deltas).unsqueeze(1).to(device=input_ids.device)
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
@@ -575,47 +580,18 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = torch.cat(image_embeds, dim=0)
-
-            if input_ids is None:
-                image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_mask = image_mask.all(-1)
-            else:
-                image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (image_mask).sum()
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            n_image_features = image_embeds.shape[0]
-            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-            video_embeds = torch.cat(video_embeds, dim=0)
-
-            if input_ids is None:
-                video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                video_mask = video_mask.all(-1)
-            else:
-                video_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (video_mask).sum()
-            n_video_features = video_embeds.shape[0]
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
@@ -649,7 +625,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 else:
                     delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
-                position_ids += delta.to(position_ids.device)
+                position_ids = position_ids + delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,
@@ -680,6 +656,9 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -778,7 +757,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Qwen2_5_VLCausalLMOutputWithPast(
             loss=loss,
@@ -840,17 +821,16 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 self.model.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             elif "position_ids" in model_inputs:
-                position_ids = model_inputs["position_ids"][None, ...]
-                delta = self.model.rope_deltas
-                delta = delta.repeat_interleave(position_ids.shape[1] // delta.shape[0], dim=0)
+                batch_size, seq_length = model_inputs["position_ids"].shape
+                device = model_inputs["position_ids"].device
+                position_ids = torch.arange(seq_length, device=device)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = cache_position[0] + self.model.rope_deltas
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 vision_positions = position_ids + delta.expand_as(position_ids)
-                vision_positions = vision_positions.expand(3, vision_positions.shape[1], -1)
 
             # Concatenate "text + vision" positions into [4, bs, seq-len]
-            if "position_ids" not in model_inputs:
-                text_positions = torch.arange(input_ids, device=input_ids.device)[None, None, :]
-            else:
-                text_positions = model_inputs["position_ids"][None, ...]
+            text_positions = model_inputs["position_ids"][None, ...]
             model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
         if cache_position[0] != 0:

@@ -79,7 +79,7 @@ def rewrite_dict_keys(d):
     # (1) remove word breaking symbol, (2) add word ending symbol where the word is not broken up,
     # e.g.: d = {'le@@': 5, 'tt@@': 6, 'er': 7} => {'le': 5, 'tt': 6, 'er</w>': 7}
     d2 = dict((re.sub(r"@@$", "", k), v) if k.endswith("@@") else (re.sub(r"$", "</w>", k), v) for k, v in d.items())
-    keep_keys = "<s> <pad> </s> <unk>".split()
+    keep_keys = ["<s>", "<pad>", "</s>", "<unk>"]
     # restore the special tokens
     for k in keep_keys:
         del d2[f"{k}</w>"]

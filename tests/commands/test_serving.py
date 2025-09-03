@@ -19,7 +19,7 @@ from threading import Thread
 from unittest.mock import patch
 
 import aiohttp.client_exceptions
-from huggingface_hub import AsyncInferenceClient
+from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
@@ -30,8 +30,20 @@ from transformers.utils.import_utils import is_openai_available
 
 
 if is_openai_available():
+    from openai import APIConnectionError, OpenAI
     from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
-    from openai.types.responses import Response, ResponseCreatedEvent
+    from openai.types.responses import (
+        Response,
+        ResponseCompletedEvent,
+        ResponseContentPartAddedEvent,
+        ResponseContentPartDoneEvent,
+        ResponseCreatedEvent,
+        ResponseInProgressEvent,
+        ResponseOutputItemAddedEvent,
+        ResponseOutputItemDoneEvent,
+        ResponseTextDeltaEvent,
+        ResponseTextDoneEvent,
+    )
 
 
 @require_openai
@@ -156,7 +168,7 @@ def async_retry(fn, max_attempts=5, delay=2):
         for _ in range(max_attempts):
             try:
                 return await fn(*args, **kwargs)
-            except aiohttp.client_exceptions.ClientConnectorError:
+            except (aiohttp.client_exceptions.ClientConnectorError, APIConnectionError):
                 time.sleep(delay)
 
     return wrapper
@@ -269,6 +281,37 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
         ]
         outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
+
+        messages_with_type = [
+            {"role": "user", "content": [{"type": "text", "text": "How are you doing?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"}
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
+        self.assertListEqual(expected_outputs, outputs)
+
+        messages_multiple_text = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "How are you doing?"},
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"},
+                ],
+            },
+        ]
+        expected_outputs_multiple_text = [
+            {
+                "role": "user",
+                "content": "How are you doing? I'm doing great, thank you for asking! How can I assist you today?",
+            },
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
+        self.assertListEqual(expected_outputs_multiple_text, outputs)
 
     def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
         modality = Modality.VLM
@@ -458,11 +501,153 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8002
-        args = ServeArguments(port=cls.port, attn_implementation="sdpa_paged")  # important: toggle continuous batching
+        args = ServeArguments(
+            port=cls.port, continuous_batching=True, attn_implementation="sdpa_paged", default_seed=42
+        )
+        cls.serve_command = ServeCommand(args)
+        thread = Thread(target=cls.serve_command.run)
+        thread.daemon = True
+        thread.start()
+
+    def test_full_request(self):
+        """Tests that an inference using the Responses API and Continuous Batching works"""
+
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [
+                {"role": "system", "content": "You are a sports assistant designed to craft sports programs."},
+                {"role": "user", "content": "Tell me what you can do."},
+            ],
+            "stream": True,
+            "max_tokens": 30,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
+                content = token.choices[0].delta.get("content", "")
+                full_text += content if content is not None else ""
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
+            )
+        )
+
+    def test_max_tokens_not_set_in_req(self):
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [
+                {"role": "system", "content": "You are a sports assistant designed to craft sports programs."},
+                {"role": "user", "content": "Tell me what you can do."},
+            ],
+            "stream": True,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
+                content = token.choices[0].delta.get("content", "")
+                full_text += content if content is not None else ""
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
+            )
+        )
+
+
+@require_openai
+class ServeResponsesMixin:
+    """
+    Mixin class for the Completions API tests, to seamlessly replicate tests across the two versions of the API
+    (`generate` and `continuous_batching`).
+    """
+
+    @async_retry
+    async def run_server(self, request):
+        client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
+        stream = client.responses.create(**request)
+
+        all_payloads = []
+        for payload in stream:
+            all_payloads.append(payload)
+
+        return all_payloads
+
+    def test_request(self):
+        """Tests that an inference using the Responses API works"""
+
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "instructions": "You are a helpful assistant.",
+            "input": "Hello!",
+            "stream": True,
+            "max_output_tokens": 1,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        order_of_payloads = [
+            ResponseCreatedEvent,
+            ResponseInProgressEvent,
+            ResponseOutputItemAddedEvent,
+            ResponseContentPartAddedEvent,
+            ResponseTextDeltaEvent,
+            ResponseTextDeltaEvent,
+            ResponseTextDoneEvent,
+            ResponseContentPartDoneEvent,
+            ResponseOutputItemDoneEvent,
+            ResponseCompletedEvent,
+        ]
+
+        self.assertEqual(len(all_payloads), 10)
+        for payload, payload_type in zip(all_payloads, order_of_payloads):
+            self.assertIsInstance(payload, payload_type)
+
+    # TODO: one test for each request flag, to confirm it is working as expected
+    # TODO: speed-based test to confirm that KV cache is working across requests
+
+
+@slow  # server startup time is slow on our push CI
+@require_openai
+class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
+    """Tests the Responses API."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Starts a server for tests to connect to."""
+        cls.port = 8003
+        args = ServeArguments(port=cls.port, default_seed=42)
         serve_command = ServeCommand(args)
         thread = Thread(target=serve_command.run)
         thread.daemon = True
         thread.start()
 
+    @slow
+    def test_full_request(self):
+        """Tests that an inference using the Responses API works"""
 
-# TODO: Response integration tests
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "instructions": "You are a sports assistant designed to craft sports programs.",
+            "input": "Tell me what you can do.",
+            "stream": True,
+            "max_output_tokens": 30,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ResponseTextDeltaEvent):
+                full_text += token.delta
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
+            )
+        )

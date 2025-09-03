@@ -29,9 +29,9 @@ from .configuration_xlstm import xLSTMConfig
 
 
 if is_xlstm_available():
+    from xlstm.xlstm_large.model import RMSNorm as xLSTMRMSNorm
     from xlstm.xlstm_large.model import mLSTMBlock as xLSTMBlock
     from xlstm.xlstm_large.model import mLSTMStateType, soft_cap
-    from xlstm.xlstm_large.model import xLSTMRMSNorm as xLSTMRMSNorm
 
     external_xlstm = True
 else:
@@ -51,7 +51,7 @@ else:
 
         Performs a tanh operation on the logits and scales the result to the cap value. Common technique in attention
         and output language heads to prevent large logits from dominating the softmax. See for example Gemma2:
-        https://arxiv.org/abs/2408.00118
+        https://huggingface.co/papers/2408.00118
 
         Args:
             values: The tensor to cap.
@@ -1434,7 +1434,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
             offset = 0
             with torch.no_grad():
                 if cache_params is None:
-                    cache_params = xLSTMCache(config=self.config, batch_size=hidden_states.shape[0])
+                    cache_params = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
                 final_state = torch.zeros_like(hidden_states)
                 while offset < hidden_states.shape[1]:
                     hidden_states_chunk = hidden_states[

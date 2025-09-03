@@ -16,10 +16,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-)
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -33,6 +30,7 @@ from ...utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
+from ..janus.image_processing_janus_fast import JanusImageProcessorFast
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
 
@@ -181,10 +179,21 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
 
 
 class DeepseekVLImageProcessor(JanusImageProcessor):
+    def __init__(self, **super_kwargs):
+        super().__init__(**super_kwargs)
+
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
     def unnormalize(self):
+        raise AttributeError("Not needed for DeepseekVL")
+
+
+class DeepseekVLImageProcessorFast(JanusImageProcessorFast):
+    def __init__(self, **super_kwargs):
+        super().__init__(**super_kwargs)
+
+    def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
 
@@ -290,7 +299,6 @@ class DeepseekVLProcessor(ProcessorMixin):
 
         # process images if pixel_values are provided
         if images is not None:
-            images = make_flat_list_of_images(images)
             data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
         return BatchFeature(data=data)
@@ -322,5 +330,6 @@ __all__ = [
     "DeepseekVLModel",
     "DeepseekVLForConditionalGeneration",
     "DeepseekVLImageProcessor",
+    "DeepseekVLImageProcessorFast",
     "DeepseekVLProcessor",
 ]

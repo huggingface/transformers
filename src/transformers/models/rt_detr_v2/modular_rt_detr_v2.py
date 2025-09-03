@@ -369,6 +369,14 @@ class RTDetrV2Config(PretrainedConfig):
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
@@ -602,7 +610,7 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
 
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
-        RTDetrV2PreTrainedModel.__init__(config)
+        RTDetrV2PreTrainedModel.__init__(self, config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
 

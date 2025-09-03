@@ -42,6 +42,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
+from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
@@ -89,6 +91,8 @@ class Qwen2_5_VisionPatchEmbed(nn.Module):
 
 
 class Qwen2_5_VisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -98,26 +102,6 @@ class Qwen2_5_VisionRotaryEmbedding(nn.Module):
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
-
-
-class Qwen2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Qwen2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Qwen2_5_VLPatchMerger(nn.Module):
@@ -245,7 +229,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
 
         if self.config._attn_implementation == "flash_attention_2":
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -517,6 +501,8 @@ class Qwen2_5_VLModelOutputWithPast(ModelOutput):
 
 
 class Qwen2_5_VLRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Qwen2_5_VLTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -653,12 +639,13 @@ class Qwen2_5_VLAttention(nn.Module):
 
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -680,9 +667,9 @@ class Qwen2_5_VLAttention(nn.Module):
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -723,12 +710,13 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -746,7 +734,7 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
@@ -766,7 +754,7 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -846,7 +834,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -877,7 +865,8 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
-            text_position_ids = position_ids[0]
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -915,7 +904,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=text_position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -950,6 +939,8 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {"^model": "language_model"}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
     config: Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
@@ -1042,8 +1033,8 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
+            if attention_mask is not None:
+                attention_mask = attention_mask == 1
             position_ids = torch.ones(
                 3,
                 input_ids.shape[0],
@@ -1052,9 +1043,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 device=input_ids.device,
             )
             image_index, video_index = 0, 0
-            attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
+                if attention_mask is not None:
+                    input_ids = input_ids[attention_mask[i]]
                 image_nums, video_nums = 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
@@ -1131,9 +1122,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+                if attention_mask is not None:
+                    position_ids[..., i, attention_mask[i]] = llm_positions.to(position_ids.device)
+                else:
+                    position_ids[..., i, :] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+            mrope_position_deltas = torch.tensor(mrope_position_deltas).unsqueeze(1).to(device=input_ids.device)
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
@@ -1190,6 +1184,46 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
+
     @auto_docstring
     def forward(
         self,
@@ -1233,47 +1267,18 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = torch.cat(image_embeds, dim=0)
-
-            if input_ids is None:
-                image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_mask = image_mask.all(-1)
-            else:
-                image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (image_mask).sum()
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            n_image_features = image_embeds.shape[0]
-            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-            video_embeds = torch.cat(video_embeds, dim=0)
-
-            if input_ids is None:
-                video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                video_mask = video_mask.all(-1)
-            else:
-                video_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (video_mask).sum()
-            n_video_features = video_embeds.shape[0]
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
@@ -1307,7 +1312,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 else:
                     delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
-                position_ids += delta.to(position_ids.device)
+                position_ids = position_ids + delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1369,6 +1374,8 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }
     _tied_weights_keys = ["lm_head.weight"]
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -1397,7 +1404,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1506,7 +1513,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Qwen2_5_VLCausalLMOutputWithPast(
             loss=loss,
@@ -1568,17 +1577,16 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                 self.model.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             elif "position_ids" in model_inputs:
-                position_ids = model_inputs["position_ids"][None, ...]
-                delta = self.model.rope_deltas
-                delta = delta.repeat_interleave(position_ids.shape[1] // delta.shape[0], dim=0)
+                batch_size, seq_length = model_inputs["position_ids"].shape
+                device = model_inputs["position_ids"].device
+                position_ids = torch.arange(seq_length, device=device)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = cache_position[0] + self.model.rope_deltas
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 vision_positions = position_ids + delta.expand_as(position_ids)
-                vision_positions = vision_positions.expand(3, vision_positions.shape[1], -1)
 
             # Concatenate "text + vision" positions into [4, bs, seq-len]
-            if "position_ids" not in model_inputs:
-                text_positions = torch.arange(input_ids, device=input_ids.device)[None, None, :]
-            else:
-                text_positions = model_inputs["position_ids"][None, ...]
+            text_positions = model_inputs["position_ids"][None, ...]
             model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
         if cache_position[0] != 0:
@@ -1695,14 +1703,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "second_per_grid_ts":
-                    if not isinstance(dict_to_expand[key], list):
-                        raise TypeError(
-                            f"Expected value for key '{key}' to be a list, but got {type(dict_to_expand[key])} instead."
-                        )
-                    tensor = torch.tensor(dict_to_expand[key])
-                    lengths = list(video_nums)
-                    tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
-                    dict_to_expand[key] = tensor.tolist()
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
             return dict_to_expand
 
         def _expand_dict_for_generation(dict_to_expand):

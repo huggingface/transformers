@@ -23,10 +23,8 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -98,13 +96,6 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen3Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -218,7 +209,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_15b_a2b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window

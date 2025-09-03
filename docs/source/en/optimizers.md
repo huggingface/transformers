@@ -138,7 +138,6 @@ args = TrainingArguments(
     per_device_train_batch_size=4,
 +   optim="adalomo",
     gradient_checkpointing=True,
-    gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
     learning_rate=2e-6,
@@ -181,7 +180,7 @@ args = TrainingArguments(
 pip install torch-optimi
 ```
 
-[StableAdamW](https://arxiv.org/pdf/2304.13013) is a hybrid between AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, which removes the need for gradient clipping. Otherwise, it behaves as a drop-in replacement for AdamW.
+[StableAdamW](https://huggingface.co/papers/2304.13013) is a hybrid between AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, which removes the need for gradient clipping. Otherwise, it behaves as a drop-in replacement for AdamW.
 
 > [!TIP]
 > If training on large batch sizes or still observing training loss spikes, consider reducing beta_2 between [0.95, 0.99].

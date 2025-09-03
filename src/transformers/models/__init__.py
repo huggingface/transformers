@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -98,6 +99,8 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
     from .donut import *
@@ -120,6 +123,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
@@ -139,6 +143,7 @@ if TYPE_CHECKING:
     from .gpt_neo import *
     from .gpt_neox import *
     from .gpt_neox_japanese import *
+    from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
@@ -153,6 +158,8 @@ if TYPE_CHECKING:
     from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
+    from .hunyuan_v1_dense import *
+    from .hunyuan_v1_moe import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -236,6 +243,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .opt import *
+    from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
@@ -283,9 +291,11 @@ if TYPE_CHECKING:
     from .rwkv import *
     from .sam import *
     from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
+    from .seed_oss import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
@@ -352,6 +362,7 @@ if TYPE_CHECKING:
     from .wavlm import *
     from .whisper import *
     from .x_clip import *
+    from .xcodec import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
