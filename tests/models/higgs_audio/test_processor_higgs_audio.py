@@ -20,9 +20,8 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import HiggsAudioProcessor, HiggsAudioTokenizer, PreTrainedTokenizerFast, WhisperFeatureExtractor
-from transformers.models.higgs_audio.generation_higgs_audio import build_delay_pattern_mask
-from transformers.models.higgs_audio.processing_higgs_audio import HiggsAudioProcessorKwargs
+from transformers import DacFeatureExtractor, HiggsAudioProcessor, HiggsAudioTokenizer, PreTrainedTokenizerFast
+from transformers.models.higgs_audio.processing_higgs_audio import HiggsAudioProcessorKwargs, build_delay_pattern_mask
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -64,7 +63,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
         self.assertEqual(
             processor.feature_extractor.to_json_string(), self.processor.feature_extractor.to_json_string()
         )
-        self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, DacFeatureExtractor)
 
         self.assertEqual(
             processor.audio_tokenizer.__class__.__name__, self.processor.audio_tokenizer.__class__.__name__
@@ -131,9 +130,12 @@ class HiggsAudioProcessorTest(unittest.TestCase):
         kwargs = HiggsAudioProcessorKwargs._defaults
 
         for batch_idx, speech in enumerate(raw_speeches):
-            input_values = self.processor.audio_tokenizer.audio_extraction(
+            input_values = self.processor.feature_extractor(
                 speech,
             )
+            input_values = torch.tensor(
+                input_values["input_values"][0], device=self.processor.audio_tokenizer.device
+            ).unsqueeze(0)
             audio_ids = self.processor.audio_tokenizer.encode(input_values)
             audio_codes = build_delay_pattern_mask(
                 audio_ids.audio_codes,

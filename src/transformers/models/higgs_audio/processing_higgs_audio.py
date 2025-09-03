@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from .generation_higgs_audio import _ceil_to_nearest
+    from .modeling_higgs_audio import _ceil_to_nearest
 
 if is_soundfile_available():
     import soundfile as sf
