@@ -15,6 +15,7 @@
 """Convert Xcodec2 checkpoints."""
 
 import argparse
+import re
 
 import safetensors
 import torch
@@ -57,50 +58,159 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
 def _convert_model(state_dict, hf_model):
     tensors = {}
 
-    for k in state_dict.keys():
-        # replace beta with bias and handle special cases
-        if "generator.backbone.transformers" in k:
-            if "c_attn" in k:
-                # split into 3 tensors
-                c_attn_weight = state_dict[k]
-                W_q, W_k, W_v = torch.chunk(c_attn_weight, chunks=3, dim=0)
+    for old_k in state_dict.keys():
+        # update to new names used in `Xcodec2Model` in modeling_xcodec2.py
+        # old names can be found here: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L12
+        if "CodecEnc" in old_k:
+            k = old_k.replace("CodecEnc", "acoustic_encoder")
+            
+            # Handle initial convolutional layer (conv_blocks.0 -> initial_conv)
+            if "conv_blocks.0" in k:
+                k = k.replace("conv_blocks.0", "initial_conv")
+            
+            # Handle final layers (conv_final_block.0 -> final_activation, conv_final_block.1 -> final_conv)
+            elif "conv_final_block.0" in k:
+                k = k.replace("conv_final_block.0", "final_activation")
+            elif "conv_final_block.1" in k:
+                k = k.replace("conv_final_block.1", "final_conv")
+            
+            # Handle encoder blocks (conv_blocks.1, conv_blocks.2, etc. -> encoder_blocks.0, encoder_blocks.1, etc.)
+            elif "conv_blocks." in k:
+                # Extract the block index (subtracting 1 because initial_conv replaced conv_blocks.0)
+                conv_block_pattern = r'acoustic_encoder\.conv_blocks\.(\d+)(.*)'
+                match = re.match(conv_block_pattern, k)
+                if match:
+                    block_idx = int(match.group(1))
+                    suffix = match.group(2)
+                    # Adjust index (subtract 1 because we moved conv_blocks.0 to initial_conv)
+                    k = f"acoustic_encoder.encoder_blocks.{block_idx-1}{suffix}"
+            
+            # Handle the ResidualUnit structure changes (nested blocks)
+            # We're looking for patterns like "block.X.block.Y" where Y is 0-3
+            nested_block_pattern = r'(.*\.block\.\d+)\.block\.(\d+)(.*)'
+            match = re.match(nested_block_pattern, k)
+            if match:
+                prefix = match.group(1)  # Everything before .block.Y
+                subblock_idx = int(match.group(2))  # Y value (0-3)
+                suffix = match.group(3)  # Everything after .block.Y
+                
+                # Map to the corresponding component in ResidualUnit
+                if subblock_idx == 0:
+                    k = f"{prefix}.activation1{suffix}"
+                elif subblock_idx == 1:
+                    k = f"{prefix}.conv1{suffix}"
+                elif subblock_idx == 2:
+                    k = f"{prefix}.activation2{suffix}"
+                elif subblock_idx == 3:
+                    k = f"{prefix}.conv2{suffix}"
+            
+            # Handle the EncoderBlock structure changes
+            # We're looking for patterns like "encoder_blocks.X.block.Y" where Y is 0-2 (residual units), 3 (activation), or 4 (conv)
+            encoder_block_pattern = r'(acoustic_encoder\.encoder_blocks\.\d+)\.block\.(\d+)(.*)'
+            match = re.match(encoder_block_pattern, k)
+            if match:
+                prefix = match.group(1)  # Everything before .block.Y (conv_blocks.X)
+                block_idx = int(match.group(2))  # Y value (0-4)
+                suffix = match.group(3)  # Everything after .block.Y
+                
+                # Map to the corresponding component in EncoderBlock
+                if block_idx < 3:  # First 3 are residual units (typically 0, 1, 2)
+                    k = f"{prefix}.residual_units.{block_idx}{suffix}"
+                elif block_idx == 3:  # This is the activation
+                    k = f"{prefix}.activation{suffix}"
+                elif block_idx == 4:  # This is the final conv
+                    k = f"{prefix}.conv{suffix}"
+        elif "generator" in old_k:
+            k = old_k.replace("generator", "decoder")
+            
+            # Handle prior_net -> prior_blocks conversion
+            if "backbone.prior_net.0." in k:
+                k = k.replace("backbone.prior_net.0.", "backbone.prior_blocks.0.")
+            elif "backbone.prior_net.1." in k:
+                k = k.replace("backbone.prior_net.1.", "backbone.prior_blocks.1.")
+            
+            # Handle post_net -> post_blocks conversion
+            elif "backbone.post_net.0." in k:
+                k = k.replace("backbone.post_net.0.", "backbone.post_blocks.0.")
+            elif "backbone.post_net.1." in k:
+                k = k.replace("backbone.post_net.1.", "backbone.post_blocks.1.")
+            
+            # Handle special cases for decoder.backbone.transformers
+            elif "backbone.transformers" in k:
+                if "c_attn" in k:
+                    # split into 3 tensors
+                    c_attn_weight = state_dict[old_k]
+                    W_q, W_k, W_v = torch.chunk(c_attn_weight, chunks=3, dim=0)
 
-                n_heads = hf_model.config.num_attention_heads
-                W_q = permute_for_rope(W_q, n_heads, W_q.shape[0], W_q.shape[1])
-                W_k = permute_for_rope(W_k, n_heads, W_k.shape[0], W_k.shape[1])
-                k_mod = k.replace("att.", "self_attn.")
-                tensors[k_mod.replace("c_attn", "q_proj")] = W_q
-                tensors[k_mod.replace("c_attn", "k_proj")] = W_k
-                tensors[k_mod.replace("c_attn", "v_proj")] = W_v
-            elif "c_proj" in k:
-                tensors[k.replace(".att.c_proj", ".self_attn.o_proj")] = state_dict[k]
-            elif "att_norm" in k:
-                tensors[k.replace("att_norm", "input_layernorm")] = state_dict[k]
-            elif "ffn_norm" in k:
-                tensors[k.replace("ffn_norm", "post_attention_layernorm")] = state_dict[k]
-            else:
-                new_k = k.replace("beta", "bias")
-                tensors[new_k] = state_dict[k]
-        # change weight_g to parametrizations.weight.original0 and weight_v to parametrizations.weight.original1
-        elif "weight_g" in k:
-            tensors[k.replace("weight_g", "parametrizations.weight.original0")] = state_dict[k]
-        elif "weight_v" in k:
-            tensors[k.replace("weight_v", "parametrizations.weight.original1")] = state_dict[k]
+                    n_heads = hf_model.config.num_attention_heads
+                    W_q = permute_for_rope(W_q, n_heads, W_q.shape[0], W_q.shape[1])
+                    W_k = permute_for_rope(W_k, n_heads, W_k.shape[0], W_k.shape[1])
+                    k_mod = k.replace("att.", "self_attn.")
+                    tensors[k_mod.replace("c_attn", "q_proj")] = W_q
+                    tensors[k_mod.replace("c_attn", "k_proj")] = W_k
+                    tensors[k_mod.replace("c_attn", "v_proj")] = W_v
+                    continue  # Skip the rest of the loop for this key
+                elif "c_proj" in k:
+                    tensors[k.replace(".att.c_proj", ".self_attn.o_proj")] = state_dict[old_k]
+                    continue  # Skip the rest of the loop for this key
+                elif "att_norm" in k:
+                    tensors[k.replace("att_norm", "input_layernorm")] = state_dict[old_k]
+                    continue  # Skip the rest of the loop for this key
+                elif "ffn_norm" in k:
+                    tensors[k.replace("ffn_norm", "post_attention_layernorm")] = state_dict[old_k]
+                    continue  # Skip the rest of the loop for this key
+                
+            # Handle weight normalization parameters
+            if "weight_g" in k:
+                # Apply weight_g conversion to all keys
+                k = k.replace("weight_g", "parametrizations.weight.original0")
+            elif "weight_v" in k:
+                # Apply weight_v conversion to all keys
+                k = k.replace("weight_v", "parametrizations.weight.original1")
+            elif "beta" in k:
+                k = k.replace("beta", "bias")
+        elif "SemanticEncoder_module" in old_k:
+            k = old_k.replace("SemanticEncoder_module", "semantic_encoder")
+            
+            # Handle residual_blocks -> individual modules conversion
+            if "residual_blocks.0." in k:
+                k = k.replace("residual_blocks.0.", "act1.")
+            elif "residual_blocks.1." in k:
+                k = k.replace("residual_blocks.1.", "conv1.")
+            elif "residual_blocks.2." in k:
+                k = k.replace("residual_blocks.2.", "act2.")
+            elif "residual_blocks.3." in k:
+                k = k.replace("residual_blocks.3.", "conv2.")
         else:
+            k = old_k
+
+        # Handle weight normalization parameters
+        if "weight_g" in k:
+            # Apply weight_g conversion to all keys
+            new_k = k.replace("weight_g", "parametrizations.weight.original0")
+            tensors[new_k] = state_dict[old_k]
+        elif "weight_v" in k:
+            # Apply weight_v conversion to all keys
+            new_k = k.replace("weight_v", "parametrizations.weight.original1")
+            tensors[new_k] = state_dict[old_k]
+        elif "beta" in k:
             new_k = k.replace("beta", "bias")
-            tensors[new_k] = state_dict[k]
+            tensors[new_k] = state_dict[old_k]
+        else:
+            # For all other keys
+            tensors[k] = state_dict[old_k]
     state_dict = tensors
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
-        raise ValueError(f"extra keys found: {extra_keys}")
+        raise ValueError(f"{len(extra_keys)} extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
-        raise ValueError(f"missing keys: {missing_keys}")
+        raise ValueError(f"{len(missing_keys)} missing keys found: {missing_keys}")
     hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
     logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
-
+    
     del state_dict
 
     return hf_model
@@ -152,6 +262,8 @@ def convert_checkpoint(
     if "best_state" in original_checkpoint:
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
+    
+    # TODO add and remove weight norm
     model = _convert_model(original_checkpoint, model)
 
     # create feature extractor

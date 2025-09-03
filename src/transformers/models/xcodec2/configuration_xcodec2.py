@@ -118,12 +118,14 @@ class Xcodec2Config(PretrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
 
+        self.semantic_model_id = "facebook/w2v-bert-2.0"    # needed for feature extractor
         if semantic_model_config is None:
             self.semantic_model_config = Wav2Vec2BertConfig()
         elif isinstance(semantic_model_config, dict):
             if "_name_or_path" in semantic_model_config:
                 # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"],)
+                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
+                self.semantic_model_id = semantic_model_config["_name_or_path"]
             else:
                 # assume HubertConfig as probably created from scratch
                 logger.warning(

@@ -605,35 +605,39 @@ class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.block = nn.Sequential(
-            Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True)),
-            WNConv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad),
-            Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True)),
-            WNConv1d(dim, dim, kernel_size=1),
-        )
+        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
+        self.conv1 = WNConv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
+        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
+        self.conv2 = WNConv1d(dim, dim, kernel_size=1)
 
     def forward(self, x):
-        return x + self.block(x)
+        residual = x
+        x = self.activation1(x)
+        x = self.conv1(x)
+        x = self.activation2(x)
+        x = self.conv2(x)
+        return residual + x
 
 
 class EncoderBlock(nn.Module):
     def __init__(self, dim: int = 16, stride: int = 1, dilations=(1, 3, 9)):
         super().__init__()
-        runits = [ResidualUnit(dim // 2, dilation=d) for d in dilations]
-        self.block = nn.Sequential(
-            *runits,
-            Activation1d(activation=Xcodec2SnakeBeta(dim // 2, alpha_logscale=True)),
-            WNConv1d(
-                dim // 2,
-                dim,
-                kernel_size=2 * stride,
-                stride=stride,
-                padding=stride // 2 + stride % 2,
-            ),
+        self.residual_units = nn.ModuleList([ResidualUnit(dim // 2, dilation=d) for d in dilations])
+        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2, alpha_logscale=True))
+        self.conv = WNConv1d(
+            dim // 2,
+            dim,
+            kernel_size=2 * stride,
+            stride=stride,
+            padding=stride // 2 + stride % 2,
         )
 
     def forward(self, x):
-        return self.block(x)
+        for residual_unit in self.residual_units:
+            x = residual_unit(x)
+        x = self.activation(x)
+        x = self.conv(x)
+        return x
 
 
 def init_weights(m):
@@ -656,29 +660,31 @@ class Xcodec2CodecEncoder(nn.Module):
         self.up_ratios = up_ratios
 
         d_model = ngf
-        self.conv_blocks = [WNConv1d(1, d_model, kernel_size=7, padding=3)]
+        self.initial_conv = WNConv1d(1, d_model, kernel_size=7, padding=3)
 
+        self.encoder_blocks = nn.ModuleList()
         for i, stride in enumerate(up_ratios):
             d_model *= 2
-            self.conv_blocks += [EncoderBlock(d_model, stride=stride, dilations=dilations)]
+            self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
 
-        self.conv_blocks = nn.Sequential(*self.conv_blocks)
-        self.conv_final_block = [
-            Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True)),
-            WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1),
-        ]
-        self.conv_final_block = nn.Sequential(*self.conv_final_block)
+        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
+        self.final_conv = WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
         self.reset_parameters()
 
     def forward(self, x):
-        x = self.conv_blocks(x)
-        x = self.conv_final_block(x)
+        # Initial convolution
+        x = self.initial_conv(x)
+
+        # Apply all encoder blocks
+        for encoder_block in self.encoder_blocks:
+            x = encoder_block(x)
+
+        # Final processing
+        x = self.final_activation(x)
+        x = self.final_conv(x)
         x = x.permute(0, 2, 1)
         return x
-
-    def inference(self, x):
-        return self.block(x)
 
     def remove_weight_norm(self):
         """Remove weight normalization module from all of the layers."""
@@ -794,11 +800,12 @@ class Xcodec2VocosBackbone(Backbone):
         block_in = config.hidden_size
         dropout = 0.1
 
-        prior_net: list[nn.Module] = [
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-        ]
-        self.prior_net = nn.Sequential(*prior_net)
+        self.prior_blocks = nn.ModuleList(
+            [
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+            ]
+        )
 
         # Initialize rotary embeddings
         self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
@@ -809,16 +816,18 @@ class Xcodec2VocosBackbone(Backbone):
         )
 
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        post_net: list[nn.Module] = [
-            ResnetBlock(
-                in_channels=config.hidden_size,
-                out_channels=config.hidden_size,
-                temb_channels=self.temb_ch,
-                dropout=dropout,
-            ),
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-        ]
-        self.post_net = nn.Sequential(*post_net)
+
+        self.post_blocks = nn.ModuleList(
+            [
+                ResnetBlock(
+                    in_channels=config.hidden_size,
+                    out_channels=config.hidden_size,
+                    temb_channels=self.temb_ch,
+                    dropout=dropout,
+                ),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+            ]
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x shape: [batch, seq_len, hidden_dim]
@@ -826,7 +835,11 @@ class Xcodec2VocosBackbone(Backbone):
         # Handle initial transformations
         x = x.transpose(1, 2)
         x = self.embed(x)
-        x = self.prior_net(x)
+
+        # Process through prior_blocks
+        for block in self.prior_blocks:
+            x = block(x)
+
         x = x.transpose(1, 2)  # [batch, seq_len, hidden_dim]
 
         # Generate position IDs and rotary embeddings
@@ -843,7 +856,11 @@ class Xcodec2VocosBackbone(Backbone):
 
         # Handle final transformations
         x = x.transpose(1, 2)
-        x = self.post_net(x)
+
+        # Process through post_blocks
+        for block in self.post_blocks:
+            x = block(x)
+
         x = x.transpose(1, 2)
         x = self.final_layer_norm(x)
 
@@ -1474,26 +1491,24 @@ class Xcodec2SemanticEncoder(nn.Module):
             bias=False,
         )
 
-        # Residual blocks
-        self.residual_blocks = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.Conv1d(
-                encode_channels,
-                encode_channels,
-                kernel_size=kernel_size,
-                stride=1,
-                padding=(kernel_size - 1) // 2,
-                bias=bias,
-            ),
-            nn.ReLU(inplace=True),
-            nn.Conv1d(
-                encode_channels,
-                encode_channels,
-                kernel_size=kernel_size,
-                stride=1,
-                padding=(kernel_size - 1) // 2,
-                bias=bias,
-            ),
+        # Residual block with two convolutional layers
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv1d(
+            encode_channels,
+            encode_channels,
+            kernel_size=kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
+            bias=bias,
+        )
+        self.act2 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv1d(
+            encode_channels,
+            encode_channels,
+            kernel_size=kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
+            bias=bias,
         )
 
         # Final convolution, maps encode_channels to code_dim
@@ -1517,7 +1532,15 @@ class Xcodec2SemanticEncoder(nn.Module):
             Tensor: Encoded tensor, shape (Batch, Code_dim, Length)
         """
         x = self.initial_conv(x)  # (Batch, Encode_channels, Length)
-        x = self.residual_blocks(x) + x  # Residual connection
+
+        # Apply residual block operations
+        residual = x
+        x = self.act1(x)
+        x = self.conv1(x)
+        x = self.act2(x)
+        x = self.conv2(x)
+        x = x + residual  # Residual connection
+
         x = self.final_conv(x)  # (Batch, Code_dim, Length)
         return x
 
@@ -1572,9 +1595,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         super().__init__(config)
 
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
-        self.semantic_feature_extractor = AutoFeatureExtractor.from_pretrained(
-            "facebook/w2v-bert-2.0"
-        )  # TODO extract name from config
+        self.semantic_feature_extractor = AutoFeatureExtractor.from_pretrained(config.semantic_model_id)
         self.semantic_encoder = Xcodec2SemanticEncoder(
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
@@ -1625,10 +1646,10 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         semantic_output = self.semantic_model(input_features.to(self.device), output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
-        semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
+        semantic_encoded = self.semantic_encoder(semantic_hidden_16)
 
         # 2) Get acoustic embedding
-        vq_emb = self.CodecEnc(wav.unsqueeze(1))
+        vq_emb = self.acoustic_encoder(wav.unsqueeze(1))
         vq_emb = vq_emb.transpose(1, 2)
         if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
             min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
