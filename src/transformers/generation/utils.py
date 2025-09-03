@@ -2146,12 +2146,13 @@ class GenerationMixin(ContinuousMixin):
         self,
         generation_mode: GenerationMode,
         trust_remote_code: bool,
+        generation_modes_mapping: dict[GenerationMode, Union[str, Callable]],
         custom_generate: Optional[str] = None,
     ) -> Optional[str]:
         """
         Returns the Hub repo for a deprecated generation mode, if any.
         """
-        if custom_generate is not None or not isinstance(repo := GENERATION_MODES_MAPPING[generation_mode], str):
+        if custom_generate is not None or not isinstance(repo := generation_modes_mapping[generation_mode], str):
             return None
 
         logger.warning_once(
@@ -2346,8 +2347,21 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        # Cannot be root level constant since subclasses might override the methods
+        generation_modes_mapping = {
+            GenerationMode.SAMPLE: type(self)._sample,
+            GenerationMode.GREEDY_SEARCH: type(self)._sample,
+            GenerationMode.BEAM_SEARCH: type(self)._beam_search,
+            GenerationMode.BEAM_SAMPLE: type(self)._beam_search,
+            GenerationMode.ASSISTED_GENERATION: type(self)._assisted_decoding,
+            # Deprecated methods
+            GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+            GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+            GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
+            GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
+        }
         generation_call = (
-            GENERATION_MODES_MAPPING[generation_mode] if not isinstance(custom_generate, Callable) else custom_generate
+            generation_modes_mapping[generation_mode] if not isinstance(custom_generate, Callable) else custom_generate
         )
 
         self._validate_model_kwargs(model_kwargs.copy())
@@ -2356,7 +2370,9 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecate_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        if deprecate_mode_repo := self._get_deprecated_gen_repo(
+            generation_mode, trust_remote_code, generation_modes_mapping, custom_generate
+        ):
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
@@ -3834,17 +3850,3 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
-
-
-GENERATION_MODES_MAPPING = {
-    GenerationMode.SAMPLE: GenerationMixin._sample,
-    GenerationMode.GREEDY_SEARCH: GenerationMixin._sample,
-    GenerationMode.BEAM_SEARCH: GenerationMixin._beam_search,
-    GenerationMode.BEAM_SAMPLE: GenerationMixin._beam_search,
-    GenerationMode.ASSISTED_GENERATION: GenerationMixin._assisted_decoding,
-    # Deprecated methods
-    GenerationMode.DOLA_GENERATION: "transformers-community/dola",
-    GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
-    GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
-    GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
-}
