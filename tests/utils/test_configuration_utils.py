@@ -301,38 +301,27 @@ class ConfigTestUtils(unittest.TestCase):
             warnings.simplefilter("error")
             PretrainedConfig.from_pretrained("bert-base-uncased")
 
-    def test_get_text_config(self):
-        """Tests the `get_text_config` method."""
+    def test_get_sub_config(self):
+        """Tests the `get_sub_config` method."""
         # 1. model with only text input -> returns the original config instance
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
-        self.assertEqual(
-            config.get_sub_config(modality="text"),
-            config,
-        )
-        self.assertEqual(config.get_sub_config(modality="text", decoder=True), config)
+        self.assertEqual(config.get_sub_config(modality="text"), config)
+        self.assertEqual(config.get_sub_config(), config)
 
-        # 2. composite model (VLM) -> returns the text component
+        # 2. composite model (VLM) -> can pull the desired sub-config
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
-        self.assertEqual(
-            config.get_sub_config(modality="text"),
-            config.text_config,
-        )
+        self.assertEqual(config.get_sub_config(modality="text"), config.text_config)
+        self.assertEqual(config.get_sub_config(modality="text", strict=True), config.text_config)
         self.assertEqual(config.get_sub_config(modality="text", decoder=True), config.text_config)
+        self.assertEqual(config.get_sub_config(modality="image"), config.vision_config)
+        self.assertEqual(config.get_sub_config(), config)  # ambiguous case -> returns the original config instance
+        with self.assertRaises(ValueError):  # ambiguous + strict -> error
+            self.assertEqual(config.get_sub_config(strict=True), config)
 
-        # 3. ! corner case! : composite model whose sub-config is an old composite model (should behave as above)
-        config = Florence2Config()
-        self.assertEqual(
-            config.get_sub_config(modality="text"),
-            config.text_config,
-        )
-        self.assertEqual(config.get_sub_config(modality="text", decoder=True), config.text_config)
-
-        # 4. old composite model -> may remove components based on the `decoder` or `encoder` argument
+        # 3. old composite model -> may remove components based on the `decoder` or `encoder` argument
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
-        self.assertEqual(
-            config.get_sub_config(modality="text"),
-            config,
-        )
+        self.assertEqual(config.get_sub_config(modality="text"), config)
+        self.assertEqual(config.get_sub_config(), config)
         # both encoder_layers and decoder_layers exist
         self.assertTrue(getattr(config, "encoder_layers", None) is not None)
         self.assertTrue(getattr(config, "decoder_layers", None) is not None)
@@ -344,6 +333,11 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
         self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
+
+        # 4. ! corner case! : composite model whose sub-config is an old composite model (should behave as above)
+        config = Florence2Config()
+        self.assertEqual(config.get_sub_config(modality="text"), config.text_config)
+        self.assertEqual(config.get_sub_config(modality="text", decoder=True), config.text_config)
 
     @require_torch
     def test_bc_torch_dtype(self):
