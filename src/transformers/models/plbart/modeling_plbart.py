@@ -961,10 +961,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = (
-                EncoderDecoderCache(
-                    DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # self-attention
-                    DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # cross-attention
-                )
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None
                 else DynamicCache(config=self.config)
             )
