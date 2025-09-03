@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.models.lfm2_vl.processing_lfm2_vl import Lfm2VlProcessor
+from transformers import AutoTokenizer, Lfm2VlProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
@@ -29,7 +29,7 @@ if is_vision_available():
     from PIL import Image
 
     if is_torchvision_available():
-        pass
+        from transformers import Lfm2VlImageProcessorFast
 
 
 @require_torch
@@ -41,11 +41,16 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor_kwargs = cls.prepare_processor_dict()
-        processor = Lfm2VlProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
+        image_processor = Lfm2VlImageProcessorFast(
+            tile_size=14,
+            min_image_tokens = 2,
+            max_image_tokens = 10,
+            encoder_patch_size = 4,
+            do_image_splitting=False,
+        )
+        tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
-        # TODO: create a tiny dummy processor
-        # image_processor = Lfm2VlImageProcessorFast(tile_size=10)
-        # processor.image_processor = image_processor
+        processor = Lfm2VlProcessor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
 
         # Create images with different sizes

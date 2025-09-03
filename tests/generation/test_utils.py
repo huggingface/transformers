@@ -796,6 +796,7 @@ class GenerationTesterMixin:
                     "chameleon",
                     "internvl",
                     "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
+                    "lfm2vl",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")

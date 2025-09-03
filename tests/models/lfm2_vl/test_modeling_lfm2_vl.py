@@ -32,8 +32,10 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_vision_available
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...causal_lm_tester import CausalLMModelTester
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_vision_available():
@@ -117,12 +119,13 @@ class Lfm2VlModelTester(CausalLMModelTester):
         # Create dummy pixel values: [num_images, num_patches, channels * patch_size^2]
         patch_size = self.vision_config["patch_size"]
         pixel_values = floats_tensor([self.num_images, 64, 3 * patch_size * patch_size])
-        # Compute square grid size in patches
-        patches = int(math.sqrt(64))
+
         # Spatial shapes: one (height_patches, width_patches) per image
-        spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long)
+        patches = int(math.sqrt(64))
+        spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long, device=torch_device)
+
         # Pixel attention mask: mark all patches as valid (no padding)
-        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long)
+        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long, device=torch_device)
         config = self.get_config()
         return config, pixel_values, spatial_shapes, pixel_attention_mask
 
@@ -132,12 +135,10 @@ class Lfm2VlModelTester(CausalLMModelTester):
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
 
         # For simplicity just set the last n tokens to the image token
+        input_ids[input_ids == self.image_token_id] = self.text_config["pad_token_id"]
         input_ids[:, -self.image_seq_length :] = self.image_token_id
-        attention_mask = input_ids.ne(1).to(torch_device)
-        pixel_values = pixel_values.to(torch_device)
-        spatial_shapes = spatial_shapes.to(torch_device)
-        pixel_attention_mask = pixel_attention_mask.to(torch_device)
 
+        attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -149,7 +150,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Lfm2VlModelTest(CausalLMModelTest, unittest.TestCase):
+class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Lfm2VlModel, Lfm2VlForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -163,36 +164,64 @@ class Lfm2VlModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2VlModelTester
+    _is_composite = True
+
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2VlForConditionalGeneration if is_torch_available() else None
 
+    def setUp(self):
+        self.model_tester = Lfm2VlModelTester(self)
+        common_properties = ["image_token_id", "projector_hidden_size"]
+        self.config_tester = ConfigTester(
+            self, config_class=Lfm2VlConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
     @unittest.skip(
-        "Lfm2 alternates between attention and conv layers, so attention are only returned for attention layers"
+        "Lfm2 backbone alternates between attention and conv layers, so attention are only returned for attention layers"
     )
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format as it alternates between attention and conv layers")
+    @unittest.skip("Lfm2 backbone has a special cache format as it alternates between attention and conv layers")
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("Lfm2 backbone has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("Lfm2 backbone has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("Lfm2 backbone has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate_low_memory(self):
         pass
 
     @unittest.skip(
-        "Lfm2 has a special cache format which is not compatible with compile as it has static address for conv cache"
+        "Lfm2 backbone has a special cache format which is not compatible with compile as it has static address for conv cache"
     )
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Siglip2 backbone uses the same initialization scheme as the Flax original implementation")
+    def test_initialization(self):
         pass
 
 
@@ -203,6 +232,9 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B")
         self.image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        self.image2 = Image.open(
             BytesIO(
                 requests.get(
                     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
@@ -213,11 +245,10 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_integration_test(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-1.6B",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -227,8 +258,52 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=text, images=images, return_tensors="pt")
         inputs.to(device=torch_device, dtype=torch.bfloat16)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=9)
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, standing tall on"
+        expected_generated_text = (
+            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
+        )
+        self.assertEqual(generated_texts[0], expected_generated_text)
+
+    def test_integration_test_high_resolution(self):
+        model = Lfm2VlForConditionalGeneration.from_pretrained(
+            "LiquidAI/LFM2-VL-1.6B",
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        text = "<image>In this image, we see"
+        images = self.image2
+        inputs = self.processor(text=text, images=images, return_tensors="pt")
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = (
+            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
+        )
+        self.assertEqual(generated_texts[0], expected_generated_text)
+
+    def test_integration_test_batched(self):
+        model = Lfm2VlForConditionalGeneration.from_pretrained(
+            "LiquidAI/LFM2-VL-1.6B",
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        text = ["<image>In this image, we see", "<image>In this image, there is a cat on"]
+        images = [self.image2, self.image]
+        inputs = self.processor(text=text, images=images, return_tensors="pt")
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = (
+            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
+        )
         self.assertEqual(generated_texts[0], expected_generated_text)

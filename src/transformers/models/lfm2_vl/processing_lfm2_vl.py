@@ -69,14 +69,14 @@ class Lfm2VlProcessor(ProcessorMixin):
     [`Lfm2VlProcessor`] offers all the functionalities of [`Lfm2ImageProcessor`] and [`Lfm2Tokenizer`].
 
     Args:
-            image_processor (`Lfm2VlImageProcessor`):
-                An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
-            tokenizer (`PreTrainedTokenizerBase`):
-                An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-            chat_template (`str`): A Jinja template which will be used to convert lists of messages
-                in a chat into a tokenizable string.
-            use_image_special_tokens (`bool`):
-                Whether to use image special tokens or not when processing.
+        image_processor (`Lfm2VlImageProcessor`):
+             An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
+        tokenizer (`PreTrainedTokenizerBase`):
+            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+        chat_template (`str`): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        use_image_special_tokens (`bool`):
+            Whether to use image special tokens or not when processing.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -211,7 +211,7 @@ class Lfm2VlProcessor(ProcessorMixin):
                             sample_text_with_image_tokens += self.image_thumbnail_token
                         sample_text_with_image_tokens += self.image_token * num_thumbnail_tokens
                 else:
-                    sample_text_with_image_tokens += self.image_token * num_tokens_per_tile
+                    sample_text_with_image_tokens += self.image_token * num_thumbnail_tokens
 
                 if use_image_special_tokens:
                     sample_text_with_image_tokens += self.image_end_token

@@ -315,7 +315,6 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
             processed_images.append(thumbnail_image)
 
-        processed_images = torch.stack(processed_images, dim=0).flatten(0, 1).contiguous()
         return processed_images, grid_width, grid_height
 
     # Adapted from Qwen-VL with minor differences
@@ -428,6 +427,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         """
         Prepare a nested images structure for processing.
         """
+        images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def _preprocess(
@@ -482,6 +482,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         resized_image_sizes = {}
         rows_grouped, cols_grouped = {}, {}
         for shape, stacked_images in grouped_images.items():
+            num_rows = [1] * stacked_images.shape[0]
+            num_cols = [1] * stacked_images.shape[0]
+            height, width = stacked_images.shape[-2:]
+            image_sizes = [[height, width]] * stacked_images.shape[0]
+            do_resize = True
+
             if do_resize:
                 stacked_images, num_rows, num_cols, image_sizes = self.resize_and_split(
                     stacked_images,
@@ -518,15 +524,15 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+            batch_size, *_, height, width = stacked_images.shape
+            num_patches_height = height // encoder_patch_size
+            num_patches_width = width // encoder_patch_size
+
             stacked_images = convert_image_to_patches(stacked_images, encoder_patch_size)
+            processed_spatial_shapes[shape] = [[num_patches_height, num_patches_width]] * batch_size
 
             if do_pad:
-                batch_size, *_, height, width = stacked_images.shape
                 stacked_images, pixel_mask = pad_along_first_dim(stacked_images, max_num_patches)
-                num_patches_height = height // encoder_patch_size
-                num_patches_width = width // encoder_patch_size
-
-                processed_spatial_shapes[shape] = [[num_patches_height, num_patches_width]] * batch_size
                 processed_masks[shape] = [pixel_mask] * batch_size
 
             processed_images_grouped[shape] = stacked_images
@@ -538,6 +544,9 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             processed_masks = reorder_images(processed_masks, grouped_images_index, is_nested=True)
             processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index, is_nested=True)
             processed_masks = torch.stack([torch.cat(masks) for masks in processed_masks])
+            processed_spatial_shapes = torch.cat(
+                [torch.tensor(spatial_shape) for spatial_shape in processed_spatial_shapes]
+            )
             data.update({"pixel_attention_mask": processed_masks, "spatial_shapes": processed_spatial_shapes})
 
         if return_row_col_info:

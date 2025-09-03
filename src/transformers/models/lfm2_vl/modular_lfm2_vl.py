@@ -193,7 +193,7 @@ class Lfm2VlModel(LlavaModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Lfm2VlModelOutputWithPast]:
-        """
+        r"""
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
