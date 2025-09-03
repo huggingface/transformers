@@ -19,7 +19,7 @@ import unittest.mock as mock
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
-from huggingface_hub.errors import OfflineModeIsEnabled, LocalEntryNotFoundError
+from huggingface_hub.errors import LocalEntryNotFoundError, OfflineModeIsEnabled
 from requests.exceptions import HTTPError
 
 from transformers.utils import (
