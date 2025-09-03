@@ -507,9 +507,12 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if input_features is not None:
             audio_embeds = self.get_audio_embeds(input_features)
 
+            # Enable gradient tracking when inputs_embeds is a leaf tensor
+            if inputs_embeds.is_leaf and inputs_embeds.requires_grad:
+                inputs_embeds = inputs_embeds.clone()
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = input_ids == self.config.audio_token_id
-            inputs_embeds[audio_token_mask] = audio_embeds
+            inputs_embeds[audio_token_mask] = audio_embeds.to(inputs_embeds.device)
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
