@@ -1849,8 +1849,8 @@ class GenerationMixin(ContinuousMixin):
                     "offloading": offload_cache,
                 }
                 self._cache = EncoderDecoderCache(
-                    self._cache,  # self-attention cache (decoder)
-                    StaticCache(**cross_attention_cache_kwargs),  # cross-attention cache (encoder)
+                    self._cache,  # self-attention (decoder)
+                    StaticCache(**cross_attention_cache_kwargs),  # cross-attention (encoder)
                 )
         else:
             self._cache.reset()
@@ -2008,8 +2008,8 @@ class GenerationMixin(ContinuousMixin):
                 decoder_cache_kwargs["config"] = self.config.get_sub_config(modality="text", decoder=True)
                 encoder_cache_kwargs["config"] = self.config.get_sub_config(modality="text", decoder=True)
                 model_kwargs[cache_name] = EncoderDecoderCache(
-                    DynamicCache(**decoder_cache_kwargs),  # self-attention cache (decoder)
-                    DynamicCache(**encoder_cache_kwargs),  # cross-attention cache (encoder)
+                    DynamicCache(**decoder_cache_kwargs),  # self-attention (decoder)
+                    DynamicCache(**encoder_cache_kwargs),  # cross-attention (encoder)
                 )
 
     def _supports_logits_to_keep(self) -> bool:

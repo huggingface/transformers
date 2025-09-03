@@ -857,10 +857,8 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         if cache is None:
             cache = EncoderDecoderCache(
-                DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # self-attention cache
-                DynamicCache(
-                    config=self.config.get_sub_config(modality="text", decoder=True)
-                ),  # cross-attention cache
+                DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # self-attention
+                DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # cross-attention
             )
 
         if isinstance(cache, tuple):
