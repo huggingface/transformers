@@ -34,7 +34,7 @@ from transformers import (
 # python3 -m dac download --model_type 44khz # downloads the 44kHz variant
 # python3 -m dac download --model_type 24khz # downloads the 24kHz variant
 # python3 -m dac download --model_type 16khz # downloads the 16kHz variant
-# More informations: https://github.com/descriptinc/descript-audio-codec/tree/main
+# More information: https://github.com/descriptinc/descript-audio-codec/tree/main
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.dac")

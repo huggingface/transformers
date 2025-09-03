@@ -995,29 +995,29 @@ def pipeline(
             )
         model_kwargs["device_map"] = device_map
 
-        # BC for the `torch_dtype` argument
-        if (torch_dtype := kwargs.get("torch_dtype")) is not None:
+    # BC for the `torch_dtype` argument
+    if (torch_dtype := kwargs.get("torch_dtype")) is not None:
+        logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+        # If both are provided, keep `dtype`
+        dtype = torch_dtype if dtype == "auto" else dtype
+    if "torch_dtype" in model_kwargs or "dtype" in model_kwargs:
+        if "torch_dtype" in model_kwargs:
             logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
-            # If both are provided, keep `dtype`
-            dtype = torch_dtype if dtype == "auto" else dtype
-        if "torch_dtype" in model_kwargs or "dtype" in model_kwargs:
-            if "torch_dtype" in model_kwargs:
-                logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
-            # If the user did not explicitly provide `dtype` (i.e. the function default "auto" is still
-            # present) but a value is supplied inside `model_kwargs`, we silently defer to the latter instead of
-            # raising. This prevents false positives like providing `dtype` only via `model_kwargs` while the
-            # top-level argument keeps its default value "auto".
-            if dtype == "auto":
-                dtype = None
-            else:
-                raise ValueError(
-                    'You cannot use both `pipeline(... dtype=..., model_kwargs={"dtype":...})` as those'
-                    " arguments might conflict, use only one.)"
-                )
-        if dtype is not None:
-            if isinstance(dtype, str) and hasattr(torch, dtype):
-                dtype = getattr(torch, dtype)
-            model_kwargs["dtype"] = dtype
+        # If the user did not explicitly provide `dtype` (i.e. the function default "auto" is still
+        # present) but a value is supplied inside `model_kwargs`, we silently defer to the latter instead of
+        # raising. This prevents false positives like providing `dtype` only via `model_kwargs` while the
+        # top-level argument keeps its default value "auto".
+        if dtype == "auto":
+            dtype = None
+        else:
+            raise ValueError(
+                'You cannot use both `pipeline(... dtype=..., model_kwargs={"dtype":...})` as those'
+                " arguments might conflict, use only one.)"
+            )
+    if dtype is not None:
+        if isinstance(dtype, str) and hasattr(torch, dtype):
+            dtype = getattr(torch, dtype)
+        model_kwargs["dtype"] = dtype
 
     model_name = model if isinstance(model, str) else None
 

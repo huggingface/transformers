@@ -373,6 +373,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
       - local: model_doc/arcee
         title: Arcee
       - local: model_doc/bamba
