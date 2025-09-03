@@ -1578,40 +1578,32 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         channels = input_values.shape[1]
         if channels != 1:
             raise ValueError(f"Audio must be mono, but got {channels}")
-
-        # TODO move to feature extractor
-        wav = input_values.squeeze(1)
-        pad_for_wav = 320 - (wav.shape[1] % 320)
-        wav = torch.nn.functional.pad(wav, (0, pad_for_wav))
-
+        
         # 1) Get semantic embedding
         # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
         input_features = self.semantic_feature_extractor(
             input_values.cpu(),
             sampling_rate=self.semantic_feature_extractor.sampling_rate,
             return_tensors="pt",
-        ).input_features.to(self.dtype)
+        ).input_features.to(self.dtype).to(self.device)
         # -- extract 16th layer of semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
-        semantic_output = self.semantic_model(
-            input_features.to(self.device),
-            output_hidden_states=True
-        )
+        semantic_output = self.semantic_model(input_features, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
         semantic_encoded = self.semantic_encoder(semantic_hidden_16)
 
         # 2) Get acoustic embedding
-        vq_emb = self.acoustic_encoder(wav.unsqueeze(1))
+        vq_emb = self.acoustic_encoder(input_values)
         vq_emb = vq_emb.transpose(1, 2)
+
+        # 3) Concat embeddings and apply final layers
         if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
             min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
             vq_emb = vq_emb[:, :, :min_len]
             semantic_encoded = semantic_encoded[:, :, :min_len]
-
-        # 3) Concat embeddings and apply final layers
         concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
-        
+
         # 4) Get codes for generator
         _, vq_code, _ = self.decoder(concat_emb, vq=True)
 
