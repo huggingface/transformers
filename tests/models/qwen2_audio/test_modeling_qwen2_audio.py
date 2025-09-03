@@ -156,10 +156,6 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Qwen2 Audio does not support right padding.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:

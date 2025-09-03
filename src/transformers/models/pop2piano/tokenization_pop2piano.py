@@ -555,7 +555,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # check if it is batched or not
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
-        # considered batched if it has shape of `[batch_size, seqence_length, 4]` or ndim=3.
+        # considered batched if it has shape of `[batch_size, sequence_length, 4]` or ndim=3.
         is_batched = notes.ndim == 3 if isinstance(notes, np.ndarray) else isinstance(notes[0], list)
 
         # get the truncation and padding strategy

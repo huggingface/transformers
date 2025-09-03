@@ -23,7 +23,7 @@ from transformers import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -141,7 +141,10 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            fps=2,  # by default no more than 2 frames per second, otherwise too slow
+            fps=2
+            if isinstance(input_data[0], str)
+            else None,  # by default no more than 2 frames per second, otherwise too slow
+            do_sample_frames=bool(isinstance(input_data[0], str)),  # don't sample frames if decoded video is used
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -200,7 +203,9 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+            "url": url_to_local_path(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+            ),
         }
 
         # Load with `video_fps` arg

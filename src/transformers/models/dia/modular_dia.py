@@ -107,7 +107,7 @@ class DiaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class DiaSelfAttention(LlamaAttention, nn.Module):
+class DiaSelfAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], layer_idx: int, is_causal: bool = False):
@@ -600,7 +600,7 @@ class DiaModel(DiaPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
