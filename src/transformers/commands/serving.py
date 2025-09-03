@@ -493,6 +493,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 raise ValueError(
                     f"Continuous batching only supports {supported_attn_impl} as attn_implementation, got "
                     f"{self.args.attn_implementation}"
+                    f"Try setting `--attn_implementation={default_attn_impl}`"
                 )
         self.enable_cors = self.args.enable_cors
 
