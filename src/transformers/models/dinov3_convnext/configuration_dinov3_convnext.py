@@ -17,14 +17,15 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ConvNextConfig(PretrainedConfig):
-    r"""
+class DINOv3ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
+    """
     This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
     DINOv3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DINOv3ConvNext
@@ -53,6 +54,22 @@ class DINOv3ConvNextConfig(PretrainedConfig):
             The drop rate for stochastic depth.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of input images.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        apply_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
 
     Example:
     ```python
@@ -81,6 +98,10 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         layer_scale_init_value: float = 1e-6,
         drop_path_rate: float = 0.0,
         image_size: int = 224,
+        out_features: Optional[list[str]] = None,
+        out_indices: Optional[list[int]] = None,
+        apply_layernorm: bool = False,
+        reshape_hidden_states: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -94,6 +115,12 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+        self.apply_layernorm = apply_layernorm
+        self.reshape_hidden_states = reshape_hidden_states
 
     @property
     def num_stages(self) -> int:

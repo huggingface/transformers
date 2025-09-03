@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -22,7 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...models.backbone_utils import BackboneMixin
+from ...utils.backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention, BackboneOutput
 )
@@ -197,6 +197,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
     _no_split_modules = ["DINOv3ConvNextLayer"]
+    _can_record_outputs = {} 
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -295,10 +296,6 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
 
         for stage in self.stages:
             hidden_states = stage(hidden_states)
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        if not output_hidden_states:
             all_hidden_states.append(hidden_states)
 
         # NCHW
