@@ -16,7 +16,6 @@ import gc
 import tempfile
 import unittest
 
-import mistral_common.tokens.tokenizers.image
 import numpy as np
 import torch
 
@@ -29,6 +28,7 @@ from transformers.utils import PaddingStrategy, is_mistral_common_available
 
 
 if is_mistral_common_available():
+    import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
