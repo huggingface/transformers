@@ -222,6 +222,7 @@ def convert_config(model_path, save_dir):
             break
 
 
+# TODO: chat template whoops
 def convert_tokenizer(original_tokenizer_path, save_dir):
     # `original_tokenizer_path` can be any tokenizer from the already converted 4.5 series
     tokenizer = AutoTokenizer.from_pretrained(original_tokenizer_path)
