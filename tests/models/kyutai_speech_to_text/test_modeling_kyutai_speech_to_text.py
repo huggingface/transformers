@@ -454,10 +454,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(
-                config.get_sub_config(modality="text"),
-                "use_cache",
-            ):
+            if not hasattr(config.get_sub_config(modality="text"), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:
