@@ -3,13 +3,8 @@ import os
 import requests
 from huggingface_hub import Repository, hf_hub_download
 
-from transformers.utils.import_utils import is_mistral_common_available
-
-
-if is_mistral_common_available():
-    from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
+from transformers.utils.import_utils import is_mistral_common_available
 
 
 URLS_FOR_TESTING_DATA = [
