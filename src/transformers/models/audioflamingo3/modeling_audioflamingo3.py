@@ -299,22 +299,13 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    # Compatibility helpers (tower)
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
-        """
-        Compute output lengths after the two conv layers.
-        Returns both the feature length after conv1 and after conv2 (encoder S).
-        """
-        return (input_lengths - 1) // 2 + 1  # conv2 path as in the previous implementation
-
     def _build_square_attn_mask(self, mask_1d: torch.Tensor, max_mel_seq_len: int) -> torch.Tensor:
         """
         Build (B, 1, S, S) attention mask with -inf on padded positions.
         mask_1d: (B, T_mel) boolean/0-1 mask indicating valid mel frames.
         max_mel_seq_len: T_mel
         """
-        audio_feat_lengths = self._get_feat_extract_output_lengths(mask_1d.sum(-1))
+        audio_feat_lengths = (mask_1d.sum(-1) - 1) // 2 + 1
         B = mask_1d.shape[0]
         S = (max_mel_seq_len - 2) // 2 + 1
 
@@ -510,7 +501,8 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         audio_features: List[torch.Tensor],
         labels: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        media_meta: Dict[str, Dict[str, Any]] = None,
+        audio_feature_masks: List[torch.Tensor],
+        audio_embed_masks: List[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
@@ -518,11 +510,11 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         # Extract text and audio_features embeddings
         text_embeds = self.llm.model.embed_tokens(input_ids)
 
-        media_embeds = deque(self._sound_features(audio_features, media_meta["sound_feature_masks"]))
+        media_embeds = deque(self._sound_features(audio_features, audio_feature_masks))
 
         batch_size = labels.shape[0]
 
-        num_audio_tokens = torch.stack(media_meta["sound_embed_masks"], dim=0).sum(-1)
+        num_audio_tokens = torch.stack(audio_embed_masks, dim=0).sum(-1)
         num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])
         num_audios = len(media_embeds)  # number of total audios
         max_audio_tokens, embed_dim = media_embeds[0].shape
@@ -664,10 +656,11 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         input_ids: Optional[torch.FloatTensor] = None,
         audio_features: Optional[List[torch.Tensor]] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        media_meta: Dict[str, Dict[str, Any]] = None,
+        audio_feature_masks: Optional[List[torch.Tensor]] = None,
+        audio_embed_masks: Optional[List[torch.Tensor]] = None,
         **generation_kwargs,
     ) -> torch.LongTensor:
-        inputs_embeds, _, attention_mask = self._embed(input_ids, audio_features, None, attention_mask, media_meta)
+        inputs_embeds, _, attention_mask = self._embed(input_ids, audio_features, None, attention_mask, audio_feature_masks, audio_embed_masks)
         return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
 
     @property
@@ -690,22 +683,24 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
 class AudioFlamingo3MultiModalProjector(nn.Module):
     """
-    Multi-modal projector for AudioFlamingo3 that projects audio features to the language model's embedding space.
-
-    Args:
-        config (AudioFlamingo3Config): Model configuration.
+    Multi-modal projector for AudioFlamingo3 that projects audio features to the
+    language model's embedding space.
     """
 
     def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(config.sound_hidden_size, config.hidden_size),
-            nn.GELU(),
-            nn.Linear(config.hidden_size, config.hidden_size),
+        self.layers = nn.ModuleList(
+            [
+                nn.Linear(config.sound_hidden_size, config.hidden_size),
+                nn.GELU(),
+                nn.Linear(config.hidden_size, config.hidden_size),
+            ]
         )
 
     def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
-        return self.layers(x)
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
 __all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder"]

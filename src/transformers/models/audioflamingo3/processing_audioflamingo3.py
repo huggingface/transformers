@@ -116,14 +116,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
         window_length: float = 30.0,
         window_overlap: float = 0.0,
         max_num_window: int = 20,
-        audio_start: float = 0.0,
     ) -> Optional[Tuple[List[List[List[float]]], torch.Tensor, torch.Tensor]]:
         if audio_data is None:
             return None
         window_length = int(window_length * sample_rate)
         window_overlap = int(window_overlap * sample_rate)
         max_num_window = int(max_num_window)
-        duration = max_num_window * (window_length - window_overlap) + window_overlap
 
         sound_outputs = []
         audio_feature_masks = []
@@ -131,7 +129,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         T = len(audio_data)
         audio_data = audio_data.reshape(1, -1)
-        num_windows, full_length = self._get_num_windows(T, sample_rate)
+        num_windows = self._get_num_windows(T, sample_rate)[0]
 
         int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
         float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
@@ -163,36 +161,36 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput,
-        audio_data: np.ndarray,
+        audio: np.ndarray,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to AutoTokenizer's [`~AutoTokenizer.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio_data` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio_data` is not `None`. Please refer to the docstring
+        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
+        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
             text (`str`):
                 The sequence to be encoded. Can be a string.
-            audio_data (`np.ndarray`):
+            audio (`np.ndarray`):
                 The audio to be prepared. Should be a NumPy array.
 
         Returns:
             [`BatchFeature`]: A BatchFeature containing:
                 - input_ids: Tokenized input IDs
                 - media: List of processed audio tensors
-                - media_meta: Dictionary with audio feature and embedding masks
+                - audio_feature_masks: List of attention masks for audio features
+                - audio_embed_masks: List of embedding masks for audio features
         """
         audio_features = []
-        media_meta = defaultdict(list)
 
         final_text = ""
-        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio_data)
+        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio)
         audio_features.append(sound)
-        media_meta["sound_feature_masks"].append(audio_feature_masks)
-        media_meta["sound_embed_masks"].append(audio_embed_masks)
+        audio_feature_masks_dict = [audio_feature_masks]
+        audio_embed_masks_dict = [audio_embed_masks]
         final_text += "<sound>" * len(sound)
         final_text += text.replace("<sound>", "").strip()
 
@@ -201,12 +199,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         sounds = torch.tensor(audio_features).half()
         audio_features = [sound for sound in sounds]
-        sound_feature_masks = media_meta["sound_feature_masks"][0].detach().clone().half()
-        media_meta["sound_feature_masks"] = [sound_mask for sound_mask in sound_feature_masks]
-        sound_embed_masks = media_meta["sound_embed_masks"][0].detach().clone().half()
-        media_meta["sound_embed_masks"] = [sound_mask for sound_mask in sound_embed_masks]
+        audio_feature_masks = audio_feature_masks_dict[0].detach().clone().half()
+        audio_feature_masks_dict = [sound_mask for sound_mask in audio_feature_masks]
+        audio_embed_masks = audio_embed_masks_dict[0].detach().clone().half()
+        audio_embed_masks_dict = [sound_mask for sound_mask in audio_embed_masks]
 
-        return BatchFeature(data={"input_ids": input_ids, "audio_features": audio_features, "media_meta": media_meta})
+        return BatchFeature(data={"input_ids": input_ids, "audio_features": audio_features, "audio_feature_masks": audio_feature_masks_dict, "audio_embed_masks": audio_embed_masks_dict})
 
     def decode(self, token_ids: torch.Tensor) -> str:
         result = [self.tokenizer.decode(output_ids, skip_special_tokens=True).strip() for output_ids in token_ids]
