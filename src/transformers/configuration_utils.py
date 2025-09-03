@@ -1289,7 +1289,8 @@ class PretrainedConfig(PushToHubMixin):
             prefix_to_discard = "encoder" if decoder else "decoder"
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
-                if key.startswith(prefix_to_discard):
+                # NOTE: We don't want to discard the key if it is mapped from a different attribute name at read time
+                if key.startswith(prefix_to_discard) and key not in config_to_return.attribute_map.values():
                     delattr(config_to_return, key)
                 if key.startswith(prefix_to_keep):
                     if key == prefix_to_keep + "_layers":  # [encoder/decoder]_layers -> num_hidden_layers
