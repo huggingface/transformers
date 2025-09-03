@@ -485,8 +485,6 @@ class PanguEmbeddedModel(PanguEmbeddedPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring
 class PanguEmbeddedForCausalLM(PanguEmbeddedPreTrainedModel, GenerationMixin):
