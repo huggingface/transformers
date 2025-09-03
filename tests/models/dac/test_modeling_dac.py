@@ -380,7 +380,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = DacModel(config=config).to(torch_device).eval()
         self.assertTrue(
             all(hasattr(quantizer, "codebook_dim") for quantizer in model.quantizer.quantizers),
-            msg="All quantizers should have the attribute codebook_dim"
+            msg="All quantizers should have the attribute codebook_dim",
         )
         with torch.no_grad():
             encoder_outputs = model.encode(inputs_dict["input_values"])
@@ -391,6 +391,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsInstance(quantized_latents, torch.Tensor)
         self.assertEqual(quantized_latents.shape[0], latents.shape[0])
         self.assertEqual(quantized_latents.shape[1], latents.shape[1])
+
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
@@ -919,8 +920,9 @@ class DacIntegrationTest(unittest.TestCase):
             # forward pass
             original_reconstructed = model(input_values).audio_values
 
-        # ensure forward and decode are the same 
+        # ensure forward and decode are the same
         self.assertTrue(
             torch.allclose(reconstructed, original_reconstructed, atol=1e-6),
-            msg="Reconstructed codes from latents should match original quantized codes"
+            msg="Reconstructed codes from latents should match original quantized codes",
         )
+
