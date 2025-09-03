@@ -2591,9 +2591,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         if (
-            final_logit_softcapping := self.config.get_sub_config(
-                modality="text",
-            ).final_logit_softcapping
+            final_logit_softcapping := self.config.get_sub_config(modality="text").final_logit_softcapping
         ) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

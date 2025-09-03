@@ -423,9 +423,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 inputs["use_cache"] = True
             outputs = model(**inputs)
 
-            text_config = config.get_sub_config(
-                modality="text",
-            )
+            text_config = config.get_sub_config(modality="text")
             num_hidden_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)

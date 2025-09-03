@@ -306,9 +306,7 @@ class ConfigTestUtils(unittest.TestCase):
         # 1. model with only text input -> returns the original config instance
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         self.assertEqual(
-            config.get_sub_config(
-                modality="text",
-            ),
+            config.get_sub_config(modality="text"),
             config,
         )
         self.assertEqual(config.get_sub_config(modality="text", decoder=True), config)
@@ -316,9 +314,7 @@ class ConfigTestUtils(unittest.TestCase):
         # 2. composite model (VLM) -> returns the text component
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
         self.assertEqual(
-            config.get_sub_config(
-                modality="text",
-            ),
+            config.get_sub_config(modality="text"),
             config.text_config,
         )
         self.assertEqual(config.get_sub_config(modality="text", decoder=True), config.text_config)
@@ -326,9 +322,7 @@ class ConfigTestUtils(unittest.TestCase):
         # 3. ! corner case! : composite model whose sub-config is an old composite model (should behave as above)
         config = Florence2Config()
         self.assertEqual(
-            config.get_sub_config(
-                modality="text",
-            ),
+            config.get_sub_config(modality="text"),
             config.text_config,
         )
         self.assertEqual(config.get_sub_config(modality="text", decoder=True), config.text_config)
@@ -336,9 +330,7 @@ class ConfigTestUtils(unittest.TestCase):
         # 4. old composite model -> may remove components based on the `decoder` or `encoder` argument
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(
-            config.get_sub_config(
-                modality="text",
-            ),
+            config.get_sub_config(modality="text"),
             config,
         )
         # both encoder_layers and decoder_layers exist

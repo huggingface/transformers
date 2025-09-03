@@ -2158,18 +2158,14 @@ class ModelTesterMixin:
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -2194,9 +2190,7 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
@@ -2232,19 +2226,13 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
@@ -2278,18 +2266,14 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -2354,13 +2338,9 @@ class ModelTesterMixin:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
@@ -2398,9 +2378,7 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
@@ -2515,9 +2493,7 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            vocab_size = config.get_sub_config(modality="text").vocab_size
             model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
@@ -2582,9 +2558,7 @@ class ModelTesterMixin:
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
-            copied_config.get_sub_config(
-                modality="text",
-            ).tie_word_embeddings = True
+            copied_config.get_sub_config(modality="text").tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -4674,9 +4648,7 @@ class ModelTesterMixin:
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             batch_size, sequence_length = inputs["input_ids"].shape[:2]
-            vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            vocab_size = config.get_sub_config(modality="text").vocab_size
             model = model_class(config).to(device=torch_device).eval()
             # some models have labels but `logits_to_keep` should not be used in train mode
             _ = inputs.pop("labels", None)

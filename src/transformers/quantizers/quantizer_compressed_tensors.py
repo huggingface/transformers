@@ -100,18 +100,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
         }
         if (
-            config.get_sub_config(
-                modality="text",
-            )
-            is not None
-            and config.get_sub_config(
-                modality="text",
-            ).base_model_tp_plan
-            is not None
+            config.get_sub_config(modality="text") is not None
+            and config.get_sub_config(modality="text").base_model_tp_plan is not None
         ):
-            config.get_sub_config(
-                modality="text",
-            ).base_model_tp_plan.update(additional_plan)
+            config.get_sub_config(modality="text").base_model_tp_plan.update(additional_plan)
 
         return config
 

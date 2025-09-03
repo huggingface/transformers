@@ -1040,9 +1040,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            text_config = config.get_sub_config(
-                modality="text",
-            )
+            text_config = config.get_sub_config(modality="text")
             if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not

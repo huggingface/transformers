@@ -482,18 +482,14 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             max_new_tokens = 10
 
             # here we force to not stop at eos and go until max-length
-            model.generation_config.eos_token_id = model.config.get_sub_config(
-                modality="text",
-            ).eos_token_id = -1
+            model.generation_config.eos_token_id = model.config.get_sub_config(modality="text").eos_token_id = -1
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_sub_config(
-                modality="text",
-            )
+            text_config = model.config.get_sub_config(modality="text")
             head_dim = (
                 getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )
@@ -614,9 +610,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_sub_config(
-                modality="text",
-            )
+            text_config = config.get_sub_config(modality="text")
             num_decoder_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)
@@ -1117,12 +1111,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(
-            input_size
-            > model.config.get_sub_config(
-                modality="text",
-            ).sliding_window
-        )
+        self.assertTrue(input_size > model.config.get_sub_config(modality="text").sliding_window)
 
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
@@ -1148,12 +1137,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(
-            input_size
-            > model.config.get_sub_config(
-                modality="text",
-            ).sliding_window
-        )
+        self.assertTrue(input_size > model.config.get_sub_config(modality="text").sliding_window)
 
         out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[
             :, input_size:

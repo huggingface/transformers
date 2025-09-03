@@ -1051,9 +1051,7 @@ class GenerationTesterMixin:
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_sub_config(
-                modality="text",
-            )
+            text_config = config.get_sub_config(modality="text")
             num_decoder_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)
@@ -1328,9 +1326,7 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_sub_config(
-                modality="text",
-            )
+            text_config = model.config.get_sub_config(modality="text")
             head_dim = (
                 getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )

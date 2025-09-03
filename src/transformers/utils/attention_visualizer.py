@@ -150,9 +150,7 @@ class AttentionMaskVisualizer:
         config = AutoConfig.from_pretrained(model_name)
         self.image_token = "<img>"
         if hasattr(
-            config.get_sub_config(
-                modality="text",
-            ),
+            config.get_sub_config(modality="text"),
             "sliding_window",
         ):
             self.sliding_window = getattr(

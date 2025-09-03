@@ -808,9 +808,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
-            config = self.config.get_sub_config(
-                modality="text",
-            )
+            config = self.config.get_sub_config(modality="text")
             factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):

@@ -1048,9 +1048,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
     ) -> dict:
         # Prepare mask arguments
         mask_kwargs = {
-            "config": config.get_sub_config(
-                modality="text",
-            ),
+            "config": config.get_sub_config(modality="text"),
             "input_embeds": input_embeds,
             "attention_mask": attention_mask,
             "cache_position": cache_position,

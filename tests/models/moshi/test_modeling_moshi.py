@@ -226,18 +226,14 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -261,9 +257,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
@@ -295,19 +289,13 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
@@ -338,18 +326,14 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            model_vocab_size = config.get_sub_config(modality="text").vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_sub_config(
-                modality="text",
-            ).vocab_size
+            new_model_vocab_size = model.config.get_sub_config(modality="text").vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)

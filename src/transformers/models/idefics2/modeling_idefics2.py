@@ -473,9 +473,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         std = getattr(
             self.config,
             "initializer_range",
-            self.config.get_sub_config(
-                modality="text",
-            ).initializer_range,
+            self.config.get_sub_config(modality="text").initializer_range,
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
