@@ -64,6 +64,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
             # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
+            # TODO: Discuss with `mistral-common` maintainers: after a fix being done there, remove this `revision` hack
             revision=None,
         )
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
