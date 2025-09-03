@@ -34,7 +34,7 @@ import gpustat
 import torch
 
 
-class WithGPU(TypedDict):
+class GPUMetrics(TypedDict):
     """GPU monitoring result with GPU metrics."""
     gpu_utilization_mean: float
     gpu_utilization_max: float
@@ -318,7 +318,7 @@ class GPUMonitor:
         self.thread.start()
         self.logger.debug("GPU monitoring started")
         
-    def stop_and_collect(self) -> Union[WithGPU, NoGPU]:
+    def stop_and_collect(self) -> Union[GPUMetrics, NoGPU]:
         """Stop monitoring and return collected metrics."""
         if not self.gpu_available:
             return NoGPU(
@@ -332,7 +332,7 @@ class GPUMonitor:
             self.thread.join()
         
         if self.gpu_utilization:
-            metrics = WithGPU(
+            metrics = GPUMetrics(
                 gpu_utilization_mean=statistics.mean(self.gpu_utilization),
                 gpu_utilization_max=max(self.gpu_utilization),
                 gpu_utilization_min=min(self.gpu_utilization),
