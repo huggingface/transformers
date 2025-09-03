@@ -242,6 +242,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openpangu_dense import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
