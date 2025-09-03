@@ -1493,11 +1493,6 @@ class GenerationMixin(ContinuousMixin):
         return transition_scores
 
     def _validate_generation_mode(self, generation_mode, generation_mode_kwargs):
-        if "synced_gpus" not in generation_mode_kwargs:
-            generation_mode_kwargs["synced_gpus"] = (
-                is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
-            ) and dist.get_world_size() > 1
-
         if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
@@ -2177,10 +2172,13 @@ class GenerationMixin(ContinuousMixin):
         generation_mode_kwargs = {
             "tokenizer": kwargs.pop("tokenizer", None),
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
-            "synced_gpus": synced_gpus,
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
+        if synced_gpus is not None:
+            generation_mode_kwargs["synced_gpus"] = (
+                is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+            ) and dist.get_world_size() > 1
         generation_mode_kwargs = {k: v for k, v in generation_mode_kwargs.items() if v is not None}
         # Custom_generate callables can have their own set of arguments
         # To extract them, we compare the signature with the standard _sample method
