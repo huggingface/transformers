@@ -40,7 +40,6 @@ if is_torch_available():
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
     )
-    from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeRotaryEmbedding
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -85,7 +84,6 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Qwen2MoeModelTester
-    rotary_embedding_layer = Qwen2MoeRotaryEmbedding
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(

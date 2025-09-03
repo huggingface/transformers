@@ -38,7 +38,6 @@ if is_torch_available():
         ApertusForTokenClassification,
         ApertusModel,
     )
-    from transformers.models.apertus.modeling_apertus import ApertusRotaryEmbedding
 
 
 class ApertusModelTester(CausalLMModelTester):
@@ -72,7 +71,6 @@ class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = ApertusModelTester
-    rotary_embedding_layer = ApertusRotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

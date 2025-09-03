@@ -82,13 +82,12 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
-    rotary_embedding_layer = DeepseekV2RotaryEmbedding
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
 
-    def test_model_rope_scaling(self):
+    def test_model_rope_scaling_frequencies(self):
         """
         Overwritten: DeepseekV2 implements RoPE in the complex domain, as opposed to in the real domain with
         `sin` and `cos`. Nevertheless, the checks are the same as in the original test.

@@ -41,7 +41,6 @@ if is_torch_available():
         Qwen3ForTokenClassification,
         Qwen3Model,
     )
-    from transformers.models.qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -72,7 +71,6 @@ class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Qwen3ModelTester
-    rotary_embedding_layer = Qwen3RotaryEmbedding
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen3Model,

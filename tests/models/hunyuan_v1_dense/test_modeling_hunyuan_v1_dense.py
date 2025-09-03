@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import HunYuanDenseV1Config, is_torch_available
 from transformers.testing_utils import (
     cleanup,
@@ -55,7 +57,6 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = HunYuanDenseV1ModelTester
-    rotary_embedding_layer = None  # TODO: add RoPE tests, HunYuan has unique RoPE parameters
     pipeline_model_mapping = (
         {
             "feature-extraction": HunYuanDenseV1Model,
@@ -77,6 +78,15 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("HunYuanDenseV1's RoPE has a custom config parameter")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

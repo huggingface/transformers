@@ -41,7 +41,6 @@ if is_torch_available():
         Ernie4_5_MoeForCausalLM,
         Ernie4_5_MoeModel,
     )
-    from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import Ernie4_5_MoeRotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -76,7 +75,6 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
-    rotary_embedding_layer = Ernie4_5_MoeRotaryEmbedding
 
     @require_flash_attn
     @require_torch_gpu

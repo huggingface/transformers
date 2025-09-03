@@ -42,7 +42,6 @@ if is_torch_available():
         Glm4ForTokenClassification,
         Glm4Model,
     )
-    from transformers.models.glm4.modeling_glm4 import Glm4RotaryEmbedding
 
 
 class Glm4ModelTester(CausalLMModelTester):
@@ -75,7 +74,6 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
-    rotary_embedding_layer = Glm4RotaryEmbedding
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 

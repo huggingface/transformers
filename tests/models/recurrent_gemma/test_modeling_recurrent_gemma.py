@@ -60,8 +60,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
-    # RecurrentGemma doesn't have `max_position_embeddings`, so it doesn't make sense to test RoPE scaling
-    rotary_embedding_layer = None
 
     @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
@@ -146,6 +144,15 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

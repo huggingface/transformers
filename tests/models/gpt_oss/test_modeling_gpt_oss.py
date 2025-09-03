@@ -52,7 +52,6 @@ if is_torch_available():
         GptOssForTokenClassification,
         GptOssModel,
     )
-    from transformers.models.gpt_oss.modeling_gpt_oss import GptOssRotaryEmbedding
 
     NUM_GPUS = torch.cuda.device_count()
 
@@ -100,7 +99,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
-    rotary_embedding_layer = GptOssRotaryEmbedding
 
     def setUp(self):
         self.model_tester = GptOssModelTester(self)

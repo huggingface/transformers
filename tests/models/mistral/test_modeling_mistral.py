@@ -48,7 +48,6 @@ if is_torch_available():
         MistralForTokenClassification,
         MistralModel,
     )
-    from transformers.models.mistral.modeling_mistral import MistralRotaryEmbedding
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -89,7 +88,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = MistralModelTester
-    rotary_embedding_layer = MistralRotaryEmbedding
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(

@@ -37,7 +37,6 @@ if is_torch_available():
         Ernie4_5ForCausalLM,
         Ernie4_5Model,
     )
-    from transformers.models.ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding
 
 
 class Ernie4_5ModelTester(CausalLMModelTester):
@@ -69,7 +68,6 @@ class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Ernie4_5ModelTester
-    rotary_embedding_layer = Ernie4_5RotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

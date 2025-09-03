@@ -30,7 +30,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import Lfm2Config, Lfm2ForCausalLM, Lfm2Model
-    from transformers.models.lfm2.modeling_lfm2 import Lfm2RotaryEmbedding
 
 
 class Lfm2ModelTester(CausalLMModelTester):
@@ -63,7 +62,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2ModelTester
-    rotary_embedding_layer = Lfm2RotaryEmbedding
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 

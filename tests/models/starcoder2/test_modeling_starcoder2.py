@@ -39,7 +39,6 @@ if is_torch_available():
         Starcoder2ForTokenClassification,
         Starcoder2Model,
     )
-    from transformers.models.starcoder2.modeling_starcoder2 import Starcoder2RotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -63,7 +62,6 @@ class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Starcoder2ModelTester
-    rotary_embedding_layer = Starcoder2RotaryEmbedding
     pipeline_model_mapping = (
         {
             "feature-extraction": Starcoder2Model,

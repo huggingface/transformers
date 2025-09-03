@@ -18,7 +18,7 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import PretrainedConfig, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -230,7 +230,6 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_pruning = False
     model_tester_class = None
     all_model_classes = None
-    rotary_embedding_layer = None  # Enables RoPE tests if set
     pipeline_model_mapping = None
 
     def setUp(self):
@@ -323,9 +322,11 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
         that a few basic model output properties are honored.
         """
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not _config_supports_rope_scaling(config):
+            self.skipTest("This model does not support RoPE scaling")
+
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
@@ -355,11 +356,40 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    def test_model_rope_scaling(self):
+    def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not _config_supports_rope_scaling(config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # Retrieves the RoPE layer class from the base model class. Assumption: the RoPE layer is under a few
+        # possible attribute names and is found in the base model class. In some (inconsistent) cases, it may be
+        # found in the self_attention layer instead.
+        base_model = self.model_tester.base_model_class(config)
+        possible_rope_attributes = [
+            "rotary_emb",  # most common case
+            "global_rotary_emb",
+            "local_rotary_emb",
+        ]
+        for rope_attr in possible_rope_attributes:
+            rope_class = getattr(base_model, rope_attr, None)  # expected pattern
+            if (
+                rope_class is None
+                and hasattr(base_model, "layers")
+                and hasattr(base_model.layers[0], "self_attention")
+            ):
+                rope_class = getattr(base_model.layers[0].self_attention, rope_attr, None)  # fallback
+            if rope_class is not None:
+                rope_class = type(rope_class)
+                break
+
+        if rope_class is None:
+            raise ValueError(
+                f"RoPE layer not found in the expected places (base class or self_attention) under any of the "
+                f"expected attribute names {possible_rope_attributes}"
+            )
+
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
@@ -375,7 +405,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check original RoPE
         config.rope_scaling = {"rope_type": "default"}
-        original_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        original_rope = rope_class(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -384,7 +414,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
         config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        linear_scaling_rope = rope_class(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -398,7 +428,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
         config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        ntk_scaling_rope = rope_class(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -412,7 +442,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        yarn_scaling_rope = rope_class(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
@@ -457,3 +487,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
                 torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)
+
+
+def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
+    """Returns whether a certain model config supports RoPE scaling parameterization."""
+    # Has rope_scaling -> model was designed with rope scaling in mind
+    # Has rope_theta -> probably an older model, but should support rope scaling as well
+    main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
+    sub_config_has_rope = any(
+        hasattr(config[sub_config], "rope_scaling") or hasattr(config[sub_config], "rope_theta")
+        for sub_config in config.sub_configs.keys()
+    )
+    return main_config_has_rope or sub_config_has_rope

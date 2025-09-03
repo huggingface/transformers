@@ -48,7 +48,6 @@ if is_torch_available():
         Exaone4ForTokenClassification,
         Exaone4Model,
     )
-    from transformers.models.exaone4.modeling_exaone4 import Exaone4RotaryEmbedding
 
 
 class Exaone4ModelTester(CausalLMModelTester):
@@ -90,7 +89,6 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
-    rotary_embedding_layer = Exaone4RotaryEmbedding
     model_split_percents = [0.5, 0.6]
 
     def setUp(self):
