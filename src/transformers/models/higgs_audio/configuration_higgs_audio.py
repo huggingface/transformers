@@ -37,7 +37,7 @@ class HiggsAudioConfig(PretrainedConfig):
             - dual_ffn_fast_forward:
                 We pick a few layers in the LLM backbone to plug-in the audio FFN. For the remaining layers,
                 the audio hidden states will be directly fast-forward to the next layer.
-        audio_dual_ffn_layers (`list[int]`, *optional*):
+        audio_dual_ffn_layers (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]`):
             The layers in the LLM backbone to plug-in the dual FFN layer (mixture of audio FFN and text FFN).
         encode_audio_in_tokens (`bool`, *optional*, defaults to `True`):
             Whether to encode the input audio directly as discrete audio tokens.
