@@ -34,18 +34,26 @@ You can find all the original DialoGPT checkpoints under the
 > Click on the DialoGPT models in the right sidebar for more examples of how to apply DialoGPT to different 
 > conversational tasks.
 
+The example below demonstrates how to generate dialogue responses with 
+[Pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines), 
+[AutoModel](https://huggingface.co/docs/transformers/model_doc/auto), and from the command line.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*We present a large, tunable neural conversational response generation model, DialoGPT (dialogue generative pre-trained
-transformer). Trained on 147M conversation-like exchanges extracted from Reddit comment chains over a period spanning
-from 2005 through 2017, DialoGPT extends the Hugging Face PyTorch transformer to attain a performance close to human
-both in terms of automatic and human evaluation in single-turn dialogue settings. We show that conversational systems
-that leverage DialoGPT generate more relevant, contentful and context-consistent responses than strong baseline
-systems. The pre-trained model and training pipeline are publicly released to facilitate research into neural response
-generation and the development of more intelligent open-domain dialogue systems.*
+```py
+import torch
+from transformers import pipeline
 
-The original code can be found [here](https://github.com/microsoft/DialoGPT).
+pipeline = pipeline(
+    task="text-generation",
+    model="microsoft/DialoGPT-medium",
+    torch_dtype=torch.float16,
+    device=0
+)
+response = pipeline("User: Hello, how are you? DialoGPT:", max_new_tokens=50)
+print(response[0]["generated_text"])
+```
 
 ## Usage tips
 
