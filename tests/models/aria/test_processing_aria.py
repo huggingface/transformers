@@ -25,7 +25,7 @@ from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -273,7 +273,7 @@ And who is that?<|im_end|>
 
         # Now test the ability to return dict
         messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")}
         )
         out_dict = processor.apply_chat_template(
             messages,
@@ -290,7 +290,7 @@ And who is that?<|im_end|>
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
 
         _ = processor(

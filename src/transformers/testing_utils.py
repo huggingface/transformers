@@ -103,7 +103,6 @@ from .utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
-    is_jieba_available,
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
@@ -508,13 +507,6 @@ def require_rjieba(test_case):
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
 
 
-def require_jieba(test_case):
-    """
-    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
-    """
-    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
-
-
 def require_jinja(test_case):
     """
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
@@ -601,7 +593,16 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel("kernels-community/flash-attn")
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):

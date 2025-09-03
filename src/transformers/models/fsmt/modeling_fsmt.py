@@ -650,7 +650,7 @@ class FSMTDecoder(nn.Module):
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -793,7 +793,7 @@ class Attention(nn.Module):
             else:
                 curr_past_key_value = layer_state
 
-        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
+        # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
@@ -905,9 +905,6 @@ class FSMTModel(PretrainedFSMTModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:

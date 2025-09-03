@@ -113,7 +113,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -132,7 +132,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Base Paligemma model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
@@ -252,7 +252,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:

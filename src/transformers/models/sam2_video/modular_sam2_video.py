@@ -16,8 +16,9 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -27,28 +28,12 @@ import torch.utils.checkpoint
 from torch import Tensor
 from tqdm import tqdm
 
-from transformers.models.sam2.configuration_sam2 import (
-    Sam2MaskDecoderConfig,
-    Sam2PromptEncoderConfig,
-)
-from transformers.models.sam2.modeling_sam2 import (
-    Sam2FeedForward,
-    Sam2ImageSegmentationOutput,
-    Sam2LayerNorm,
-    Sam2Model,
-    Sam2SinePositionEmbedding,
-    Sam2TwoWayAttentionBlock,
-    eager_attention_forward,
-)
-from transformers.models.sam2.processing_sam2 import Sam2Processor
-from transformers.utils.generic import OutputRecorder, TransformersKwargs
-
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -57,8 +42,23 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.generic import OutputRecorder, TransformersKwargs
 from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.configuration_sam2 import (
+    Sam2MaskDecoderConfig,
+    Sam2PromptEncoderConfig,
+)
+from ..sam2.modeling_sam2 import (
+    Sam2FeedForward,
+    Sam2ImageSegmentationOutput,
+    Sam2LayerNorm,
+    Sam2Model,
+    Sam2SinePositionEmbedding,
+    Sam2TwoWayAttentionBlock,
+    eager_attention_forward,
+)
+from ..sam2.processing_sam2 import Sam2Processor
 
 
 if is_torch_available():
@@ -637,7 +637,7 @@ class Sam2VideoProcessor(Sam2Processor):
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
-        Sam2Processor().__init__(image_processor, video_processor, **kwargs)
+        ProcessorMixin.__init__(self, image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
@@ -1320,14 +1320,14 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
             padding=config.memory_fuser_padding,
             groups=config.memory_fuser_embed_dim,
         )  # depthwise conv
-        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.memory_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
             config.memory_fuser_embed_dim, config.memory_fuser_intermediate_dim
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(config.memory_fuser_intermediate_dim, config.memory_fuser_embed_dim)
         self.scale = nn.Parameter(
-            config.memory_fuser_layer_scale_init_value * torch.ones((config.memory_fuser_embed_dim)),
+            config.memory_fuser_layer_scale_init_value * torch.ones(config.memory_fuser_embed_dim),
             requires_grad=True,
         )
 
@@ -1370,7 +1370,7 @@ class Sam2VideoMaskDownSamplerLayer(nn.Module):
             stride=config.mask_downsampler_stride,
             padding=config.mask_downsampler_padding,
         )
-        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.mask_downsampler_hidden_act]
 
     def forward(self, x):
@@ -1604,7 +1604,7 @@ class Sam2VideoModel(Sam2Model):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1635,9 +1635,7 @@ class Sam2VideoModel(Sam2Model):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
         elif input_points is not None:
             num_objects = input_points.shape[1]

@@ -614,6 +614,7 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -1291,7 +1292,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 

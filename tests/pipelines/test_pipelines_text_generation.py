@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -555,3 +556,20 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # forcing special tokens to be included in the output
         output = generator(chat, max_new_tokens=1000, do_sample=False, skip_special_tokens=False)
         self.assertIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+    @require_torch
+    def test_forward_tokenizer_kwargs(self):
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        model = "hf-internal-testing/tiny-gpt2-with-chatml-template"
+        text_generator = pipeline("text-generation", model, max_new_tokens=5)
+        tokenizer = text_generator.tokenizer
+
+        with patch.object(tokenizer, "apply_chat_template", wraps=tokenizer.apply_chat_template) as mock:
+            text_generator(chat, tokenizer_encode_kwargs={"enable_thinking": True})
+            self.assertGreater(mock.call_count, 0)
+            kw_call_args = mock.call_args[1]
+            self.assertIn("enable_thinking", kw_call_args)
+            self.assertEqual(kw_call_args["enable_thinking"], True)

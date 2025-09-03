@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -104,13 +103,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
-
 
 @require_torch_accelerator
 @require_read_token
@@ -172,6 +164,7 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
@@ -185,7 +178,13 @@ class MistralIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
+            input_ids,
+            max_new_tokens=20,
+            temperature=0,
+            dola_layers="low",
+            repetition_penalty=1.2,
+            trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -339,16 +338,26 @@ class MistralIntegrationTest(unittest.TestCase):
         """Test that we can correctly generate beyond the sliding window. This is non-trivial as Mistral will use
         a DynamicCache with only sliding layers."""
 
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         model_id = "mistralai/Mistral-7B-v0.1"
         EXPECTED_COMPLETIONS = [
-            "This is a nice place. This is a nice place. This is a nice place. This is",
+            "scenery, scenery, scenery, scenery, scenery,",
             ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
         ]
 
         input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, 15 more than 4096
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
+
+        if attn_implementation == "eager":
+            input_text = input_text[:1]
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
@@ -358,14 +367,14 @@ class MistralIntegrationTest(unittest.TestCase):
         )
 
         # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
+        batch_size, input_size = inputs.input_ids.shape
         self.assertTrue(input_size > model.config.sliding_window)
 
         # Should already be Dynamic by default, but let's make sure!
         out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
-        output_text = tokenizer.batch_decode(out.sequences[:, input_size:])
+        output_text = tokenizer.batch_decode(out.sequences[:batch_size, input_size:])
 
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS[:batch_size])
 
         # Let's check that the dynamic cache has hybrid layers!
         dynamic_cache = out.past_key_values

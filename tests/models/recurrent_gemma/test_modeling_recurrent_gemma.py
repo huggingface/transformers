@@ -130,32 +130,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     @pytest.mark.generate
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
     def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_constrained_beam_search_generate(self):
         pass
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")

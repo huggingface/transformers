@@ -33,6 +33,7 @@ Add the `gguf_file` parameter to [`~PreTrainedModel.from_pretrained`] to specify
 
 ```py
 # pip install gguf
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"

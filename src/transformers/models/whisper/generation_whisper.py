@@ -140,7 +140,7 @@ def _pad_to_max_length(
     timestamp_begin=None,
 ):
     """
-    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    skip_ending_double_timestamps: when the segment ended with two timestamp tokens, whether to ignore the last timestamp token
     see https://github.com/huggingface/transformers/pull/35750
 
     _pad_to_max_length is used in different contexts:
@@ -372,7 +372,7 @@ class WhisperGenerationMixin(GenerationMixin):
             jump_times = time_indices[jumps] * time_precision
 
             # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
-            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # (indeed contrary to OAI that re-run a full forward to retrieve cross attentions for each token and therefore also the last one predicted, we retrieve
             # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
             # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0

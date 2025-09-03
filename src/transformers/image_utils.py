@@ -21,7 +21,6 @@ from typing import Optional, Union
 
 import numpy as np
 import requests
-from packaging import version
 
 from .utils import (
     ExplicitEnum,
@@ -51,10 +50,7 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-        PILImageResampling = PIL.Image.Resampling
-    else:
-        PILImageResampling = PIL.Image
+    PILImageResampling = PIL.Image.Resampling
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode
@@ -233,7 +229,7 @@ def make_flat_list_of_images(
     if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and all(is_valid_list_of_images(images_i) for images_i in images)
+        and all(is_valid_list_of_images(images_i) or not images_i for images_i in images)
     ):
         return [img for img_list in images for img in img_list]
 
@@ -255,7 +251,7 @@ def make_flat_list_of_images(
 def make_nested_list_of_images(
     images: Union[list[ImageInput], ImageInput],
     expected_ndims: int = 3,
-) -> ImageInput:
+) -> list[ImageInput]:
     """
     Ensure that the output is a nested list of images.
     Args:
@@ -270,7 +266,7 @@ def make_nested_list_of_images(
     if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and all(is_valid_list_of_images(images_i) for images_i in images)
+        and all(is_valid_list_of_images(images_i) or not images_i for images_i in images)
     ):
         return images
 
@@ -535,6 +531,7 @@ def validate_preprocess_arguments(
     do_resize: Optional[bool] = None,
     size: Optional[dict[str, int]] = None,
     resample: Optional["PILImageResampling"] = None,
+    interpolation: Optional["InterpolationMode"] = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
@@ -559,8 +556,13 @@ def validate_preprocess_arguments(
     if do_center_crop and crop_size is None:
         raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
-    if do_resize and (size is None or resample is None):
-        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
+    if interpolation is not None and resample is not None:
+        raise ValueError(
+            "Only one of `interpolation` and `resample` should be specified, depending on image processor type."
+        )
+
+    if do_resize and not (size is not None and (resample is not None or interpolation is not None)):
+        raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
 
 
 # In the future we can add a TF implementation here when we have TF models.
