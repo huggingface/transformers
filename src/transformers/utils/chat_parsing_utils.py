@@ -166,10 +166,20 @@ def recursive_parse(
         if node_content in mapping:
             node_content = mapping[node_content]
             offset = None  # Don't try to track offsets through mappings
-        else:
-            raise ValueError(
-                f"Value {node_content} not found in x-mapping.\nMapping: {mapping}\nSchema: {node_schema}"
+
+    if "x-mapping-regex" in node_schema:
+        if not isinstance(node_content, str):
+            raise TypeError(
+                f"Schema node with type {node_type} cannot use x-mapping-regex on non-string content.\n"
+                f"Content: {node_content}\n"
+                f"Schema: {node_schema}"
             )
+        mapping_regex = node_schema["x-mapping-regex"]
+        for pattern, replacement in mapping_regex.items():
+            substitution = re.sub(pattern, replacement, node_content, flags=re.DOTALL)
+            if substitution != node_content:
+                offset = None  # If we make a substitution, we can't track offsets anymore
+                node_content = substitution
 
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
@@ -221,16 +231,35 @@ def recursive_parse(
         if not isinstance(node_content, list):
             raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
         parsed_schema = []
-        # TODO Handle tuples/prefixItems?
-        for item in node_content:
-            if isinstance(item, offset_content):
-                item_content = item.content
-                item_offset = item.offset
-            else:
-                item_content = item
-                item_offset = offset
-            parsed_schema.append(recursive_parse(item_content, node_schema["items"], scope_vars, item_offset))
-        return parsed_schema
+        if "items" in node_schema:
+            for item in node_content:
+                if isinstance(item, offset_content):
+                    item_content = item.content
+                    item_offset = item.offset
+                else:
+                    item_content = item
+                    item_offset = offset
+                parsed_schema.append(recursive_parse(item_content, node_schema["items"], scope_vars, item_offset))
+            return parsed_schema
+        elif "prefixItems" in node_schema:
+            if len(node_content) != len(node_schema["prefixItems"]):
+                raise ValueError(
+                    f"Array node has {len(node_content)} items, but schema only has "
+                    f"{len(node_schema['prefixItems'])} prefixItems defined.\n"
+                    f"Content: {node_content}\n"
+                    f"Schema: {node_schema}"
+                )
+            for item, item_schema in zip(node_content, node_schema["prefixItems"]):
+                if isinstance(item, offset_content):
+                    item_content = item.content
+                    item_offset = item.offset
+                else:
+                    item_content = item
+                    item_offset = offset
+                parsed_schema.append(recursive_parse(item_content, item_schema, scope_vars, item_offset))
+            return parsed_schema
+        else:
+            raise ValueError(f"Array node has no items or prefixItems schema defined.\nSchema: {node_schema}")
     elif node_type in ("string", "integer", "number", "boolean"):
         if not isinstance(node_content, str):
             raise TypeError(f"Expected a string for schema node with type {node_type}, got {node_content}")
