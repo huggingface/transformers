@@ -3930,8 +3930,13 @@ class Trainer:
                     self._attn_mask_causal_checked = True
                 if self._attn_mask_causal_checked:
                     # Add to buffers only after validation (or if validation already passed)
-                    buffers.append(inputs["attention_mask"])
-                    buffer_seq_dims.append(1)
+                    attention_mask = inputs["attention_mask"]
+                    if attention_mask.dim() == 2:
+                        buffers.append(attention_mask)
+                        buffer_seq_dims.append(1)
+                    else:
+                        # Other dimensionality; keep as-is without sharding to avoid incorrect splits
+                        pass
             # Include position_ids in context parallelism splitting
             if "position_ids" in inputs and inputs["position_ids"] is not None:
                 buffers.append(inputs["position_ids"])
