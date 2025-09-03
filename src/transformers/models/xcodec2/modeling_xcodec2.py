@@ -27,7 +27,6 @@ from functools import partial, wraps
 from math import ceil
 from typing import Callable, Optional, Union
 
-import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -639,21 +638,17 @@ class EncoderBlock(nn.Module):
 class Xcodec2CodecEncoder(nn.Module):
     def __init__(
         self,
-        ngf=48,
-        up_ratios=[2, 2, 4, 4, 5],
+        d_model=48,
+        downsampling_ratios=[2, 2, 4, 4, 5],
         dilations=(1, 3, 9),
         hidden_dim=1024,
     ):
         super().__init__()
-        self.hop_length = np.prod(up_ratios)
-        self.ngf = ngf
-        self.up_ratios = up_ratios
 
-        d_model = ngf
         self.initial_conv = nn.Conv1d(1, d_model, kernel_size=7, padding=3)
 
         self.encoder_blocks = nn.ModuleList()
-        for i, stride in enumerate(up_ratios):
+        for i, stride in enumerate(downsampling_ratios):
             d_model *= 2
             self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
 
@@ -1358,7 +1353,7 @@ class Xcodec2CodecDecoderVocos(nn.Module):
         self.hop_length = config.hop_length
 
         self.quantizer = Xcodec2ResidualFSQ(
-            dim=config.vq_dim, levels=[4, 4, 4, 4, 4, 4, 4, 4], num_quantizers=config.num_quantizers
+            dim=config.vq_dim, levels=config.vq_levels, num_quantizers=config.num_quantizers
         )
 
         self.backbone = Xcodec2VocosBackbone(config=config)
@@ -1493,7 +1488,8 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
-            nn.init.constant_(module.bias, 0)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, Xcodec2SnakeBeta):
             module.alpha.data.fill_(1.0)
             module.beta.data.fill_(1.0)
@@ -1534,7 +1530,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
 
-        self.acoustic_encoder = Xcodec2CodecEncoder()
+        self.acoustic_encoder = Xcodec2CodecEncoder(
+            downsampling_ratios=config.downsampling_ratios, hidden_dim=config.encoder_hidden_size
+        )
         self.decoder = Xcodec2CodecDecoderVocos(config=config)
         self.fc_prior = nn.Linear(config.intermediate_size, config.intermediate_size)
         self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)

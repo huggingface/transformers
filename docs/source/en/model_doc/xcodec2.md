@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2025-04-29.*
 
 # X-Codec2
 
@@ -62,13 +63,13 @@ This model was contributed by [Steven Zheng](https://huggingface.co/Steveeeeeeen
 The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
 
 
-## XCodec2Config
+## Xcodec2Config
 
-[[autodoc]] XCodec2Config
+[[autodoc]] Xcodec2Config
 
-## XCodec2Model
+## Xcodec2Model
 
-[[autodoc]] XCodec2Model
+[[autodoc]] Xcodec2Model
     - decode
     - encode
     - forward

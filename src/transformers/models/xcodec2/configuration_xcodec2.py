@@ -14,15 +14,15 @@
 # limitations under the License.
 """Xcodec2 model configuration"""
 
-
 import math
-from typing import Optional, Union
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from typing import Union
 
 import numpy as np
 
 from transformers import AutoConfig, Wav2Vec2BertConfig
+
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -67,16 +67,8 @@ class Xcodec2Config(PretrainedConfig):
             Head dimension for the model.
         vq_dim (`int`, *optional*, defaults to 2048):
             Dimension for the VQ codebook.
-        vq_commit_weight (`float`, *optional*, defaults to 0.25):
-            Commit weight for the VQ.
-        vq_weight_init (`bool`, *optional*, defaults to `False`):
-            Whether to initialize VQ weights.
-        vq_full_commit_loss (`bool`, *optional*, defaults to `False`):
-            Whether to use full commit loss for the VQ.
-        codebook_size (`int`, *optional*, defaults to 16384):
-            Number of discrete codes that make up VQVAE.
-        codebook_dim (`int`, *optional*, defaults to 16):
-            Dimension of the codebook vectors. If not defined, uses `hidden_size`.
+        vq_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
+            Levels for the VQ codebook.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -105,11 +97,7 @@ class Xcodec2Config(PretrainedConfig):
         rms_norm_eps: float = 1e-6,
         head_dim: int = 64,
         vq_dim: int = 2048,
-        vq_commit_weight: float = 0.25,
-        vq_weight_init: bool = False,
-        vq_full_commit_loss: bool = False,
-        codebook_size: int = 16384,
-        codebook_dim: int = 16,
+        vq_levels: list = [4, 4, 4, 4, 4, 4, 4, 4],
         max_position_embeddings: int = 4096,
         rope_theta: float = 10000.0,
         **kwargs,
@@ -118,7 +106,7 @@ class Xcodec2Config(PretrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
 
-        self.semantic_model_id = "facebook/w2v-bert-2.0"    # needed for feature extractor
+        self.semantic_model_id = "facebook/w2v-bert-2.0"  # needed for feature extractor
         if semantic_model_config is None:
             self.semantic_model_config = Wav2Vec2BertConfig()
         elif isinstance(semantic_model_config, dict):
@@ -157,17 +145,12 @@ class Xcodec2Config(PretrainedConfig):
         # single codebook VQ
         self.num_quantizers = 1
         self.vq_dim = vq_dim
-        self.vq_commit_weight = vq_commit_weight
-        self.vq_weight_init = vq_weight_init
-        self.vq_full_commit_loss = vq_full_commit_loss
-        # TODO not being used, remove or figure out if something hardcoded
-        self.codebook_size = codebook_size
-        self.codebook_dim = codebook_dim
+        self.vq_levels = vq_levels
 
     @property
     def frame_rate(self) -> int:
         return math.ceil(self.sampling_rate / self.hop_length)
-    
+
     @property
     def semantic_hidden_size(self) -> int:
         return self.semantic_model_config.hidden_size
@@ -181,12 +164,20 @@ class Xcodec2Config(PretrainedConfig):
     @property
     def hop_length(self) -> int:
         return int(np.prod(self.downsampling_ratios))
-    
+
     @property
     def hidden_size(self) -> int:
-        # Decoder consists of a Transformer for acoustic reconstruction
+        # For Transformer used in decoder
         # See Decoder > Acoustic Reconstruction on p. 3 of https://arxiv.org/pdf/2502.04128
         return self.decoder_hidden_size
-    
+
+    @property
+    def codebook_size(self) -> int:
+        return int(np.prod(self.vq_levels))
+
+    @property
+    def codebook_dim(self) -> int:
+        return len(self.vq_levels)
+
 
 __all__ = ["Xcodec2Config"]

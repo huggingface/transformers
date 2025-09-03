@@ -15,11 +15,11 @@
 """Convert Xcodec2 checkpoints."""
 
 import argparse
+import json
 import re
 
 import safetensors
 import torch
-import json
 
 from transformers import (
     AutoConfig,
@@ -63,37 +63,37 @@ def _convert_model(state_dict, hf_model):
         # old names can be found here: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L12
         if "CodecEnc" in old_k:
             k = old_k.replace("CodecEnc", "acoustic_encoder")
-            
+
             # Handle initial convolutional layer (conv_blocks.0 -> initial_conv)
             if "conv_blocks.0" in k:
                 k = k.replace("conv_blocks.0", "initial_conv")
-            
+
             # Handle final layers (conv_final_block.0 -> final_activation, conv_final_block.1 -> final_conv)
             elif "conv_final_block.0" in k:
                 k = k.replace("conv_final_block.0", "final_activation")
             elif "conv_final_block.1" in k:
                 k = k.replace("conv_final_block.1", "final_conv")
-            
+
             # Handle encoder blocks (conv_blocks.1, conv_blocks.2, etc. -> encoder_blocks.0, encoder_blocks.1, etc.)
             elif "conv_blocks." in k:
                 # Extract the block index (subtracting 1 because initial_conv replaced conv_blocks.0)
-                conv_block_pattern = r'acoustic_encoder\.conv_blocks\.(\d+)(.*)'
+                conv_block_pattern = r"acoustic_encoder\.conv_blocks\.(\d+)(.*)"
                 match = re.match(conv_block_pattern, k)
                 if match:
                     block_idx = int(match.group(1))
                     suffix = match.group(2)
                     # Adjust index (subtract 1 because we moved conv_blocks.0 to initial_conv)
-                    k = f"acoustic_encoder.encoder_blocks.{block_idx-1}{suffix}"
-            
+                    k = f"acoustic_encoder.encoder_blocks.{block_idx - 1}{suffix}"
+
             # Handle the ResidualUnit structure changes (nested blocks)
             # We're looking for patterns like "block.X.block.Y" where Y is 0-3
-            nested_block_pattern = r'(.*\.block\.\d+)\.block\.(\d+)(.*)'
+            nested_block_pattern = r"(.*\.block\.\d+)\.block\.(\d+)(.*)"
             match = re.match(nested_block_pattern, k)
             if match:
                 prefix = match.group(1)  # Everything before .block.Y
                 subblock_idx = int(match.group(2))  # Y value (0-3)
                 suffix = match.group(3)  # Everything after .block.Y
-                
+
                 # Map to the corresponding component in ResidualUnit
                 if subblock_idx == 0:
                     k = f"{prefix}.activation1{suffix}"
@@ -103,16 +103,16 @@ def _convert_model(state_dict, hf_model):
                     k = f"{prefix}.activation2{suffix}"
                 elif subblock_idx == 3:
                     k = f"{prefix}.conv2{suffix}"
-            
+
             # Handle the EncoderBlock structure changes
             # We're looking for patterns like "encoder_blocks.X.block.Y" where Y is 0-2 (residual units), 3 (activation), or 4 (conv)
-            encoder_block_pattern = r'(acoustic_encoder\.encoder_blocks\.\d+)\.block\.(\d+)(.*)'
+            encoder_block_pattern = r"(acoustic_encoder\.encoder_blocks\.\d+)\.block\.(\d+)(.*)"
             match = re.match(encoder_block_pattern, k)
             if match:
                 prefix = match.group(1)  # Everything before .block.Y (conv_blocks.X)
                 block_idx = int(match.group(2))  # Y value (0-4)
                 suffix = match.group(3)  # Everything after .block.Y
-                
+
                 # Map to the corresponding component in EncoderBlock
                 if block_idx < 3:  # First 3 are residual units (typically 0, 1, 2)
                     k = f"{prefix}.residual_units.{block_idx}{suffix}"
@@ -122,19 +122,19 @@ def _convert_model(state_dict, hf_model):
                     k = f"{prefix}.conv{suffix}"
         elif "generator" in old_k:
             k = old_k.replace("generator", "decoder")
-            
+
             # Handle prior_net -> prior_blocks conversion
             if "backbone.prior_net.0." in k:
                 k = k.replace("backbone.prior_net.0.", "backbone.prior_blocks.0.")
             elif "backbone.prior_net.1." in k:
                 k = k.replace("backbone.prior_net.1.", "backbone.prior_blocks.1.")
-            
+
             # Handle post_net -> post_blocks conversion
             elif "backbone.post_net.0." in k:
                 k = k.replace("backbone.post_net.0.", "backbone.post_blocks.0.")
             elif "backbone.post_net.1." in k:
                 k = k.replace("backbone.post_net.1.", "backbone.post_blocks.1.")
-            
+
             # Handle special cases for decoder.backbone.transformers
             elif "backbone.transformers" in k:
                 if "c_attn" in k:
@@ -155,10 +155,10 @@ def _convert_model(state_dict, hf_model):
                 elif "att_norm" in k:
                     k = k.replace("att_norm", "input_layernorm")
                 elif "ffn_norm" in k:
-                    k = k.replace("ffn_norm", "post_attention_layernorm")  
+                    k = k.replace("ffn_norm", "post_attention_layernorm")
         elif "SemanticEncoder_module" in old_k:
             k = old_k.replace("SemanticEncoder_module", "semantic_encoder")
-            
+
             # Handle residual_blocks -> individual modules conversion
             if "residual_blocks.0." in k:
                 k = k.replace("residual_blocks.0.", "act1.")
@@ -185,7 +185,7 @@ def _convert_model(state_dict, hf_model):
     n_params = param_count(hf_model)
 
     logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
-    
+
     del state_dict
 
     return hf_model
@@ -224,7 +224,7 @@ def convert_checkpoint(
     config = Xcodec2Config(
         encoder_hidden_size=encoder_hidden_size,
         decoder_hidden_size=decoder_hidden_size,
-        semantic_model_config=semantic_model_config
+        semantic_model_config=semantic_model_config,
     )
 
     # create model
@@ -237,7 +237,7 @@ def convert_checkpoint(
     if "best_state" in original_checkpoint:
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
-    
+
     # add weight norm, convert, and remove weight norm
     model.apply_weight_norm()
     model = _convert_model(original_checkpoint, model)
@@ -258,6 +258,7 @@ def convert_checkpoint(
         print("Pushing to the hub...")
         feature_extractor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
+
 
 """
 While there is training code on GitHub: https://github.com/zhenye234/X-Codec-2.0
@@ -284,9 +285,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model."
-    )
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )

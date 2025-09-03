@@ -25,7 +25,7 @@ from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
-from transformers import AutoFeatureExtractor, XCodec2Config
+from transformers import AutoFeatureExtractor, Xcodec2Config
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -40,11 +40,11 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import XCodec2Model
+    from transformers import Xcodec2Model
 
 
 @require_torch
-class XCodec2ModelTester:
+class Xcodec2ModelTester:
     def __init__(
         self,
         parent,
@@ -85,7 +85,7 @@ class XCodec2ModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return XCodec2Config(
+        return Xcodec2Config(
             sample_rate=self.sample_rate,
             audio_channels=self.num_channels,
             codebook_size=self.codebook_size,
@@ -93,7 +93,7 @@ class XCodec2ModelTester:
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = XCodec2Model(config=config).to(torch_device).eval()
+        model = Xcodec2Model(config=config).to(torch_device).eval()
         input_values = inputs_dict["input_values"]
         result = model(input_values)
         self.parent.assertEqual(
@@ -103,8 +103,8 @@ class XCodec2ModelTester:
 
 
 @require_torch
-class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (XCodec2Model,) if is_torch_available() else ()
+class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Xcodec2Model,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -121,9 +121,9 @@ class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = XCodec2ModelTester(self)
+        self.model_tester = Xcodec2ModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=XCodec2Config, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=Xcodec2Config, hidden_size=37, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -273,11 +273,11 @@ class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip(reason="The XCodec2Model does not have the usual `attention` logic")
+    @unittest.skip(reason="The Xcodec2Model does not have the usual `attention` logic")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="The XCodec2Model does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="The Xcodec2Model does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
 
@@ -397,11 +397,11 @@ class XCodec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-    @unittest.skip(reason="The XCodec2Model does not support right padding")
+    @unittest.skip(reason="The Xcodec2Model does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="The XCodec2Model does not have support dynamic compile yet")
+    @unittest.skip(reason="The Xcodec2Model does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -422,7 +422,7 @@ def compute_rmse(arr1, arr2):
 
 # @slow
 @require_torch
-class XCodec2IntegrationTest(unittest.TestCase):
+class Xcodec2IntegrationTest(unittest.TestCase):
     def test_integration(self):
         expected_rmse = 0.07212554663419724
         expected_codes = [
@@ -654,8 +654,8 @@ class XCodec2IntegrationTest(unittest.TestCase):
         ]
 
         librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "Steveeeeeeen/XCodec2"
-        model = XCodec2Model.from_pretrained(model_id).to(torch_device).eval()
+        model_id = "Steveeeeeeen/Xcodec2"
+        model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         librispeech = librispeech.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))

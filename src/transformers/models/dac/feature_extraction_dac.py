@@ -151,7 +151,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             padding=padding,
             return_attention_mask=padding,
-            pad_to_multiple_of=self.hop_length
+            pad_to_multiple_of=self.hop_length,
         )
         if padding:
             padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")

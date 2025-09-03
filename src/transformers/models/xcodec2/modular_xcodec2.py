@@ -19,9 +19,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial, wraps
 from math import ceil
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
-import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -41,14 +40,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModel, AutoFeatureExtractor
+from ..auto import AutoFeatureExtractor, AutoModel
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
     eager_attention_forward,
-    apply_rotary_pos_emb
 )
 from .configuration_xcodec2 import Xcodec2Config
 
@@ -100,7 +99,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-# See here for their attention implementation: 
+# See here for their attention implementation:
 # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/bs_roformer5.py
 class Xcodec2Attention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -112,12 +111,12 @@ class Xcodec2Attention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -186,7 +185,6 @@ class Xcodec2MLP(nn.Module):
 
 
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
-
     # Override forward to enforce non-causal attention
     def forward(
         self,
@@ -197,9 +195,9 @@ class Xcodec2DecoderLayer(LlamaDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,  # Non-causal typically doesn't use KV cache
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,  # Catches potential FlashAttention kwargs etc.
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if use_cache:
             logger.warning_once("KV Caching (`use_cache=True`) is typically not used with non-causal attention.")
             # Depending on use case, you might want to force use_cache = False here
@@ -493,35 +491,31 @@ class EncoderBlock(nn.Module):
 class Xcodec2CodecEncoder(nn.Module):
     def __init__(
         self,
-        ngf=48,
-        up_ratios=[2, 2, 4, 4, 5],
+        d_model=48,
+        downsampling_ratios=[2, 2, 4, 4, 5],
         dilations=(1, 3, 9),
         hidden_dim=1024,
     ):
         super().__init__()
-        self.hop_length = np.prod(up_ratios)
-        self.ngf = ngf
-        self.up_ratios = up_ratios
 
-        d_model = ngf
         self.initial_conv = nn.Conv1d(1, d_model, kernel_size=7, padding=3)
-        
+
         self.encoder_blocks = nn.ModuleList()
-        for i, stride in enumerate(up_ratios):
+        for i, stride in enumerate(downsampling_ratios):
             d_model *= 2
             self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
-        
+
         self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
         self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
     def forward(self, x):
         # Initial convolution
         x = self.initial_conv(x)
-        
+
         # Apply all encoder blocks
         for encoder_block in self.encoder_blocks:
             x = encoder_block(x)
-        
+
         # Final processing
         x = self.final_activation(x)
         x = self.final_conv(x)
@@ -629,10 +623,12 @@ class Xcodec2VocosBackbone(Backbone):
         block_in = config.hidden_size
         dropout = 0.1
 
-        self.prior_blocks = nn.ModuleList([
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-        ])
+        self.prior_blocks = nn.ModuleList(
+            [
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+            ]
+        )
 
         # Initialize rotary embeddings
         self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
@@ -643,16 +639,18 @@ class Xcodec2VocosBackbone(Backbone):
         )
 
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        
-        self.post_blocks = nn.ModuleList([
-            ResnetBlock(
-                in_channels=config.hidden_size,
-                out_channels=config.hidden_size,
-                temb_channels=self.temb_ch,
-                dropout=dropout,
-            ),
-            ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-        ])
+
+        self.post_blocks = nn.ModuleList(
+            [
+                ResnetBlock(
+                    in_channels=config.hidden_size,
+                    out_channels=config.hidden_size,
+                    temb_channels=self.temb_ch,
+                    dropout=dropout,
+                ),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+            ]
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x shape: [batch, seq_len, hidden_dim]
@@ -660,11 +658,11 @@ class Xcodec2VocosBackbone(Backbone):
         # Handle initial transformations
         x = x.transpose(1, 2)
         x = self.embed(x)
-        
+
         # Process through prior_blocks
         for block in self.prior_blocks:
             x = block(x)
-            
+
         x = x.transpose(1, 2)  # [batch, seq_len, hidden_dim]
 
         # Generate position IDs and rotary embeddings
@@ -681,11 +679,11 @@ class Xcodec2VocosBackbone(Backbone):
 
         # Handle final transformations
         x = x.transpose(1, 2)
-        
+
         # Process through post_blocks
         for block in self.post_blocks:
             x = block(x)
-            
+
         x = x.transpose(1, 2)
         x = self.final_layer_norm(x)
 
@@ -852,14 +850,15 @@ class Xcodec2FSQ(Module):
     """
     Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
     """
+
     def __init__(
         self,
-        levels: List[int],
+        levels: list[int],
         dim: Optional[int] = None,
         num_codebooks=1,
         keep_num_codebooks_dim: Optional[bool] = None,
         scale: Optional[float] = None,
-        allowed_dtypes: Tuple[torch.dtype, ...] = (torch.float32, torch.float64),
+        allowed_dtypes: tuple[torch.dtype, ...] = (torch.float32, torch.float64),
         channel_first: bool = False,
         projection_has_bias: bool = True,
         return_indices=True,
@@ -1044,10 +1043,11 @@ class Xcodec2ResidualFSQ(Module):
     """
     Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
     """
+
     def __init__(
         self,
         *,
-        levels: List[int],
+        levels: list[int],
         num_quantizers,
         dim: Optional[int] = None,
         is_channel_first=False,
@@ -1206,7 +1206,7 @@ class Xcodec2CodecDecoderVocos(nn.Module):
         self.hop_length = config.hop_length
 
         self.quantizer = Xcodec2ResidualFSQ(
-            dim=config.vq_dim, levels=[4, 4, 4, 4, 4, 4, 4, 4], num_quantizers=config.num_quantizers
+            dim=config.vq_dim, levels=config.vq_levels, num_quantizers=config.num_quantizers
         )
 
         self.backbone = Xcodec2VocosBackbone(config=config)
@@ -1314,7 +1314,7 @@ class Xcodec2SemanticEncoder(nn.Module):
             Tensor: Encoded tensor, shape (Batch, Code_dim, Length)
         """
         x = self.initial_conv(x)  # (Batch, Encode_channels, Length)
-        
+
         # Apply residual block operations
         residual = x
         x = self.act1(x)
@@ -1322,7 +1322,7 @@ class Xcodec2SemanticEncoder(nn.Module):
         x = self.act2(x)
         x = self.conv2(x)
         x = x + residual  # Residual connection
-        
+
         x = self.final_conv(x)  # (Batch, Code_dim, Length)
         return x
 
@@ -1341,7 +1341,8 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
-            nn.init.constant_(module.bias, 0)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, Xcodec2SnakeBeta):
             module.alpha.data.fill_(1.0)
             module.beta.data.fill_(1.0)
@@ -1352,6 +1353,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
 
 XCODEC2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1377,6 +1379,7 @@ XCODEC2_INPUTS_DOCSTRING = r"""
             whether to return a `Xcodec2Output` or a plain tuple.
 """
 
+
 # Taking inspiration form modeling code of original authors: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
 @add_start_docstrings(
     "The Xcodec2 neural audio codec model.",
@@ -1394,7 +1397,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
 
-        self.acoustic_encoder = Xcodec2CodecEncoder()
+        self.acoustic_encoder = Xcodec2CodecEncoder(
+            downsampling_ratios=config.downsampling_ratios, hidden_dim=config.encoder_hidden_size
+        )
         self.decoder = Xcodec2CodecDecoderVocos(config=config)
         self.fc_prior = nn.Linear(config.intermediate_size, config.intermediate_size)
         self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)
@@ -1405,11 +1410,11 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
             weight_norm = nn.utils.parametrizations.weight_norm
-            
+
         # Weight norm was only applied in acoustic encoder of original model
         # -- to initial_conv
         weight_norm(self.acoustic_encoder.initial_conv)
-        
+
         # -- to encoder blocks
         for encoder_block in self.acoustic_encoder.encoder_blocks:
             # -- to each residual unit in the block
@@ -1418,7 +1423,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
                 weight_norm(residual_unit.conv2)
             # -- to the final conv in the encoder block
             weight_norm(encoder_block.conv)
-            
+
         # -- to final_conv
         weight_norm(self.acoustic_encoder.final_conv)
 
@@ -1427,14 +1432,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         remove_weight_norm = nn.utils.remove_weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
             remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
-            
+
         # Remove weight norm from acoustic_encoder
         # -- from initial_conv
         try:
             remove_weight_norm(self.acoustic_encoder.initial_conv)
         except (ValueError, RuntimeError):
             raise ValueError("Not able to remove weight norm. Have you run `apply_weight_norm?`")
-            
+
         # -- from encoder blocks
         for encoder_block in self.acoustic_encoder.encoder_blocks:
             # -- from each residual unit in the block
@@ -1443,7 +1448,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
                 remove_weight_norm(residual_unit.conv2)
             # -- from the final conv in the encoder block
             remove_weight_norm(encoder_block.conv)
-            
+
         # -- from final_conv
         remove_weight_norm(self.acoustic_encoder.final_conv)
 
@@ -1451,7 +1456,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self,
         input_values,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1469,14 +1474,18 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         channels = input_values.shape[1]
         if channels != 1:
             raise ValueError(f"Audio must be mono, but got {channels}")
-        
+
         # 1) Get semantic embedding
         # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
-        input_features = self.semantic_feature_extractor(
-            input_values.cpu(),
-            sampling_rate=self.semantic_feature_extractor.sampling_rate,
-            return_tensors="pt",
-        ).input_features.to(self.dtype).to(self.device)
+        input_features = (
+            self.semantic_feature_extractor(
+                input_values.cpu(),
+                sampling_rate=self.semantic_feature_extractor.sampling_rate,
+                return_tensors="pt",
+            )
+            .input_features.to(self.dtype)
+            .to(self.device)
+        )
         # -- extract 16th layer of semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
         semantic_output = self.semantic_model(input_features, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
@@ -1509,7 +1518,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self,
         audio_codes,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2DecoderOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2DecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1550,7 +1559,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         input_values: torch.Tensor,
         audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
         r"""
         Returns:
 
