@@ -498,7 +498,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "

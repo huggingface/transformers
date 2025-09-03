@@ -659,7 +659,7 @@ class GPTJModel(GPTJPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:

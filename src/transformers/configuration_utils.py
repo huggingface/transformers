@@ -1228,12 +1228,12 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         # Encoder vs Decoder assumptions:
-        # - If the config has `is_encoder_decoder=True` and no nested sub-configs, then it has both encoder and
+        # 1. If the config has `is_encoder_decoder=True` and no nested sub-configs, then it has both encoder and
         #   decoder attributes. The logic for this legacy case with flat config structure is handled separately at
         #   the bottom of this function.
-        # - Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
+        # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
         #   to decoders.
-        # - Decoder sub-configs may have `is_decoder=True`
+        # 3. Decoder sub-configs may have `is_decoder=True`
         return_both = decoder == encoder  # both unset or both set -> search all possible names
         possible_sub_config_names = self.sub_configs.keys()
         if not return_both:
@@ -1247,16 +1247,16 @@ class PretrainedConfig(PushToHubMixin):
                 possible_sub_config_names = [name for name in possible_sub_config_names if "encoder" not in name]
 
         # Modality assumptions:
-        # - All text configs have a `vocab_size` attribute
-        # - All image configs have a `image_size` attribute
-        # - audio configs have a `num_mel_bins` attribute OR a `num_channels` attribute (+ no `image_size` attribute)
+        # 1. All text configs have a `vocab_size` attribute, but not "audio_vocab_size"
+        # 2. All image configs have a `image_size` attribute
+        # 3. audio configs have a `num_mel_bins` attribute OR a `num_channels` attribute (+ no `image_size` attribute)
         if modality is None:
             valid_sub_config_names = possible_sub_config_names
         else:
             valid_sub_config_names = []
             for sub_config_name in possible_sub_config_names:
                 sub_config = getattr(self, sub_config_name)
-                if modality == "text" and "vocab_size" in sub_config:
+                if modality == "text" and "vocab_size" in sub_config and "audio_vocab_size" not in sub_config:
                     valid_sub_config_names.append(sub_config_name)
                 elif modality == "image" and "image_size" in sub_config:
                     valid_sub_config_names.append(sub_config_name)
@@ -1294,13 +1294,15 @@ class PretrainedConfig(PushToHubMixin):
                 if key.startswith(prefix_to_keep):
                     if key == prefix_to_keep + "_layers":  # [encoder/decoder]_layers -> num_hidden_layers
                         new_key = "num_hidden_layers"
-                    elif key == prefix_to_keep + "_attention_heads":  # [encoder/decoder]_attention_heads -> num_attention_heads
+                    elif (
+                        key == prefix_to_keep + "_attention_heads"
+                    ):  # [encoder/decoder]_attention_heads -> num_attention_heads
                         new_key = "num_attention_heads"
                     else:  # e.g. encoder_hidden_act -> hidden_act
                         new_key = key[len(prefix_to_keep) + 1 :]
 
-                    # Does the class map the new key into a different attribute name? if so, let's write into that
-                    # attribute instead
+                    # Does the class map the new key into a different attribute name at read time? if so, let's write
+                    # into that attribute instead
                     if new_key in config_to_return.attribute_map:
                         new_key = config_to_return.attribute_map[new_key]
 
