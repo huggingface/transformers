@@ -5,7 +5,7 @@ import re
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 
-from transformers import Ernie4_5_VLConfig
+from transformers import AutoTokenizer, Ernie4_5_VLConfig
 
 
 TIED_MAPPING = {
@@ -51,6 +51,11 @@ TEXT_TO_VISION_CONFIG_KEYS = [
 ]
 ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
 ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + ["hidden_act", "moe_layer_end_index", "moe_layer_start_index", "moe_num_experts", "freq_allocation"]
+
+TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
+ADDED_TOKENS_FILE = "added_tokens.json"
+SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
+TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
 def load_json(save_dir, filename):
@@ -216,7 +221,47 @@ def convert_config(model_path, save_dir):
             final_config.save_pretrained(save_dir)
             break
 
-#"""
+
+def convert_tokenizer(original_tokenizer_path, save_dir):
+    # `original_tokenizer_path` can be any tokenizer from the already converted 4.5 series
+    tokenizer = AutoTokenizer.from_pretrained(original_tokenizer_path)
+    tokenizer.save_pretrained(TMP_TOKENIZER_DIR)
+
+    # we will exchange the special audio token as we need a dedicated video token
+    original_str = "<|AUDIO_PLACEHOLDER|>"
+    new_str = "<|VIDEO_PLACEHOLDER|>"
+
+    # overwrite every occurrence of the special tokens with the new string
+    added_tokens = load_json(TMP_TOKENIZER_DIR, ADDED_TOKENS_FILE)
+    original_id = added_tokens.get(original_str, -1)
+    if original_id < 0:
+        raise ValueError(f"The requested string '{original_str}' is not a special token.")
+
+    added_tokens.pop(original_str)
+    added_tokens[new_str] = original_id
+    write_json(added_tokens, TMP_TOKENIZER_DIR, ADDED_TOKENS_FILE)
+
+    special_tokens_map = load_json(TMP_TOKENIZER_DIR, SPECIAL_TOKENS_MAP_FILE)
+    for i, token in enumerate(special_tokens_map["additional_special_tokens"]):
+        if token == original_str:
+            special_tokens_map["additional_special_tokens"][i] = new_str
+            break
+    write_json(special_tokens_map, TMP_TOKENIZER_DIR, SPECIAL_TOKENS_MAP_FILE)
+
+    tokenizer_config = load_json(TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
+    for i, token in enumerate(tokenizer_config["additional_special_tokens"]):
+        if token == original_str:
+            tokenizer_config["additional_special_tokens"][i] = new_str
+            break
+    tokenizer_config["added_tokens_decoder"][f"{original_id}"]["content"] = new_str
+    write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
+
+    # reload and save to get correct formatting
+    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR)
+    tokenizer.save_pretrained(save_dir)
+
+
+"""
 convert_weights(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
@@ -230,16 +275,10 @@ convert_config(
 )
 #"""
 
-
-"""import torch
-checkpoint_path = "/raid/anton/code/forks/transformers/src/transformers/models/ernie4_5_vl/AntonV/ErnieVL"
-for filename in sorted(os.listdir(checkpoint_path)):
-    # sharded files are converted 1 by 1
-    if filename.endswith('.safetensors'):
-        input_file = os.path.join(checkpoint_path, filename)
-        state_dict = load_file(input_file)
-
-        for k, v in state_dict.items():
-            if "vision_tower" in k:
-                assert v.dtype == torch.float16, f"First invalid key: {k}"
-"""
+#"""
+convert_tokenizer(
+    # can use any preconverted tokenizer (as they are the same)
+    original_tokenizer_path='baidu/ERNIE-4.5-0.3B-PT',
+    save_dir='AntonV/ErnieVL',
+)
+#"""
