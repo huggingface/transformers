@@ -40,9 +40,9 @@ def sdpa_attention_paged_forward(
 
     sliding_window = cache.sliding_windows[module.layer_idx]
     if sliding_window == NO_SLIDING_WINDOW:
-        causal_mask = attention_mask[1:, :, :, :key.size(2)]
+        causal_mask = attention_mask[:1, :, :, :key.size(2)]
     else:
-        causal_mask = attention_mask[:1, :, :, :key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
+        causal_mask = attention_mask[1:, :, :, :key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
 
     query = query.contiguous()
     key = key.contiguous()

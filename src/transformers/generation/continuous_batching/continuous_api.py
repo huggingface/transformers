@@ -15,6 +15,7 @@
 # limitations under the License.
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
@@ -165,7 +166,8 @@ class ContinuousBatchProcessor:
         self.output_ids = torch.empty((1, T), **tensor_metadata)
         # Since attenention_mask is not always needed, we only allocate it if it is needed
         if self.return_attention_mask():
-            self.attention_mask = torch.empty((2, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device)
+            size_0 = 1 if self.sliding_window == NO_SLIDING_WINDOW else 2
+            self.attention_mask = torch.empty((size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device)
         else:
             logger.warning(f"Attention mask is not needed for {self.config._attn_implementation}")
             self.attention_mask = None
@@ -190,8 +192,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = 0
         self.output_ids[:, :t].fill_(-1)
         if self.attention_mask is not None:
-            self.attention_mask[..., :t, :c].fill_(torch.finfo(self.model_dtype).min)
-            self.attention_mask[..., :t, :c].fill_(torch.finfo(self.model_dtype).min)
+            self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
@@ -358,7 +359,8 @@ class ContinuousBatchProcessor:
 
         if self.attention_mask is not None:
             build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0])
-            build_attention_mask(self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window)
+            if self.sliding_window != NO_SLIDING_WINDOW:
+                build_attention_mask(self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window)
 
     @traced
     def _sync(self):
@@ -481,6 +483,7 @@ class ContinuousBatchingManager:
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
         self.slice_inputs = slice_inputs
+        self.creation_time = time.time()
 
     @traced
     def start(self):
@@ -492,7 +495,7 @@ class ContinuousBatchingManager:
         self._result_queue = queue.Queue()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
-        logger.info("Continuous batching manager started.")
+        logger.info(f"Continuous batching manager started at {time.time() - self.creation_time} seconds")
 
     def is_running(self):
         """Check if the background generation thread is running."""
@@ -699,6 +702,7 @@ class ContinuousBatchingManager:
                 num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
+            logger.info(f"PagedAttentionCache created at {time.time() - self.creation_time} seconds")
 
             scheduler = None
             if hasattr(self.generation_config, "scheduler"):

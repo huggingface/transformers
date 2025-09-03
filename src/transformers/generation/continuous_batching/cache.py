@@ -148,11 +148,16 @@ class PagedAttentionCache:
         )
 
         # Initialize the cache
-        self.cache_shape = (num_blocks, self.block_size, self.page_size)
-        self.key_cache: torch.Tensor = torch.empty(self.cache_shape, dtype=self.dtype, device=device)
-        self.value_cache: torch.Tensor = torch.empty(self.cache_shape, dtype=self.dtype, device=device)
-        torch._dynamo.mark_static_address(self.key_cache)
-        torch._dynamo.mark_static_address(self.value_cache)
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
+        self.cache_shape = (num_blocks * self.block_size, self.num_key_value_heads, self.head_dim)
+        for _ in range(self.group_size):
+            new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
+            new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
@@ -235,20 +240,20 @@ class PagedAttentionCache:
         layer_write_index = write_index[group_idx, :group_write_length]
         # Reshape cache for easier indexing
         num_pages = self.num_blocks * self.block_size
-        k_cache_flat = self.key_cache.view(self.group_size, num_pages, self.num_key_value_heads, self.head_dim)
-        v_cache_flat = self.value_cache.view(self.group_size, num_pages, self.num_key_value_heads, self.head_dim)
+        k_cache_flat = self.key_cache[layer_idx_in_group].view(num_pages, self.num_key_value_heads, self.head_dim)
+        v_cache_flat = self.value_cache[layer_idx_in_group].view(num_pages, self.num_key_value_heads, self.head_dim)
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
         # Add the cache to the key and value states
         mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
-        key_states_with_cache = k_cache_flat[layer_idx_in_group, layer_read_index, :, :]
+        key_states_with_cache = k_cache_flat[layer_read_index, :, :]
         key_states_with_cache[mask] = key_states
-        value_states_with_cache = v_cache_flat[layer_idx_in_group, layer_read_index, :, :]
+        value_states_with_cache = v_cache_flat[layer_read_index, :, :]
         value_states_with_cache[mask] = value_states
         # Write new KV values to the cache
-        k_cache_flat[layer_idx_in_group, layer_write_index, :, :] = key_states
-        v_cache_flat[layer_idx_in_group, layer_write_index, :, :] = value_states
+        k_cache_flat[layer_write_index, :, :] = key_states
+        v_cache_flat[layer_write_index, :, :] = value_states
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
