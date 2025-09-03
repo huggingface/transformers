@@ -284,10 +284,9 @@ class HiggsAudioForConditionalGenerationTest(
     test_head_masking = False
     test_resize_embeddings = False
     is_encoder_decoder = False
-    # Indicates VLMs usually but there are many audio models which are also composite
-    _is_composite = True
+    _is_composite = False
     # There is a bug that _attn_implementation has to be hard coded in the model implementation, otherwise it is None
-    has_attentions = False
+    has_attentions = True
 
     def setUp(self):
         self.model_tester = HiggsAudioModelTester(self)
@@ -345,6 +344,42 @@ class HiggsAudioForConditionalGenerationTest(
 
         return inputs_dict
 
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
+        # HiggsAudio does not support repetition_penalty
+        logits_processor_kwargs = {
+            "bad_words_ids": [[1, 0]],
+            "remove_invalid_values": True,
+        }
+        if do_sample:
+            logits_processor_kwargs.update(
+                {
+                    "top_k": 10,
+                    "top_p": 0.7,
+                    "temperature": 0.7,
+                }
+            )
+        # TODO (joao, raushan): see this comment for a long-term fix
+        # https://github.com/huggingface/transformers/pull/33593#issuecomment-2361824264)
+        # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
+        # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
+        if config is not None:
+            for key in [
+                "image_token_id",
+                "video_token_id",
+                "audio_token_id",
+                "vision_start_token_id",
+                "audio_start_token_id",
+                "audio_end_token_id",
+                "vision_end_token_id",
+            ]:
+                token_index = getattr(config, key, None)
+                if token_index is None and hasattr(self, "model_tester"):
+                    token_index = getattr(self.model_tester, key, None)
+                if token_index is not None and token_index < config.get_text_config().vocab_size:
+                    logits_processor_kwargs["bad_words_ids"].append([token_index])
+
+        return logits_processor_kwargs
+
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
@@ -370,7 +405,7 @@ class HiggsAudioForConditionalGenerationTest(
         vocab_size = config.vocab_size
         expected_audio_logit_shape = (
             batch_size * self.model_tester.num_quantizers,
-            vocab_size,
+            self.model_tester.codebook_size,
         )
         expected_text_logit_shape = (batch_size, vocab_size)
         self.assertIsInstance(logits, tuple)
@@ -414,15 +449,22 @@ class HiggsAudioForConditionalGenerationTest(
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
+                # HiggsAudio embeds audio features and tokens inside its forward
+                model_input_length += (self.model_tester.num_audio_in + self.model_tester.num_audio_out) * (
+                    self.model_tester.audio_length - 1
+                )
             query_length = (
-                prompt_length + generated_length
+                prompt_length
+                + generated_length
+                + (self.model_tester.num_audio_in + self.model_tester.num_audio_out)
+                * (self.model_tester.audio_length - 1)
                 if not has_static_cache
                 else decoder_past_key_values.get_max_cache_shape()
             )
 
             expected_shape = (
                 batch_size,
-                config.decoder_config.num_attention_heads,  # Decoder config
+                config.num_attention_heads,  # Decoder config
                 model_input_length,
                 query_length,
             )
@@ -507,11 +549,11 @@ class HiggsAudioForConditionalGenerationTest(
             )
 
     def _check_scores(self, batch_size, scores, generated_length, config):
-        # Special case where HiggsAudio keeps score in a 2D mesh of (bsz * channels, vocab) for audio scores and (bsz, vocab) for text tokens
+        # Special case where HiggsAudio keeps score in a 2D mesh of (bsz * num_quantizers, codebook_size) for audio scores and (bsz, vocab) for text tokens
         vocab_size = config.vocab_size
         expected_audio_score_shape = (
             batch_size * self.model_tester.num_quantizers,
-            vocab_size,
+            self.model_tester.codebook_size,
         )
         expected_text_score_shape = (batch_size, vocab_size)
         self.assertIsInstance(scores, tuple)
@@ -555,6 +597,13 @@ class HiggsAudioForConditionalGenerationTest(
                             sub_config = getattr(model_sdpa.config, key)
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 
+    def test_attention_outputs(self):
+        self.model_tester.encoder_seq_length = self.model_tester.seq_length + (
+            self.model_tester.num_audio_in + self.model_tester.num_audio_out
+        ) * (self.model_tester.audio_length - 1)
+        super().test_attention_outputs()
+        self.model_tester.encoder_seq_length = None
+
     @pytest.mark.generate
     @unittest.skip("HiggsAudio has complicated attention mask schemes and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
@@ -597,6 +646,10 @@ class HiggsAudioForConditionalGenerationTest(
 
     @unittest.skip(reason="NotImplementedError: Cannot copy out of meta tensor; no data!")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(reason="HiggsAudio does not support left-padding")
+    def test_left_padding_compatibility(self):
         pass
 
 

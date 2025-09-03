@@ -163,6 +163,8 @@ def merge_input_ids_with_audio_features(
         audio_in_embed = None
     if audio_out_embed is not None and audio_out_embed.shape[0] == 0:
         audio_out_embed = None
+    if attention_mask is None:
+        attention_mask = torch.ones_like(input_ids)
 
     batch_size, sequence_length, embed_dim = inputs_embeds.shape
 
