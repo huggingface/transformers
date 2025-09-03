@@ -151,24 +151,11 @@ def _convert_model(state_dict, hf_model):
                     tensors[k_mod.replace("c_attn", "v_proj")] = W_v
                     continue  # Skip the rest of the loop for this key
                 elif "c_proj" in k:
-                    tensors[k.replace(".att.c_proj", ".self_attn.o_proj")] = state_dict[old_k]
-                    continue  # Skip the rest of the loop for this key
+                    k = k.replace(".att.c_proj", ".self_attn.o_proj")
                 elif "att_norm" in k:
-                    tensors[k.replace("att_norm", "input_layernorm")] = state_dict[old_k]
-                    continue  # Skip the rest of the loop for this key
+                    k = k.replace("att_norm", "input_layernorm")
                 elif "ffn_norm" in k:
-                    tensors[k.replace("ffn_norm", "post_attention_layernorm")] = state_dict[old_k]
-                    continue  # Skip the rest of the loop for this key
-                
-            # Handle weight normalization parameters
-            if "weight_g" in k:
-                # Apply weight_g conversion to all keys
-                k = k.replace("weight_g", "parametrizations.weight.original0")
-            elif "weight_v" in k:
-                # Apply weight_v conversion to all keys
-                k = k.replace("weight_v", "parametrizations.weight.original1")
-            elif "beta" in k:
-                k = k.replace("beta", "bias")
+                    k = k.replace("ffn_norm", "post_attention_layernorm")  
         elif "SemanticEncoder_module" in old_k:
             k = old_k.replace("SemanticEncoder_module", "semantic_encoder")
             
@@ -184,21 +171,9 @@ def _convert_model(state_dict, hf_model):
         else:
             k = old_k
 
-        # Handle weight normalization parameters
-        if "weight_g" in k:
-            # Apply weight_g conversion to all keys
-            new_k = k.replace("weight_g", "parametrizations.weight.original0")
-            tensors[new_k] = state_dict[old_k]
-        elif "weight_v" in k:
-            # Apply weight_v conversion to all keys
-            new_k = k.replace("weight_v", "parametrizations.weight.original1")
-            tensors[new_k] = state_dict[old_k]
-        elif "beta" in k:
-            new_k = k.replace("beta", "bias")
-            tensors[new_k] = state_dict[old_k]
-        else:
-            # For all other keys
-            tensors[k] = state_dict[old_k]
+        # copy over to new state dict
+        tensors[k] = state_dict[old_k]
+
     state_dict = tensors
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
@@ -263,8 +238,10 @@ def convert_checkpoint(
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
     
-    # TODO add and remove weight norm
+    # add weight norm, convert, and remove weight norm
+    model.apply_weight_norm()
     model = _convert_model(original_checkpoint, model)
+    model.remove_weight_norm()
 
     # create feature extractor
     feature_extractor = DacFeatureExtractor(

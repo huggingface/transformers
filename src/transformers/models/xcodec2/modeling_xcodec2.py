@@ -444,13 +444,13 @@ class Xcodec2SnakeBeta(nn.Module):
         self.alpha_logscale = alpha_logscale
         if self.alpha_logscale:  # log scale alphas initialized to zeros
             self.alpha = Parameter(torch.zeros(in_features) * alpha)
-            self.bias = Parameter(torch.zeros(in_features) * alpha)
+            self.beta = Parameter(torch.zeros(in_features) * alpha)
         else:  # linear scale alphas initialized to ones
             self.alpha = Parameter(torch.ones(in_features) * alpha)
-            self.bias = Parameter(torch.ones(in_features) * alpha)
+            self.beta = Parameter(torch.ones(in_features) * alpha)
 
         self.alpha.requires_grad = alpha_trainable
-        self.bias.requires_grad = alpha_trainable
+        self.beta.requires_grad = alpha_trainable
 
         self.no_div_by_zero = 0.000000001
 
@@ -461,7 +461,7 @@ class Xcodec2SnakeBeta(nn.Module):
         SnakeBeta ∶= x + 1/b * sin^2 (xa)
         """
         alpha = self.alpha.unsqueeze(0).unsqueeze(-1)
-        beta = self.bias.unsqueeze(0).unsqueeze(-1)
+        beta = self.beta.unsqueeze(0).unsqueeze(-1)
         if self.alpha_logscale:
             alpha = torch.exp(alpha)
             beta = torch.exp(beta)
@@ -594,21 +594,14 @@ class Activation1d(nn.Module):
         return x
 
 
-def WNConv1d(*args, **kwargs):
-    weight_norm = nn.utils.weight_norm
-    if hasattr(nn.utils.parametrizations, "weight_norm"):
-        weight_norm = nn.utils.parametrizations.weight_norm
-    return weight_norm(nn.Conv1d(*args, **kwargs))
-
-
 class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
         self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
-        self.conv1 = WNConv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
+        self.conv1 = nn.Conv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
         self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
-        self.conv2 = WNConv1d(dim, dim, kernel_size=1)
+        self.conv2 = nn.Conv1d(dim, dim, kernel_size=1)
 
     def forward(self, x):
         residual = x
@@ -624,7 +617,7 @@ class EncoderBlock(nn.Module):
         super().__init__()
         self.residual_units = nn.ModuleList([ResidualUnit(dim // 2, dilation=d) for d in dilations])
         self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2, alpha_logscale=True))
-        self.conv = WNConv1d(
+        self.conv = nn.Conv1d(
             dim // 2,
             dim,
             kernel_size=2 * stride,
@@ -660,7 +653,7 @@ class Xcodec2CodecEncoder(nn.Module):
         self.up_ratios = up_ratios
 
         d_model = ngf
-        self.initial_conv = WNConv1d(1, d_model, kernel_size=7, padding=3)
+        self.initial_conv = nn.Conv1d(1, d_model, kernel_size=7, padding=3)
 
         self.encoder_blocks = nn.ModuleList()
         for i, stride in enumerate(up_ratios):
@@ -668,7 +661,7 @@ class Xcodec2CodecEncoder(nn.Module):
             self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
 
         self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
-        self.final_conv = WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1)
+        self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
         self.reset_parameters()
 
@@ -685,29 +678,6 @@ class Xcodec2CodecEncoder(nn.Module):
         x = self.final_conv(x)
         x = x.permute(0, 2, 1)
         return x
-
-    def remove_weight_norm(self):
-        """Remove weight normalization module from all of the layers."""
-
-        def _remove_weight_norm(m):
-            try:
-                torch.nn.utils.remove_weight_norm(m)
-            except ValueError:  # this module didn't have weight norm
-                return
-
-        self.apply(_remove_weight_norm)
-
-    def apply_weight_norm(self):
-        """Apply weight normalization module from all of the layers."""
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        def _apply_weight_norm(m):
-            if isinstance(m, nn.Conv1d):
-                weight_norm(m)
-
-        self.apply(_apply_weight_norm)
 
     def reset_parameters(self):
         self.apply(init_weights)
@@ -1443,29 +1413,6 @@ class Xcodec2CodecDecoderVocos(nn.Module):
         x = self.model(x)
         return x, None
 
-    def remove_weight_norm(self):
-        """Remove weight normalization module from all of the layers."""
-
-        def _remove_weight_norm(m):
-            try:
-                torch.nn.utils.remove_weight_norm(m)
-            except ValueError:  # this module didn't have weight norm
-                return
-
-        self.apply(_remove_weight_norm)
-
-    def apply_weight_norm(self):
-        """Apply weight normalization module from all of the layers."""
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        def _apply_weight_norm(m):
-            if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
-                weight_norm(m)
-
-        self.apply(_apply_weight_norm)
-
     def reset_parameters(self):
         self.apply(init_weights)
 
@@ -1606,6 +1553,52 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)
 
         self.post_init()
+
+    def apply_weight_norm(self, legacy=True):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        # Weight norm was only applied in acoustic encoder of original model
+        # -- to initial_conv
+        weight_norm(self.acoustic_encoder.initial_conv)
+
+        # -- to encoder blocks
+        for encoder_block in self.acoustic_encoder.encoder_blocks:
+            # -- to each residual unit in the block
+            for residual_unit in encoder_block.residual_units:
+                weight_norm(residual_unit.conv1)
+                weight_norm(residual_unit.conv2)
+            # -- to the final conv in the encoder block
+            weight_norm(encoder_block.conv)
+
+        # -- to final_conv
+        weight_norm(self.acoustic_encoder.final_conv)
+
+    def remove_weight_norm(self, legacy=True):
+        """Remove weight normalization from layers that have it applied via apply_weight_norm."""
+        remove_weight_norm = nn.utils.remove_weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
+
+        # Remove weight norm from acoustic_encoder
+        # -- from initial_conv
+        try:
+            remove_weight_norm(self.acoustic_encoder.initial_conv)
+        except (ValueError, RuntimeError):
+            raise ValueError("Not able to remove weight norm. Have you run `apply_weight_norm?`")
+
+        # -- from encoder blocks
+        for encoder_block in self.acoustic_encoder.encoder_blocks:
+            # -- from each residual unit in the block
+            for residual_unit in encoder_block.residual_units:
+                remove_weight_norm(residual_unit.conv1)
+                remove_weight_norm(residual_unit.conv2)
+            # -- from the final conv in the encoder block
+            remove_weight_norm(encoder_block.conv)
+
+        # -- from final_conv
+        remove_weight_norm(self.acoustic_encoder.final_conv)
 
     def encode(
         self,
