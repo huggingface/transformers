@@ -1054,7 +1054,7 @@ class GenerationTesterMixin:
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_sub_config(modality="text")
+            text_config = config.get_sub_config(modality="text", decoder=True)
             num_decoder_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)
@@ -1062,30 +1062,28 @@ class GenerationTesterMixin:
             )
 
             if custom_all_cache_shapes is None:
-                num_query_attention_heads = getattr(
-                    text_config, "decoder_attention_heads", text_config.num_attention_heads
-                )
+                num_query_attention_heads = text_config.num_attention_heads
                 embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
-                per_head_embed_dim = embed_dim // num_query_attention_heads
+                per_head_embed_dim = getattr(text_config, "head_dim", None) or embed_dim // num_query_attention_heads
                 num_key_value_heads = (
                     text_config.num_key_value_heads
                     if getattr(text_config, "num_key_value_heads", None) is not None
                     else num_query_attention_heads
                 )
                 if config.is_encoder_decoder:
-                    encoder_num_attention_heads = (
-                        text_config.encoder_attention_heads
-                        if hasattr(text_config, "encoder_attention_heads")
-                        else text_config.num_attention_heads
-                    )
-                    encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
+                    # encoder_num_attention_heads = (
+                    #     text_config.encoder_attention_heads
+                    #     if hasattr(text_config, "encoder_attention_heads")
+                    #     else text_config.num_attention_heads
+                    # )
+                    # encoder_per_head_embed_dim = per_head_embed_dim
                     batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
                     # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
                     # autoregressive generation, we're keeping the test general and not checking the 3rd dim
                     default_cross_attention_shape = (
                         batch_size,
-                        encoder_num_attention_heads,
-                        encoder_per_head_embed_dim,
+                        num_key_value_heads,
+                        per_head_embed_dim,
                     )
                     default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
                     all_cache_shapes = [

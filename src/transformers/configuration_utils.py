@@ -1294,6 +1294,8 @@ class PretrainedConfig(PushToHubMixin):
                 if key.startswith(prefix_to_keep):
                     if key == prefix_to_keep + "_layers":  # [encoder/decoder]_layers -> num_hidden_layers
                         new_key = "num_hidden_layers"
+                    elif key == prefix_to_keep + "_attention_heads":  # [encoder/decoder]_attention_heads -> num_attention_heads
+                        new_key = "num_attention_heads"
                     else:  # e.g. encoder_hidden_act -> hidden_act
                         new_key = key[len(prefix_to_keep) + 1 :]
 
