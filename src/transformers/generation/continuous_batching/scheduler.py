@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import threading
 from abc import ABC, abstractmethod
 from collections import deque
 
@@ -32,7 +33,8 @@ class Scheduler(ABC):
         self.waiting_requests_order: deque[str] = deque()
         self.cache = cache
         self.retain_cache_on_finish = retain_cache_on_finish
-        self.requests_to_cancel: set[str] = set()
+        self._cancellation_lock = threading.Lock()
+        self._requests_to_cancel: set[str] = set()
 
     @abstractmethod
     def add_waiting_request(self, state: RequestState):
@@ -61,23 +63,25 @@ class Scheduler(ABC):
 
     @traced
     def set_request_cancellation(self, request_id: str):
-        self.requests_to_cancel.add(request_id)
+        with self._cancellation_lock:
+            self._requests_to_cancel.add(request_id)
 
     @traced
     def clear_cancelled_requests(self):
-        for request_id in self.requests_to_cancel:
-            if request_id in self.active_requests:
-                del self.active_requests[request_id]
-            if request_id in self.waiting_requests:
-                del self.waiting_requests[request_id]
-            if request_id in self.waiting_requests_order:
-                self.waiting_requests_order.remove(request_id)
-            self.cache.free_blocks(request_id)
-        self.requests_to_cancel = set()
+        with self._cancellation_lock:
+            for request_id in self._requests_to_cancel:
+                if request_id in self.active_requests:
+                    del self.active_requests[request_id]
+                if request_id in self.waiting_requests:
+                    del self.waiting_requests[request_id]
+                if request_id in self.waiting_requests_order:
+                    self.waiting_requests_order.remove(request_id)
+                self.cache.free_blocks(request_id)
+            self._requests_to_cancel = set()
 
     @traced
     def request_is_cancelled(self, request_id: str) -> bool:
-        return request_id in self.requests_to_cancel or (
+        return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
 
