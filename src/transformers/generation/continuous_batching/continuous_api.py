@@ -17,6 +17,7 @@ import queue
 import threading
 from dataclasses import dataclass
 from functools import partial
+from itertools import count
 from typing import Optional
 
 import torch
@@ -27,9 +28,41 @@ from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-from .cache import PagedAttentionCache
+from .cache import NO_SLIDING_WINDOW, PagedAttentionCache
 from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
+
+
+def build_attention_mask(
+    attention_mask: torch.Tensor,
+    cumulative_seqlens_q: torch.Tensor,
+    cumulative_seqlens_k: torch.Tensor,
+    sliding_window: int = NO_SLIDING_WINDOW,
+) -> None:
+    min_value = torch.finfo(attention_mask.dtype).min
+    for i in range(len(cumulative_seqlens_q) - 1):
+        seqlen_q = cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+        seqlen_k = cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+        if seqlen_q < seqlen_k and seqlen_q >= 1:
+            causal_diagonal = seqlen_k - seqlen_q + 1
+        else:
+            causal_diagonal = 1
+        query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
+        key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+        # Apply causal mask
+        minus_inf = torch.full(
+            attention_mask[..., query_range, key_range].shape,
+            min_value,
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
+        )
+        masked = torch.triu(minus_inf, diagonal=causal_diagonal)
+        # Apply sliding window mask if needed
+        if sliding_window > NO_SLIDING_WINDOW:
+            sliding_diagonal = seqlen_k - seqlen_q + sliding_window
+            masked = torch.tril(masked, diagonal=sliding_diagonal)
+        # Replace in attention mask
+        attention_mask[..., query_range, key_range] = masked
 
 
 @dataclass
@@ -91,6 +124,13 @@ class ContinuousBatchProcessor:
         self.manual_eviction = manual_eviction
         self.slice_inputs = slice_inputs
 
+        sliding_windows = set(cache.sliding_windows.values())
+        if NO_SLIDING_WINDOW in sliding_windows:
+            sliding_windows.remove(NO_SLIDING_WINDOW)
+        if len(sliding_windows) != 1:
+            raise ValueError("Only one sliding window is supported for now, but got: " + str(sliding_windows))
+        self.sliding_window = sliding_windows.pop() if len(sliding_windows) == 1 else 0
+
         self.requests_in_batch: list[RequestState] = []
 
         # Set up metrics collector
@@ -100,6 +140,7 @@ class ContinuousBatchProcessor:
         # Setup static tensors
         self.total_query_length = 0
         self.total_key_length = 0
+        self.group_read_write_length = [(0, 0) for _ in range(cache.num_groups)]
         self.setup_static_tensors(cache.num_groups)
 
     def return_attention_mask(self) -> bool:
@@ -115,7 +156,7 @@ class ContinuousBatchProcessor:
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
+        self.cumulative_seqlens_k = torch.empty((2, T + 1), **tensor_metadata) # [full, sliding]
         self.write_index = torch.empty((num_groups, T), **tensor_metadata)
         self.read_index = torch.empty((num_groups, num_pages + T), **tensor_metadata) # +T is because there are -1 for seqlen_q
         self.logits_indices = torch.empty((T,), **tensor_metadata)
@@ -124,10 +165,9 @@ class ContinuousBatchProcessor:
         self.output_ids = torch.empty((1, T), **tensor_metadata)
         # Since attenention_mask is not always needed, we only allocate it if it is needed
         if self.return_attention_mask():
-            self.attention_mask = torch.empty(
-                (1, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
-            )
+            self.attention_mask = torch.empty((2, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device)
         else:
+            logger.warning(f"Attention mask is not needed for {self.config._attn_implementation}")
             self.attention_mask = None
         self.reset_static_tensors(full_reset=True)
 
@@ -150,7 +190,8 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = 0
         self.output_ids[:, :t].fill_(-1)
         if self.attention_mask is not None:
-            self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
+            self.attention_mask[..., :t, :c].fill_(torch.finfo(self.model_dtype).min)
+            self.attention_mask[..., :t, :c].fill_(torch.finfo(self.model_dtype).min)
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
@@ -164,8 +205,9 @@ class ContinuousBatchProcessor:
             "position_ids": self.position_ids[:, :t],
             "cu_seq_lens_q": self.cumulative_seqlens_q[: t + 1],
             "cu_seq_lens_k": self.cumulative_seqlens_k[: t + 1],
-            "write_index": self.write_index[:, :t],
             "read_index": self.read_index[:, :c],
+            "write_index": self.write_index[:, :t],
+            "group_read_write_length": self.group_read_write_length, # can be set to 2 like attn mask
             "logits_indices": self.logits_indices[:t],
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
@@ -174,7 +216,7 @@ class ContinuousBatchProcessor:
         }
         # If the attention mask is not None, we slice it as the others
         if self.attention_mask is not None:
-            kwargs["attention_mask"] = self.attention_mask[:, :, :t, :c]
+            kwargs["attention_mask"] = self.attention_mask[..., :t, :c]
         return kwargs
 
     def __repr__(self):
@@ -238,7 +280,7 @@ class ContinuousBatchProcessor:
         read_index = [[] for _ in range(self.cache.num_groups)]
         write_index = [[] for _ in range(self.cache.num_groups)]
         cumulative_seqlens_q = [0]
-        cumulative_seqlens_k = [0]
+        cumulative_seqlens_k = [[0], [0]]
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
@@ -261,7 +303,10 @@ class ContinuousBatchProcessor:
 
             position_ids.extend(positions_to_add)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
-            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
+
+            cumulative_seqlens_k[0].append(cumulative_seqlens_k[0][-1] + query_length + past_length)
+            cumulative_seqlens_k[1].append(cumulative_seqlens_k[1][-1] + query_length + min(past_length, self.sliding_window - 1))
+
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
@@ -271,7 +316,7 @@ class ContinuousBatchProcessor:
         logger.debug(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
             f"Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. "
-            f"cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+            f"cum KV: {max(ck[-1] for ck in cumulative_seqlens_k)}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
@@ -301,46 +346,25 @@ class ContinuousBatchProcessor:
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[:, :len(write_index[0])] = to_tensor(write_index)
-        max_len_read = max(len(read_index[i]) for i in range(len(read_index)))
-        self.read_index[:, :max_len_read] = to_tensor(read_index)
+
+        for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
+            self.read_index[i, :len(group_read_indices)] = to_tensor(group_read_indices)
+            self.write_index[i, :len(group_write_indices)] = to_tensor(group_write_indices)
+            self.group_read_write_length[i] = (len(group_read_indices), len(group_write_indices))
+
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        self.cumulative_seqlens_k[:, : len(cumulative_seqlens_k[0])] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
-        min_value = torch.finfo(self.model_dtype).min
         if self.attention_mask is not None:
-            for i in range(len(cumulative_seqlens_q) - 1):
-                if (
-                    cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                    < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                    and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
-                ):
-                    diagonal = (
-                        cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
-                    )
-                    diagonal = diagonal - cumulative_seqlens_k[i]
-                else:
-                    diagonal = 1
-                query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-                key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-
-                mask = torch.triu(
-                    torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        min_value,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
-                    ),
-                    diagonal=diagonal,
-                )
-                self.attention_mask[..., query_range, key_range] = mask
+            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0])
+            build_attention_mask(self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window)
 
     @traced
     def _sync(self):
         if self.output_ids is not None:
             try:
-                out = self.output_ids.tolist()[0]  # should be the only synch we do
+                out = self.output_ids.tolist()[0]  # should be the only sync we do
             except Exception:
                 out = [0, 1]
         else:

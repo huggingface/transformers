@@ -27,7 +27,10 @@ from transformers.generation import GenerationConfig
 
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
-MODEL_ID = "google/gemma-2b"
+MODEL_ID = "google/gemma-2-2b-it"
+SLIDIND_WINDOW = 256
+FORCE_MAX_LENGTH = False # should be False unless you are debugging sliding window features
+
 
 
 def generate_simple(
@@ -41,6 +44,8 @@ def generate_simple(
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_implem)
     model = model.cuda().eval()
+    if getattr(model.config, "sliding_window", None) is not None:
+        model.config.sliding_window = SLIDIND_WINDOW
 
     decoded_outputs = {}
     for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
@@ -206,6 +211,9 @@ if __name__ == "__main__":
         dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
+    if getattr(model.config, "sliding_window", None) is not None:
+        print(f"Setting sliding window from {model.config.sliding_window} to {SLIDIND_WINDOW}")
+        model.config.sliding_window = SLIDIND_WINDOW
 
     # If turned on, we compile the model
     if args.compile:
@@ -216,16 +224,17 @@ if __name__ == "__main__":
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
+
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-    dataset = dataset.select(range(args.samples))  # Use only 5 examples for the simple version
-    tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
-    simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+    dataset = dataset.select(range(args.samples))
+
+    simple_batch_inputs = [tokenizer(item["question"])["input_ids"] for item in dataset]
 
     # Prepare generation config
     generation_config = GenerationConfig(
         max_new_tokens=512,
         use_cuda_graph=args.use_cuda_graph,
-        eos_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.pad_token_id if FORCE_MAX_LENGTH else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=True,
         temperature=0.8,
@@ -246,14 +255,14 @@ if __name__ == "__main__":
         )
 
     # Run warmup batch generation
-    # batch_generate(
-    #     model,
-    #     simple_batch_inputs[: min(5, args.samples)],
-    #     generation_config,
-    #     tokenizer,
-    #     displayed_samples=-1,
-    #     slice_inputs=args.slice_inputs,
-    # )
+    batch_generate(
+        model,
+        simple_batch_inputs[: min(5, args.samples)],
+        generation_config,
+        tokenizer,
+        displayed_samples=-1,
+        slice_inputs=args.slice_inputs,
+    )
 
     # Run batch generation
     gen_time, tok_per_sec = batch_generate(

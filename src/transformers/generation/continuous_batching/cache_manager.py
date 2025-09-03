@@ -85,8 +85,10 @@ class SlidingAttentionCacheManager(CacheManager):
         self._block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+        if request_id not in self._block_table:
+            self._block_table[request_id] = []
         # Early return if we are already at the max number of blocks per request
-        already_allocated = len(self._block_table.get(request_id, []))
+        already_allocated = len(self._block_table[request_id])
         if already_allocated == self._max_blocks_per_request:
             return 0
         # Compute actual number of blocks to allocate
@@ -104,11 +106,11 @@ class SlidingAttentionCacheManager(CacheManager):
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Apply sliding window
-        start_index = past_length % self.sliding_window
-        cache_length = min(past_length, self.sliding_window)
+        start_index = 0 if past_length < self.sliding_window else past_length % self.sliding_window
+        cache_length = min(past_length, self.sliding_window - 1)
         # Compute the physical indices
         physical_indices = []
-        for i in range(start_index + cache_length):
+        for i in range(start_index, start_index + cache_length):
             i %= self.sliding_window
             block_idx = i // self.block_size
             block_offset = i % self.block_size
@@ -123,7 +125,7 @@ class SlidingAttentionCacheManager(CacheManager):
             raise ValueError(f"No block table found for request {request_id}")
         # Apply sliding window
         start_index = past_length % self.sliding_window
-        cache_length = min(past_length, self.sliding_window)
+        cache_length = min(query_length, self.sliding_window)
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
