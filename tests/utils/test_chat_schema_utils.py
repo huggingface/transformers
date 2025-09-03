@@ -162,7 +162,7 @@ cohere_schema = {
                 "required": ["role", "content"],
             },
             "x-regex": r"^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
-            "x-regex-iterator": "<\\|START_OF_TURN_TOKEN\\|><\\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\\|>(?P<content>.*?)(?:<\\|END_OF_TURN_TOKEN\\|>|\n\n## Available Tools)",
+            "x-regex-iterator": "<\\|START_OF_TURN_TOKEN\\|><\\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\\|>(?P<content>.*?)(?:\nAction:\n```(?P<tool_calls>.*?(?:<\\|END_OF_TURN_TOKEN\\|>|\n\n## Available Tools)",
             #      2) Mapping the role names like CHATBOT -> assistant with some kind of re.sub or mapping deal
         },
     },
@@ -405,6 +405,44 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat_with_offsets = recursive_parse(formatted_chat, cohere_schema, offset=0)
         self.assertEqual(remove_offsets(parsed_chat_with_offsets), parsed_chat)
         validate_offsets(parsed_chat_with_offsets, formatted_chat)
+
+    def test_cohere_template_with_tool_calls(self):
+        def get_current_temperature(location: str):
+            """
+            Gets the temperature at a given location.
+
+            Args:
+                location: The location to get the temperature for
+            """
+            return 22.0  # bug: Sometimes the temperature is not 22. low priority
+
+        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-08-2024")
+        chat = [
+            {"role": "system", "content": "You are a helpful assistant who responds to queries by calling tools."},
+            {"role": "user", "content": "Hey, what's the weather in Paris today?"},
+            {
+                "role": "assistant",
+                "content": "We need to respond to the user by calling the get_current_temperature function with location \"Paris\". Provide a short response.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"location": "Paris"}
+                        }
+                    }
+                ]
+            },
+            {"role": "tool", "content": "22.0"},
+            {"role": "assistant", "content": "The current temperature in Paris is 22.0 degrees."},
+
+        ]
+        formatted_chat = tokenizer.apply_chat_template(
+            chat, tokenize=False, tools=[get_current_temperature], chat_template="tool_use"
+        )
+        parsed_chat = recursive_parse(formatted_chat, cohere_schema)
+        breakpoint()
+        print()
 
     def test_gpt_oss_template(self):
         def simple_tool(temperature_format: str):
