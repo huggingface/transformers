@@ -492,7 +492,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
-    # Has rope_theta -> probably an older model, but should support rope scaling as well
+    # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
     main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
     sub_config_has_rope = any(
         hasattr(config[sub_config], "rope_scaling") or hasattr(config[sub_config], "rope_theta")
