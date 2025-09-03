@@ -216,9 +216,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         """
         super().__init__()
 
-        config = model.config.get_sub_config(
-            modality="text",
-        )
+        config = model.config.get_sub_config(modality="text")
 
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
@@ -499,9 +497,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         """
         super().__init__()
 
-        config = model.config.get_sub_config(
-            modality="text",
-        )
+        config = model.config.get_sub_config(modality="text")
         generation_config = model.generation_config
 
         # Sanity checks
@@ -677,9 +673,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         """
         super().__init__()
         self.model = model
-        config = model.config.get_sub_config(
-            modality="text",
-        )
+        config = model.config.get_sub_config(modality="text")
         generation_config = model.generation_config
 
         # Sanity checks

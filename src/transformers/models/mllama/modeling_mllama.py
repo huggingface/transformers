@@ -1297,14 +1297,8 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        super().__init__(
-            config.get_sub_config(
-                modality="text",
-            )
-        )
-        self.text_config = config.get_sub_config(
-            modality="text",
-        )
+        super().__init__(config.get_sub_config(modality="text"))
+        self.text_config = config.get_sub_config(modality="text")
         self.vocab_size = self.text_config.vocab_size
         self.model = MllamaTextModel._from_config(self.text_config)
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)

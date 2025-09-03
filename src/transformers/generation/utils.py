@@ -1972,9 +1972,7 @@ class GenerationMixin(ContinuousMixin):
                 cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
                 # Add the config if it was not provided, as it's a required argument
                 if "config" not in cache_config:
-                    cache_config["config"] = self.config.get_sub_config(
-                        modality="text",
-                    )
+                    cache_config["config"] = self.config.get_sub_config(modality="text", decoder=True)
                 # Pop the backend from the config (defaults to quanto if not defined)
                 backend = cache_config.pop("backend", "quanto")
 

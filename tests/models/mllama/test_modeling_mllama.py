@@ -299,9 +299,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = MllamaForConditionalGeneration(config).to(torch_device)
-        model_vocab_size = config.get_sub_config(
-            modality="text",
-        ).vocab_size
+        model_vocab_size = config.get_sub_config(modality="text").vocab_size
         inputs = self._prepare_for_class(inputs, MllamaForConditionalGeneration, return_labels=True)
         # Resize embeddings and call forward
         model.resize_token_embeddings(model_vocab_size + 10)

@@ -3345,9 +3345,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             vocab_size = model_embeds.weight.shape[0]
 
         # Update base model and current model config.
-        self.config.get_sub_config(
-            modality="text",
-        ).vocab_size = vocab_size
+        self.config.get_sub_config(modality="text").vocab_size = vocab_size
         self.vocab_size = vocab_size
 
         # Tie weights again if needed
