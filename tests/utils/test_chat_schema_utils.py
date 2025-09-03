@@ -214,24 +214,51 @@ gpt_oss_schema = {
             },
         },
         "messages": {
+            # TODO The structure is very hard to parse because a message with tool calls completely upends the format.
+            #      I need to figure out all the possibilities before we can actually write a parser. Create a bunch
+            #      of sample chats including non-tool-calling but with thinking etc.
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
                     "role": {
                         "type": "string",
-                        "enum": ["user", "assistant", "system"],
+                        "enum": ["user", "assistant", "system", "tool"],
                         "x-mapping": {"developer": "system", "user": "user", "assistant": "assistant"},
+                        "x-mapping-regex": {r"^functions\.": "tool"}
                     },
                     "content": {
                         "type": "string",
                         "x-regex": "^(?:\\# Instructions\n\n)?(.*?)(?:\n\n# Tools\n\n.*?)?$",
                     },
+                    "thinking": {
+                        "type": "string",
+                    },
+                    "tool_calls": {
+                        "type": "array",
+                        "x-regex-iterator": r"to=functions.\w+<.*?<|message|>.*?[<$]",
+                        "prefixItems": [
+                            {
+                                "type": {"const": "function"},
+                                "function": {
+                                    "type": "object",
+                                    "x-regex": r"to=functions(?P<name>.\w+)<.*?<|message|>(?P<arguments>.*?)[<$]",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "arguments": {
+                                            "type": "object",
+                                            "additionalProperties": {"type": "string"}, # Type any?
+                                        },
+                                    }
+                                }
+                             }
+                        ]
+                    },
                 },
                 "required": ["role", "content"],
             },
             "x-regex": r"<\|start\|>system<\|message\|>.*?<\|end\|>(.*?)$",
-            "x-regex-iterator": r"<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>)",
+            "x-regex-iterator": r"<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>|<\|call\|>)",
         },
     },
 }
@@ -362,7 +389,7 @@ class ChatSchemaParserTest(unittest.TestCase):
 
         # Command-R is a real workout because it converts tools to Python function defs in the template
         # TODO Move this template to an internal-testing repo and add the schema too
-        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-plus")
+        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-08-2024")
         chat = [
             {"role": "user", "content": "Hello!"},
             {"role": "assistant", "content": "Hi there! How can I help you today?"},
@@ -420,6 +447,44 @@ class ChatSchemaParserTest(unittest.TestCase):
             "number"  # The GPT template maps these all to 'number' so we can't recover int vs float
         )
         self.assertEqual(parsed_chat["tools"][1], complex_schema)
+
+    def test_gpt_oss_template_with_tool_calls(self):
+        def get_current_temperature(location: str):
+            """
+            Gets the temperature at a given location.
+
+            Args:
+                location: The location to get the temperature for
+            """
+            return 22.0  # bug: Sometimes the temperature is not 22. low priority
+
+        tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+        chat = [
+            {"role": "system", "content": "You are a helpful assistant who responds to queries by calling tools."},
+            {"role": "user", "content": "Hey, what's the weather in Paris today?"},
+            {
+                "role": "assistant",
+                "content": "We need to respond to the user by calling the get_current_temperature function with location \"Paris\". Provide a short response.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"location": "Paris"}
+                        }
+                    }
+                ]
+            },
+            # {"role": "tool", "content": "22.0"},
+            # {"role": "assistant", "content": "The current temperature in Paris is 22.0 degrees."},
+
+        ]
+        formatted_chat = tokenizer.apply_chat_template(
+            chat, tokenize=False, tools=[get_current_temperature]
+        )
+        breakpoint()
+        parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
+        self.assertEqual(parsed_chat["messages"], chat)
 
     def test_assistant_masking(self):
         tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
