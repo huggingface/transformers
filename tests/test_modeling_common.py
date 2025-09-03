@@ -1002,6 +1002,7 @@ class ModelTesterMixin:
 
         def check_determinism(first, second):
             # Simply don't compare if both tensors only contain `nan` elements
+            # See: https://github.com/huggingface/transformers/pull/40661
             if torch.all(torch.isnan(first)) and torch.all(torch.isnan(second)):
                 return
 
