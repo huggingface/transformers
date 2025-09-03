@@ -925,4 +925,3 @@ class DacIntegrationTest(unittest.TestCase):
             torch.allclose(reconstructed, original_reconstructed, atol=1e-6),
             msg="Reconstructed codes from latents should match original quantized codes",
         )
-
