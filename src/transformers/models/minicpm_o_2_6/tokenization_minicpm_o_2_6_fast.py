@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import Qwen2TokenizerFast
+from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 
 class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):

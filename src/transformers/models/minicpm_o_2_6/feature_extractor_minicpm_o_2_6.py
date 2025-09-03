@@ -14,34 +14,44 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
-from transformers import WhisperFeatureExtractor, AutoFeatureExtractor, AutoTokenizer
 import numpy as np
 import torch
+
+from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
 
 class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __call__(
-        self,
-        tokenizer: None,
-        audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]],
-        audio_parts: Optional[list] = None,
-        chunk_input: Optional[bool] = False,
-        sampling_rate: Optional[int] = None,
-        chunk_length: Optional[int] = 1,
-        **kwargs,
-    ):
+    def format_audios(self, audios):
+        """
+        Normalize audios format to list of list of numpy arrays.
+
+        Args:
+            audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]]
+
+        Returns:
+            List[List[np.ndarray]]: Normalized audio format
+        """
         # in batch inference, it may be [[]]
         if isinstance(audios, np.ndarray):
-            audios_list = [[audios]]
+            return [[audios]]
         elif isinstance(audios[0], np.ndarray):
-            audios_list = [audios]
+            return [audios]
         else:
-            audios_list = audios
+            return audios
+
+    def __call__(
+        self,
+        audios: Union[np.ndarray, list[np.ndarray], list[list[np.ndarray]]],
+        audio_parts: Optional[list] = None,
+        sampling_rate: Optional[int] = None,
+        **kwargs,
+    ):
+        audios_list = self.format_audios(audios)
 
         if audio_parts is not None:
             assert len(audio_parts) == len(audios_list)
@@ -49,18 +59,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
                 assert len(parts) == len(audios)
 
         audio_feature_lens_list = []
-        audio_ph_list = []
-
         audio_features_all = []
-
-        # audio placeholder not dependent on audio_parts
-        for audios in audios_list:
-            if audios:
-                audio_ph_list.append(
-                    [self.get_audio_placeholder(tokenizer, len(a), chunk_input, chunk_length) for a in audios]
-                )
-            else:
-                audio_ph_list.append([])
 
         for idx, audios in enumerate(audios_list):
             if audio_parts is not None:
@@ -90,7 +89,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
                     final_merge_audio.append(audio)
                 else:
                     for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
+                        final_merge_audio.append(audio[i * max_audio_inp_len: (i + 1) * max_audio_inp_len])
 
             if audios:
                 audio_inputs = super().__call__(
@@ -121,34 +120,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         else:
             audio_features = []
 
-        return audio_features, audio_feature_lens_list, audio_ph_list
+        return audio_features, audio_feature_lens_list
 
-    def get_audio_placeholder(self, tokenizer, audio_lens, chunk_input, chunk_length):
-        pool_step = 2
-        feature_lens = math.ceil(audio_lens / self.hop_length)
-
-        feature_lens = (feature_lens - 1) // 2 + 1
-        output_lens = (feature_lens - pool_step) // pool_step + 1
-
-        if chunk_input:
-            fbank_feat_in_chunk = int(chunk_length * 100)
-            cnn_feat_in_chunk = (fbank_feat_in_chunk - 1) // 2 + 1
-            audio_embeds_in_chunk = (cnn_feat_in_chunk - pool_step) // pool_step + 1
-            num_audio_chunks = (output_lens + audio_embeds_in_chunk - 1) // audio_embeds_in_chunk
-
-            place_holders = ""
-            total_unk_len = 0
-            for _ in range(num_audio_chunks):
-                unk_len = min(audio_embeds_in_chunk, output_lens - total_unk_len)
-                place_holders += tokenizer.audio_start + tokenizer.unk_token * unk_len + tokenizer.audio_end
-                total_unk_len += unk_len
-            audio_placeholder = place_holders
-        else:
-            audio_placeholder = tokenizer.audio_start + tokenizer.unk_token * output_lens + tokenizer.audio_end
-
-        return audio_placeholder
-
-
-AutoFeatureExtractor.register("MiniCPM_o_2_6FeatureExtractor", MiniCPM_o_2_6FeatureExtractor)
 
 __all__ = ["MiniCPM_o_2_6FeatureExtractor"]

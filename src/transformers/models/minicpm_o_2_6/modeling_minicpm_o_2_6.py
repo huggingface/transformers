@@ -67,40 +67,31 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     auto_docstring,
     can_return_tuple,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..whisper.configuration_whisper import WhisperConfig
-from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from ...utils.generic import check_model_inputs
+from ...utils.import_utils import _is_package_available, is_flash_attn_2_available
 from .configuration_minicpm_o_2_6 import (
     MiniCPM_o_2_6Config,
     MiniCPMConditionalTTSConfig,
     MiniCPMConditionalTTSTextConfig,
+    MiniCPMVisionConfig,
+    MiniCPMWhisperConfig,
 )
-from .processing_minicpm_o_2_6 import NumberToTextConverter, VoiceChecker, sentence_end
+from .tts_processing_minicpm_o_2_6 import ChatTTSProcessor, NumberToTextConverter, VoiceChecker, sentence_end
 
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,  # noqa
-        pad_input,
-        unpad_input,
-    )
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
-try:
+if _is_package_available("vector_quantize_pytorch") and _is_package_available("vocos"):
     from vector_quantize_pytorch import GroupedResidualFSQ
     from vocos import Vocos
     from vocos.pretrained import instantiate_class
-
-    _tts_deps = True
-except:
-    _tts_deps = False
-
 
 logger = logging.get_logger(__name__)
 
@@ -339,7 +330,7 @@ class MiniCPM_o_2_6PreTrainedModel(PreTrainedModel):
     config: MiniCPM_o_2_6Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MiniCPM_o_2_6TextDecoderLayer"]
+    _no_split_modules = ["MiniCPM_o_2_6DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -351,24 +342,6 @@ class MiniCPM_o_2_6PreTrainedModel(PreTrainedModel):
         "hidden_states": MiniCPM_o_2_6DecoderLayer,
         "attentions": MiniCPM_o_2_6Attention,
     }
-    config_class = MiniCPM_o_2_6Config
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MiniCPM_o_2_6TextRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class MiniCPM_o_2_6RotaryEmbedding(nn.Module):
@@ -408,7 +381,7 @@ class MiniCPM_o_2_6RotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class MiniCPMTextModel(MiniCPM_o_2_6PreTrainedModel):
+class MiniCPM_o_2_6TextModel(MiniCPM_o_2_6PreTrainedModel):
     def __init__(self, config: MiniCPM_o_2_6Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -499,6 +472,9 @@ class MiniCPMTextModel(MiniCPM_o_2_6PreTrainedModel):
         )
 
 
+_tts_deps = _is_package_available("vector_quantize_pytorch") and _is_package_available("vocos")
+
+
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -572,16 +548,20 @@ def gen_logits(
     return logits_warpers, logits_processors
 
 
-class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
+class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
-        super().__init__(config)
-        self.language_model = MiniCPMTextModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+    def __init__(self, config: MiniCPM_o_2_6Config):
+        super().__init__(config.text_config)
+
+        text_config = config.text_config
+        self.language_model = MiniCPM_o_2_6TextModel(text_config)
+        self.vocab_size = text_config.vocab_size
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+
+        self.omni_config = config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -592,12 +572,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         # init vision module
         self.vpm = self.init_vision_module()
         self.vision_dim = self.vpm.embed_dim
-        self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
+        self.resampler = self.init_resampler(config.query_num, self.embed_dim, self.vision_dim)
 
         # init audio module
         self.apm = self.init_audio_module()
         audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
-        self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
+        self.audio_avg_pooler = nn.AvgPool1d(self.omni_config.audio_pool_step, stride=self.omni_config.audio_pool_step)
         self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
         self.audio_encoder_layer = -1
 
@@ -627,10 +607,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         load tts tokenizer and vocos
         1. try load form local 2. try load from huggingface
         """
-        from .processing_minicpm_o_2_6 import ChatTTSProcessor
-
         if tts_text_tokenizer_path is None:
-            tts_text_tokenizer_path = os.path.join(self.config._name_or_path, "assets/chattts_tokenizer")
+            tts_text_tokenizer_path = os.path.join(self.omni_config._name_or_path, "assets/chattts_tokenizer")
         if not os.path.exists(tts_text_tokenizer_path):
             # try from hf model_id
             tts_text_tokenizer_path = "openbmb/chattts_tokenizer"
@@ -639,7 +617,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         self.tts_processor = ChatTTSProcessor(text_tokenizer=tts_text_tokenizer)
 
         if vocos_ckpt_path is None:
-            vocos_ckpt_path = os.path.join(self.config._name_or_path, "assets/Vocos.pt")
+            vocos_ckpt_path = os.path.join(self.omni_config._name_or_path, "assets/Vocos.pt")
         if not os.path.exists(vocos_ckpt_path):
             vocos_ckpt_path = hf_hub_download(repo_id="openbmb/MiniCPM-o-2_6", subfolder="assets", filename="Vocos.pt")
 
@@ -670,12 +648,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         return vocos
 
     def init_vision_module(self):
-        if self.config._attn_implementation == "flash_attention_2":
-            self.config.vision_config._attn_implementation = "flash_attention_2"
+        if self.omni_config._attn_implementation == "flash_attention_2":
+            self.omni_config.vision_config._attn_implementation = "flash_attention_2"
         else:
-            self.config.vision_config._attn_implementation = "eager"
-        model = MiniCPMVisionTransformer(self.config.vision_config)
-        if self.config.drop_vision_last_layer:
+            self.omni_config.vision_config._attn_implementation = "eager"
+        model = MiniCPMVisionTransformer(self.omni_config.vision_config)
+        if self.omni_config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
         setattr(model, "embed_dim", model.embeddings.embed_dim)
@@ -683,9 +661,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         return model
 
-    def init_resampler(self, embed_dim, vision_dim):
+    def init_resampler(self, query_num, embed_dim, vision_dim):
         return Resampler(
-            num_queries=self.config.query_num,
+            num_queries=query_num,
             embed_dim=embed_dim,
             num_heads=embed_dim // 128,
             kv_dim=vision_dim,
@@ -693,11 +671,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         )
 
     def init_audio_module(self):
-        model = MiniCPMWhisperEncoder(self.config.audio_config)
+        model = MiniCPMWhisperEncoder(self.omni_config.audio_config)
         return model
 
     def init_tts_module(self):
-        model = ConditionalChatTTS(self.config.tts_config)
+        model = ConditionalChatTTS(self.omni_config.tts_config)
         return model
 
     def get_input_embeddings(self):
@@ -769,8 +747,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         """
         input_lengths_after_cnn = (input_lengths - 1) // 2 + 1
         input_lengths_after_pooling = (
-            input_lengths_after_cnn - self.config.audio_pool_step
-        ) // self.config.audio_pool_step + 1
+            input_lengths_after_cnn - self.omni_config.audio_pool_step
+        ) // self.omni_config.audio_pool_step + 1
         input_lengths_after_pooling = input_lengths_after_pooling.to(dtype=torch.int32)
 
         return input_lengths_after_cnn, input_lengths_after_pooling
@@ -798,7 +776,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             for i in range(B):
                 patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
 
-            vision_batch_size = self.config.vision_batch_size
+            vision_batch_size = self.omni_config.vision_batch_size
             all_pixel_values = all_pixel_values.type(dtype)
             if B > vision_batch_size:
                 hs = []
@@ -1047,7 +1025,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             assert len(audio_embeddings) == len(input_embeddings)
             audio_bounds = data["audio_bounds"]
 
-            if self.config.chunk_input:
+            if self.omni_config.chunk_input:
                 for i in range(bs):
                     audio_embs = torch.cat(audio_embeddings[i], dim=0).to(
                         device=input_embeddings.device, dtype=input_embeddings.dtype
@@ -1116,9 +1094,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.omni_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.omni_config.output_hidden_states
         )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -1142,7 +1120,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1237,7 +1215,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             model_inputs["inputs_embeds"] = self.get_omni_embedding(
                 model_inputs,
                 input_embeddings=model_inputs["inputs_embeds"],
-                chunk_length=self.config.audio_chunk_length,
+                chunk_length=self.omni_config.audio_chunk_length,
             )
 
             if stream:
@@ -1270,7 +1248,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             spk_embeds = wav_numpy = sr = None
 
             if not batched and use_tts_template and generate_audio:
-                result = processor.decode_text(outputs.sequences, processor.tokenizer)
+                result = processor.decode(outputs.sequences)
                 mel_spec = self._generate_mel_spec(
                     model_inputs,
                     outputs,
@@ -1612,7 +1590,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             end = check_uncompleted_token(cur_ids[0])
             left_ids = cur_ids[:, end:]
             cur_ids = cur_ids[:, :end]
-            text = processor.decode_text(cur_ids, tokenizer)[0] if end > 0 else ""
+            text = processor.decode(cur_ids)[0] if end > 0 else ""
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
@@ -2247,6 +2225,37 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             logger.info(f"Audio saved to {output_path}")
         return wav_numpy, sr
 
+
+def whisper_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None and attention_mask.ndim == 4:
+        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class MiniCPMWhisperAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -2295,7 +2304,7 @@ class MiniCPMWhisperAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -2323,34 +2332,34 @@ class MiniCPMWhisperAttention(nn.Module):
         query_states = query_states.view(*q_input_shape)
         query_states = query_states.transpose(1, 2).contiguous()
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        if past_key_values is not None:
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
+                past_key_values.is_updated[self.layer_idx] = True
+                past_key_values = past_key_values.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                past_key_values = past_key_values.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
+        if is_cross_attention and past_key_values and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_values.key_cache[self.layer_idx]
+            value_states = past_key_values.value_cache[self.layer_idx]
         else:
             key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
 
-        attention_interface: Callable = eager_attention_forward
+        attention_interface: Callable = whisper_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -2370,11 +2379,11 @@ class MiniCPMWhisperAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, past_key_values
 
 
 class MiniCPMWhisperEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: WhisperConfig, layer_idx: int = None):
+    def __init__(self, config: MiniCPMWhisperConfig, layer_idx: int = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = MiniCPMWhisperAttention(
@@ -2426,7 +2435,7 @@ class MiniCPMWhisperEncoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_values,
+            past_key_values=past_key_values,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -2477,7 +2486,7 @@ class MiniCPMWhisperEncoder(MiniCPM_o_2_6PreTrainedModel):
         config: MiniCPMWhisperConfig
     """
 
-    def __init__(self, config: WhisperConfig):
+    def __init__(self, config: MiniCPMWhisperConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
@@ -2592,7 +2601,7 @@ class MiniCPMWhisperEncoder(MiniCPM_o_2_6PreTrainedModel):
                 only present if their respective `output_*` arguments are set to `True`.
 
         Example:
-            >>> from transformers import AutoFeatureExtractor, WhisperConfig, WhisperForConditionalGeneration
+            >>> from transformers import AutoFeatureExtractor, MiniCPMWhisperConfig, WhisperForConditionalGeneration
             >>> import torch
 
             >>> # Load a feature extractor and a Whisper model
@@ -2994,7 +3003,7 @@ class ConditionalChatTTSGenerationOutput(ModelOutput):
     Args:
         new_ids (torch.LongTensor): Newly generated audio code sequence, shape (batch_size, sequence_length, num_vq).
         audio_input_ids (torch.LongTensor): Updated input IDs including condition and generated audio codes, shape (batch_size, full_sequence_length, num_vq).
-        past_key_values (Tuple[Tuple[torch.FloatTensor]]): Tuple containing pre-computed keys and values used for attention mechanism. Each element has shape (batch_size, num_heads, sequence_length, embed_size_per_head).
+        past_key_values (tuple[tuple[torch.FloatTensor]]): tuple containing pre-computed keys and values used for attention mechanism. Each element has shape (batch_size, num_heads, sequence_length, embed_size_per_head).
         finished (bool): Boolean indicating whether generation is complete.
 
     """
@@ -3196,23 +3205,6 @@ class MiniCPMConditionalTTSTextPreTrainedModel(PreTrainedModel):
         "attentions": MiniCPMConditionalTTSTextAttention,
     }
     config_class = MiniCPMConditionalTTSTextConfig
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MiniCPMConditionalTTSTextRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class MiniCPMConditionalTTSTextRotaryEmbedding(nn.Module):
@@ -3340,7 +3332,7 @@ class MiniCPMConditionalTTSTextModel(MiniCPMConditionalTTSTextPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -3681,16 +3673,7 @@ class ConditionalChatTTS(PreTrainedModel):
         dvae = DVAE()
         self.dvae = dvae
 
-        model_config = MiniCPMConditionalTTSTextConfig(
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            num_attention_heads=config.num_attention_heads,
-            num_hidden_layers=config.num_hidden_layers,
-            max_position_embeddings=config.max_position_embeddings,
-            attn_implementation=config.attn_implementation,
-        )
-
-        model = MiniCPMConditionalTTSTextModel(model_config)
+        model = MiniCPMConditionalTTSTextModel(config.tts_text_config)
         self.model = model
 
     @torch.inference_mode()
@@ -3751,7 +3734,7 @@ class ConditionalChatTTS(PreTrainedModel):
         Args:
             input_ids (Tensor): Tensor of shape [batch_size, seq_len]
             position_ids (LongTensor): Tensor of shape [batch_size, seq_len]
-            past_key_values (List[Tuple[Tensor]]): KV Cache of all layers, each layer is a tuple (Tensor, Tensor) denoting keys and values. Each tensor is of seq_len = `self.streaming_text_reserved_len`. `past_key_values` will be updated.
+            past_key_values (List[tuple[Tensor]]): KV Cache of all layers, each layer is a tuple (Tensor, Tensor) denoting keys and values. Each tensor is of seq_len = `self.streaming_text_reserved_len`. `past_key_values` will be updated.
             lm_spk_emb_last_hidden_states (Tensor, optional): Tensor of shape [batch_size, num_spk_emb, llm_dim]. Defaults to None.
             lm_last_hidden_states (Tensor, optional): _description_. Defaults to None.
 
@@ -3825,7 +3808,7 @@ class ConditionalChatTTS(PreTrainedModel):
 
         Args:
             input_ids (torch.Tensor): (1, seq_len, num_vq) Audio input token ids.
-            past_key_values (List[Tuple[torch.Tensor, torch.Tensor]]): Past key values for attention mechanism.
+            past_key_values (List[tuple[torch.Tensor, torch.Tensor]]): Past key values for attention mechanism.
         """
         assert input_ids.shape[0] == 1
         assert past_key_values is not None
@@ -3891,7 +3874,7 @@ class ConditionalChatTTS(PreTrainedModel):
 
         Args:
             input_ids (torch.Tensor): Input token ids.
-            past_key_values (List[Tuple[torch.Tensor, torch.Tensor]]): Past key values for attention mechanism.
+            past_key_values (List[tuple[torch.Tensor, torch.Tensor]]): Past key values for attention mechanism.
             temperature (torch.Tensor): Temperature for sampling.
             eos_token (Union[int, torch.Tensor]): End of sequence token.
             streaming_tts_text_mask (Optional[torch.Tensor], optional): Mask for streaming TTS text. Defaults to None.
@@ -4433,11 +4416,11 @@ class MiniCPMVisionModelOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -4450,7 +4433,7 @@ class MiniCPMVisionModelOutput(ModelOutput):
 
 
 class MiniCPMVisionEmbedding(nn.Module):
-    def __init__(self, config: SiglipVisionConfig):
+    def __init__(self, config: MiniCPMVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -4807,7 +4790,7 @@ class MiniCPMVisionMLP(nn.Module):
 
 
 class MiniCPMVisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: SiglipVisionConfig):
+    def __init__(self, config: MiniCPMVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -4817,6 +4800,7 @@ class MiniCPMVisionEncoderLayer(GradientCheckpointingLayer):
         )
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = MiniCPMVisionMLP(config)
+
 
     def forward(
         self,
@@ -4969,7 +4953,7 @@ class MiniCPMVisionPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = SiglipVisionConfig
+    config_class = MiniCPMVisionConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
 
@@ -5009,10 +4993,10 @@ class MiniCPMVisionEncoder(nn.Module):
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
     Args:
-        config: SiglipConfig
+        config: MiniCPMVisionConfig
     """
 
-    def __init__(self, config: SiglipVisionConfig):
+    def __init__(self, config: MiniCPMVisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([MiniCPMVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -5098,7 +5082,7 @@ SIGLIP_START_DOCSTRING = r"""
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
     Parameters:
-        config ([`SiglipVisionConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MiniCPMVisionConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -5124,12 +5108,12 @@ SIGLIP_VISION_INPUTS_DOCSTRING = r"""
     """The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING
 )
 class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
-    config_class = SiglipVisionConfig
+    config_class = MiniCPMVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
     _no_split_modules = []
 
-    def __init__(self, config: SiglipVisionConfig):
+    def __init__(self, config: MiniCPMVisionConfig):
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -5146,7 +5130,7 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         return self.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MiniCPMVisionConfig)
     def forward(
         self,
         pixel_values,
@@ -5216,4 +5200,4 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         )
 
 
-__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6Model", "MiniCPM_o_2_6PreTrainedModel"]
+__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6TextModel", "MiniCPM_o_2_6PreTrainedModel"]

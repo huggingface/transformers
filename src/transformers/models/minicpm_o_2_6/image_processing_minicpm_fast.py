@@ -14,20 +14,23 @@
 # limitations under the License.
 
 import math
-from typing import List
-from typing import Optional
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-import torchvision.transforms as transforms
 from PIL import Image
-from transformers import AutoImageProcessor
-from transformers.image_processing_utils import BaseImageProcessor
-from transformers.image_transforms import to_pil_image
-from transformers.image_utils import valid_images, make_nested_list_of_images
-from transformers.utils import TensorType, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_transforms import to_pil_image
+from ...image_utils import valid_images, make_nested_list_of_images
+from ...utils import TensorType, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...utils.import_utils import is_torchvision_available, is_torchvision_v2_available
 from .processing_minicpm_o_2_6 import MiniCPMOBatchFeature
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 def recursive_converter(converter, value):
@@ -40,7 +43,7 @@ def recursive_converter(converter, value):
         return converter(value)
 
 
-class MiniCPMVImageProcessor(BaseImageProcessor):
+class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -62,9 +65,10 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
         self.slice_mode = kwargs.pop("slice_mode", True)
 
-        self.image_mean = np.array(image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN)
-        self.image_std = np.array(image_std if image_std is not None else IMAGENET_DEFAULT_STD)
-        self.version = kwargs.pop("version", 2.0)
+        self.image_mean = np.array(
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN)
+        self.image_std = np.array(
+            image_std if image_std is not None else IMAGENET_STANDARD_STD)
 
     def ensure_divide(self, length, patch_size):
         return max(round(length / patch_size) * patch_size, patch_size)
@@ -112,46 +116,29 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
     def slice_image(self, image, max_slice_nums=9, scale_resolution=448, patch_size=14, never_split=False):
         original_size = image.size
         source_image = None
-        best_grid = self.get_sliced_grid(original_size, max_slice_nums, never_split)
+        best_grid = self.get_sliced_grid(
+            original_size, max_slice_nums, never_split)
         patches = []
 
         if best_grid is None:
             # dont need to slice, upsample
-            best_size = self.find_best_resize(original_size, scale_resolution, patch_size, allow_upscale=True)
-            source_image = image.resize(best_size, resample=Image.Resampling.BICUBIC)
+            best_size = self.find_best_resize(
+                original_size, scale_resolution, patch_size, allow_upscale=True)
+            source_image = image.resize(
+                best_size, resample=Image.Resampling.BICUBIC)
         else:
             # source image, down-sampling and ensure divided by patch_size
-            best_resize = self.find_best_resize(original_size, scale_resolution, patch_size)
+            best_resize = self.find_best_resize(
+                original_size, scale_resolution, patch_size)
             source_image = image.copy().resize(best_resize, resample=Image.Resampling.BICUBIC)
             refine_size = self.get_refine_size(
                 original_size, best_grid, scale_resolution, patch_size, allow_upscale=True
             )
-            refine_image = image.resize(refine_size, resample=Image.Resampling.BICUBIC)
+            refine_image = image.resize(
+                refine_size, resample=Image.Resampling.BICUBIC)
             patches = self.split_to_patches(refine_image, best_grid)
 
         return source_image, patches, best_grid
-
-    def get_grid_placeholder(self, tokenizer, grid):
-        if grid is None:
-            return ""
-        slice_image_placeholder = (
-            tokenizer.slice_start + tokenizer.unk_token * self.image_feature_size + tokenizer.slice_end
-        )
-
-        cols = grid[0]
-        rows = grid[1]
-        slices = []
-        for i in range(rows):
-            lines = []
-            for j in range(cols):
-                lines.append(slice_image_placeholder)
-            slices.append("".join(lines))
-
-        slice_placeholder = "\n".join(slices)
-        return slice_placeholder
-
-    # def get_image_id_placeholder(self, idx=0):
-    #     return f"{self.tokenizer.im_id_start}{idx}{self.tokenizer.im_id_end}"
 
     def get_sliced_images(self, image, max_slice_nums=None):
         slice_images = []
@@ -159,7 +146,8 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         if not self.slice_mode:
             return [image]
 
-        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
+        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(
+            max_slice_nums)
         assert max_slice_nums > 0
         source_image, patches, sliced_grid = self.slice_image(
             # default: 9  # default: 448  # default: 14
@@ -179,7 +167,8 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
     def get_sliced_grid(self, image_size, max_slice_nums, nerver_split=False):
         original_width, original_height = image_size
         log_ratio = math.log(original_width / original_height)
-        ratio = original_width * original_height / (self.scale_resolution * self.scale_resolution)
+        ratio = original_width * original_height / \
+            (self.scale_resolution * self.scale_resolution)
         multiple = min(math.ceil(ratio), max_slice_nums)
         if multiple <= 1 or nerver_split:
             return None
@@ -207,22 +196,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
         return best_grid
 
-    def get_slice_image_placeholder(self, tokenizer, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
-        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
-        assert max_slice_nums > 0
-        grid = self.get_sliced_grid(image_size=image_size, max_slice_nums=max_slice_nums)
-
-        image_placeholder = tokenizer.im_start + tokenizer.unk_token * self.image_feature_size + tokenizer.im_end
-        use_image_id = self.use_image_id if use_image_id is None else bool(use_image_id)
-        if use_image_id:
-            final_placeholder = f"{tokenizer.im_id_start}{image_idx}{tokenizer.im_id_end}" + image_placeholder
-        else:
-            final_placeholder = image_placeholder
-
-        if self.slice_mode:
-            final_placeholder = final_placeholder + self.get_grid_placeholder(tokenizer, grid=grid)
-        return final_placeholder
-
     def reshape_by_patch(self, image):
         """
         :param image: shape [3, H, W]
@@ -244,10 +217,10 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[Image.Image, List[Image.Image], List[List[Image.Image]]],
-        do_pad: Optional[bool] = True,
+        images: Union[Image.Image, list[Image.Image], list[list[Image.Image]]],
         max_slice_nums: int = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        do_normalize: bool = True,
         **kwargs,
     ) -> MiniCPMOBatchFeature:
         # in batch inference, it may be [[]], so we can't use `make_nested_list_of_images`
@@ -257,9 +230,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             images_list = [images]
         else:
             images_list = images
-
-        to_tensor = transforms.ToTensor()
-        normalize_transform = transforms.Normalize(mean=self.image_mean.tolist(), std=self.image_std.tolist())
 
         new_images_list = []
         image_sizes_list = []
@@ -286,17 +256,21 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                 for patch in image_patches:
                     # Convert PIL to tensor (0-1 range) and normalize
                     # Shape: [C, H, W], range [0, 1]
-                    tensor_patch = to_tensor(patch)
-                    normalized_patch = normalize_transform(tensor_patch)  # Apply normalization
+                    tensor_patch = F.to_tensor(patch)
+                    if do_normalize:
+                        normalized_patch = F.normalize(tensor_patch, mean=self.image_mean.tolist(),
+                                                       std=self.image_std.tolist())  # Apply normalization
                     image_patches_tensors.append(normalized_patch)
 
                 # Convert back to numpy for compatibility with existing code
-                image_patches = [patch.numpy() for patch in image_patches_tensors]
+                image_patches = [patch.numpy()
+                                 for patch in image_patches_tensors]
 
                 for slice_image in image_patches:
                     new_images.append(self.reshape_by_patch(slice_image))
                     tgt_sizes.append(
-                        np.array((slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
+                        np.array(
+                            (slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
                     )
 
             # in batch inference, it may be []
@@ -306,13 +280,12 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             new_images_list.append(new_images)
             image_sizes_list.append(image_sizes)
             tgt_sizes_list.append(tgt_sizes)
+
         return MiniCPMOBatchFeature(
-            data={"pixel_values": new_images_list, "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list},
+            data={"pixel_values": new_images_list,
+                  "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list},
             tensor_type=return_tensors,
         )
 
 
-AutoImageProcessor.register("MiniCPMVImageProcessor", MiniCPMVImageProcessor)
-
-
-__all__ = ["MiniCPMVImageProcessor"]
+__all__ = ["MiniCPMVImageProcessorFast"]
