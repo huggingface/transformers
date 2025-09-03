@@ -1516,7 +1516,10 @@ class GenerationMixin(ContinuousMixin):
             doc_reference = (
                 "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
             )
-            if self.config.get_sub_config(modality="text", decoder=True).vocab_size == assistant_model.config.get_sub_config(modality="text", decoder=True).vocab_size:
+            if (
+                self.config.get_sub_config(modality="text", decoder=True).vocab_size
+                == assistant_model.config.get_sub_config(modality="text", decoder=True).vocab_size
+            ):
                 if "assistant_tokenizer" in generation_mode_kwargs:
                     raise ValueError(
                         f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
