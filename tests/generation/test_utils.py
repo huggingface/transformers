@@ -799,7 +799,7 @@ class GenerationTesterMixin:
                     "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
                     # All models below: shouldn't suggest audio tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
                     "voxtral",
-                    "qwen2_audio",
+                    "qwen2audio",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
