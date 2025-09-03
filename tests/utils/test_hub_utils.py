@@ -29,7 +29,8 @@ from transformers.utils import (
     TRANSFORMERS_CACHE,
     WEIGHTS_NAME,
     cached_file,
-    has_file, list_repo_templates,
+    has_file,
+    list_repo_templates,
 )
 
 
