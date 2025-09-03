@@ -258,7 +258,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             input_embed = model.get_input_embeddings()
             if self.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
                 model.tie_weights()
-                setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+                setattr(model.config.get_sub_config(modality="text", decoder=True), "tie_word_embeddings", False)
 
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
             if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):

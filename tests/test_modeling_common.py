@@ -2158,14 +2158,18 @@ class ModelTesterMixin:
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.get_text_config().vocab_size
+            model_vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -2190,7 +2194,9 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
@@ -2226,13 +2232,19 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_text_config().vocab_size
+            model_vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
@@ -2266,14 +2278,18 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.to(torch_device)
 
-            model_vocab_size = config.get_text_config().vocab_size
+            model_vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -2338,9 +2354,13 @@ class ModelTesterMixin:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.get_text_config().vocab_size
+            model_vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
@@ -2378,7 +2398,9 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
+            new_model_vocab_size = model.config.get_sub_config(
+                modality="text",
+            ).vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
@@ -2493,7 +2515,9 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            vocab_size = config.get_text_config().vocab_size
+            vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
@@ -2558,7 +2582,9 @@ class ModelTesterMixin:
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
-            copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.get_sub_config(
+                modality="text",
+            ).tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -2832,7 +2858,14 @@ class ModelTesterMixin:
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
+                config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                if config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                is not None
+                else 1
             )
 
             wte = model.get_input_embeddings()
@@ -3673,9 +3706,9 @@ class ModelTesterMixin:
             # Set the attention to default `None` but the text config to `eager`
             # The model should load encoders in SDPA but not the text attention
             config._attn_implementation = None
-            config.get_text_config(decoder=True)._attn_implementation = "eager"
+            config.get_sub_config(modality="text", decoder=True)._attn_implementation = "eager"
             model = model_class(config)
-            self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
+            self.assertTrue(model.config.get_sub_config(modality="text", decoder=True)._attn_implementation == "eager")
 
             # Test that using `dict` atttention implementation works with `from_pretrained`
             #  Set all backbones to "eager" because "eager" attention is always available
@@ -4217,7 +4250,9 @@ class ModelTesterMixin:
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
 
                 model = (
                     model_class.from_pretrained(
@@ -4323,7 +4358,12 @@ class ModelTesterMixin:
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(
+                config.get_sub_config(
+                    modality="text",
+                ),
+                "use_cache",
+            ):
                 self.skipTest(f"{model_class.__name__} doesn't support caching")
 
             if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
@@ -4643,7 +4683,9 @@ class ModelTesterMixin:
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             batch_size, sequence_length = inputs["input_ids"].shape[:2]
-            vocab_size = config.get_text_config().vocab_size
+            vocab_size = config.get_sub_config(
+                modality="text",
+            ).vocab_size
             model = model_class(config).to(device=torch_device).eval()
             # some models have labels but `logits_to_keep` should not be used in train mode
             _ = inputs.pop("labels", None)
@@ -4837,7 +4879,7 @@ class ModelTesterMixin:
                 if key in inputs_dict:
                     dummy_inputs[key] = inputs_dict[key].to(torch_device)
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.get_sub_config(modality="text", decoder=True).is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 

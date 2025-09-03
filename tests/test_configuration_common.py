@@ -163,14 +163,18 @@ class ConfigTester:
         # Check only composite configs. We can't know which attributes each type fo config has so check
         # only text config because we are sure that all text configs have a `vocab_size`
         config = self.config_class(**self.inputs_dict)
-        if config.get_text_config() is config or not hasattr(self.parent.model_tester, "get_config"):
+        if config.get_sub_config(
+            modality="text",
+        ) is config or not hasattr(self.parent.model_tester, "get_config"):
             return
 
         # First create a config with non-default values and save it. The reload it back with a new
         # `vocab_size` and check that all values are loaded from checkpoint and not init from defaults
         non_default_inputs = self.parent.model_tester.get_config().to_dict()
         config = self.config_class(**non_default_inputs)
-        original_text_config = config.get_text_config()
+        original_text_config = config.get_sub_config(
+            modality="text",
+        )
         text_config_key = [key for key in config if getattr(config, key) is original_text_config]
 
         # The heuristic is a bit brittle so let's just skip the test
@@ -186,7 +190,9 @@ class ConfigTester:
             original_text_config_dict = original_text_config.to_dict()
             original_text_config_dict["vocab_size"] = 20
 
-            text_config_reloaded_dict = config_reloaded.get_text_config().to_dict()
+            text_config_reloaded_dict = config_reloaded.get_sub_config(
+                modality="text",
+            ).to_dict()
             self.parent.assertDictEqual(text_config_reloaded_dict, original_text_config_dict)
 
     def create_and_test_config_with_num_labels(self):

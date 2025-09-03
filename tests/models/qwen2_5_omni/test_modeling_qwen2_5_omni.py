@@ -195,7 +195,16 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, pixel_grid_thw, input_features_values, feature_attention_mask = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.get_text_config().vocab_size - 3) + 3
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length],
+                config.get_sub_config(
+                    modality="text",
+                ).vocab_size
+                - 3,
+            )
+            + 3
+        )
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
         # Make sure no other tokens are set to special, to prevetn flakiness
@@ -356,7 +365,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
 
                 model = (
                     model_class.from_pretrained(

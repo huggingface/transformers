@@ -428,7 +428,14 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                if config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
@@ -452,7 +459,12 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(
+                config.get_sub_config(
+                    modality="text",
+                ),
+                "use_cache",
+            ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:

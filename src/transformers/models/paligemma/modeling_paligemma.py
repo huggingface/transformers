@@ -122,7 +122,13 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+        std = getattr(
+            self.config,
+            "initializer_range",
+            self.config.get_sub_config(
+                modality="text",
+            ).initializer_range,
+        )
 
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)

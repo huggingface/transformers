@@ -299,7 +299,9 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = MllamaForConditionalGeneration(config).to(torch_device)
-        model_vocab_size = config.get_text_config().vocab_size
+        model_vocab_size = config.get_sub_config(
+            modality="text",
+        ).vocab_size
         inputs = self._prepare_for_class(inputs, MllamaForConditionalGeneration, return_labels=True)
         # Resize embeddings and call forward
         model.resize_token_embeddings(model_vocab_size + 10)
@@ -423,7 +425,9 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 inputs["use_cache"] = True
             outputs = model(**inputs)
 
-            text_config = config.get_text_config()
+            text_config = config.get_sub_config(
+                modality="text",
+            )
             num_hidden_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)

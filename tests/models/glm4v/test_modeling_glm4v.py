@@ -213,7 +213,7 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
+        text_gen_config = config.get_sub_config(modality="text", decoder=True)
         if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
             text_gen_config.pad_token_id = (
                 text_gen_config.eos_token_id

@@ -906,7 +906,9 @@ class Gemma3Model(Gemma3PreTrainedModel):
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
-                "config": self.config.get_text_config(),
+                "config": self.config.get_sub_config(
+                    modality="text",
+                ),
                 "input_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
@@ -1180,7 +1182,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     ) -> dict:
         # Prepare mask arguments
         mask_kwargs = {
-            "config": config.get_text_config(),
+            "config": config.get_sub_config(
+                modality="text",
+            ),
             "input_embeds": input_embeds,
             "attention_mask": attention_mask,
             "cache_position": cache_position,

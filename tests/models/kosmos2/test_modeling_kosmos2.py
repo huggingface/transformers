@@ -519,7 +519,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                if config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32)
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
@@ -637,7 +644,12 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # Traditional way of generating text
             input_ids = inputs_dict.pop("input_ids")
-            input_ids[input_ids == config.get_text_config().pad_token_id] = 0
+            input_ids[
+                input_ids
+                == config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+            ] = 0
             generation_kwargs = {
                 "return_dict_in_generate": True,
                 "output_scores": True,

@@ -996,7 +996,12 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # 1. If it doesn't support cache, skip the test
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(
+                config.get_sub_config(
+                    modality="text",
+                ),
+                "use_cache",
+            ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
@@ -1012,7 +1017,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_text_config(decoder=True)
+            text_config = config.get_sub_config(modality="text", decoder=True)
             num_decoder_layers = text_config.num_hidden_layers
 
             if custom_all_cache_shapes is None:
@@ -1122,7 +1127,12 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(
+                config.get_sub_config(
+                    modality="text",
+                ),
+                "use_cache",
+            ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:

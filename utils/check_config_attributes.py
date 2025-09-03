@@ -377,7 +377,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 or f'getattr(self.config, "{attribute}"' in modeling_source
                 or (
                     "TextConfig" in config_class.__name__
-                    and f"config.get_text_config().{attribute}" in modeling_source
+                    and f"config.get_sub_config(modality='text').{attribute}" in modeling_source
                 )
             ):
                 attribute_used = True
@@ -408,7 +408,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "image_seq_length",
         "video_seq_length",
         "image_size",
-        "text_config",  # may appear as `get_text_config()`
+        "text_config",  # may appear as `get_sub_config(modality='text')`
         "use_cache",
         "out_features",
         "out_indices",

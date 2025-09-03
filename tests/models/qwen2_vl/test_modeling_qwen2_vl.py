@@ -306,7 +306,9 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
 
                 model = (
                     model_class.from_pretrained(

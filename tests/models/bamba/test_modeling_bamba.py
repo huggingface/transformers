@@ -509,7 +509,14 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                if config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
+                is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32)
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
@@ -573,7 +580,9 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_sub_config(
+                    modality="text",
+                ).pad_token_id
                 # Ensure inputs_dict also has labels in it, as their presence/absence can induce
                 # dtype conversions. This also lets us compare losses.
                 labels = inputs_dict["input_ids"].clone()

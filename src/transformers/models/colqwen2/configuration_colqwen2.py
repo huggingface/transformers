@@ -87,9 +87,9 @@ class ColQwen2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
-    def get_text_config(self, *args, **kwargs) -> PretrainedConfig:
+    def get_sub_config(self, *args, **kwargs) -> PretrainedConfig:
         # Overwritten: `ColQwen2Config` wraps a VLM config
-        return self.vlm_config.get_text_config(*args, **kwargs)
+        return self.vlm_config.get_sub_config(*args, **kwargs)
 
 
 __all__ = ["ColQwen2Config"]

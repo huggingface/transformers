@@ -317,7 +317,7 @@ class StaticLayer(CacheLayerMixin):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
         # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         cache_position = (
@@ -392,12 +392,7 @@ class SlidingWindowLayer(StaticLayer):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
-        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
-        cache_position = (
-            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
-        )
+        cache_position = cache_kwargs.get("cache_position")
 
         is_full = self.cumulative_length >= self.max_cache_len
         # Update it now that we saved the value above
@@ -476,12 +471,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
-        # Some models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
-        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
-        cache_position = (
-            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
-        )
+        cache_position = cache_kwargs.get("cache_position")
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
@@ -1019,7 +1009,9 @@ class DynamicCache(Cache):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            config = config.get_text_config()
+            # If the model is a decoder-only model or the user has passed the right sub-config, this is a no-op.
+            # Otherwise, if the model is a composite model, defaults to text decoder sub-config.
+            config = config.get_sub_config(modality="text", decoder=True)
             sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
             if layer_types is None:
@@ -1131,7 +1123,9 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        config = config.get_text_config()
+        # If the model is a decoder-only model or the user has passed the right sub-config, this is a no-op.
+        # Otherwise, if the model is a composite model, defaults to text decoder sub-config.
+        config = config.get_sub_config(modality="text", decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
         if layer_types is None:
@@ -1206,7 +1200,9 @@ class QuantizedCache(Cache):
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
-        config = config.get_text_config(decoder=True)
+        # If the model is a decoder-only model or the user has passed the right sub-config, this is a no-op.
+        # Otherwise, if the model is a composite model, defaults to text decoder sub-config.
+        config = config.get_sub_config(modality="text", decoder=True)
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
             for _ in range(config.num_hidden_layers)

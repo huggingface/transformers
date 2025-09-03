@@ -467,7 +467,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.get_sub_config(modality="text", decoder=True).is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
@@ -482,14 +482,18 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             max_new_tokens = 10
 
             # here we force to not stop at eos and go until max-length
-            model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
+            model.generation_config.eos_token_id = model.config.get_sub_config(
+                modality="text",
+            ).eos_token_id = -1
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_text_config()
+            text_config = model.config.get_sub_config(
+                modality="text",
+            )
             head_dim = (
                 getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )
@@ -528,7 +532,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.get_sub_config(modality="text", decoder=True).is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
@@ -591,7 +595,12 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # 1. If it doesn't support cache, skip the test
-            if not hasattr(config.get_text_config(), "use_cache"):
+            if not hasattr(
+                config.get_sub_config(
+                    modality="text",
+                ),
+                "use_cache",
+            ):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
@@ -607,7 +616,9 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_text_config()
+            text_config = config.get_sub_config(
+                modality="text",
+            )
             num_decoder_layers = (
                 getattr(text_config, "decoder_layers", None)
                 or getattr(text_config, "num_decoder_layers", None)
@@ -1108,7 +1119,12 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
+        self.assertTrue(
+            input_size
+            > model.config.get_sub_config(
+                modality="text",
+            ).sliding_window
+        )
 
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
@@ -1134,7 +1150,12 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
+        self.assertTrue(
+            input_size
+            > model.config.get_sub_config(
+                modality="text",
+            ).sliding_window
+        )
 
         out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[
             :, input_size:

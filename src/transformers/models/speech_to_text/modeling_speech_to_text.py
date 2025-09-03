@@ -875,8 +875,10 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(
-                DynamicCache(config=self.config.get_text_config(decoder=True)),  # self-attention cache
-                DynamicCache(config=self.config.get_text_config(encoder=True)),  # cross-attention cache
+                DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True)),  # self-attention cache
+                DynamicCache(
+                    config=self.config.get_sub_config(modality="text", decoder=True)
+                ),  # cross-attention cache
             )
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(

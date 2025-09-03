@@ -780,7 +780,13 @@ class MllamaPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+        std = getattr(
+            self.config,
+            "initializer_range",
+            self.config.get_sub_config(
+                modality="text",
+            ).initializer_range,
+        )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1291,8 +1297,14 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        super().__init__(config.get_text_config())
-        self.text_config = config.get_text_config()
+        super().__init__(
+            config.get_sub_config(
+                modality="text",
+            )
+        )
+        self.text_config = config.get_sub_config(
+            modality="text",
+        )
         self.vocab_size = self.text_config.vocab_size
         self.model = MllamaTextModel._from_config(self.text_config)
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)

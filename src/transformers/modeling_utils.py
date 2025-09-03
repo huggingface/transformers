@@ -3035,7 +3035,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = self.config.initializer_range
         else:
             # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+            std = getattr(
+                self.config.get_sub_config(
+                    modality="text",
+                ),
+                "initializer_range",
+                0.02,
+            )
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -3109,7 +3115,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
+        if getattr(self.config.get_sub_config(modality="text", decoder=True), "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
                 self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
@@ -3339,7 +3345,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             vocab_size = model_embeds.weight.shape[0]
 
         # Update base model and current model config.
-        self.config.get_text_config().vocab_size = vocab_size
+        self.config.get_sub_config(
+            modality="text",
+        ).vocab_size = vocab_size
         self.vocab_size = vocab_size
 
         # Tie weights again if needed
@@ -3373,7 +3381,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # if word embeddings are not tied, make sure that lm head is resized as well
         if (
             self.get_output_embeddings() is not None
-            and not self.config.get_text_config(decoder=True).tie_word_embeddings
+            and not self.config.get_sub_config(modality="text", decoder=True).tie_word_embeddings
         ):
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
@@ -6038,8 +6046,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             not_initialized_submodules = set_initialized_submodules(self, loaded_keys)
             # If we're about to tie the output embeds to the input embeds we don't need to init them
             if (
-                hasattr(self.config.get_text_config(decoder=True), "tie_word_embeddings")
-                and self.config.get_text_config(decoder=True).tie_word_embeddings
+                hasattr(self.config.get_sub_config(modality="text", decoder=True), "tie_word_embeddings")
+                and self.config.get_sub_config(modality="text", decoder=True).tie_word_embeddings
             ):
                 output_embeddings = self.get_output_embeddings()
                 if output_embeddings is not None:

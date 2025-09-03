@@ -1093,7 +1093,9 @@ def create_masks_for_generate(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # The attribute reside in the text config for composite models
-    effective_config = config.get_text_config()
+    effective_config = config.get_sub_config(
+        modality="text",
+    )
     # Prepare the mask args
     mask_kwargs = {
         "config": effective_config,
