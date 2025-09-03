@@ -280,3 +280,30 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             torch.allclose(inputs1["input_ids"], inputs2["input_ids"]),
             f"Input ids are not equal for batched input: {inputs1['input_ids']} != {inputs2['input_ids']}",
         )
+
+    def test_processor_text_has_no_visual(self):
+        # Overwritten: text inputs have to be nested as well
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(batch_size=3, modalities="image")
+        image_inputs = self.prepare_image_inputs(batch_size=3)
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+
+        # Call with nested list of vision inputs
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"text": text, "images": image_inputs_nested}
+        inputs = processor(**inputs_dict_nested, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs)
+
+        # Call with one of the samples with no associated vision input
+        plain_text = ["lower newer"]
+        image_inputs_nested[0] = []
+        text[0] = plain_text
+        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
+        inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
+
+        # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
+        # has no vision input associated, so we skip it and check it has no vision
+        self.assertListEqual(
+            inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
+        )

@@ -354,7 +354,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, list[int]]`, *optiona;*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional;*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
