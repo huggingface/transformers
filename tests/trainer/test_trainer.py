@@ -23,15 +23,17 @@ import re
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from accelerate.data_loader import prepare_data_loader
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -112,7 +114,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.trainer import TRAINER_STATE_NAME
+from transformers.trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    HPSearchBackend,
+    check_target_module_exists,
+    get_last_checkpoint,
+)
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -140,7 +148,7 @@ else:
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data import IterableDataset
+    from torch.utils.data import DataLoader, IterableDataset
 
     import transformers.optimization
     from transformers import (
@@ -322,6 +330,18 @@ class DynamicShapesDataset:
 
     def __getitem__(self, i):
         return {"input_x": self.xs[i], "labels": self.ys[i]}
+
+
+class SimpleIncrementalDataset:
+    def __init__(self, length=64):
+        self.length = length
+        self.sequences = torch.arange(0, length).tolist()
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        return {"input_ids": self.sequences[i], "label": self.sequences[i]}
 
 
 class AlmostAccuracy:
@@ -621,6 +641,23 @@ if is_torch_available():
             train_dataset=tokenized_datasets["train"],
         )
 
+        return trainer
+
+    def get_dummy_trainer_for_elastic_job(
+        dataset, num_processes, process_index, max_steps=-1, num_train_epochs=1, drop_last=False, **kwargs
+    ):
+        model = RegressionModel(a=0, b=0, double_output=False)
+        args = TrainingArguments(**kwargs)
+        args.max_steps = max_steps
+        args.num_train_epochs = num_train_epochs
+        trainer = Trainer(model, args, train_dataset=dataset)
+        batch_size = kwargs["per_device_train_batch_size"]
+
+        def get_train_dataloader(self):
+            dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, drop_last=drop_last)
+            return prepare_data_loader(dataloader, num_processes=num_processes, process_index=process_index)
+
+        trainer.get_train_dataloader = types.MethodType(get_train_dataloader, trainer)
         return trainer
 
 
@@ -5062,6 +5099,272 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 train_dataset=train_dataset,
             )
             trainer.train()
+
+    @require_torch
+    def test_resume_training_with_elastic_job_at_specified_step(self):
+        for drop_last in [False, True]:
+            self._test_resume_training_with_elastic_job_at_specified_step(drop_last=drop_last)
+
+    @require_torch
+    def _test_resume_training_with_elastic_job_at_specified_step(self, drop_last):
+        # 1 generate trainer for elastic job
+        dataset_size = 128
+        batch_size = 4
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": tmp_dir,
+            "per_device_train_batch_size": batch_size,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "logging_steps": 5,
+            "use_cpu": True,
+            "sample_based_train": True,
+            "dataloader_drop_last": drop_last,
+        }
+        dataset = SimpleIncrementalDataset(length=dataset_size)
+
+        def training_step(
+            inner_self,
+            model: nn.Module,
+            inputs: dict[str, Union[torch.Tensor, Any]],
+            num_items_in_batch: Optional[torch.Tensor] = None,
+        ) -> torch.Tensor:
+            actual = inputs["input_ids"]
+            nonlocal start_index_in_this_epoch, current_index, process_index, num_processors, batch_size
+            # the current batch size may be smaller than batch_size when not drop_last
+            current_batch_size = actual.shape[0]
+            self.assertLessEqual(current_batch_size, batch_size)
+            expect_start = current_index + process_index * current_batch_size
+            expect_batch = list(range(expect_start, expect_start + current_batch_size))
+            # When drop_last is False and start index is close to the end of sample, we may read from start multiple times.
+            while not all(x < dataset_size for x in expect_batch):
+                expect_batch = [
+                    x % dataset_size + start_index_in_this_epoch if x >= dataset_size else x for x in expect_batch
+                ]
+            self.assertEqual(expect_batch, actual.tolist())
+            current_index += num_processors * batch_size
+            # reset start_index_in_this_epoch for next epoch
+            if (drop_last and current_index + num_processors * batch_size > dataset_size) or (
+                not drop_last and current_index >= dataset_size
+            ):
+                start_index_in_this_epoch = 0
+                current_index = 0
+            return torch.tensor(1.0, device="cpu")
+
+        def get_total_train_batch_size(self, args):
+            nonlocal num_processors, batch_size
+            return num_processors * batch_size
+
+        # 1 Use one process to trian
+        num_processors = 1
+        process_index = 0
+        current_index = 0
+        start_index_in_this_epoch = 0
+        trainer = get_dummy_trainer_for_elastic_job(
+            dataset, num_processors, process_index, max_steps=10, num_train_epochs=-1, drop_last=drop_last, **kwargs
+        )
+        trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+        trainer.training_step = types.MethodType(training_step, trainer)
+        trainer.train()
+        self.assertEqual(batch_size * 10, trainer.state.samples_trained)
+
+        # 2 Use two process to train
+        num_processors = 2
+        checkpoint = os.path.join(tmp_dir, "checkpoint-10")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset, num_processors, process_index, max_steps=-1, drop_last=drop_last, num_train_epochs=1, **kwargs
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
+        self.assertEqual(dataset_size, trainer.state.samples_trained)
+
+        # 3 Use three process to process train
+        num_processors = 3
+        checkpoint = os.path.join(tmp_dir, "checkpoint-20")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset, num_processors, process_index, max_steps=-1, drop_last=drop_last, num_train_epochs=2, **kwargs
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            self.assertEqual(dataset_size * 2, trainer.state.samples_trained)
+
+        # 4 Use five process to process train
+        num_processors = 5
+        checkpoint = os.path.join(tmp_dir, "checkpoint-30")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset, num_processors, process_index, max_steps=-1, drop_last=drop_last, num_train_epochs=4, **kwargs
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            self.assertEqual(dataset_size * 4, trainer.state.samples_trained)
+
+    @require_torch
+    def test_resume_training_with_elastic_job_at_latest_step(self):
+        for drop_last in [True, False]:
+            dataset_size = random.randint(100, 200)
+            batch_size = random.randint(1, 16)
+            self._test_resume_training_with_elastic_job_at_latest_step(
+                drop_last=drop_last, dataset_size=dataset_size, batch_size=batch_size
+            )
+
+    @require_torch
+    def _test_resume_training_with_elastic_job_at_latest_step(self, drop_last, dataset_size, batch_size):
+        # 1 generate trainer for elastic job
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": tmp_dir,
+            "per_device_train_batch_size": batch_size,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "logging_steps": 5,
+            "use_cpu": True,
+            "sample_based_train": True,
+            "dataloader_drop_last": drop_last,
+        }
+        dataset = SimpleIncrementalDataset(length=dataset_size)
+
+        def training_step(
+            inner_self,
+            model: nn.Module,
+            inputs: dict[str, Union[torch.Tensor, Any]],
+            num_items_in_batch: Optional[torch.Tensor] = None,
+        ) -> torch.Tensor:
+            actual = inputs["input_ids"]
+            nonlocal start_index_in_this_epoch, current_index, process_index, num_processors, batch_size
+            # the current batch size may be smaller than batch_size when not drop_last
+            current_batch_size = actual.shape[0]
+            self.assertLessEqual(current_batch_size, batch_size)
+            expect_start = current_index + process_index * current_batch_size
+            expect_batch = list(range(expect_start, expect_start + current_batch_size))
+            # When drop_last is False and start index is close to the end of sample, we may read from start multiple times.
+            while not all(x < dataset_size for x in expect_batch):
+                expect_batch = [
+                    x % dataset_size + start_index_in_this_epoch if x >= dataset_size else x for x in expect_batch
+                ]
+            self.assertEqual(expect_batch, actual.tolist())
+            current_index += num_processors * batch_size
+            # reset start_index_in_this_epoch for next epoch
+            if (drop_last and current_index + num_processors * batch_size > dataset_size) or (
+                not drop_last and current_index >= dataset_size
+            ):
+                start_index_in_this_epoch = 0
+                current_index = 0
+            return torch.tensor(1.0, device="cpu")
+
+        def get_total_train_batch_size(self, args):
+            nonlocal num_processors, batch_size
+            return num_processors * batch_size
+
+        # 1 Use one process to trian
+        num_processors = 1
+        process_index = 0
+        current_index = 0
+        start_index_in_this_epoch = 0
+        trainer = get_dummy_trainer_for_elastic_job(
+            dataset, num_processors, process_index, max_steps=10, num_train_epochs=-1, drop_last=drop_last, **kwargs
+        )
+        trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+        trainer.training_step = types.MethodType(training_step, trainer)
+        trainer.train()
+
+        # 2 Use two process to train
+        num_processors = 2
+        checkpoint = get_last_checkpoint(tmp_dir)
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset,
+                num_processors,
+                process_index,
+                max_steps=20,
+                drop_last=drop_last,
+                num_train_epochs=-1,
+                **kwargs,
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
+
+        # 3 Use three process to process train
+        num_processors = 3
+        checkpoint = get_last_checkpoint(tmp_dir)
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset,
+                num_processors,
+                process_index,
+                max_steps=30,
+                drop_last=drop_last,
+                num_train_epochs=-1,
+                **kwargs,
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
+
+        # 4 Use five process to process train
+        num_processors = 5
+        checkpoint = get_last_checkpoint(tmp_dir)
+        state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        start_index = state.samples_trained % dataset_size
+        if drop_last and start_index + batch_size * num_processors > dataset_size:
+            start_index = 0
+        for idx in range(num_processors):
+            process_index = idx
+            current_index = start_index
+            start_index_in_this_epoch = start_index
+            trainer = get_dummy_trainer_for_elastic_job(
+                dataset,
+                num_processors,
+                process_index,
+                max_steps=20,
+                drop_last=drop_last,
+                num_train_epochs=-1,
+                **kwargs,
+            )
+            trainer.get_total_train_batch_size = types.MethodType(get_total_train_batch_size, trainer)
+            trainer.training_step = types.MethodType(training_step, trainer)
+            trainer.train(resume_from_checkpoint=checkpoint)
 
 
 @require_torch

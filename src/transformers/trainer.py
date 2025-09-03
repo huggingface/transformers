@@ -2535,6 +2535,7 @@ class Trainer:
         start_time = time.time()
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
+        samples_trained_in_current_epoch = 0
         steps_trained_progress_bar = None
 
         # Check if continuing training from a checkpoint
@@ -2544,20 +2545,37 @@ class Trainer:
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             self.compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
-            epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
+            epochs_trained = (
+                int(self.state.samples_trained // num_examples)
+                if args.sample_based_train
+                else int(self.state.global_step // num_update_steps_per_epoch)
+            )
             if not args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
-                steps_trained_in_current_epoch *= args.gradient_accumulation_steps
+                if args.sample_based_train:
+                    samples_trained_in_current_epoch = self.state.samples_trained % num_examples
+                    if (
+                        args.dataloader_drop_last
+                        and samples_trained_in_current_epoch > num_examples - total_train_batch_size
+                    ):
+                        samples_trained_in_current_epoch = 0
+                        epochs_trained += 1
+                        self.state.samples_trained = epochs_trained * num_examples
+                else:
+                    steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+                    steps_trained_in_current_epoch *= args.gradient_accumulation_steps
             else:
                 steps_trained_in_current_epoch = 0
 
             logger.info("  Continuing training from checkpoint, will skip to saved global_step")
             logger.info(f"  Continuing training from epoch {epochs_trained}")
-            logger.info(f"  Continuing training from global step {self.state.global_step}")
+            logger.info(
+                f"  Continuing training from {'samples ' + str(self.state.samples_trained) if args.sample_based_train else 'global step ' + str(self.state.global_step)}"
+            )
             if not args.ignore_data_skip:
                 logger.info(
                     f"  Will skip the first {epochs_trained} epochs then the first"
-                    f" {steps_trained_in_current_epoch} batches in the first epoch."
+                    f" {samples_trained_in_current_epoch if args.sample_based_train else steps_trained_in_current_epoch} "
+                    f"{'samples' if args.sample_based_train else 'batches'} in the first epoch."
                 )
 
         # Update the references
@@ -2565,7 +2583,7 @@ class Trainer:
             setattr(self.callback_handler, attr, getattr(self, attr))
         self.callback_handler.train_dataloader = train_dataloader
 
-        self.state.init_training_references(self, max_steps, num_train_epochs, trial)
+        self.state.init_training_references(self, max_steps, num_train_epochs, num_train_samples, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0, device=args.device)
@@ -2596,12 +2614,20 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-            if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
+            if (
+                epoch == epochs_trained
+                and resume_from_checkpoint is not None
+                and (steps_trained_in_current_epoch == 0 and samples_trained_in_current_epoch == 0)
+            ):
                 self._load_rng_state(resume_from_checkpoint)
 
             rng_to_sync = False
             steps_skipped = 0
-            if steps_trained_in_current_epoch > 0:
+            if args.sample_based_train and samples_trained_in_current_epoch > 0:
+                epoch_dataloader = skip_first_batches(epoch_dataloader, num_samples=samples_trained_in_current_epoch)
+                samples_trained_in_current_epoch = 0
+                rng_to_sync = True
+            elif steps_trained_in_current_epoch > 0:
                 epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
@@ -2626,7 +2652,15 @@ class Trainer:
                 self.current_gradient_accumulation_steps = len(batch_samples)
                 for i, inputs in enumerate(batch_samples):
                     step += 1
-                    do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
+                    do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0
+                    if not do_sync_step:
+                        if self.args.sample_based_train:
+                            do_sync_step = (self.state.samples_trained + total_train_batch_size) >= (
+                                epoch + 1
+                            ) * num_examples - int(args.dataloader_drop_last) * total_train_batch_size
+                        else:
+                            do_sync_step = (step + 1) == steps_in_epoch
+
                     # Since we perform prefetching, we need to manually set sync_gradients
                     self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
@@ -2748,8 +2782,17 @@ class Trainer:
                                 self.lr_scheduler.step()
 
                         model.zero_grad()
+                        self.state.samples_trained += total_train_batch_size
+                        if (
+                            self.state.samples_trained
+                            > (epoch + 1) * num_examples - int(args.dataloader_drop_last) * total_train_batch_size
+                        ):
+                            self.state.samples_trained = (epoch + 1) * num_examples
                         self.state.global_step += 1
-                        self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+                        if args.sample_based_train:
+                            self.state.epoch = self.state.samples_trained / num_examples
+                        else:
+                            self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
                             tr_loss,
