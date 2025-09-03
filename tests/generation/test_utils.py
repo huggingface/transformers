@@ -779,6 +779,7 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
+                    # TODO: The list is growing huge 🙃! Let's try to check if the config has any of audio/image/video token id and skip the test!
                     # All models below: shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
                     "llava",
                     "idefics2",
