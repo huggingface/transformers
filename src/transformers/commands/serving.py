@@ -732,6 +732,10 @@ class ServeCommand(BaseTransformersCLICommand):
         def get_all_models():
             return JSONResponse({"object": "list", "data": self.get_gen_models()})
 
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     @functools.cache
