@@ -1154,6 +1154,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self.use_audio_out_embed_projector = config.use_audio_out_embed_projector
 
         self.embed_tokens = nn.Embedding(self.vocab_size, config.text_config.hidden_size, self.padding_idx)
+        self.config.text_config._attn_implementation = self.config._attn_implementation
 
         if config.audio_adapter_type == "dual_ffn":
             layers = []

@@ -285,7 +285,6 @@ class HiggsAudioForConditionalGenerationTest(
     test_resize_embeddings = False
     is_encoder_decoder = False
     _is_composite = False
-    # There is a bug that _attn_implementation has to be hard coded in the model implementation, otherwise it is None
     has_attentions = True
 
     def setUp(self):
