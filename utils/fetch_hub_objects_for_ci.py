@@ -19,6 +19,7 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000039769.jpg",
     "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
