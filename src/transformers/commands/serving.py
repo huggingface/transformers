@@ -732,6 +732,10 @@ class ServeCommand(BaseTransformersCLICommand):
         def get_all_models():
             return JSONResponse({"object": "list", "data": self.get_gen_models()})
 
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     @functools.cache
@@ -830,7 +834,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_chat_completion(_inputs):
             try:
-                decode_stream = DecodeStream([id.item() for id in _inputs], False)
+                decode_stream = DecodeStream(_inputs.tolist(), False)
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )
