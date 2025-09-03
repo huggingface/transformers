@@ -48,7 +48,7 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    Utility function to extract patches from a given image tensor. Returns a tensor of shape
     (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
@@ -72,7 +72,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     return patches.unsqueeze(0)
 
 
-# similar to transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor, but delete is_vqa and additionaly return width and height after resizing
+# similar to transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor, but delete is_vqa and additionally return width and height after resizing
 class Kosmos2_5ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Kosmos2_5 image processor.

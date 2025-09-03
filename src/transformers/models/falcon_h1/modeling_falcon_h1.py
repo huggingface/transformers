@@ -555,7 +555,6 @@ class FalconH1Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.A_log._no_weight_decay = True
         self.mamba_rms_norm = config.mamba_rms_norm
 
         if self.mamba_rms_norm:
@@ -566,7 +565,6 @@ class FalconH1Mixer(nn.Module):
                 norm_before_gate=config.mamba_norm_before_gate,
             )
         self.D = nn.Parameter(torch.ones(self.num_heads))
-        self.D._no_weight_decay = True
 
         self.out_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=config.projectors_bias)
 
@@ -1559,7 +1557,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
+        # Overwritten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 

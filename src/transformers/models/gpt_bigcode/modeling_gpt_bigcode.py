@@ -419,9 +419,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         self.gradient_checkpointing = False
 
-        self._use_sdpa = config._attn_implementation == "sdpa"
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -523,7 +520,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        if self._use_flash_attention_2:
+        if self.config._attn_implementation == "flash_attention_2":
             encoder_attention_mask = (
                 encoder_attention_mask.bool()
                 if (encoder_attention_mask is not None and 0 in encoder_attention_mask)

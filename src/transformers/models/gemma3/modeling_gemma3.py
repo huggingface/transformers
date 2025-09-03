@@ -751,7 +751,7 @@ def token_type_ids_mask_function(
 
 @auto_docstring(
     custom_intro="""
-    The Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Gemma3 model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class Gemma3Model(Gemma3PreTrainedModel):
@@ -969,6 +969,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         "^language_model.lm_head": "lm_head",
     }
     _tied_weights_keys = ["lm_head.weight"]
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
