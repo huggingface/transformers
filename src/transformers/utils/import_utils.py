@@ -122,6 +122,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.11.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -191,8 +192,7 @@ try:
     _is_optimum_quanto_available = True
 except importlib.metadata.PackageNotFoundError:
     _is_optimum_quanto_available = False
-# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
-_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
+_compressed_tensors_available, _compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -1364,8 +1364,8 @@ def is_qutlass_available() -> Union[tuple[bool, str], bool]:
     return _qutlass_available
 
 
-def is_compressed_tensors_available() -> bool:
-    return _compressed_tensors_available
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    return _compressed_tensors_available and version.parse(_compressed_tensors_version) >= version.parse(min_version)
 
 
 def is_auto_gptq_available() -> Union[tuple[bool, str], bool]:

@@ -1319,21 +1319,22 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         sparsity_config: Optional[dict[str, Any]] = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
+        transform_config: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
         if is_compressed_tensors_available():
             from compressed_tensors.config import SparsityCompressionConfig
             from compressed_tensors.quantization import QuantizationConfig
+            from compressed_tensors.transform import TransformConfig
         else:
             raise ImportError(
                 "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
             )
-        self.quantization_config = None
-        self.sparsity_config = None
 
         self.run_compressed = run_compressed
 
         # parse from dict to load nested QuantizationScheme objects
+        self.quantization_config = None
         if config_groups or kv_cache_scheme:
             self.quantization_config = QuantizationConfig.model_validate(
                 {
@@ -1348,10 +1349,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 }
             )
 
+        self.sparsity_config = None
         if sparsity_config:
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
                 sparsity_config.get("format"), **sparsity_config
             )
+
+        self.transform_config = None
+        if transform_config:
+            self.transform_config = TransformConfig.model_validate(transform_config)
 
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
@@ -1392,6 +1398,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
+                transform_config=config_dict.get("transform_config"),
                 **config_dict["quantization_config"],
             )
 
@@ -1414,6 +1421,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
         else:
             quantization_config["sparsity_config"] = {}
+
+        if self.transform_config is not None:
+            quantization_config["transform_config"] = self.transform_config.model_dump()
+        else:
+            quantization_config["transform_config"] = {}
 
         return quantization_config
 
