@@ -27,8 +27,8 @@ from transformers.generation import GenerationConfig
 
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
-MODEL_ID = "google/gemma-2-2b-it"
-SLIDIND_WINDOW = 256
+SLIDIND_WINDOW = 0
+MODEL_ID = "google/gemma-2-2b-it" if SLIDIND_WINDOW > 0 else "Qwen/Qwen3-4B-Instruct-2507"
 FORCE_MAX_LENGTH = False # should be False unless you are debugging sliding window features
 
 

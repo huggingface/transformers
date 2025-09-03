@@ -127,9 +127,9 @@ class ContinuousBatchProcessor:
         sliding_windows = set(cache.sliding_windows.values())
         if NO_SLIDING_WINDOW in sliding_windows:
             sliding_windows.remove(NO_SLIDING_WINDOW)
-        if len(sliding_windows) != 1:
+        if len(sliding_windows) > 1:
             raise ValueError("Only one sliding window is supported for now, but got: " + str(sliding_windows))
-        self.sliding_window = sliding_windows.pop() if len(sliding_windows) == 1 else 0
+        self.sliding_window = sliding_windows.pop() if len(sliding_windows) >= 1 else NO_SLIDING_WINDOW
 
         self.requests_in_batch: list[RequestState] = []
 
