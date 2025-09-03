@@ -363,9 +363,7 @@ class HfQuantizer(ABC):
                 with init_empty_weights():
                     parent_module, name = get_module_from_name(model, name)
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
-                        model.config.get_sub_config(
-                            modality="text",
-                        )
+                        model.config.get_sub_config(modality="text")
                     )
 
 

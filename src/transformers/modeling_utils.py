@@ -3035,11 +3035,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = self.config.initializer_range
         else:
             # 0.02 is the standard default value across the library
-            std = getattr(
-                self.config.get_sub_config(modality="text"),
-                "initializer_range",
-                0.02,
-            )
+            std = getattr(self.config.get_sub_config(modality="text"), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)

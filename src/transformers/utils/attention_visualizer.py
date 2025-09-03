@@ -149,15 +149,8 @@ class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
         self.image_token = "<img>"
-        if hasattr(
-            config.get_sub_config(modality="text"),
-            "sliding_window",
-        ):
-            self.sliding_window = getattr(
-                config.get_sub_config(modality="text"),
-                "sliding_window",
-                None,
-            )
+        if hasattr(config.get_sub_config(modality="text"), "sliding_window"):
+            self.sliding_window = getattr(config.get_sub_config(modality="text"), "sliding_window", None)
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
         except Exception:

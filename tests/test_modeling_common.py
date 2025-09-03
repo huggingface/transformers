@@ -4363,10 +4363,7 @@ class ModelTesterMixin:
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
-            if not hasattr(
-                config.get_sub_config(modality="text"),
-                "use_cache",
-            ):
+            if not hasattr(config.get_sub_config(modality="text"), "use_cache"):
                 self.skipTest(f"{model_class.__name__} doesn't support caching")
 
             if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
