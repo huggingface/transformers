@@ -44,6 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -151,7 +152,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -195,6 +196,7 @@ class Xcodec2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -305,13 +307,13 @@ class Xcodec2RotaryEmbedding(nn.Module):
 
 
 class Xcodec2MLP(nn.Module):
-    def __init__(self, config: Xcodec2Config):  # Use your specific config
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
         dim = config.hidden_size
 
-        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # Assuming no bias like original
+        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # No bias like original
         self.silu = nn.SiLU()  # TODO: Or ACT2FN[config.hidden_act] if using config activation
-        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # Assuming no bias
+        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # No bias like original
 
     def forward(self, x):
         x = self.fc1(x)
@@ -325,7 +327,8 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Xcodec2Attention(config, layer_idx)
+        self.self_attn = Xcodec2Attention(config=config, layer_idx=layer_idx)
+
         self.mlp = Xcodec2MLP(config)
         self.input_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -633,12 +636,6 @@ class EncoderBlock(nn.Module):
         return x
 
 
-def init_weights(m):
-    if isinstance(m, nn.Conv1d):
-        nn.init.trunc_normal_(m.weight, std=0.02)
-        nn.init.constant_(m.bias, 0)
-
-
 class Xcodec2CodecEncoder(nn.Module):
     def __init__(
         self,
@@ -663,8 +660,6 @@ class Xcodec2CodecEncoder(nn.Module):
         self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
         self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
-        self.reset_parameters()
-
     def forward(self, x):
         # Initial convolution
         x = self.initial_conv(x)
@@ -679,12 +674,9 @@ class Xcodec2CodecEncoder(nn.Module):
         x = x.permute(0, 2, 1)
         return x
 
-    def reset_parameters(self):
-        self.apply(init_weights)
-
 
 class Backbone(nn.Module):
-    """Base class for the generator's backbone. It preserves the same temporal resolution across all layers."""
+    """Base class for the decoder's backbone. It preserves the same temporal resolution across all layers."""
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -1375,8 +1367,6 @@ class Xcodec2CodecDecoderVocos(nn.Module):
             dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same"
         )
 
-        self.reset_parameters()
-
     def forward(self, x, vq=True):
         if vq is True:
             x = x.permute(0, 2, 1)
@@ -1412,9 +1402,6 @@ class Xcodec2CodecDecoderVocos(nn.Module):
     def inference(self, x):
         x = self.model(x)
         return x, None
-
-    def reset_parameters(self):
-        self.apply(init_weights)
 
 
 class Xcodec2SemanticEncoder(nn.Module):
@@ -1504,7 +1491,12 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        """Initialize the weights"""
+        if isinstance(module, nn.Conv1d):
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            nn.init.constant_(module.bias, 0)
+        elif isinstance(module, Xcodec2SnakeBeta):
+            module.alpha.data.fill_(1.0)
+            module.beta.data.fill_(1.0)
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -1512,11 +1504,6 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
 
 
 XCODEC2_INPUTS_DOCSTRING = r"""
@@ -1652,7 +1639,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
-        # 4) Get codes for generator
+        # 4) Get codes for decoder
         _, vq_code, _ = self.decoder(concat_emb, vq=True)
 
         if not return_dict:

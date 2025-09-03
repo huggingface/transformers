@@ -43,9 +43,12 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoFeatureExtractor
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    eager_attention_forward,
+    apply_rotary_pos_emb
 )
 from .configuration_xcodec2 import Xcodec2Config
 
@@ -97,103 +100,14 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class Xcodec2Attention(nn.Module):
+# See here for their attention implementation: 
+# https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/bs_roformer5.py
+class Xcodec2Attention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Xcodec2Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        super().__init__(config, layer_idx=layer_idx)
         self.is_causal = False
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
 
     def forward(
         self,
@@ -256,13 +170,13 @@ class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class Xcodec2MLP(nn.Module):
-    def __init__(self, config: Xcodec2Config):  # Use your specific config
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
         dim = config.hidden_size
 
-        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # Assuming no bias like original
+        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # No bias like original
         self.silu = nn.SiLU()  # TODO: Or ACT2FN[config.hidden_act] if using config activation
-        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # Assuming no bias
+        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # No bias like original
 
     def forward(self, x):
         x = self.fc1(x)
@@ -272,13 +186,6 @@ class Xcodec2MLP(nn.Module):
 
 
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Xcodec2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-
-        self.self_attn = Xcodec2Attention(config, layer_idx)
-        self.mlp = Xcodec2MLP(config)
-        self.input_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     # Override forward to enforce non-causal attention
     def forward(
@@ -583,12 +490,6 @@ class EncoderBlock(nn.Module):
         return x
 
 
-def init_weights(m):
-    if isinstance(m, nn.Conv1d):
-        nn.init.trunc_normal_(m.weight, std=0.02)
-        nn.init.constant_(m.bias, 0)
-
-
 class Xcodec2CodecEncoder(nn.Module):
     def __init__(
         self,
@@ -613,8 +514,6 @@ class Xcodec2CodecEncoder(nn.Module):
         self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
         self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
-        self.reset_parameters()
-
     def forward(self, x):
         # Initial convolution
         x = self.initial_conv(x)
@@ -628,9 +527,6 @@ class Xcodec2CodecEncoder(nn.Module):
         x = self.final_conv(x)
         x = x.permute(0, 2, 1)
         return x
-
-    def reset_parameters(self):
-        self.apply(init_weights)
 
 
 def is_distributed():
@@ -647,7 +543,7 @@ def get_maybe_sync_seed(device, max_size=10_000):
 
 
 class Backbone(nn.Module):
-    """Base class for the generator's backbone. It preserves the same temporal resolution across all layers."""
+    """Base class for the decoder's backbone. It preserves the same temporal resolution across all layers."""
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -1319,8 +1215,6 @@ class Xcodec2CodecDecoderVocos(nn.Module):
             dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same"
         )
 
-        self.reset_parameters()
-
     def forward(self, x, vq=True):
         if vq is True:
             x = x.permute(0, 2, 1)
@@ -1356,9 +1250,6 @@ class Xcodec2CodecDecoderVocos(nn.Module):
     def inference(self, x):
         x = self.model(x)
         return x, None
-
-    def reset_parameters(self):
-        self.apply(init_weights)
 
 
 class Xcodec2SemanticEncoder(nn.Module):
@@ -1448,7 +1339,12 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        """Initialize the weights"""
+        if isinstance(module, nn.Conv1d):
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            nn.init.constant_(module.bias, 0)
+        elif isinstance(module, Xcodec2SnakeBeta):
+            module.alpha.data.fill_(1.0)
+            module.beta.data.fill_(1.0)
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -1456,11 +1352,6 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
 
 XCODEC2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1604,7 +1495,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
-        # 4) Get codes for generator
+        # 4) Get codes for decoder
         _, vq_code, _ = self.decoder(concat_emb, vq=True)
 
         if not return_dict:
