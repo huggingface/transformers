@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 import torch
@@ -22,12 +22,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...utils.backbone_utils import BackboneMixin
-from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndNoAttention, BackboneOutput
-)
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -197,7 +195,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
     _no_split_modules = ["DINOv3ConvNextLayer"]
-    _can_record_outputs = {} 
+    _can_record_outputs = {}
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -259,9 +257,11 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
             hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
         )
 
+
 @auto_docstring
 class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
     config: DINOv3ConvNextConfig
+
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
         super()._init_backbone(config)
@@ -292,14 +292,14 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
             output_hidden_states = self.config.output_hidden_states
 
         hidden_states = pixel_values
-        all_hidden_states: List[torch.Tensor] = [hidden_states] 
+        all_hidden_states: list[torch.Tensor] = [hidden_states]
 
         for stage in self.stages:
             hidden_states = stage(hidden_states)
             all_hidden_states.append(hidden_states)
 
         # NCHW
-        feature_maps: List[torch.Tensor] = []
+        feature_maps: list[torch.Tensor] = []
         for stage, hs in zip(self.stage_names, all_hidden_states):
             if stage in self.out_features:
                 feature_maps.append(hs)
@@ -308,5 +308,6 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
             feature_maps=tuple(feature_maps),
             hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
         )
+
 
 __all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]

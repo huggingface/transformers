@@ -19,16 +19,16 @@ from transformers import DINOv3ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-from ...test_backbone_common import BackboneTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import DINOv3ConvNextModel, DINOv3ConvNextBackbone
+    from transformers import DINOv3ConvNextBackbone, DINOv3ConvNextModel
 
 
 if is_vision_available():
@@ -122,9 +122,8 @@ class DINOv3ConvNextModelTester:
         self.parent.assertEqual(len(model.channels), len(config.out_features))
 
         # verify backbone works with out_features=None
-        config_copy = copy.deepcopy(config)
-        config_copy.out_features = None
-        model = DINOv3ConvNextBackbone(config=config_copy)
+        config.out_features = None
+        model = DINOv3ConvNextBackbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -139,11 +138,10 @@ class DINOv3ConvNextModelTester:
         self.parent.assertEqual(len(model.channels), 1)
 
         # verify backbone works with apply_layernorm=False and reshape_hidden_states=False
-        config_copy = copy.deepcopy(config)
-        config_copy.apply_layernorm = False
-        config_copy.reshape_hidden_states = False
+        config.apply_layernorm = False
+        config.reshape_hidden_states = False
 
-        model = DINOv3ConvNextBackbone(config=config_copy)
+        model = DINOv3ConvNextBackbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
