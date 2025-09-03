@@ -715,7 +715,6 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
         >>> from transformers import AutoTokenizer, MetaClip2TextModelWithProjection
 
         >>> model = MetaClip2TextModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -723,8 +722,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
-        >>> with torch.inference_mode():
-        ...     outputs = model(**inputs)
+        >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
         ```"""
 
@@ -887,9 +885,11 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: torch.Tensor,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -899,16 +899,13 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
         >>> from transformers import AutoTokenizer, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> with torch.inference_mode():
-        ...     text_features = model.get_text_features(**inputs)
+        >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
@@ -924,7 +921,9 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
@@ -935,20 +934,19 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2Model
-        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = load_image(url)
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> with torch.inference_mode():
-        ...     image_features = model.get_image_features(**inputs)
+        >>> image_features = model.get_image_features(**inputs)
         ```"""
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
@@ -980,22 +978,21 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2Model
-        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = load_image(url)
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
         ... )
 
-        >>> with torch.inference_mode():
-        ...     outputs = model(**inputs)
+        >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
@@ -1277,20 +1274,19 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
-        >>> from transformers.image_utils import load_image
 
         >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = load_image(url)
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> with torch.inference_mode():
-        ...     outputs = model(**inputs)
+        >>> outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
         ```"""
 
