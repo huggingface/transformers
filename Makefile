@@ -3,7 +3,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils
+check_dirs := examples tests src utils benchmark scripts
 
 exclude_folders :=  ""
 
