@@ -455,7 +455,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

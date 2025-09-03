@@ -1131,7 +1131,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

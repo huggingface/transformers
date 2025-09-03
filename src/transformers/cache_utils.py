@@ -1009,6 +1009,9 @@ class DynamicCache(Cache):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
+            # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+            # `DynamicCache(config=model.config)`
+            config = config.get_sub_config(modality="text", decoder=True)
             sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
             if layer_types is None:
@@ -1120,6 +1123,9 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
+        # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+        # `StaticCache(config=model.config)`
+        config = config.get_sub_config(modality="text", decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
         if layer_types is None:
@@ -1194,6 +1200,9 @@ class QuantizedCache(Cache):
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
+        # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+        # `QuantizedCache(config=model.config)`
+        config = config.get_sub_config(modality="text", decoder=True)
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
             for _ in range(config.num_hidden_layers)

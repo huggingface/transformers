@@ -958,7 +958,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                         DynamicCache(config=self.config), DynamicCache(config=self.config)
                     )
                 else:
-                    past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place

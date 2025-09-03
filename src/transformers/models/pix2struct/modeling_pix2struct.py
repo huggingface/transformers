@@ -1131,7 +1131,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                     DynamicCache(config=self.config), DynamicCache(config=self.config)
                 )
             else:
-                past_key_values = DynamicCache(config=self.config.get_sub_config(modality="text", decoder=True))
+                past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = 0
         if cache_position is not None:
