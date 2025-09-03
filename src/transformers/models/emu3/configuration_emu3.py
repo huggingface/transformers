@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -241,7 +241,7 @@ class Emu3TextConfig(PretrainedConfig):
         eos_token_id: int = 151850,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1000000.0,
-        rope_scaling: Optional = None,
+        rope_scaling: Optional[dict[str, Any]] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,

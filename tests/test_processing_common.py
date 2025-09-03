@@ -1003,10 +1003,8 @@ class ProcessorTesterMixin:
 
         batch_messages = [
             [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Describe this."}],
-                },
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
             ]
         ] * batch_size
 
@@ -1053,7 +1051,7 @@ class ProcessorTesterMixin:
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
-            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
+            batch_messages[idx][1]["content"] = [batch_messages[idx][1]["content"][0], {"type": modality, "url": url}]
 
         out_dict = processor.apply_chat_template(
             batch_messages,

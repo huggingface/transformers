@@ -95,7 +95,7 @@ class GradientCheckpointingLayer(nn.Module):
 
 
 @auto_docstring
-class GenericForSequenceClassification(object):
+class GenericForSequenceClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -170,7 +170,7 @@ class GenericForSequenceClassification(object):
 
 
 @auto_docstring
-class GenericForQuestionAnswering(object):
+class GenericForQuestionAnswering:
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -231,7 +231,7 @@ class GenericForQuestionAnswering(object):
 
 
 @auto_docstring
-class GenericForTokenClassification(object):
+class GenericForTokenClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):

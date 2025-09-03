@@ -172,7 +172,7 @@ class MobileNetV1ConvLayer(nn.Module):
         groups: Optional[int] = 1,
         bias: bool = False,
         use_normalization: Optional[bool] = True,
-        use_activation: Optional[bool or str] = True,
+        use_activation: Optional[Union[bool, str]] = True,
     ) -> None:
         super().__init__()
         self.config = config

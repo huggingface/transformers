@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Sequence, TypedDict, Union
+from collections.abc import Sequence
+from typing import Any, TypedDict, Union
 
 from typing_extensions import TypeAlias, overload
 
@@ -29,8 +30,16 @@ if is_vision_available():
 
 ImagePair: TypeAlias = Sequence[Union["Image.Image", str]]
 
-Keypoint = TypedDict("Keypoint", {"x": float, "y": float})
-Match = TypedDict("Match", {"keypoint_image_0": Keypoint, "keypoint_image_1": Keypoint, "score": float})
+
+class Keypoint(TypedDict):
+    x: float
+    y: float
+
+
+class Match(TypedDict):
+    keypoint_image_0: Keypoint
+    keypoint_image_1: Keypoint
+    score: float
 
 
 def validate_image_pairs(images: Any) -> Sequence[Sequence[ImagePair]]:

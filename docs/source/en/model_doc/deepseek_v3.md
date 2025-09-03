@@ -188,3 +188,8 @@ error, it means NCCL was probably not loaded.
 
 [[autodoc]] DeepseekV3ForSequenceClassification
     - forward
+
+## DeepseekV3ForTokenClassification
+
+[[autodoc]] DeepseekV3ForTokenClassification
+    - forward

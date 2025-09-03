@@ -284,7 +284,6 @@ class DiaGenerationMixin(GenerationMixin):
             )
 
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -299,6 +298,7 @@ class DiaGenerationMixin(GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = inputs_tensor.shape[0]
+        self._validate_generation_mode(batch_size, generation_mode, generation_config, generation_mode_kwargs)
 
         device = inputs_tensor.device
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)

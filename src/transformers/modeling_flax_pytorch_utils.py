@@ -86,7 +86,7 @@ def rename_key_and_reshape_tensor(
     pt_tensor: np.ndarray,
     random_flax_state_dict: dict[str, jnp.ndarray],
     model_prefix: str,
-) -> (tuple[str], np.ndarray):
+) -> tuple[tuple[str], np.ndarray]:
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
     def is_key_or_prefix_key_in_dict(key: tuple[str]) -> bool:

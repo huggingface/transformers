@@ -21,7 +21,6 @@ from typing import Optional, Union
 
 import numpy as np
 import requests
-from packaging import version
 
 from .utils import (
     ExplicitEnum,
@@ -51,10 +50,7 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-        PILImageResampling = PIL.Image.Resampling
-    else:
-        PILImageResampling = PIL.Image
+    PILImageResampling = PIL.Image.Resampling
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode
