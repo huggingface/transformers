@@ -17,10 +17,6 @@ from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
 
-
-if is_torch_available():
-    import torch
-
 logger = logging.get_logger(__name__)
 
 
