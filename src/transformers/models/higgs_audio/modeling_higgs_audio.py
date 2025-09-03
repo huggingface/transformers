@@ -1230,10 +1230,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             torch.arange(self.config.audio_num_codebooks, device=audio_ids.device) * self.audio_codebook_size
         )
         audio_embed = self.audio_codebook_embeddings(audio_ids + codebook_shift.unsqueeze(-1))
-        if self.config.audio_embed_avg:
-            audio_embed = torch.mean(audio_embed, dim=0)
-        else:
-            audio_embed = torch.sum(audio_embed, dim=0)
+        audio_embed = torch.sum(audio_embed, dim=0)
         if self.use_audio_out_embed_projector:
             audio_embed = self.audio_out_embed_projector(audio_embed)
         return audio_embed

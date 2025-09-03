@@ -37,11 +37,6 @@ class HiggsAudioConfig(PretrainedConfig):
             - dual_ffn_fast_forward:
                 We pick a few layers in the LLM backbone to plug-in the audio FFN. For the remaining layers,
                 the audio hidden states will be directly fast-forward to the next layer.
-        audio_embed_avg (`bool`, *optional*, defaults to `False`):
-            Whether to average the audio embeddings before sending them to the text attention layer.
-            The hidden size of the audio feedforward network in dual-path FFN
-            The intermediate size of the audio feedforward network in dual-path FFN
-            The layers in the LLM backbone to plug-in the dual FFN layer (mixture of audio FFN and text FFN).
         audio_dual_ffn_layers (`list[int]`, *optional*):
             The layers in the LLM backbone to plug-in the dual FFN layer (mixture of audio FFN and text FFN).
         encode_audio_in_tokens (`bool`, *optional*, defaults to `False`):
@@ -112,7 +107,6 @@ class HiggsAudioConfig(PretrainedConfig):
         self,
         text_config=None,
         audio_adapter_type="stack",
-        audio_embed_avg=False,
         audio_dual_ffn_layers=None,
         encode_audio_in_tokens=False,
         use_delay_pattern=False,
@@ -150,7 +144,6 @@ class HiggsAudioConfig(PretrainedConfig):
                 raise ValueError("audio_dual_ffn_layers must be specified when using dual_ffn adapter.")
         self.text_config = text_config
         self.audio_adapter_type = audio_adapter_type
-        self.audio_embed_avg = audio_embed_avg
         self.audio_dual_ffn_layers = audio_dual_ffn_layers
         self.encode_audio_in_tokens = encode_audio_in_tokens
         self.use_delay_pattern = use_delay_pattern
