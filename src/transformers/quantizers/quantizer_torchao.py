@@ -35,6 +35,10 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+from torchao.quantization import Float8Tensor
+
+from torchao.prototype.safetensors.safetensors_support import save_tensor_state_dict, load_tensor_state_dict
+
 logger = logging.get_logger(__name__)
 
 
@@ -137,6 +141,10 @@ class TorchAoHfQuantizer(HfQuantizer):
                 dtype = torch.float32
         return dtype
 
+    def get_state_dict(self, model):
+        return save_tensor_state_dict(model.state_dict())
+
+
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
             from accelerate.utils import CustomDtype
@@ -220,6 +228,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 _QUANTIZABLE.append(torch.nn.Embedding)
             return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
+
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -278,6 +287,9 @@ class TorchAoHfQuantizer(HfQuantizer):
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+
+    def transform_state_dict(self, tensor_data, metadata):
+        return load_tensor_state_dict(tensor_data=tensor_data, provided_metadata=metadata)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
