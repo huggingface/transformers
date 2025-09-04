@@ -1306,6 +1306,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             do not override, should be compressed-tensors
         run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
             emulate compressed model execution if True, otherwise use default submodule
+        transform_config (`typing.dict[str, typing.Any]`, *optional*):
+            configuration for online and offline transforms to improve accuracy recovery
     """
 
     def __init__(

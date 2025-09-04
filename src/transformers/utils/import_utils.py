@@ -192,7 +192,9 @@ try:
     _is_optimum_quanto_available = True
 except importlib.metadata.PackageNotFoundError:
     _is_optimum_quanto_available = False
-_compressed_tensors_available, _compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+_compressed_tensors_available, _compressed_tensors_version = _is_package_available(
+    "compressed_tensors", return_version=True
+)
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
