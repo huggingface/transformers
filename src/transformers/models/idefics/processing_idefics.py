@@ -16,7 +16,8 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature

@@ -27,11 +27,12 @@ import subprocess
 import sys
 import warnings
 from collections import OrderedDict
+from collections.abc import Callable
 from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 

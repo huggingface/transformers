@@ -17,8 +17,9 @@ import copy
 import inspect
 import os
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 import torch.distributed as dist

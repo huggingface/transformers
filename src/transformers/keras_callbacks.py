@@ -1,8 +1,9 @@
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from time import sleep
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf

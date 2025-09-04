@@ -15,11 +15,11 @@
 
 import os
 import warnings
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Optional, Union
 from urllib.parse import urlparse
 
 import numpy as np

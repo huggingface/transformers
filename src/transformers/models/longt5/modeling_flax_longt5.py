@@ -15,7 +15,8 @@
 """Flax LongT5 model."""
 
 import copy
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 import flax.linen as nn
 import jax

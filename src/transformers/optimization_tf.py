@@ -14,7 +14,8 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import tensorflow as tf
 

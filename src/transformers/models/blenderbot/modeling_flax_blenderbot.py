@@ -16,8 +16,9 @@
 
 import math
 import random
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, Optional
+from typing import Optional
 
 import flax.linen as nn
 import jax

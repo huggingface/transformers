@@ -15,7 +15,8 @@
 # limitations under the License.
 """Flax XLM-RoBERTa model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import flax.linen as nn
 import jax
