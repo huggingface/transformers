@@ -471,7 +471,8 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @is_flaky(
-        description="sdpa gets nan values in some places while eager is fine. Except those places, the values are close"
+        max_attempts=2,
+        description="sdpa gets nan values in some places while eager is fine. Except those places, the values are close",
     )
     def test_eager_matches_sdpa_inference(
         self,
