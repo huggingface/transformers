@@ -142,7 +142,7 @@ class Xcodec2Config(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
 
-        # single codebook VQ
+        # single codebook VQ is main feature of Xcodec2
         self.num_quantizers = 1
         self.vq_dim = vq_dim
         self.vq_levels = vq_levels

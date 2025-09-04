@@ -1486,20 +1486,34 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Conv1d):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Xcodec2SnakeBeta):
-            module.alpha.data.fill_(1.0)
-            module.beta.data.fill_(1.0)
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, Xcodec2SnakeBeta):
+            # Initialize alpha and beta based on the alpha_logscale setting
+            if module.alpha_logscale:
+                # Log scale alphas initialized to zeros
+                module.alpha.data.zero_()
+                module.beta.data.zero_()
+            else:
+                # Linear scale alphas initialized to ones
+                module.alpha.data.fill_(1.0)
+                module.beta.data.fill_(1.0)
 
 
 XCODEC2_INPUTS_DOCSTRING = r"""
@@ -1612,7 +1626,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
         input_features = (
             self.semantic_feature_extractor(
-                input_values.cpu(),
+                input_values.cpu().tolist(),  # need list to handle batch
                 sampling_rate=self.semantic_feature_extractor.sampling_rate,
                 return_tensors="pt",
             )

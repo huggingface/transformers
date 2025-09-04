@@ -51,19 +51,15 @@ class Xcodec2ModelTester:
         batch_size=4,
         num_channels=1,
         sample_rate=16000,
-        codebook_size=16384,
-        num_quantizers=1,
         num_samples=400,
         is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.num_channels = num_channels
         self.sample_rate = sample_rate
-        self.codebook_size = codebook_size
-        self.num_quantizers = num_quantizers
         self.is_training = is_training
         self.num_samples = num_samples
+        self.num_channels = num_channels
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
@@ -79,7 +75,7 @@ class Xcodec2ModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         codes_length = math.ceil(self.num_samples / config.hop_length)
         inputs_dict["audio_codes"] = ids_tensor(
-            [self.batch_size, self.num_quantizers, codes_length], config.codebook_size
+            [self.batch_size, config.num_quantizers, codes_length], config.codebook_size
         )
 
         return config, inputs_dict
@@ -88,8 +84,6 @@ class Xcodec2ModelTester:
         return Xcodec2Config(
             sample_rate=self.sample_rate,
             audio_channels=self.num_channels,
-            codebook_size=self.codebook_size,
-            num_quantizers=self.num_quantizers,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -123,7 +117,13 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Xcodec2ModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Xcodec2Config, hidden_size=37, common_properties=[], has_text_modality=False
+            # self, config_class=Xcodec2Config, common_properties=[], has_text_modality=False
+            self,
+            config_class=Xcodec2Config,
+            encoder_hidden_size=37,
+            decoder_hidden_size=37,
+            common_properties=[],
+            has_text_modality=False,
         )
 
     def test_config(self):
@@ -654,7 +654,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         ]
 
         librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "Steveeeeeeen/Xcodec2"
+        model_id = "bezzam/xcodec2"
         model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
