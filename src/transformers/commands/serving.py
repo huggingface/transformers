@@ -31,7 +31,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
@@ -522,7 +522,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def _validate_request(
         self,
         request: dict,
-        schema: "_TypedDictMeta",  # noqa: F821
+        schema: TypedDict,
         validator: "TypeAdapter",
         unused_fields: set,
     ):
@@ -532,7 +532,7 @@ class ServeCommand(BaseTransformersCLICommand):
         Args:
             request (`dict`):
                 The request to validate.
-            schema (`_TypedDictMeta`):
+            schema (`TypedDict`):
                 The schema of the request to validate. It is a `TypedDict` definition.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
