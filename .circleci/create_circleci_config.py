@@ -262,7 +262,6 @@ custom_tokenizers_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
 )
 
-
 examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
@@ -286,19 +285,6 @@ hub_job = CircleCIJob(
     resource_class="medium",
 )
 
-
-onnx_job = CircleCIJob(
-    "onnx",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    install_steps=[
-        "uv pip install .[testing,sentencepiece,onnxruntime,vision,rjieba]",
-    ],
-    pytest_options={"k onnx": None},
-    pytest_num_workers=1,
-    resource_class="small",
-)
-
-
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
@@ -306,14 +292,12 @@ exotic_models_job = CircleCIJob(
     pytest_options={"durations": 100},
 )
 
-
 repo_utils_job = CircleCIJob(
     "repo_utils",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
     pytest_num_workers=4,
     resource_class="large",
 )
-
 
 non_model_job = CircleCIJob(
     "non_model",
@@ -350,7 +334,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, hub_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]

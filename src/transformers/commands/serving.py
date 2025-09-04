@@ -834,7 +834,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_chat_completion(_inputs):
             try:
-                decode_stream = DecodeStream([id.item() for id in _inputs], False)
+                decode_stream = DecodeStream(_inputs.tolist(), False)
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )

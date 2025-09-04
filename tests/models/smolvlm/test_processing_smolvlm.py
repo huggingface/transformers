@@ -15,22 +15,16 @@
 import shutil
 import tempfile
 import unittest
-from io import BytesIO
 from typing import Optional
 
 import numpy as np
-import requests
 
 from transformers import SmolVLMProcessor
+from transformers.image_utils import load_image
 from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 @require_torch
@@ -45,21 +39,19 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = cls.prepare_processor_dict()
         processor = SmolVLMProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct", **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path(
+                url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            )
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -74,6 +66,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.image1.close()
+        cls.image2.close()
+        cls.image3.close()
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -129,10 +128,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()

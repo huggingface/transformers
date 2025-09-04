@@ -21,15 +21,15 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
-import requests
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -299,7 +299,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
+        url = url_to_local_path("https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png")
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2.5")
         texts = ["<md>", "<ocr>"]
         expected_input_ids = [
@@ -308,7 +308,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         expected_attention_mask = [[1], [1]]
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_image(url)
         # To match the official (microsoft) Kosmos-2 demo from which the expected values here are grabbed
         image_path = os.path.join(self.tmpdirname, "image.png")
         image.save(image_path)
