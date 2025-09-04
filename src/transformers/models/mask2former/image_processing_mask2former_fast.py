@@ -154,6 +154,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     size_divisor = 32
     do_reduce_labels = False
     valid_kwargs = Mask2FormerFastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps", "instance_id_to_semantic_id"]
 
     def __init__(self, **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:

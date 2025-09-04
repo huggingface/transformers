@@ -78,6 +78,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_flip_channel_order = True
     do_reduce_labels = False
     valid_kwargs = MobileVitFastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps"]
 
     def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
