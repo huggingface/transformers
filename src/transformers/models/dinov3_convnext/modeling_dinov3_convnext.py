@@ -195,7 +195,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
     _no_split_modules = ["DINOv3ConvNextLayer"]
-    _can_record_outputs = {}
 
     def _init_weights(self, module):
         """Initialize the weights"""
