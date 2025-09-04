@@ -35,6 +35,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
 ]
 
 
@@ -59,12 +60,11 @@ if __name__ == "__main__":
     # `fatal: could not read Username for 'https://hub-ci.huggingface.co': Success`
     # But this repo. is never used in a test decorated by `is_staging_test`.
     if not _run_staging:
-        # Used in as `tests/models/auto/test_modeling_auto.py::AutoModelTest::test_dynamic_saving_from_local_repo --> _ = Repository( ... )`
-        # TODO: Remove this and the above test when `huggingface_hub v1.0` comes (where `Repository` will be removed).
-        _ = Repository(
-            local_dir="tiny-random-custom-architecture",
-            clone_from="hf-internal-testing/tiny-random-custom-architecture",
-        )
+        if not os.path.isdir("tiny-random-custom-architecture"):
+            _ = Repository(
+                local_dir="tiny-random-custom-architecture",
+                clone_from="hf-internal-testing/tiny-random-custom-architecture",
+            )
 
         # For `tests/test_tokenization_mistral_common.py:TestMistralCommonTokenizer`, which eventually calls
         # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
