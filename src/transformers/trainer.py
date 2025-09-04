@@ -5615,7 +5615,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
                     num_items_in_batch = num_items_in_batch.unsqueeze(0)
                 # Divide by number of devices with the same batch
-                if pc := self.accelerator.parallelism_config:
+                if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return batch_samples, num_items_in_batch
