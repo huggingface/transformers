@@ -1482,7 +1482,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
         generation_mode = generation_config.get_generation_mode()
-        # Cannot be root level constant since subclasses might override the methods
         if generation_mode not in [
             GenerationMode.SAMPLE,
             GenerationMode.GREEDY_SEARCH,
