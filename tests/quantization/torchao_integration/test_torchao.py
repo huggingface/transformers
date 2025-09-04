@@ -37,6 +37,8 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
+    import torchao
+
     # renamed in torchao 0.7.0, please install the latest torchao
     from torchao.dtypes import (
         AffineQuantizedTensor,
@@ -399,7 +401,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJane: (sighs)"
+        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
@@ -462,6 +464,40 @@ class TorchAoSerializationTest(unittest.TestCase):
 
     def test_serialization_expected_output(self):
         self.check_serialization_expected_output(self.device, self.EXPECTED_OUTPUT)
+
+
+@require_torchao
+@require_torchao_version_greater_or_equal("0.8.0")
+class TorchAoSafeSerializationTest(TorchAoSerializationTest):
+    if is_torchao_available():
+        configs = [
+            torchao.quantization.Float8DynamicActivationFloat8WeightConfig(),
+            torchao.quantization.Float8WeightOnlyConfig(),
+        ]
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    def test_serialization_expected_output(self):
+        serialized_expected_output = "What are we having for dinner?\n\nJessica: (smiling)"
+
+        for config in self.configs:
+            self.quant_config = TorchAoConfig(config)
+            self.quantized_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                dtype=torch.bfloat16,
+                device_map=self.device,
+                quantization_config=self.quant_config,
+            )
+            self.check_serialization_expected_output(self.device, serialized_expected_output)
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
