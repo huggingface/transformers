@@ -1572,6 +1572,7 @@ class ProcessorMixin(PushToHubMixin):
             batch_images, batch_videos = [], []
             batch_audios = []
             for conversation in conversations:
+                images, videos = [], []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                     audio_fnames = [
@@ -1586,12 +1587,14 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["image", "url", "path", "base64"]
                         if key in vision_info and vision_info["type"] == "image"
                     ]
+                    images.extend(image_fnames)
                     video_fnames = [
                         vision_info[key]
                         for vision_info in visuals
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
+                    videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not mm_load_kwargs["load_audio_from_video"]:
@@ -1601,12 +1604,10 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in video_fnames:
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
-                    # Currently all processors can accept nested list of batches, but not flat list of visuals
-                    # So we'll make a batched list of images and let the processor handle it
-                    if image_fnames:
-                        batch_images.append(image_fnames)
-                    if video_fnames:
-                        batch_videos.append(video_fnames)
+                # Currently all processors can accept nested list of batches, but not flat list of visuals
+                # So we'll make a batched list of images and let the processor handle it
+                batch_images.append(images)
+                batch_videos.append(videos)
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -1631,13 +1632,17 @@ class ProcessorMixin(PushToHubMixin):
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
             # sampling should not done for BC.
-            if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
+            if "do_sample_frames" not in kwargs and (
+                kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
+            ):
                 kwargs["do_sample_frames"] = True
 
+            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
+            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
-                images=batch_images if batch_images else None,
-                videos=batch_videos if batch_videos else None,
+                images=batch_images if images_exist else None,
+                videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
                 **kwargs,
             )
