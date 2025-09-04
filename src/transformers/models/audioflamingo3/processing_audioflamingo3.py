@@ -45,10 +45,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
     [`~AudioFlamingo3Processor.__call__`] and [`~AudioFlamingo3Processor.decode`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The feature extractor is a required input.
-        tokenizer ([`AutoTokenizer`], *optional*):
-            The tokenizer is a required input.
     """
 
     attributes = ["feature_extractor", "tokenizer"]

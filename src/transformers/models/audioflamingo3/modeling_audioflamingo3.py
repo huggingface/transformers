@@ -55,7 +55,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
+):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
@@ -97,10 +97,21 @@ class AudioFlamingo3Attention(nn.Module):
         self.head_dim = embed_dim // num_heads
         self.config = config
 
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
+        if layer_idx is None and is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
         self.layer_idx = layer_idx
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
@@ -157,7 +168,7 @@ class AudioFlamingo3Attention(nn.Module):
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->AudioFlamingo3, WHISPER->AUDIOFLAMINGO3
 class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: AudioFlamingo3Config) -> None:
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -181,7 +192,7 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
