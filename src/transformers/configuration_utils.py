@@ -1234,17 +1234,8 @@ class PretrainedConfig(PushToHubMixin):
         # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
         #    to decoders.
         # 3. Decoder sub-configs may have `is_decoder=True`
-        return_both = decoder == encoder  # both unset or both set -> search all possible names
-        possible_sub_config_names = self.sub_configs.keys()
-        if not return_both:
-            if encoder:
-                possible_sub_config_names = [
-                    name
-                    for name in possible_sub_config_names
-                    if "decoder" not in name and "generator" not in name and not getattr(self, name).is_decoder
-                ]
-            if decoder:
-                possible_sub_config_names = [name for name in possible_sub_config_names if "encoder" not in name]
+        # 4. We don't have image decoders. (Changing this assumption breaks KV cache initialization unless we add more
+        #    logic)
 
         # Modality assumptions:
         # 1. All image configs have a `image_size` attribute
@@ -1254,23 +1245,29 @@ class PretrainedConfig(PushToHubMixin):
         #    - `audio_vocab_size`
         # 3. If it's not any of the above and it has a `vocab_size` attribute, then it's a text config. (`vocab_size`
         #    often exists in audio configs)
-        if modality is None:
-            valid_sub_config_names = possible_sub_config_names
-        else:
-            valid_sub_config_names = []
-            for sub_config_name in possible_sub_config_names:
-                sub_config = getattr(self, sub_config_name)
-                is_image_config = "image_size" in sub_config
-                is_audio_config = not is_image_config and (
-                    any(attr in sub_config for attr in ["num_mel_bins", "num_channels", "audio_vocab_size"])
-                )
-                is_text_config = not is_image_config and not is_audio_config and "vocab_size" in sub_config
-                if modality == "text" and is_text_config:
-                    valid_sub_config_names.append(sub_config_name)
-                elif modality == "image" and is_image_config:
-                    valid_sub_config_names.append(sub_config_name)
-                elif modality == "audio" and is_audio_config:
-                    valid_sub_config_names.append(sub_config_name)
+        possible_sub_config_names = self.sub_configs.keys()
+        valid_sub_config_names = []
+        for sub_config_name in possible_sub_config_names:
+            sub_config = getattr(self, sub_config_name)
+            is_image_config = "image_size" in sub_config
+            is_audio_config = not is_image_config and (
+                any(attr in sub_config for attr in ["num_mel_bins", "num_channels", "audio_vocab_size"])
+            )
+            is_text_config = not is_image_config and not is_audio_config and "vocab_size" in sub_config
+
+            if encoder and ("decoder" in sub_config_name or "generator" in sub_config_name or sub_config.is_decoder):
+                continue
+            if decoder and ("encoder" in sub_config_name or is_image_config):
+                continue
+
+            if modality is None:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "text" and is_text_config:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "image" and is_image_config:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "audio" and is_audio_config:
+                valid_sub_config_names.append(sub_config_name)
 
         # If exactly one sub-config is found, return it. Otherwise, check `strict` -- if True, raise an error,
         # otherwise return the original config (no match / ambiguous match)
@@ -1293,7 +1290,7 @@ class PretrainedConfig(PushToHubMixin):
         # handle legacy models with flat config structure, when we only want one of the configs
         if (
             len(self.sub_configs) == 0
-            and not return_both
+            and decoder != encoder
             and len(valid_sub_config_names) == 0
             and config_to_return.is_encoder_decoder
         ):
