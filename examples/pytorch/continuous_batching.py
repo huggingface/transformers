@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import contextlib
 import json
 import os
 import time
@@ -20,6 +21,7 @@ from typing import Optional
 
 import datasets
 import torch
+from torch.profiler import ProfilerActivity, profile
 from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -194,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("--output-file", type=str, default=None)
     parser.add_argument("--compare", action="store_true", default=False)
     parser.add_argument("--metrics", action="store_true", default=False)
+    parser.add_argument("--profile", type=str, default=None)
     args = parser.parse_args()
 
     # If turned on, we setup metrics
@@ -264,17 +267,25 @@ if __name__ == "__main__":
         slice_inputs=args.slice_inputs,
     )
 
-    # Run batch generation
-    gen_time, tok_per_sec = batch_generate(
-        model,
-        simple_batch_inputs,
-        generation_config,
-        tokenizer,
-        displayed_samples=args.displayed,
-        output_file=args.output_file,
-        expected_outputs=expected_outputs,
-        slice_inputs=args.slice_inputs,
-    )
+    if args.profile is not None:
+        cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)
+    else:
+        cm = contextlib.nullcontext()
+    with cm as prof:
+        # Run batch generation
+        gen_time, tok_per_sec = batch_generate(
+            model,
+            simple_batch_inputs,
+            generation_config,
+            tokenizer,
+            displayed_samples=args.displayed,
+            output_file=args.output_file,
+            expected_outputs=expected_outputs,
+            slice_inputs=args.slice_inputs,
+        )
+    if args.profile is not None:
+        filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"
+        prof.export_chrome_trace(filename)
 
 # Example usage:
 # python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --slice-inputs --samples 3 --compare
