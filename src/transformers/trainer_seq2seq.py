@@ -54,9 +54,9 @@ class Seq2SeqTrainer(Trainer):
     @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
-        model: Union["PreTrainedModel", nn.Module] = None,
-        args: "TrainingArguments" = None,
-        data_collator: Optional["DataCollator"] = None,
+        model: Optional[Union[PreTrainedModel, nn.Module]] = None,
+        args: Optional[TrainingArguments] = None,
+        data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[

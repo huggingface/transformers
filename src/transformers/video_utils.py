@@ -80,12 +80,12 @@ VideoInput = Union[
 @dataclass
 class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: float = None
-    width: int = None
-    height: int = None
-    duration: float = None
-    video_backend: str = None
-    frames_indices: list[int] = None
+    fps: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+    video_backend: Optional[str] = None
+    frames_indices: Optional[list[int]] = None
 
     def __iter__(self):
         return (f.name for f in fields(self))

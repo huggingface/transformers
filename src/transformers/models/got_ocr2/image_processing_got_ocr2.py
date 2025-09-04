@@ -259,7 +259,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
