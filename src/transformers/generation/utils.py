@@ -2521,7 +2521,7 @@ class GenerationMixin(ContinuousMixin):
                 UserWarning,
             )
 
-        # 8. prepare logits processors and stopping criteria
+        # 8. Prepare logits processors and stopping criteria
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
