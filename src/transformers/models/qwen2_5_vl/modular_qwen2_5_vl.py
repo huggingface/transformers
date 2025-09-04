@@ -19,7 +19,7 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -50,6 +50,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torchdynamo_compiling, logging
@@ -594,6 +595,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        # Initialize current_rope_deltas for all code paths
+        current_rope_deltas = rope_deltas if rope_deltas is not None else self.rope_deltas
+
         if position_ids is None:
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -607,21 +611,24 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
-                position_ids, rope_deltas = self.get_rope_index(
+
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or current_rope_deltas is None:
+                position_ids, calculated_rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
                     second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask,
                 )
-                self.rope_deltas = rope_deltas
+                # Always update model state during prefill stage
+                self.rope_deltas = calculated_rope_deltas
+                current_rope_deltas = calculated_rope_deltas
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
                 if cache_position is not None:
-                    delta = (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
+                    delta = (cache_position[0] + current_rope_deltas).to(inputs_embeds.device)
                 else:
                     delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
@@ -646,7 +653,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=current_rope_deltas,
         )
         return output if return_dict else output.to_tuple()
 
@@ -769,6 +776,23 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+
+        # Preserve rope_deltas for CFG and multi-pass generation
+        if hasattr(outputs, "rope_deltas") and outputs.rope_deltas is not None:
+            model_kwargs["rope_deltas"] = outputs.rope_deltas
+
+        return model_kwargs
 
     def prepare_inputs_for_generation(
         self,

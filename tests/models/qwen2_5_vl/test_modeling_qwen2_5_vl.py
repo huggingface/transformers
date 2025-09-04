@@ -446,6 +446,68 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_model_is_small(self):
         pass
 
+    def test_cfg_generation_with_rope_deltas(self):
+        """Test that CFG generation works correctly with rope_deltas and doesn't produce gibberish."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen2_5_VLForConditionalGeneration(config).eval().to(torch_device)
+
+        with torch.no_grad():
+            # Test CFG generation with guidance_scale > 1.0
+            output_cfg = model.generate(
+                input_ids=inputs_dict["input_ids"].to(torch_device),
+                pixel_values=inputs_dict["pixel_values"].to(torch_device),
+                image_grid_thw=inputs_dict["image_grid_thw"].to(torch_device),
+                max_new_tokens=10,
+                guidance_scale=2.0,  # Enable CFG - this triggers multi-pass generation
+                do_sample=False,
+                use_cache=True
+            )
+            
+            # Test regular generation for comparison
+            output_regular = model.generate(
+                input_ids=inputs_dict["input_ids"].to(torch_device),
+                pixel_values=inputs_dict["pixel_values"].to(torch_device),
+                image_grid_thw=inputs_dict["image_grid_thw"].to(torch_device),
+                max_new_tokens=10,
+                guidance_scale=1.0,  # No CFG - single pass generation
+                do_sample=False,
+                use_cache=True
+            )
+
+        # Verify both generations succeeded and produced coherent outputs
+        self.assertTrue(output_cfg.shape[1] > inputs_dict["input_ids"].shape[1], "CFG generation should produce new tokens")
+        self.assertTrue(output_regular.shape[1] > inputs_dict["input_ids"].shape[1], "Regular generation should produce new tokens")
+        
+        # Verify CFG produces different output than regular generation (not gibberish)
+        self.assertFalse(torch.equal(output_cfg, output_regular), "CFG should produce different output than regular generation")
+        
+        # Verify rope_deltas are preserved after CFG multi-pass generation
+        self.assertIsNotNone(model.model.rope_deltas, "rope_deltas should be preserved during CFG generation")
+        
+        # Verify generated tokens are valid (within vocabulary range)
+        self.assertTrue(torch.all(output_cfg >= 0), "Generated tokens should be non-negative")
+        self.assertTrue(torch.all(output_cfg < config.vocab_size), "Generated tokens should be within vocabulary")
+        self.assertTrue(torch.all(output_regular >= 0), "Generated tokens should be non-negative")
+        self.assertTrue(torch.all(output_regular < config.vocab_size), "Generated tokens should be within vocabulary")
+
+        # Test that _update_model_kwargs_for_generation preserves rope_deltas
+        class MockOutput:
+            def __init__(self):
+                self.rope_deltas = torch.tensor([[1.0, 2.0, 3.0]])
+                self.past_key_values = None
+
+            def __contains__(self, key):
+                return hasattr(self, key)
+
+        mock_outputs = MockOutput()
+        initial_kwargs = {"cache_position": torch.tensor([0, 1, 2])}
+        updated_kwargs = model._update_model_kwargs_for_generation(
+            mock_outputs, initial_kwargs, is_encoder_decoder=False, num_new_tokens=1
+        )
+
+        self.assertIn("rope_deltas", updated_kwargs, "rope_deltas should be preserved for CFG generation")
+        torch.testing.assert_close(updated_kwargs["rope_deltas"], mock_outputs.rope_deltas)
+
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
@@ -739,3 +801,50 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+
+    @slow
+    def test_cfg_generation_integration(self):
+        """Integration test for CFG generation with real 3B model to ensure CFG works and doesn't generate gibberish."""
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-VL-3B-Instruct", torch_dtype="auto", device_map="auto"
+        )
+        
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+
+        # Test CFG generation with guidance_scale > 1.0
+        output_cfg = model.generate(
+            **inputs,
+            max_new_tokens=20,
+            guidance_scale=2.0,  # Enable CFG
+            do_sample=False,
+            use_cache=True
+        )
+        
+        # Test regular generation for comparison
+        output_regular = model.generate(
+            **inputs,
+            max_new_tokens=20,
+            guidance_scale=1.0,  # No CFG
+            do_sample=False,
+            use_cache=True
+        )
+        
+        # Decode outputs to verify they're not gibberish
+        decoded_cfg = self.processor.decode(output_cfg[0], skip_special_tokens=True)
+        decoded_regular = self.processor.decode(output_regular[0], skip_special_tokens=True)
+        
+        # Verify both generations succeeded and produced coherent text
+        self.assertGreater(len(decoded_cfg), len(text), "CFG generation should produce new text")
+        self.assertGreater(len(decoded_regular), len(text), "Regular generation should produce new text")
+        
+        # Verify CFG produces different output than regular generation
+        self.assertNotEqual(decoded_cfg, decoded_regular, "CFG should produce different output than regular generation")
+        
+        # Verify outputs contain reasonable text (not random tokens/gibberish)
+        # Both should start with the same system prompt but differ in generation
+        self.assertTrue("assistant" in decoded_cfg, "CFG output should contain assistant response")
+        self.assertTrue("assistant" in decoded_regular, "Regular output should contain assistant response")
+        
+        # Verify rope_deltas are preserved after CFG generation
+        self.assertIsNotNone(model.model.rope_deltas, "rope_deltas should be preserved during CFG generation")
