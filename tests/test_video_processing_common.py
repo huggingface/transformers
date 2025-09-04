@@ -342,6 +342,13 @@ class VideoProcessingTestMixin:
             self.assertEqual(encoded_videos.shape[1], 6)
             self.assertEqual(encoded_videos_batched.shape[1], 6)
 
+            # The same as above but uses a `VideoMetadata` object in the input
+            metadata = [[VideoMetadata(duration=2.0, total_num_frames=8, fps=4)]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+
             # We should raise error when asked to sample more frames than there are in input video
             with self.assertRaises(ValueError):
                 encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
