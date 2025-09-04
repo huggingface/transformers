@@ -29,7 +29,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    make_nested_list_of_images,
 )
 from ...processing_utils import (
     Unpack,
@@ -156,15 +155,15 @@ def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.
     Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape
     (num_patches_height * num_patches_width, patch_size * patch_size * num_channels).
     """
-    batch_size, num_channels, image_height, image_width = images.shape
+    batch_size, num_images, num_channels, image_height, image_width = images.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    images = images.permute(0, 2, 3, 1)  # first move to channel-last dim
+    images = images.permute(0, 1, 3, 4, 2)  # move to channel-last dim
     patched_image = images.reshape(
-        batch_size, num_patches_height, patch_size, num_patches_width, patch_size, num_channels
+        batch_size * num_images, num_patches_height, patch_size, num_patches_width, patch_size, num_channels
     )
     patched_image = patched_image.permute(0, 1, 3, 2, 4, 5)
-    patched_image = patched_image.reshape(batch_size, num_patches_height * num_patches_width, -1)
+    patched_image = patched_image.reshape(batch_size * num_images, num_patches_height * num_patches_width, -1)
     return patched_image
 
 
@@ -200,7 +199,6 @@ class Lfm2VlFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     encoder_patch_size: Optional[int]
     tile_size: Optional[int]
     max_pixels_tolerance: Optional[float]
-    patch_size: Optional[int]
     do_pad: Optional[bool]
     return_row_col_info: Optional[bool]
 
@@ -228,7 +226,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
     image_mean = IMAGENET_STANDARD_STD
     image_std = IMAGENET_STANDARD_MEAN
     valid_kwargs = Lfm2VlFastImageProcessorKwargs
-    model_inputs_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
+    model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 
     def __init__(self, **kwargs: Unpack[Lfm2VlFastImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -288,7 +286,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         This method splits a high resolution image into a grid of smaller patches while trying to maintain
         the original aspect ratio. It finds the optimal grid configuration within the specified tile constraints.
         """
-        height, width = image.shape[-2:]
+        batch_size, num_channels, height, width = image.shape
         grid_width, grid_height, target_width, target_height, total_patches = self._get_grid_layout(
             height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
         )
@@ -297,24 +295,24 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         )
 
         # split the image into patches
-        processed_images = []
-        for i in range(total_patches):
-            column = i % grid_height
-            row = i // grid_width
-            box = (
-                column * tile_size,
-                row * tile_size,
-                (column + 1) * tile_size,
-                (row + 1) * tile_size,
-            )
-            # split the image
-            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            processed_images.append(patch_image)
+        processed_images = (
+            resized_image.unfold(2, size=tile_size, step=tile_size)
+            .unfold(3, size=tile_size, step=tile_size)
+            .contiguous()
+            .view(batch_size, num_channels, -1, tile_size, tile_size)
+            .permute(2, 0, 1, 3, 4)
+            .reshape(-1, 1, num_channels, tile_size, tile_size)
+        )
+        processed_images = list(processed_images)
 
         if use_thumbnail and len(processed_images) != 1:
+            total_patches += 1
             thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
             processed_images.append(thumbnail_image)
 
+        # Re-order processed images to a nested image structure, so it can be reordered back correctly
+        # Note that the images can't be stacked because the thumbnail image is of bigger size than patches
+        processed_images = [processed_images[i * total_patches : (i + 1) * total_patches] for i in range(batch_size)]
         return processed_images, grid_width, grid_height
 
     # Adapted from Qwen-VL with minor differences
@@ -383,7 +381,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         max_pixels_tolerance: float,
         interpolation: "F.InterpolationMode",
     ) -> "torch.Tensor":
-        height, width = images.shape[-2:]
+        batch_size, _, height, width = images.shape
         do_image_splitting = not min_tiles == max_tiles == 1
         is_image_large = self._is_image_too_large(
             height=height,
@@ -417,18 +415,13 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         else:
             num_rows = num_cols = 1
             images = F.resize(images, (new_height, new_width), interpolation=interpolation)
+            # Make a list and treat it as single crop per image so it can be re-grouped back correctly
+            images = [[image.unsqueeze(0)] for image in images]
 
-        num_rows = [num_rows] * images.shape[0]
-        num_cols = [num_cols] * images.shape[0]
-        image_sizes = [[new_height, new_width]] * images.shape[0]
+        num_rows = [num_rows] * batch_size
+        num_cols = [num_cols] * batch_size
+        image_sizes = [[new_height, new_width]] * batch_size
         return images, num_rows, num_cols, image_sizes
-
-    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
-        """
-        Prepare a nested images structure for processing.
-        """
-        images = self.fetch_images(images)
-        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def _preprocess(
         self,
@@ -441,7 +434,6 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Union[float, list[float]],
         image_std: Union[float, list[float]],
-        patch_size: int,
         downsample_factor: int,
         do_image_splitting: bool,
         min_tiles: int,
@@ -475,9 +467,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             tile_size_patches,
         )
 
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images, is_nested=True, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         resized_image_sizes = {}
         rows_grouped, cols_grouped = {}, {}
@@ -507,14 +497,13 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             cols_grouped[shape] = num_cols
             resized_image_sizes[shape] = image_sizes
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
-        batch_rows = reorder_images(rows_grouped, grouped_images_index, is_nested=True)
-        batch_cols = reorder_images(cols_grouped, grouped_images_index, is_nested=True)
-        resized_image_sizes = reorder_images(resized_image_sizes, grouped_images_index, is_nested=True)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+        batch_rows = reorder_images(rows_grouped, grouped_images_index)
+        batch_cols = reorder_images(cols_grouped, grouped_images_index)
+        resized_image_sizes = reorder_images(resized_image_sizes, grouped_images_index)
 
-        # resized_images = make_flat_list_of_images(resized_images)
         grouped_images, grouped_images_index = group_images_by_shape(
-            resized_images, is_nested=True, disable_grouping=disable_grouping
+            resized_images, disable_grouping=disable_grouping, is_nested=True
         )
 
         processed_images_grouped = {}
@@ -538,12 +527,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
-        data = {"pixel_values": torch.stack([torch.cat(images) for images in processed_images])}
+        data = {"pixel_values": torch.cat([torch.stack(images) for images in processed_images])}
 
         if do_pad:
             processed_masks = reorder_images(processed_masks, grouped_images_index, is_nested=True)
             processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index, is_nested=True)
-            processed_masks = torch.stack([torch.cat(masks) for masks in processed_masks])
+            processed_masks = torch.cat([torch.stack(masks) for masks in processed_masks])
             processed_spatial_shapes = torch.cat(
                 [torch.tensor(spatial_shape) for spatial_shape in processed_spatial_shapes]
             )

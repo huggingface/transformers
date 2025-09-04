@@ -873,7 +873,8 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(modalities="image")

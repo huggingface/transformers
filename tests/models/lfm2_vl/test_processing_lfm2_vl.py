@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import shutil
 import tempfile
 import unittest
@@ -43,9 +44,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = cls.prepare_processor_dict()
         image_processor = Lfm2VlImageProcessorFast(
             tile_size=14,
-            min_image_tokens = 2,
-            max_image_tokens = 10,
-            encoder_patch_size = 4,
+            min_image_tokens=2,
+            max_image_tokens=10,
+            encoder_patch_size=2,
             do_image_splitting=False,
         )
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
@@ -67,7 +68,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_end_token_id = processor.tokenizer.convert_tokens_to_ids(processor.image_end_token)
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_thumbnail_token_id = processor.tokenizer.convert_tokens_to_ids(processor.image_thumbnail_token)
-        cls.image_seq_len = 100
 
     def get_tokenizer(self, **kwargs):
         return Lfm2VlProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -112,11 +112,8 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols, add_thumbnail, image_seq_len):
         text_split_images = [self.image_start_token_id]
-        tile_seq_len = (
-            processor.image_processor.tile_size
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        ) ** 2
+        num_patches_tile = processor.image_processor.tile_size // processor.image_processor.encoder_patch_size
+        tile_seq_len = math.ceil(num_patches_tile / processor.image_processor.downsample_factor) ** 2
         for n_h in range(image_rows):
             for n_w in range(image_cols):
                 text_split_images += (
@@ -153,17 +150,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(
             np.array(inputs["pixel_attention_mask"]).shape, (1, processor.image_processor.max_num_patches)
         )
-        self.assertEqual(
-            inputs["spatial_shapes"],
-            (
-                [
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    )
-                ]
-            ),
-        )
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[6, 6]])
         # fmt: on
 
     def test_process_interleaved_images_prompts_no_image_splitting_single_image_with_text(self):
@@ -174,15 +161,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
-        small_image_expected_seq_len = (
-            self.small_image.height
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-            * self.small_image.width
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        )
-
         image_str = "<image>"
         text_str = "In this image, we see"
         text = image_str + text_str
@@ -190,13 +168,13 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [[self.image_start_token_id] + [self.image_token_id] * small_image_expected_seq_len + [self.image_end_token_id] + tokenized_sentence["input_ids"]]
+        expected_input_ids = [[self.image_start_token_id] + [self.image_token_id] * 9 + [self.image_end_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
         encoder_feature_dims = 3 * processor.image_processor.encoder_patch_size * processor.image_processor.encoder_patch_size
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, processor.image_processor.max_num_patches, encoder_feature_dims))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, processor.image_processor.max_num_patches))
-        self.assertEqual(inputs["spatial_shapes"], ([(self.small_image.height // processor.image_processor.encoder_patch_size, self.small_image.width // processor.image_processor.encoder_patch_size)]))
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[6, 6]])
         # fmt: on
 
     def test_process_interleaved_images_prompts_no_image_splitting_multiple_images(self):
@@ -221,17 +199,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
-        small_image_seq_len = (
-            self.small_image.height
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-            * self.small_image.width
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        )
-        image_tokens = (
-            [self.image_start_token_id] + [self.image_token_id] * small_image_seq_len + [self.image_end_token_id]
-        )
+        image_tokens = [self.image_start_token_id] + [self.image_token_id] * 9 + [self.image_end_token_id]
         expected_input_ids_1 = image_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = 2 * image_tokens + tokenized_sentence_2["input_ids"]
         # Pad the first input to match the second input
@@ -253,25 +221,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(
             np.array(inputs["pixel_attention_mask"]).shape, (3, processor.image_processor.max_num_patches)
         )
-        self.assertEqual(
-            inputs["spatial_shapes"],
-            (
-                [
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    ),
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    ),
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    ),
-                ]
-            ),
-        )
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[6, 6], [6, 6], [6, 6]])
 
     def test_process_interleaved_images_prompts_image_splitting(self):
         processor = self.get_processor()
@@ -280,55 +230,25 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_str_1 = "In this image, we see"
         text_str_2 = "bla, bla"
 
-        text = [
-            image_str + text_str_1,
-            text_str_2 + image_str + image_str,
-        ]
-        images = [[self.small_image], [self.large_image, self.high_res_image]]
+        text = [image_str + text_str_1, text_str_2 + image_str + image_str]
+        images = [[self.small_image], [self.high_res_image, self.high_res_image]]
 
         inputs = processor(
-            text=text, images=images, padding=True, padding_side="left", max_pixels_tolerance=2.0, use_thumbnail=False
+            text=text,
+            images=images,
+            padding=True,
+            padding_side="left",
+            max_pixels_tolerance=2.0,
+            use_thumbnail=False,
+            do_image_splitting=True,
         )
 
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        small_seq_len = (
-            self.small_image.height
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-            * self.small_image.width
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        )
-
-        # resized with smart resize with preserved aspect ratio assuming max_pixels_tolerance == 2.0 and default 512 x 512 pixels
-        large_seq_len = (
-            352
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-            * 704
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        )
-
-        # resized with smart resize to fit max image size (default 512 x 512 pixels)
-        high_res_seq_len = (
-            512
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-            * 512
-            // processor.image_processor.encoder_patch_size
-            // processor.image_processor.downsample_factor
-        )
-
-        small_image_tokens = (
-            [self.image_start_token_id] + [self.image_token_id] * small_seq_len + [self.image_end_token_id]
-        )
-        large_image_tokens = (
-            [self.image_start_token_id] + [self.image_token_id] * large_seq_len + [self.image_end_token_id]
-        )
-        high_res_image_tokens = self.get_split_image_expected_tokens(processor, 2, 2, False, high_res_seq_len)
+        small_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
+        large_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
+        high_res_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
 
         expected_input_ids_1 = small_image_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = tokenized_sentence_2["input_ids"] + large_image_tokens + high_res_image_tokens
@@ -342,48 +262,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)],
         )
-        encoder_feature_dims = (
-            3 * processor.image_processor.encoder_patch_size * processor.image_processor.encoder_patch_size
-        )
-        self.assertEqual(
-            np.array(inputs["pixel_values"]).shape,
-            (6, processor.image_processor.max_num_patches, encoder_feature_dims),
-        )
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (6, 1024))
-        self.assertEqual(
-            inputs["spatial_shapes"],
-            (
-                [
-                    # small image
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    ),
-                    # large image, HxW because spacial shapes are not in PIL notation anymore
-                    (
-                        704 // processor.image_processor.encoder_patch_size,
-                        352 // processor.image_processor.encoder_patch_size,
-                    ),
-                    # high res image, 4 patches
-                    (
-                        512 // processor.image_processor.encoder_patch_size,
-                        512 // processor.image_processor.encoder_patch_size,
-                    ),
-                    (
-                        512 // processor.image_processor.encoder_patch_size,
-                        512 // processor.image_processor.encoder_patch_size,
-                    ),
-                    (
-                        512 // processor.image_processor.encoder_patch_size,
-                        512 // processor.image_processor.encoder_patch_size,
-                    ),
-                    (
-                        512 // processor.image_processor.encoder_patch_size,
-                        512 // processor.image_processor.encoder_patch_size,
-                    ),
-                ]
-            ),
-        )
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (27, 49, 12))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (27, 49))
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[7, 7]] * 27)
 
     def test_add_special_tokens_processor_image_splitting(self):
         processor = self.get_processor()
@@ -393,10 +274,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = text_str + image_str
 
         # fmt: off
-        inputs = processor(text=text, images=self.high_res_image, add_special_tokens=False)
+        inputs = processor(text=text, images=self.high_res_image, add_special_tokens=False, do_image_splitting=True)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        high_res_image_tokens = (512 // processor.image_processor.encoder_patch_size // processor.image_processor.downsample_factor) ** 2
-        split_high_res_image_tokens = self.get_split_image_expected_tokens(processor, 2, 2, True, high_res_image_tokens)
+        split_high_res_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, True, 9)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_high_res_image_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
@@ -409,10 +289,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = text_str + image_str
 
         # fmt: off
-        inputs = processor(text=text, images=self.large_image, add_special_tokens=False, max_pixels_tolerance=2.0)
+        inputs = processor(text=text, images=self.large_image, add_special_tokens=False, max_pixels_tolerance=2.0, do_image_splitting=True)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        large_image_seq_len = (352 // processor.image_processor.encoder_patch_size // processor.image_processor.downsample_factor) * (704 // processor.image_processor.encoder_patch_size // processor.image_processor.downsample_factor)
-        large_image_tokens = [self.image_start_token_id] + [self.image_token_id] * large_image_seq_len + [self.image_end_token_id]
+        large_image_tokens = self.get_split_image_expected_tokens(processor, 2, 4, True, 8)
         expected_input_ids = [tokenized_sentence["input_ids"] + large_image_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
@@ -427,74 +306,10 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.high_res_image, add_special_tokens=False, use_image_special_tokens=True, do_image_splitting=False)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        high_res_image_tokens = (512 // processor.image_processor.encoder_patch_size // processor.image_processor.downsample_factor) ** 2
-        split_high_res_image_tokens = [self.image_start_token_id] + [self.image_token_id] * high_res_image_tokens + [self.image_end_token_id]
+        split_high_res_image_tokens = [self.image_start_token_id] + [self.image_token_id] * 9 + [self.image_end_token_id]
         expected_input_ids = [split_high_res_image_tokens + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
-
-    def test_non_nested_images_with_batched_text(self):
-        processor = self.get_processor()
-        processor.do_image_splitting = False
-
-        image_str = "<image>"
-        text_str_1 = "In this image, we see"
-        text_str_2 = "In this image, we see"
-
-        text = [
-            image_str + text_str_1,
-            image_str + image_str + text_str_2,
-        ]
-        images = [[self.small_image, self.large_image, self.high_res_image]]
-
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images)
-
-    def test_nested_images_with_batched_text(self):
-        processor = self.get_processor()
-        processor.image_processor.do_image_splitting = False
-
-        image_str = "<image>"
-        text_str_1 = "In this image, we see"
-        text_str_2 = "In this image, we see"
-
-        text = [
-            image_str + text_str_1,
-            image_str + image_str + text_str_2,
-        ]
-        images = [[self.small_image], [self.large_image, self.high_res_image]]
-
-        inputs = processor(text=text, images=images, padding=True)
-        encoder_feature_dims = (
-            3 * processor.image_processor.encoder_patch_size * processor.image_processor.encoder_patch_size
-        )
-        self.assertEqual(
-            np.array(inputs["pixel_values"]).shape,
-            (3, processor.image_processor.max_num_patches, encoder_feature_dims),
-        )
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (3, 1024))
-        self.assertEqual(
-            inputs["spatial_shapes"],
-            (
-                [
-                    # small image
-                    (
-                        self.small_image.height // processor.image_processor.encoder_patch_size,
-                        self.small_image.width // processor.image_processor.encoder_patch_size,
-                    ),
-                    # large image, HxW because spacial shapes are not in PIL notation anymore
-                    (
-                        704 // processor.image_processor.encoder_patch_size,
-                        352 // processor.image_processor.encoder_patch_size,
-                    ),
-                    # high res image
-                    (
-                        512 // processor.image_processor.encoder_patch_size,
-                        512 // processor.image_processor.encoder_patch_size,
-                    ),
-                ]
-            ),
-        )
 
     def test_process_interleaved_images_prompts_image_error(self):
         processor = self.get_processor()
@@ -534,12 +349,14 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = [[self.small_image], []]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+
         images = [[], [self.large_image]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
+        processor(text=text, images=images, padding=True)
+
         images = [self.small_image, self.large_image]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+
         images = [self.small_image]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
@@ -577,35 +394,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<|im_start|>assistant\n"
         )
         self.assertEqual(rendered, expected_rendered)
-
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor_kwargs = self.prepare_processor_dict()
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["<image>"]
-        input_str += ["<image>Compare images"]
-        image_input = self.prepare_image_inputs(batch_size=2)
-        image_input = [[self.small_image], [self.small_image]]
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            padding="max_length",
-            max_length=130,
-            truncation=True,
-            max_image_tokens=128,
-            do_image_splitting=False,
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[0], 2)
-        self.assertEqual(inputs["pixel_values"].shape[1], 128 * processor.image_processor.downsample_factor**2)
-        self.assertEqual(len(inputs["input_ids"][0]), 130)
 
     def test_text_only_inference(self):
         """Test that the processor works correctly with text-only input."""

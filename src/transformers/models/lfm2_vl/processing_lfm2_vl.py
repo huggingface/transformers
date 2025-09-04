@@ -73,9 +73,9 @@ class Lfm2VlProcessor(ProcessorMixin):
              An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        chat_template (`str`): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        use_image_special_tokens (`bool`):
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+        use_image_special_tokens (`bool`, *optional*, defaults to `True`):
             Whether to use image special tokens or not when processing.
     """
 
@@ -87,8 +87,8 @@ class Lfm2VlProcessor(ProcessorMixin):
         self,
         image_processor,
         tokenizer,
-        chat_template: str,
-        use_image_special_tokens: bool,
+        chat_template: Optional[str] = None,
+        use_image_special_tokens: Optional[bool] = True,
         **kwargs,
     ):
         self.image_token = tokenizer.image_token
@@ -137,6 +137,10 @@ class Lfm2VlProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+        n_images_in_text = [sample.count(self.image_token) for sample in text]
+        if sum(n_images_in_text) > 0 and images is None:
+            raise ValueError(f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed")
+
         inputs = {}
         use_image_special_tokens = output_kwargs["text_kwargs"].pop("use_image_special_tokens")
 
@@ -145,11 +149,8 @@ class Lfm2VlProcessor(ProcessorMixin):
             batched_images = make_nested_list_of_images(images)
             vision_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
 
-            n_images_in_text = sum([sample.count(self.image_token) for sample in text])
-            n_images_in_images = sum([len(sublist) for sublist in batched_images])
-            if n_images_in_text > 0 and images is None:
-                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images were passed")
-            elif n_images_in_images != n_images_in_text:
+            n_images_in_images = [len(sublist) for sublist in batched_images]
+            if n_images_in_images != n_images_in_text:
                 raise ValueError(
                     f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                 )
@@ -168,7 +169,6 @@ class Lfm2VlProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
         inputs.update(text_inputs)
 
         return BatchFeature(inputs, tensor_type=return_tensors)
@@ -185,18 +185,16 @@ class Lfm2VlProcessor(ProcessorMixin):
     ):
         prompt_strings = []
 
-        for sample_text, sample_images, rows_list, cols_list, image_size_list in zip(
-            text, images, image_rows, image_cols, image_sizes
-        ):
+        image_data = iter(zip(*[image_rows, image_cols, image_sizes]))
+        for sample_text, sample_images in zip(text, images):
             split_sample = sample_text.split(self.image_token)
             sample_text_with_image_tokens = ""
-            for i, (image, rows, cols, image_size) in enumerate(
-                zip(sample_images, rows_list, cols_list, image_size_list)
-            ):
+            for i, image in enumerate(sample_images):
                 sample_text_with_image_tokens += split_sample[i]
                 if use_image_special_tokens:
                     sample_text_with_image_tokens += self.image_start_token
 
+                rows, cols, image_size = next(image_data)
                 num_thumbnail_tokens, num_tokens_per_tile = self._get_image_num_tokens(image_size, **images_kwargs)
 
                 if rows > 1 or cols > 1:
@@ -262,7 +260,10 @@ class Lfm2VlProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
+
+        # LFM2-VL has no dedicated tokenizer class and uses the Base class with default model input names
+        tokenizer_input_names = [name for name in tokenizer_input_names if name != "token_type_ids"]
+        return list(tokenizer_input_names + image_processor_input_names)
 
 
 __all__ = ["Lfm2VlProcessor"]

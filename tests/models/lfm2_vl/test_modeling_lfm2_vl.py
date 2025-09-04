@@ -231,6 +231,7 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B")
+        self.processor.tokenizer.padding_side = "left"
         self.image = Image.open(
             requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
         )
@@ -262,7 +263,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         expected_generated_text = (
-            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
+            "In this image, we see a group of cats lounging on a pink couch. The cats are of various colors, including"
         )
         self.assertEqual(generated_texts[0], expected_generated_text)
 
@@ -282,9 +283,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = (
-            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
-        )
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a well-known landmark in New York Harbor. The statue is"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     def test_integration_test_batched(self):
@@ -296,14 +295,15 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Create inputs
         text = ["<image>In this image, we see", "<image>In this image, there is a cat on"]
-        images = [self.image2, self.image]
-        inputs = self.processor(text=text, images=images, return_tensors="pt")
+        images = [[self.image2], [self.image]]
+        inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(device=torch_device, dtype=torch.bfloat16)
 
         generated_ids = model.generate(**inputs, max_new_tokens=20)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = (
-            "In this image, we see two cats, one of which is a kit. They are both sleeping on a pink blanket, which"
-        )
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_text = [
+            "In this image, we see the Statue of Liberty, which is a symbol of freedom and democracy. The statue is a gift",
+            "In this image, there is a cat on the left side and another cat on the right side. The cat on the left side is sleeping,",
+        ]
+        self.assertListEqual(generated_texts, expected_generated_text)
