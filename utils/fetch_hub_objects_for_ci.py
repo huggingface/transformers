@@ -33,6 +33,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg",
     "https://llava-vl.github.io/static/images/view.jpg",
     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
 ]
 
 
