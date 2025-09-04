@@ -179,3 +179,8 @@ print("Pooled output shape:", pooled_output.shape)
 
 [[autodoc]] DINOv3ViTImageProcessorFast
     - preprocess
+
+## DINOv3ConvNextBackbone
+
+[[autodoc]] DINOv3ConvNextBackbone
+    - forward
