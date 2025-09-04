@@ -20,6 +20,7 @@ import math
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from datasets import Dataset
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -6179,3 +6181,97 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
                 self.assertIsInstance(module, torch.nn.Embedding)
                 self.assertEqual(name, "weight")
                 self.assertDictEqual(config, {"optim_bits": 32})
+
+
+class DummyModelForCustomAccelerate(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(10, 2)
+
+    def forward(self, input_ids, labels=None, **kwargs):
+        logits = self.linear(input_ids.float())
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
+        return {"logits": logits, "loss": loss}
+
+
+def dummyDataForCustomAccelerate():
+    return Dataset.from_dict({"input_ids": [torch.randn(10).tolist() for _ in range(20)], "labels": [0, 1] * 10})
+
+
+@require_accelerate
+@require_torch
+class TestTrainerCustomAccelerator(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.model = DummyModelForCustomAccelerate()
+        self.dataset = dummyDataForCustomAccelerate()
+        self.args = TrainingArguments(
+            output_dir=self.temp_dir,
+            num_train_epochs=1,
+            per_device_train_batch_size=2,
+            max_steps=1,
+            save_strategy="no",
+            eval_strategy="no",
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_trainer_accepts_custom_accelerator(self):
+        """Test that Trainer accepts a custom accelerator"""
+        custom_accelerator = Accelerator(mixed_precision="no")
+
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset, accelerator=custom_accelerator)
+        assert trainer.accelerator is custom_accelerator
+
+    def test_trainer_without_accelerator_works(self):
+        """Test that existing functionality still works"""
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset)
+
+        assert trainer.accelerator is not None
+        assert isinstance(trainer.accelerator, Accelerator)
+
+    def test_postprocessing_sets_required_attributes(self):
+        """Test that postprocessing sets all required attributes"""
+        custom_accelerator = Accelerator(mixed_precision="no")
+
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset, accelerator=custom_accelerator)
+        assert hasattr(trainer, "is_deepspeed_enabled")
+        assert hasattr(trainer, "is_fsdp_enabled")
+        assert hasattr(trainer, "is_tp_enabled")
+        assert hasattr(trainer, "gather_function")
+        assert isinstance(trainer.is_deepspeed_enabled, bool)
+        assert isinstance(trainer.is_fsdp_enabled, bool)
+        assert isinstance(trainer.is_tp_enabled, bool)
+
+    def test_custom_accelerator_preserves_settings(self):
+        """Test that custom accelerator settings are preserved"""
+        custom_accelerator = Accelerator(mixed_precision="fp16", gradient_accumulation_steps=4)
+
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset, accelerator=custom_accelerator)
+
+        assert trainer.accelerator.mixed_precision == "fp16"
+        assert trainer.accelerator.gradient_accumulation_steps == 4
+
+    def test_gather_function_setup(self):
+        """Test that gather function is properly configured"""
+        custom_accelerator = Accelerator(mixed_precision="no")
+
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset, accelerator=custom_accelerator)
+
+        assert trainer.gather_function is not None
+        assert trainer.gather_function == custom_accelerator.gather_for_metrics or hasattr(
+            trainer.gather_function, "func"
+        )
+
+    def test_training_works_with_custom_accelerator(self):
+        """Test that training actually works with custom accelerator"""
+        custom_accelerator = Accelerator(mixed_precision="no")
+
+        trainer = Trainer(model=self.model, args=self.args, train_dataset=self.dataset, accelerator=custom_accelerator)
+
+        trainer.train()
+        assert trainer.state.global_step > 0
