@@ -422,7 +422,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: Optional[Union[tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        data_format: Optional[ChannelDimension] = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.

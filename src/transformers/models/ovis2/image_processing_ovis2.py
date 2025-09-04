@@ -481,7 +481,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         max_patches: int,
         use_covering_area_grid: bool = True,
         patch_size: Optional[Union[tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        data_format: Optional[ChannelDimension] = None,
         covering_threshold: float = 0.9,
     ):
         """

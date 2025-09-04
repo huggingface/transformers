@@ -418,7 +418,7 @@ class Trainer:
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module, None] = None,
-        args: TrainingArguments = None,
+        args: Optional[TrainingArguments] = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset], "datasets.Dataset"]] = None,

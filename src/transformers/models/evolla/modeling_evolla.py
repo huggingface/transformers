@@ -641,7 +641,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         attention_mask: Tensor,
         input_shape: tuple[int],
         device: Optional[torch.device] = None,
-        dtype: torch.float = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.

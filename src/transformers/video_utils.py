@@ -66,7 +66,7 @@ VideoInput = Union[
     list["np.ndarray"],
     list["torch.Tensor"],
     list[list["PIL.Image.Image"]],
-    list[list["np.ndarrray"]],
+    list[list[np.ndarray]],
     list[list["torch.Tensor"]],
     URL,
     list[URL],
@@ -245,7 +245,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadat
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
