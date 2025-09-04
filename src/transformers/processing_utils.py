@@ -1572,6 +1572,7 @@ class ProcessorMixin(PushToHubMixin):
             batch_images, batch_videos = [], []
             batch_audios = []
             for conversation in conversations:
+                images, videos = [], []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                     audio_fnames = [
@@ -1586,12 +1587,14 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["image", "url", "path", "base64"]
                         if key in vision_info and vision_info["type"] == "image"
                     ]
+                    images.extend(image_fnames)
                     video_fnames = [
                         vision_info[key]
                         for vision_info in visuals
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
+                    videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not mm_load_kwargs["load_audio_from_video"]:
@@ -1601,10 +1604,10 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in video_fnames:
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
-                    # Currently all processors can accept nested list of batches, but not flat list of visuals
-                    # So we'll make a batched list of images and let the processor handle it
-                    batch_images.append(image_fnames)
-                    batch_videos.append(video_fnames)
+                # Currently all processors can accept nested list of batches, but not flat list of visuals
+                # So we'll make a batched list of images and let the processor handle it
+                batch_images.append(images)
+                batch_videos.append(videos)
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -1634,8 +1637,8 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 kwargs["do_sample_frames"] = True
 
-            images_exist = any(len(im) > 0 for im_list in batch_images for im in im_list)
-            videos_exist = any(len(vid) > 0 for vid_list in batch_videos for vid in vid_list)
+            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
+            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
                 images=batch_images if images_exist else None,
