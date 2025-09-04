@@ -280,7 +280,7 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return None
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
