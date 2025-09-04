@@ -1051,16 +1051,9 @@ class GenerationTesterMixin:
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            num_decoder_layers = (
-                getattr(decoder_config, "decoder_layers", None)
-                or getattr(decoder_config, "num_decoder_layers", None)
-                or decoder_config.num_hidden_layers
-            )
-
+            num_decoder_layers = decoder_config.num_hidden_layers
             if custom_all_cache_shapes is None:
-                num_query_attention_heads = getattr(
-                    decoder_config, "decoder_attention_heads", decoder_config.num_attention_heads
-                )
+                num_query_attention_heads = decoder_config.num_attention_heads
                 embed_dim = getattr(decoder_config, "d_model", decoder_config.hidden_size)
                 per_head_embed_dim = (
                     getattr(decoder_config, "head_dim", None) or embed_dim // num_query_attention_heads
@@ -1126,9 +1119,13 @@ class GenerationTesterMixin:
             # 3.2. Decoder-only checks
             else:
                 num_cache_decoder_layers = len(past_kv)
-                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
+                self.assertEqual(
+                    # we may have skipped layers
+                    num_cache_decoder_layers + getattr(decoder_config, "num_kv_shared_layers", 0),
+                    num_decoder_layers,
+                )
 
-                for i in range(num_decoder_layers):
+                for i in range(num_cache_decoder_layers):
                     if is_legacy_cache:
                         self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
 
