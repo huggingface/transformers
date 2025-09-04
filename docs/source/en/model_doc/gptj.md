@@ -15,127 +15,97 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2021-06-04 and added to Hugging Face Transformers on 2021-08-31.*
 
-# GPT-J
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    </div>
 </div>
 
-## Overview
+# GPT-J
 
-The [GPT-J](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/) model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
-causal language model trained on [the Pile](https://pile.eleuther.ai/) dataset.
+[GPT-J](https://github.com/kingoflolz/mesh-transformer-jax) is a GPT-like model trained on [the Pile](https://pile.eleuther.ai/) dataset. It was trained with the Mesh Transformer JAX framework, a model parallelism scheme. This model efficiently computes attention and feedforward neural networks in parallel and uses rotary position embeddings to better inject positional information.
 
-This model was contributed by [Stella Biderman](https://huggingface.co/stellaathena).
+You can find all the original [GPT-J] checkpoints under the [EleutherAI](https://huggingface.co/EleutherAI/models?search=gpt-j) organization.
 
-## Usage tips
+> [!TIP]
+> This model was contributed by [Stella Biderman](https://huggingface.co/stellaathena).
+> Click on the GPT-J models in the right sidebar for more examples of how to apply GPT-J to different language tasks.
 
-- To load [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) in float32 one would need at least 2x model size
-  RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB
-  RAM to just load the model. To reduce the RAM usage there are a few options. The `dtype` argument can be
-  used to initialize the model in half-precision on a CUDA device only. There is also a fp16 branch which stores the fp16 weights,
-  which could be used to further minimize the RAM usage:
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-```python
->>> from transformers import GPTJForCausalLM, infer_device
->>> import torch
+<hfoptoins id="usage">
+<hfoption id="Pipeline">
 
->>> device = infer_device()
->>> model = GPTJForCausalLM.from_pretrained(
-...     "EleutherAI/gpt-j-6B",
-...     revision="float16",
-...     dtype=torch.float16,
-... ).to(device)
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="EleutherAI/gpt-j-6B",
+    dtype=torch.float16,
+    device=0
+)
+pipeline(
+    "In a shocking finding, scientists discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains."
+)
 ```
 
-- The model should fit on 16GB GPU for inference. For training/fine-tuning it would take much more GPU RAM. Adam
-  optimizer for example makes four copies of the model: model, gradients, average and squared average of the gradients.
-  So it would need at least 4x model size GPU memory, even with mixed precision as gradient updates are in fp32. This
-  is not including the activations and data batches, which would again require some more GPU RAM. So one should explore
-  solutions such as DeepSpeed, to train/fine-tune the model. Another option is to use the original codebase to
-  train/fine-tune the model on TPU and then convert the model to Transformers format for inference. Instructions for
-  that could be found [here](https://github.com/kingoflolz/mesh-transformer-jax/blob/master/howto_finetune.md)
+</hfoption>
+<hfoption id="AutoModel">
 
-- Although the embedding matrix has a size of 50400, only 50257 entries are used by the GPT-2 tokenizer. These extra
-  tokens are added for the sake of efficiency on TPUs. To avoid the mismatch between embedding matrix size and vocab
-  size, the tokenizer for [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) contains 143 extra tokens
-  `<|extratoken_1|>... <|extratoken_143|>`, so the `vocab_size` of tokenizer also becomes 50400.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-## Usage examples
+device = infer_device()
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
-The [`~generation.GenerationMixin.generate`] method can be used to generate text using GPT-J
-model.
+prompt = (
+    "In a shocking finding, scientists discovered a herd of unicorns living in a remote, "
+    "previously unexplored valley, in the Andes Mountains. Even more surprising to the "
+    "researchers was the fact that the unicorns spoke perfect English."
+)
 
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 
->>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
->>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-
->>> prompt = (
-...     "In a shocking finding, scientists discovered a herd of unicorns living in a remote, "
-...     "previously unexplored valley, in the Andes Mountains. Even more surprising to the "
-...     "researchers was the fact that the unicorns spoke perfect English."
-... )
-
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
->>> gen_tokens = model.generate(
-...     input_ids,
-...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+output = model.generate(
+    input_ids,
+    do_sample=True,
+    temperature=0.9,
+    max_length=100,
+)
+tokenizer.batch_decode(output)[0]
 ```
 
-...or in float16 precision:
+</hfoption>
+<hfoption id="transformers CLI">
 
-```python
->>> from transformers import GPTJForCausalLM, AutoTokenizer, infer_device
->>> import torch
-
->>> device = infer_device()
->>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16).to(device)
->>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-
->>> prompt = (
-...     "In a shocking finding, scientists discovered a herd of unicorns living in a remote, "
-...     "previously unexplored valley, in the Andes Mountains. Even more surprising to the "
-...     "researchers was the fact that the unicorns spoke perfect English."
-... )
-
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-
->>> gen_tokens = model.generate(
-...     input_ids,
-...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+```bash
+echo -e "In a shocking finding, scientists discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains." | transformers run --task text-generation --model EleutherAI/gpt-j-6B --device 0
 ```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- Training requires at least 4x model size GPU memory even with mixed precision. Explore options such as DeepSpeed or use the original codebase to train and fine-tune the model on TPU and convert to Transformers for inference (see [here](https://github.com/kingoflolz/mesh-transformer-jax/blob/master/howto_finetune.md)).
+
+- Although the embedding matrix is 50400, only 50257 entries are used. The extra tokens are added for TPU efficiency. To avoid a mismatch between embedding matrix size and vocab size, the GPT-J tokenizer contains 143 extra tokens (`<|extratoken_1|>... <|extratoken_143|>`.
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GPT-J. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- Blog on how to [Accelerate GPT-J inference with DeepSpeed-Inference on GPUs](https://www.philschmid.de/gptj-deepspeed-inference).
+- Blog post introducing [GPT-J-6B: 6B JAX-Based Transformer](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/).
+- Notebook for [GPT-J-6B Inference Demo](https://colab.research.google.com/github/kingoflolz/mesh-transformer-jax/blob/master/colab_demo.ipynb).
+- Notebook demonstrating [Inference with GPT-J-6B](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/GPT-J-6B/Inference_with_GPT_J_6B.ipynb).
+- [`GPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation), and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+- [`TFGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)
+- [`FlaxGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb)
 
-<PipelineTag pipeline="text-generation"/>
-
-- Description of [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B).
-- A blog on how to [Deploy GPT-J 6B for inference using Hugging Face Transformers and Amazon SageMaker](https://huggingface.co/blog/gptj-sagemaker).
-- A blog on how to [Accelerate GPT-J inference with DeepSpeed-Inference on GPUs](https://www.philschmid.de/gptj-deepspeed-inference).
-- A blog post introducing [GPT-J-6B: 6B JAX-Based Transformer](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/). 🌎
-- A notebook for [GPT-J-6B Inference Demo](https://colab.research.google.com/github/kingoflolz/mesh-transformer-jax/blob/master/colab_demo.ipynb). 🌎
-- Another notebook demonstrating [Inference with GPT-J-6B](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/GPT-J-6B/Inference_with_GPT_J_6B.ipynb).
-- [Causal language modeling](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) chapter of the 🤗 Hugging Face Course.
-- [`GPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation), and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-
-**Documentation resources**
-- [Text classification task guide](../tasks/sequence_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
 
 ## GPTJConfig
 
