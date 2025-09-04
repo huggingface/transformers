@@ -64,12 +64,6 @@ class DINOv3ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        apply_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `False`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
 
     Example:
     ```python
@@ -100,8 +94,6 @@ class DINOv3ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
         image_size: int = 224,
         out_features: Optional[list[str]] = None,
         out_indices: Optional[list[int]] = None,
-        apply_layernorm: bool = False,
-        reshape_hidden_states: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -119,8 +111,6 @@ class DINOv3ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
 
     @property
     def num_stages(self) -> int:
