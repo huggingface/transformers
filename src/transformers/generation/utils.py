@@ -129,6 +129,19 @@ ALL_CACHE_NAMES = [
     "past_buckets_states",  # reformer
 ]
 
+GENERATION_MODES_MAPPING = {
+    GenerationMode.SAMPLE: "_sample",
+    GenerationMode.GREEDY_SEARCH: "_sample",
+    GenerationMode.BEAM_SEARCH: "_beam_search",
+    GenerationMode.BEAM_SAMPLE: "_beam_search",
+    GenerationMode.ASSISTED_GENERATION: "_assisted_decoding",
+    # Deprecated methods
+    GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+    GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+    GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
+    GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
+}
+
 
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
@@ -1492,7 +1505,7 @@ class GenerationMixin(ContinuousMixin):
 
         return transition_scores
 
-    def _validate_generation_mode(self, batch_size, generation_mode, generation_config, generation_mode_kwargs):
+    def _validate_generation_mode(self, generation_mode, generation_config, generation_mode_kwargs):
         if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
@@ -1504,8 +1517,6 @@ class GenerationMixin(ContinuousMixin):
                     "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
-            if batch_size > 1:
-                raise ValueError("assisted generate is only supported for batch_size = 1")
             if self._is_stateful:
                 # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
                 # which is not possible with stateful models (they can't reset to a previous subset of generated text)
@@ -2146,13 +2157,12 @@ class GenerationMixin(ContinuousMixin):
         self,
         generation_mode: GenerationMode,
         trust_remote_code: bool,
-        generation_modes_mapping: dict[GenerationMode, Union[str, Callable]],
         custom_generate: Optional[str] = None,
     ) -> Optional[str]:
         """
         Returns the Hub repo for a deprecated generation mode, if any.
         """
-        if custom_generate is not None or not isinstance(repo := generation_modes_mapping[generation_mode], str):
+        if custom_generate is not None or "/" not in (repo := GENERATION_MODES_MAPPING[generation_mode]):
             return None
 
         logger.warning_once(
@@ -2349,31 +2359,18 @@ class GenerationMixin(ContinuousMixin):
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
         # Cannot be root level constant since subclasses might override the methods
-        generation_modes_mapping = {
-            GenerationMode.SAMPLE: type(self)._sample,
-            GenerationMode.GREEDY_SEARCH: type(self)._sample,
-            GenerationMode.BEAM_SEARCH: type(self)._beam_search,
-            GenerationMode.BEAM_SAMPLE: type(self)._beam_search,
-            GenerationMode.ASSISTED_GENERATION: type(self)._assisted_decoding,
-            # Deprecated methods
-            GenerationMode.DOLA_GENERATION: "transformers-community/dola",
-            GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
-            GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
-            GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
-        }
-        generation_call = (
-            generation_modes_mapping[generation_mode] if not isinstance(custom_generate, Callable) else custom_generate
+        decoding_method = (
+            GENERATION_MODES_MAPPING[generation_mode] if not isinstance(custom_generate, Callable) else custom_generate
         )
 
         self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # Deprecation-related step: set Hub repo for deprecated strategies.
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecate_mode_repo := self._get_deprecated_gen_repo(
-            generation_mode, trust_remote_code, generation_modes_mapping, custom_generate
-        ):
+        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
@@ -2385,7 +2382,7 @@ class GenerationMixin(ContinuousMixin):
                 negative_prompt_ids=negative_prompt_ids,
                 negative_prompt_attention_mask=negative_prompt_attention_mask,
                 use_model_defaults=use_model_defaults,
-                custom_generate=deprecate_mode_repo,
+                custom_generate=deprecated_mode_repo,
                 trust_remote_code=trust_remote_code,
                 **generation_mode_kwargs,
                 **kwargs,
@@ -2404,11 +2401,9 @@ class GenerationMixin(ContinuousMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
         # Some generation modes (e.g. assisted) need `inputs_tensor` to rerun encoder.forward()
-        if "inputs_tensor" in inspect.signature(generation_call).parameters.keys():
+        if "inputs_tensor" in inspect.signature(decoding_method).parameters.keys():
             generation_mode_kwargs["inputs_tensor"] = inputs_tensor
         batch_size = inputs_tensor.shape[0]
-
-        self._validate_generation_mode(batch_size, generation_mode, generation_config, generation_mode_kwargs)
 
         device = inputs_tensor.device
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
@@ -2544,7 +2539,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 9. Call generation mode
-        result = generation_call(
+        result = decoding_method(
             self,
             input_ids,
             logits_processor=prepared_logits_processor,
@@ -3532,6 +3527,8 @@ class GenerationMixin(ContinuousMixin):
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
+        if batch_size > 1:
+            raise ValueError("assisted generate is only supported for batch_size = 1")
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
