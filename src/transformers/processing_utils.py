@@ -359,35 +359,14 @@ class ProcessingKwargs(TypedDict, total=False):
 
     ```
 
-    For Python 3.8 compatibility, when inheriting from this class and overriding one of the kwargs,
-    you need to manually update the __annotations__ dictionary. This can be done as follows:
-
-    ```python
-    class CustomProcessorKwargs(ProcessingKwargs, total=False):
-        images_kwargs: CustomImagesKwargs
-
-    CustomProcessorKwargs.__annotations__["images_kwargs"] = CustomImagesKwargs  # python 3.8 compatibility
-    ```python
-
     """
 
     _defaults = {}
-
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
-    text_kwargs: TextKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    images_kwargs: ImagesKwargs = {
-        **ImagesKwargs.__annotations__,
-    }
-    videos_kwargs: VideosKwargs = {
-        **VideosKwargs.__annotations__,
-    }
-    audio_kwargs: AudioKwargs = {
-        **AudioKwargs.__annotations__,
-    }
+    common_kwargs: CommonKwargs
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    videos_kwargs: VideosKwargs
+    audio_kwargs: AudioKwargs
 
 
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
@@ -422,11 +401,11 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
         This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
     """
 
-    tools: Optional[list[dict]] = None
-    documents: Optional[list[dict[str, str]]] = None
-    add_generation_prompt: Optional[bool] = False
-    continue_final_message: Optional[bool] = False
-    return_assistant_tokens_mask: Optional[bool] = False
+    tools: Optional[list[dict]]
+    documents: Optional[list[dict[str, str]]]
+    add_generation_prompt: Optional[bool]
+    continue_final_message: Optional[bool]
+    return_assistant_tokens_mask: Optional[bool]
 
 
 class ChatTemplateLoadKwargs(TypedDict, total=False):
@@ -440,8 +419,8 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
             processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    sampling_rate: Optional[int] = 16_000
-    load_audio_from_video: Optional[bool] = False
+    sampling_rate: Optional[int]
+    load_audio_from_video: Optional[bool]
 
 
 class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
@@ -454,8 +433,8 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
         Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
     """
 
-    tokenize: Optional[bool] = False
-    return_dict: Optional[bool] = False
+    tokenize: Optional[bool]
+    return_dict: Optional[bool]
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
@@ -1655,12 +1634,12 @@ class ProcessorMixin(PushToHubMixin):
                     videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not mm_load_kwargs["load_audio_from_video"]:
+                    if not mm_load_kwargs.get("load_audio_from_video", False):
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs.get("sampling_rate")))
                     else:
                         for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs.get("sampling_rate")))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
