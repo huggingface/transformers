@@ -224,9 +224,8 @@ class PagedAttentionCache:
         key_states: torch.Tensor, # shape [1, num_kv_heads, seqlen_kv, head_dim]
         value_states: torch.Tensor, # shape [1, num_kv_heads, seqlen_kv, head_dim]
         layer_idx: int,
-        read_index: torch.Tensor, # shape [num_layer_groups, seqlen_kv + past_length]
-        write_index: torch.Tensor, # shape [num_layer_groups, seqlen_q]
-        group_read_write_length: list[tuple[int, int]], # shape [num_layer_groups]
+        read_index: list[torch.Tensor], # shape [num_layer_groups, seqlen_kv + past_length]
+        write_index: list[torch.Tensor], # shape [num_layer_groups, seqlen_q]
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]: # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """
@@ -236,25 +235,23 @@ class PagedAttentionCache:
         """
         # Retrieve the layer read and write indices
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
-        group_read_length, group_write_length = group_read_write_length[group_idx]
-        layer_read_index = read_index[group_idx, :group_read_length]
-        layer_write_index = write_index[group_idx, :group_write_length]
+        layer_read_index = read_index[group_idx]
+        layer_write_index = write_index[group_idx]
         # Reshape cache for easier indexing
-        num_pages = self.num_blocks * self.block_size
-        k_cache_flat = self.key_cache[layer_idx_in_group].view(num_pages, self.num_key_value_heads, self.head_dim)
-        v_cache_flat = self.value_cache[layer_idx_in_group].view(num_pages, self.num_key_value_heads, self.head_dim)
+        k_cache = self.key_cache[layer_idx_in_group]
+        v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
         # Add the cache to the key and value states
         mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
-        key_states_with_cache = k_cache_flat[layer_read_index, :, :]
+        key_states_with_cache = k_cache[layer_read_index, :, :]
         key_states_with_cache[mask] = key_states
-        value_states_with_cache = v_cache_flat[layer_read_index, :, :]
+        value_states_with_cache = v_cache[layer_read_index, :, :]
         value_states_with_cache[mask] = value_states
         # Write new KV values to the cache
-        k_cache_flat[layer_write_index, :, :] = key_states
-        v_cache_flat[layer_write_index, :, :] = value_states
+        k_cache[layer_write_index, :, :] = key_states
+        v_cache[layer_write_index, :, :] = value_states
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
