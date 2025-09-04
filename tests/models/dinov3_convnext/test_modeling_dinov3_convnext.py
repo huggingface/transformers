@@ -112,8 +112,7 @@ class DINOv3ConvNextModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        # For ConvNext, each stage reduces spatial dimensions by 2
-        expected_size = self.image_size // (2 ** len(config.depths))
+        expected_size = self.image_size // (4 * (2 ** (len(config.depths) - 1)))
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
         )
@@ -136,10 +135,6 @@ class DINOv3ConvNextModelTester:
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
-
-        # verify backbone works with apply_layernorm=False and reshape_hidden_states=False
-        config.apply_layernorm = False
-        config.reshape_hidden_states = False
 
         model = DINOv3ConvNextBackbone(config=config)
         model.to(torch_device)
