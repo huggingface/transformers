@@ -45,17 +45,16 @@ model_id = "LiquidAI/LFM2-VL-1.6B"
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype="bfloat16",
+    dtype="bfloat16",
 )
 processor = AutoProcessor.from_pretrained(model_id)
 
 # Load image and create conversation
-image = load_image(url)
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg},
+            {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
             {"type": "text", "text": "What is in this image?"},
         ],
     },
@@ -69,9 +68,9 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     tokenize=True,
 ).to(model.device)
+
 outputs = model.generate(**inputs, max_new_tokens=64)
 processor.batch_decode(outputs, skip_special_tokens=True)[0]
-# This image depicts a vibrant street scene in what appears to be a Chinatown or similar cultural area. The focal point is a large red stop sign with white lettering, mounted on a pole.
 
 ```
 
