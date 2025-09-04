@@ -15,9 +15,9 @@
 
 import os
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from io import BytesIO
 from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
@@ -78,7 +78,7 @@ VideoInput = Union[
 
 
 @dataclass
-class VideoMetadata:
+class VideoMetadata(Mapping):
     total_num_frames: int
     fps: float = None
     width: int = None
@@ -86,6 +86,12 @@ class VideoMetadata:
     duration: float = None
     video_backend: str = None
     frames_indices: list[int] = None
+
+    def __iter__(self):
+        return (f.name for f in fields(self))
+
+    def __len__(self):
+        return len(fields(self))
 
     def __getitem__(self, item):
         return getattr(self, item)
@@ -96,8 +102,8 @@ class VideoMetadata:
     @property
     def timestamps(self) -> float:
         "Timestamps of the sampled frames in seconds."
-        if self.fps is None:
-            raise ValueError("Cannot infer video `timestamps` when `fps` is None.")
+        if self.fps is None or self.frames_indices is None:
+            raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
     def update(self, dictionary):
