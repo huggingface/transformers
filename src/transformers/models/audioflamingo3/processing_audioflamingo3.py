@@ -31,7 +31,8 @@ from ...tokenization_utils_base import TextInput
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
+            "padding": True,  # pad to longest in the batch
+            "truncation": True,  # safety: clip overlong prompts
         },
         "audio_kwargs": {},
     }
@@ -116,99 +117,140 @@ class AudioFlamingo3Processor(ProcessorMixin):
         window_length: float = 30.0,
         window_overlap: float = 0.0,
         max_num_window: int = 20,
-    ) -> Optional[Tuple[List[List[List[float]]], torch.Tensor, torch.Tensor]]:
+    ) -> Optional[Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]]:
+        """
+        Returns 3 flat lists (one entry per window):
+          - input_features      : [ (num_mel_bins, T_mel), ... ]
+          - feature_attn_masks  : [ (T_mel,), ... ]               # mel-frame masks for tower attention
+          - embed_len_masks     : [ (750,), ... ]                 # token-length masks for LLM fusion
+        """
         if audio_data is None:
             return None
-        window_length = int(window_length * sample_rate)
-        window_overlap = int(window_overlap * sample_rate)
-        max_num_window = int(max_num_window)
 
-        sound_outputs = []
-        audio_feature_masks = []
-        audio_embed_masks = []
+        wl = int(window_length * sample_rate)
+        wo = int(window_overlap * sample_rate)
+
+        feats_per_win: List[torch.Tensor] = []
+        feat_masks: List[torch.Tensor] = []
+        embed_masks: List[torch.Tensor] = []
 
         T = len(audio_data)
-        audio_data = audio_data.reshape(1, -1)
-        num_windows = self._get_num_windows(T, sample_rate)[0]
+        audio = audio_data.reshape(1, -1)
 
+        # convert to float32 in a stable way (keeps your original normalization)
         int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
         float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        audio_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio))).float()
 
-        audio_data_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio_data))).float()
+        num_windows, _ = self._get_num_windows(T, sample_rate)
+
         for i in range(num_windows):
-            audio_embed_mask = torch.zeros(750)
-            start = i * (window_length - window_overlap)
-            audio_data_tensor_this = audio_data_tensor[:, start : start + window_length]
-            orig_length = audio_data_tensor_this.shape[1]
-            audio_data_tensor_this = self.feature_extractor(audio_data_tensor_this.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
-            sound_outputs.append(audio_data_tensor_this["input_features"])
-            # Mask for the input mel-spectrogram to Whisper
-            melspec_frames_this_window = int(math.ceil(orig_length / 160))
-            feature_attention_mask = torch.zeros(3000, dtype=torch.int32)
-            feature_attention_mask[:melspec_frames_this_window] = 1
-            audio_feature_masks.append(feature_attention_mask.unsqueeze(0))
-            # Mask for the output embedding used in AF3
-            conv_lengths = (melspec_frames_this_window - 1) // 2 + 1
-            output_embedding_lengths = (conv_lengths - 2) // 2 + 1
-            audio_embed_mask[:output_embedding_lengths] = 1
-            audio_embed_masks.append(audio_embed_mask)
+            start = i * (wl - wo)
+            chunk = audio_tensor[:, start : start + wl]  # (1, N_samples_window)
+            orig_len = chunk.shape[1]
 
-        sound_outputs = torch.stack(sound_outputs, dim=0)
-        audio_feature_masks = torch.stack(audio_feature_masks, dim=0)
-        audio_embed_masks = torch.stack(audio_embed_masks, dim=0)
-        return sound_outputs.numpy().tolist(), audio_feature_masks, audio_embed_masks
+            # Whisper FE -> (1, num_mel_bins, T_mel), take [0] to drop batch dim
+            fe = self.feature_extractor(chunk.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
+            mel = fe["input_features"][0]  # (M, T_mel)
+            feats_per_win.append(mel)
+
+            # mel-frame mask length (before the conv downsamples in the tower)
+            melspec_frames = int(math.ceil(orig_len / 160))  # 160 samples per mel frame @16kHz
+            fm = torch.zeros(3000, dtype=torch.int32)
+            fm[:melspec_frames] = 1
+            feat_masks.append(fm)
+
+            # embedding-length mask after the tower's conv downsampling
+            conv_lengths = (melspec_frames - 1) // 2 + 1
+            out_len = (conv_lengths - 2) // 2 + 1
+            em = torch.zeros(750, dtype=torch.int32)
+            em[:out_len] = 1
+            embed_masks.append(em)
+
+        return feats_per_win, feat_masks, embed_masks
 
     def __call__(
         self,
-        text: TextInput,
-        audio: np.ndarray,
+        text: Union[TextInput, List[TextInput]],
+        audio: Union[np.ndarray, List[np.ndarray]],
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to AutoTokenizer's [`~AutoTokenizer.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`):
-                The sequence to be encoded. Can be a string.
-            audio (`np.ndarray`):
-                The audio to be prepared. Should be a NumPy array.
-
-        Returns:
-            [`BatchFeature`]: A BatchFeature containing:
-                - input_ids: Tokenized input IDs
-                - media: List of processed audio tensors
-                - audio_feature_masks: List of attention masks for audio features
-                - audio_embed_masks: List of embedding masks for audio features
+        Batched processing:
+          - `text`: str or list[str]
+          - `audio`: np.ndarray or list[np.ndarray] (one audio per text sample)
+        Returns a BatchFeature with:
+          - input_ids          : (B, L)
+          - attention_mask     : (B, L)
+          - audio_features     : List[Tensor (M, T_mel)], flattened across the whole batch (row-major)
+          - audio_feature_masks: List[Tensor (T_mel,)]
+          - audio_embed_masks  : List[Tensor (750,)]
         """
-        audio_features = []
+        # normalize inputs to lists
+        if isinstance(text, str):
+            text = [text]
+        if isinstance(audio, np.ndarray):
+            audio = [audio]
+        if not isinstance(text, list) or not isinstance(audio, list):
+            raise ValueError("`text` and `audio` must be str/np.ndarray or lists of them.")
+        if len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} texts but {len(audio)} audios.")
 
-        final_text = ""
-        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio)
-        audio_features.append(sound)
-        audio_feature_masks_dict = [audio_feature_masks]
-        audio_embed_masks_dict = [audio_embed_masks]
-        final_text += "<sound>" * len(sound)
-        final_text += text.replace("<sound>", "").strip()
+        output_kwargs = self._merge_kwargs(
+            AudioFlamingo3ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        conversation = [{"from": "human", "value": final_text}]
-        input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).unsqueeze(0)
+        # Build per-sample prompts and flatten windowed audio across the batch
+        final_texts: List[str] = []
+        audio_features_all: List[torch.Tensor] = []
+        audio_feat_masks_all: List[torch.Tensor] = []
+        audio_embed_masks_all: List[torch.Tensor] = []
 
-        sounds = torch.tensor(audio_features).half()
-        audio_features = [sound for sound in sounds]
-        audio_feature_masks = audio_feature_masks_dict[0].detach().clone().half()
-        audio_feature_masks_dict = [sound_mask for sound_mask in audio_feature_masks]
-        audio_embed_masks = audio_embed_masks_dict[0].detach().clone().half()
-        audio_embed_masks_dict = [sound_mask for sound_mask in audio_embed_masks]
+        for t, a in zip(text, audio):
+            loaded = self._load_sound_mask(a)
+            if loaded is None:
+                # no audio for this sample: keep text as-is (no <sound> injection)
+                final_texts.append(t.strip())
+                continue
 
-        return BatchFeature(data={"input_ids": input_ids, "audio_features": audio_features, "audio_feature_masks": audio_feature_masks_dict, "audio_embed_masks": audio_embed_masks_dict})
+            feats_per_win, feat_masks, embed_masks = loaded
+            # IMPORTANT: one <sound> **per window**. They will be merged in the model using embed_masks.
+            num_windows = len(feats_per_win)
 
-    def decode(self, token_ids: torch.Tensor) -> str:
-        result = [self.tokenizer.decode(output_ids, skip_special_tokens=True).strip() for output_ids in token_ids]
-        return result[0] if len(result) == 1 else result
+            # If user inserted <sound> manually, drop it and prepend the correct count
+            clean_t = t.replace("<sound>", "").strip()
+            final_texts.append(("<sound>" * num_windows) + clean_t)
+
+            # Flatten (row-major order): all windows of sample_0, then sample_1, ...
+            audio_features_all.extend([f for f in feats_per_win])  # each f: (M, T_mel)
+            audio_feat_masks_all.extend([m for m in feat_masks])  # each m: (T_mel,)
+            audio_embed_masks_all.extend([m for m in embed_masks])  # each m: (750,)
+
+        # Tokenize all prompts as a batch using the chat template
+        convs = [[{"role": "user", "content": txt}] for txt in final_texts]
+        prompts = [self.tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in convs]
+        enc = self.tokenizer(
+            prompts,
+            padding=output_kwargs["text_kwargs"].get("padding", True),
+            truncation=output_kwargs["text_kwargs"].get("truncation", True),
+            return_tensors="pt",
+        )
+
+        return BatchFeature(
+            data={
+                "input_ids": enc["input_ids"],
+                "attention_mask": enc["attention_mask"],
+                "audio_features": audio_features_all,
+                "audio_feature_masks": audio_feat_masks_all,
+                "audio_embed_masks": audio_embed_masks_all,
+            }
+        )
+
+    def decode(self, token_ids: torch.Tensor) -> Union[str, List[str]]:
+        out = [self.tokenizer.decode(ids, skip_special_tokens=True).strip() for ids in token_ids]
+        return out[0] if len(out) == 1 else out
 
 
 __all__ = ["AudioFlamingo3Processor"]

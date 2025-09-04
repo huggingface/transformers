@@ -305,12 +305,17 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         mask_1d: (B, T_mel) boolean/0-1 mask indicating valid mel frames.
         max_mel_seq_len: T_mel
         """
-        audio_feat_lengths = (mask_1d.sum(-1) - 1) // 2 + 1
+        # Add safety checks
+        assert mask_1d.dim() == 2, f"mask_1d must be (B, T_mel), got {tuple(mask_1d.shape)}"
+        assert mask_1d.shape[1] == max_mel_seq_len, f"T_mel mismatch: mask {mask_1d.shape[1]} vs sounds {max_mel_seq_len}"
+
+        # length after first stride-2 conv
+        audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
         B = mask_1d.shape[0]
         S = (max_mel_seq_len - 2) // 2 + 1
 
         seq_range = torch.arange(S, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device).unsqueeze(0).expand(B, S)
-        lengths_expand = audio_feat_lengths.expand(B, S)
+        lengths_expand = audio_feat_lengths.unsqueeze(1).expand(B, S)
         padding_mask = seq_range >= lengths_expand  # (B, S) True => pad
 
         square = padding_mask.view(B, 1, 1, S).expand(B, 1, S, S)
