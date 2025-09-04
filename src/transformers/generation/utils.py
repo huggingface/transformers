@@ -1031,7 +1031,7 @@ class GenerationMixin(ContinuousMixin):
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    self.config.get_sub_config(modality="text", decoder=True).vocab_size,
+                    self.config.get_sub_config(decoder=True).vocab_size,
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
@@ -1286,7 +1286,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.watermarking_config is not None:
             processors.append(
                 generation_config.watermarking_config.construct_processor(
-                    self.config.get_sub_config(modality="text", decoder=True).vocab_size, device
+                    self.config.get_sub_config(decoder=True).vocab_size, device
                 )
             )
 
@@ -1464,9 +1464,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(
-                -1, self.config.get_sub_config(modality="text", decoder=True).vocab_size, scores.shape[-1]
-            )
+            scores = scores.reshape(-1, self.config.get_sub_config(decoder=True).vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 
@@ -1480,7 +1478,7 @@ class GenerationMixin(ContinuousMixin):
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.get_sub_config(modality="text", decoder=True).vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_sub_config(decoder=True).vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
@@ -1517,8 +1515,8 @@ class GenerationMixin(ContinuousMixin):
                 "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
             )
             if (
-                self.config.get_sub_config(modality="text", decoder=True).vocab_size
-                == assistant_model.config.get_sub_config(modality="text", decoder=True).vocab_size
+                self.config.get_sub_config(decoder=True).vocab_size
+                == assistant_model.config.get_sub_config(decoder=True).vocab_size
             ):
                 if "assistant_tokenizer" in generation_mode_kwargs:
                     raise ValueError(
@@ -1837,14 +1835,14 @@ class GenerationMixin(ContinuousMixin):
 
         if need_new_cache:
             self_attention_cache_kwargs = {
-                "config": self.config.get_sub_config(modality="text", decoder=True),
+                "config": self.config.get_sub_config(decoder=True),
                 "max_cache_len": max_cache_len,
                 "offloading": offload_cache,
             }
             self._cache = StaticCache(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
                 cross_attention_cache_kwargs = {
-                    "config": self.config.get_sub_config(modality="text", decoder=True),
+                    "config": self.config.get_sub_config(decoder=True),
                     "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                     "offloading": offload_cache,
                 }
@@ -1976,7 +1974,7 @@ class GenerationMixin(ContinuousMixin):
                 cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
                 # Add the config if it was not provided, as it's a required argument
                 if "config" not in cache_config:
-                    cache_config["config"] = self.config.get_sub_config(modality="text", decoder=True)
+                    cache_config["config"] = self.config.get_sub_config(decoder=True)
                 # Pop the backend from the config (defaults to quanto if not defined)
                 backend = cache_config.pop("backend", "quanto")
 
@@ -2005,8 +2003,8 @@ class GenerationMixin(ContinuousMixin):
                 # For encoder-decoder models, we need to use separate configs for encoder and decoder
                 decoder_cache_kwargs = {}
                 encoder_cache_kwargs = {}
-                decoder_cache_kwargs["config"] = self.config.get_sub_config(modality="text", decoder=True)
-                encoder_cache_kwargs["config"] = self.config.get_sub_config(modality="text", decoder=True)
+                decoder_cache_kwargs["config"] = self.config.get_sub_config(decoder=True)
+                encoder_cache_kwargs["config"] = self.config.get_sub_config(decoder=True)
                 model_kwargs[cache_name] = EncoderDecoderCache(
                     DynamicCache(**decoder_cache_kwargs),  # self-attention (decoder)
                     DynamicCache(**encoder_cache_kwargs),  # cross-attention (encoder)
@@ -3210,7 +3208,7 @@ class GenerationMixin(ContinuousMixin):
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = self.config.get_sub_config(modality="text", decoder=True).vocab_size
+            vocab_size = self.config.get_sub_config(decoder=True).vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 

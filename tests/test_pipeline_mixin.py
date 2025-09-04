@@ -864,12 +864,10 @@ def validate_test_components(model, tokenizer):
     # Avoid `IndexError` in embedding layers
     CONFIG_WITHOUT_VOCAB_SIZE = ["CanineConfig"]
     if tokenizer is not None:
-        # Removing `decoder=True` in `get_text_config` can lead to conflicting values e.g. in MusicGen
         config_vocab_size = getattr(model.config.get_sub_config(modality="text", decoder=True), "vocab_size", None)
         # For CLIP-like models
-        if config_vocab_size is None:
-            if hasattr(model.config, "text_encoder"):
-                config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+        if config_vocab_size is None and hasattr(model.config, "text_encoder"):
+            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
         if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
             raise ValueError(
                 "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."

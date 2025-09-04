@@ -149,7 +149,7 @@ class GenerationTesterMixin:
         }
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_sub_config(modality="text", decoder=True)
+        text_gen_config = config.get_sub_config(decoder=True)
         if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
             text_gen_config.pad_token_id = (
                 text_gen_config.eos_token_id
@@ -192,10 +192,7 @@ class GenerationTesterMixin:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
                     token_index = getattr(self.model_tester, key, None)
-                if (
-                    token_index is not None
-                    and token_index < config.get_sub_config(modality="text", decoder=True).vocab_size
-                ):
+                if token_index is not None and token_index < config.get_sub_config(decoder=True).vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
@@ -385,7 +382,7 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
 
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -520,7 +517,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -708,7 +705,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -814,7 +811,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -880,7 +877,7 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1011,8 +1008,8 @@ class GenerationTesterMixin:
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_sub_config(modality="text", decoder=True).pad_token_id
-                if config.get_sub_config(modality="text", decoder=True).pad_token_id is not None
+                config.get_sub_config(decoder=True).pad_token_id
+                if config.get_sub_config(decoder=True).pad_token_id is not None
                 else 0
             )
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
@@ -1038,8 +1035,8 @@ class GenerationTesterMixin:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # 1. If it doesn't support cache, skip the test
-            text_decoder_config = config.get_sub_config(modality="text", decoder=True)
-            if not hasattr(text_decoder_config, "use_cache"):
+            decoder_config = config.get_sub_config(decoder=True)
+            if not hasattr(decoder_config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
@@ -1055,17 +1052,17 @@ class GenerationTesterMixin:
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            num_decoder_layers = text_decoder_config.num_hidden_layers
+            num_decoder_layers = decoder_config.num_hidden_layers
             if custom_all_cache_shapes is None:
-                num_query_attention_heads = text_decoder_config.num_attention_heads
-                embed_dim = getattr(text_decoder_config, "d_model", text_decoder_config.hidden_size)
+                num_query_attention_heads = decoder_config.num_attention_heads
+                embed_dim = getattr(decoder_config, "d_model", decoder_config.hidden_size)
                 per_head_embed_dim = (
-                    getattr(text_decoder_config, "head_dim", None) or embed_dim // num_query_attention_heads
+                    getattr(decoder_config, "head_dim", None) or embed_dim // num_query_attention_heads
                 )
                 num_key_value_heads = (
-                    text_decoder_config.num_key_value_heads
-                    if getattr(text_decoder_config, "num_key_value_heads", None) is not None
-                    else num_query_attention_heads
+                    decoder_config.num_key_value_heads
+                    if getattr(decoder_config, "num_key_value_heads", None) is not None
+                    else decoder_config
                 )
                 if config.is_encoder_decoder:
                     batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
@@ -1128,7 +1125,7 @@ class GenerationTesterMixin:
             else:
                 num_cache_decoder_layers = len(past_kv)
                 self.assertEqual(
-                    num_cache_decoder_layers + getattr(text_decoder_config, "num_kv_shared_layers", 0),
+                    num_cache_decoder_layers + getattr(decoder_config, "num_kv_shared_layers", 0),
                     num_decoder_layers,
                 )
 
@@ -1317,16 +1314,17 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_sub_config(modality="text")
+            decoder_config = model.config.get_sub_config(decoder=True)
             head_dim = (
-                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+                getattr(decoder_config, "head_dim", None)
+                or decoder_config.hidden_size // decoder_config.num_attention_heads
             )
             num_key_value_heads = (
-                text_config.num_attention_heads
-                if getattr(text_config, "num_key_value_heads", None) is None
-                else text_config.num_key_value_heads
+                decoder_config.num_attention_heads
+                if getattr(decoder_config, "num_key_value_heads", None) is None
+                else decoder_config.num_key_value_heads
             )
-            num_hidden_layers = text_config.num_hidden_layers
+            num_hidden_layers = decoder_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
@@ -1350,7 +1348,7 @@ class GenerationTesterMixin:
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:
@@ -1458,7 +1456,7 @@ class GenerationTesterMixin:
             # TODO (joao, raushan): this shouldn't be a constraint to this test, `decoder_inputs_embeds` exists
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
-            if not hasattr(config.get_sub_config(modality="text", decoder=True), "use_cache"):
+            if not hasattr(config.get_sub_config(decoder=True), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device).eval()
@@ -2068,14 +2066,14 @@ class GenerationTesterMixin:
                 self.assertTrue(decoder_past_key_values is None)
 
     def _check_scores(self, batch_size, scores, generated_length, config):
-        vocab_size = config.get_sub_config(modality="text", decoder=True).vocab_size
+        vocab_size = config.get_sub_config(decoder=True).vocab_size
         expected_shape = (batch_size, vocab_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
     def _check_logits(self, batch_size, logits, config):
-        vocab_size = config.get_sub_config(modality="text", decoder=True).vocab_size
+        vocab_size = config.get_sub_config(decoder=True).vocab_size
         self.assertIsInstance(logits, tuple)
         self.assertListEqual([iter_logits.shape[0] for iter_logits in logits], [batch_size] * len(logits))
         # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)

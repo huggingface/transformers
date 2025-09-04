@@ -1156,7 +1156,7 @@ class PretrainedConfig(PushToHubMixin):
         try:
             default_config = self.__class__()
         except ValueError:
-            decoder_config = self.get_sub_config(modality="text", decoder=True)
+            decoder_config = self.get_sub_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
             else:
@@ -1291,7 +1291,12 @@ class PretrainedConfig(PushToHubMixin):
             config_to_return = self
 
         # handle legacy models with flat config structure, when we only want one of the configs
-        if not return_both and len(valid_sub_config_names) == 0 and config_to_return.is_encoder_decoder:
+        if (
+            len(self.sub_configs) == 0
+            and not return_both
+            and len(valid_sub_config_names) == 0
+            and config_to_return.is_encoder_decoder
+        ):
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_discard = "encoder" if decoder else "decoder"
             prefix_to_keep = "decoder" if decoder else "encoder"

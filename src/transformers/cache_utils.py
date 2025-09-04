@@ -975,7 +975,8 @@ class DynamicCache(Cache):
         config (`PretrainedConfig`, *optional*):
             The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
             or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
-            `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+            `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`. The config of the decoder must be
+            present in this config.
         offloading (`bool`, *optional*, defaults to `False`):
             Whether to perform offloading of the layers to `cpu`, to save GPU memory.
         offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
@@ -1009,9 +1010,9 @@ class DynamicCache(Cache):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+            # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
             # `DynamicCache(config=model.config)`
-            config = config.get_sub_config(modality="text", decoder=True)
+            config = config.get_sub_config(decoder=True)
             sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
             if layer_types is None:
@@ -1085,7 +1086,8 @@ class StaticCache(Cache):
     Args:
         config (`PretrainedConfig`):
             The config of the model for which this Cache will be used. It will be used to check for sliding
-            or hybrid layer structure, and initialize each layer accordingly.
+            or hybrid layer structure, and initialize each layer accordingly. The config of the decoder must be
+            present in this config.
         max_cache_len (`int`):
             The maximum number of tokens that this Cache should hold.
         offloading (`bool`, *optional*, defaults to `False`):
@@ -1123,9 +1125,9 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+        # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
         # `StaticCache(config=model.config)`
-        config = config.get_sub_config(modality="text", decoder=True)
+        config = config.get_sub_config(decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
         if layer_types is None:
@@ -1170,7 +1172,8 @@ class QuantizedCache(Cache):
         backend (`str`):
             The quantization backend to use. One of `("quanto", "hqq").
         config (`PretrainedConfig`):
-            The config of the model for which this Cache will be used.
+            The config of the model for which this Cache will be used. The config of the decoder must be present in
+            this config.
         nbits (`int`, *optional*, defaults to 4):
             The number of bits for quantization.
         axis_key (`int`, *optional*, defaults to 0):
@@ -1200,9 +1203,9 @@ class QuantizedCache(Cache):
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
-        # We pull the text decoder sub-config here to allow composite models to easily initialize the cache as
+        # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
         # `QuantizedCache(config=model.config)`
-        config = config.get_sub_config(modality="text", decoder=True)
+        config = config.get_sub_config(decoder=True)
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
             for _ in range(config.num_hidden_layers)
