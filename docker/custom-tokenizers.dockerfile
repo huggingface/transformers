@@ -2,7 +2,7 @@ FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root
-RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git cmake wget xz-utils build-essential g++5 libprotobuf-dev protobuf-compiler
+RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git cmake wget xz-utils build-essential g++5 libprotobuf-dev protobuf-compiler git-lfs
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
 
@@ -18,7 +18,7 @@ RUN make install -j 10
 
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]" unidic unidic-lite
+RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,spacy,ftfy,rjieba]" unidic unidic-lite
 # spacy is not used so not tested. Causes to failures. TODO fix later
 RUN uv run python -m unidic download
 RUN uv pip uninstall transformers

@@ -873,7 +873,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1222,7 +1222,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=batch_size,
             max_cache_length=self.config.codec_config.sliding_window,
         )

@@ -17,13 +17,11 @@ import shutil
 import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import AutoProcessor, AutoTokenizer, InternVLProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -122,11 +120,15 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
                     ],
@@ -138,7 +140,9 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
                     ],
@@ -150,7 +154,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -214,7 +218,9 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -252,8 +258,12 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(
@@ -266,15 +276,22 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2)
 
-    @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])
-    def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
+    @require_torch
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list[str],
+    ):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if "video_processor" not in self.processor_class.attributes:
-            self.skipTest(f"`video_processor` attribute not present in {self.processor_class}")
+        if processor_name not in self.processor_class.attributes:
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
             [
@@ -325,8 +342,8 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
-        for idx, url in enumerate(MODALITY_INPUT_DATA["videos"][:batch_size]):
-            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": "video", "url": url}]
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
 
         out_dict = processor.apply_chat_template(
             batch_messages,
@@ -345,8 +362,8 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # removed hardcoded video length check video_len = 2 if batch_size == 1 else 3
         # from experiment video_len looks like batch_size + 1
         # TODO: update expected video_len calculation based on the internal processing logic of InternVLProcessor
-        video_len = batch_size + 1
-        self.assertEqual(len(out_dict[self.videos_input_name]), video_len)
+        output_len = batch_size + 1 if modality == "video" else batch_size
+        self.assertEqual(len(out_dict[self.videos_input_name]), output_len)
         for k in out_dict:
             self.assertIsInstance(out_dict[k], torch.Tensor)
 

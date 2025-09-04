@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -383,7 +383,7 @@ class Gemma3MLP(Gemma2MLP):
 
 class Gemma3RMSNorm(Gemma2RMSNorm):
     def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
+        super().__init__(dim=dim, eps=eps)
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -396,7 +396,7 @@ class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -869,6 +869,10 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
+
     @auto_docstring
     def forward(
         self,
@@ -1166,6 +1170,15 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
         )
 
 
+class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    """
+    Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma3TextConfig
+
+
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
@@ -1175,4 +1188,5 @@ __all__ = [
     "Gemma3ForConditionalGeneration",
     "Gemma3Model",
     "Gemma3ForSequenceClassification",
+    "Gemma3TextForSequenceClassification",
 ]

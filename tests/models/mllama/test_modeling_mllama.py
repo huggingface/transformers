@@ -395,6 +395,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
@@ -669,7 +677,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -726,7 +739,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {
