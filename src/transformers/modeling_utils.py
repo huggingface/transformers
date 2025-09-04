@@ -493,10 +493,9 @@ if is_torch_greater_or_equal("2.3.0"):
 
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
-    is_quantized: bool = False, #change to hf_quantizer (default is none)
+    is_quantized: bool = False,
     map_location: Optional[Union[str, torch.device]] = "cpu",
     weights_only: bool = True,
-    hf_quantizer: Optional[HfQuantizer] = None,
 ):
     """
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
@@ -582,7 +581,7 @@ def set_initialized_submodules(model, state_dict_keys):
     return not_initialized_submodules
 
 
-def _end_ptr(tensor: torch.Tensor) ->  int:
+def _end_ptr(tensor: torch.Tensor) -> int:
     # extract the end of the pointer if the tensor is a slice of a bigger tensor
     if tensor.nelement():
         stop = tensor.view(-1)[-1].data_ptr() + tensor.element_size()
@@ -714,7 +713,6 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_regex: Optional[re.Pattern] = None,
     unexpected_keys: Optional[list[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-    metadata: Optional[dict] = None
 ) -> tuple[Optional[dict], Optional[dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
@@ -732,15 +730,12 @@ def _load_state_dict_into_meta_model(
     is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.HQQ,
         QuantizationMethod.BITS_AND_BYTES,
-        QuantizationMethod.TORCHAO
+        QuantizationMethod.TORCHAO,
     }
     is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
-
-    if hf_quantizer and hasattr(hf_quantizer, "transform_state_dict") and metadata:
-        state_dict = hf_quantizer.transform_state_dict(state_dict, metadata)
 
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
@@ -773,8 +768,7 @@ def _load_state_dict_into_meta_model(
                         device_map=device_map,
                     )
                 )
-            ):
-                # In this case, the param is already on the correct device!
+            ):  # In this case, the param is already on the correct device!
                 shard_and_distribute_module(
                     model,
                     param,
@@ -924,7 +918,7 @@ def load_shard_file(args):
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
         state_dict = load_state_dict(
-            shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only, hf_quantizer=hf_quantizer
+            shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
         )
 
     # Fix the key names
@@ -933,6 +927,9 @@ def load_shard_file(args):
     if shard_file.endswith(".safetensors") and is_safetensors_available():
         with safe_open(shard_file, framework="pt") as f:
             metadata = f.metadata()
+
+    if hf_quantizer:
+        state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
 
     error_msgs = []
 
@@ -956,7 +953,6 @@ def load_shard_file(args):
             keep_in_fp32_regex=keep_in_fp32_regex,
             unexpected_keys=unexpected_keys,
             device_mesh=device_mesh,
-            metadata=metadata,
         )
 
     return error_msgs, disk_offload_index, cpu_offload_index
@@ -3892,11 +3888,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and hf_quantizer.is_serializable(safe_serialization=safe_serialization)
         )
 
-        # if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
-        #     raise ValueError(
-        #         f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
-        #         " the logger on the traceback to understand the reason why the quantized model is not serializable."
-        #     )
+        if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+            raise ValueError(
+                f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                " the logger on the traceback to understand the reason why the quantized model is not serializable."
+            )
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -3927,10 +3923,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         metadata = {}
         if hf_quantizer is not None:
-            state_dict = hf_quantizer.get_state_dict(self)
-            metadata = {}
-            if isinstance(state_dict, tuple):
-                state_dict, metadata = state_dict
+            state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+        metadata["format"] = "pt"
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
@@ -4078,8 +4072,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     ptrs[id_tensor_storage(tensor)].append(name)
 
-            # shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            shared_ptrs = {}
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
@@ -4210,7 +4203,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                metadata["format"] = "pt"
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
@@ -4976,7 +4968,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
-
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
@@ -5297,7 +5288,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
-            QuantizationMethod.TORCHAO
+            QuantizationMethod.TORCHAO,
         }
 
         # Get all the keys of the state dicts that we have to initialize the model
@@ -5415,7 +5406,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if sharded_metadata is None:
                     weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
                 else:
-                    # weight file full path
                     folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
                     # Fix the weight map keys according to the key mapping
                     weight_map = {

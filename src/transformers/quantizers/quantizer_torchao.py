@@ -35,9 +35,16 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-from torchao.quantization import Float8Tensor
+if is_torchao_available():
+    import torchao
 
-from torchao.prototype.safetensors.safetensors_support import save_tensor_state_dict, load_tensor_state_dict
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0"):
+        from torchao.prototype.safetensors.safetensors_support import (
+            flatten_tensor_state_dict,
+            unflatten_tensor_state_dict,
+        )
+        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
+
 
 logger = logging.get_logger(__name__)
 
@@ -83,6 +90,13 @@ def _linear_extra_repr(self):
         return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight=None"
     else:
         return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={weight}"
+
+
+if is_torchao_available():
+    SUPPORTED_SAFE_SERIALIZATION_CONFIGS = [
+        torchao.quantization.Float8WeightOnlyConfig,
+        torchao.quantization.Float8DynamicActivationFloat8WeightConfig,
+    ]
 
 
 class TorchAoHfQuantizer(HfQuantizer):
@@ -141,9 +155,19 @@ class TorchAoHfQuantizer(HfQuantizer):
                 dtype = torch.float32
         return dtype
 
-    def get_state_dict(self, model):
-        return save_tensor_state_dict(model.state_dict())
-
+    def get_state_dict_and_metadata(self, model, safe_serialization: Optional[bool] = False):
+        """
+        If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
+        the safetensors format.
+        """
+        if (
+            type(self.quantization_config.quant_type) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS
+            and safe_serialization
+            and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0")
+        ):
+            return flatten_tensor_state_dict(model.state_dict())
+        else:
+            return super().get_state_dict_and_metadata(model)
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
@@ -228,7 +252,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                 _QUANTIZABLE.append(torch.nn.Embedding)
             return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
-
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -288,8 +311,17 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
-    def transform_state_dict(self, tensor_data, metadata):
-        return load_tensor_state_dict(tensor_data=tensor_data, provided_metadata=metadata)
+    def update_state_dict_with_metadata(self, state_dict, metadata):
+        """
+        If the metadata contains torchao tensor subclass information, we reconstruct the tensor subclass state dict
+        from the provided state_dict and metadata.
+        """
+        if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0") and is_metadata_torchao(
+            metadata
+        ):
+            return unflatten_tensor_state_dict(state_dict, metadata)
+        else:
+            return super().update_state_dict_with_metadata(state_dict, metadata)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
@@ -309,10 +341,16 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None) -> bool:
         if safe_serialization:
-            logger.warning(
-                "torchao quantized model does not support safe serialization, please set `safe_serialization` to False"
+            _is_torchao_serializable = (
+                type(self.quantization_config.quant_type) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS
             )
-            return False
+            if not _is_torchao_serializable:
+                logger.warning(
+                    f"torchao quantized model only supports safe serialization for {SUPPORTED_SAFE_SERIALIZATION_CONFIGS}, \
+                    please set `safe_serialization` to False for {type(self.quantization_config.quant_type)}."
+                )
+            return _is_torchao_serializable
+
         _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(
             "0.25.0"
         )
