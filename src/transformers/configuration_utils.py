@@ -1229,10 +1229,10 @@ class PretrainedConfig(PushToHubMixin):
 
         # Encoder vs Decoder assumptions:
         # 1. If the config has `is_encoder_decoder=True` and no nested sub-configs, then it has both encoder and
-        #   decoder attributes. The logic for this legacy case with flat config structure is handled separately at
-        #   the bottom of this function.
+        #    decoder attributes. The logic for this legacy case with flat config structure is handled separately at
+        #    the bottom of this function.
         # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
-        #   to decoders.
+        #    to decoders.
         # 3. Decoder sub-configs may have `is_decoder=True`
         return_both = decoder == encoder  # both unset or both set -> search all possible names
         possible_sub_config_names = self.sub_configs.keys()
@@ -1247,22 +1247,29 @@ class PretrainedConfig(PushToHubMixin):
                 possible_sub_config_names = [name for name in possible_sub_config_names if "encoder" not in name]
 
         # Modality assumptions:
-        # 1. All text configs have a `vocab_size` attribute, but not "audio_vocab_size"
-        # 2. All image configs have a `image_size` attribute
-        # 3. audio configs have a `num_mel_bins` attribute OR a `num_channels` attribute (+ no `image_size` attribute)
+        # 1. All image configs have a `image_size` attribute
+        # 2. If it's not an image config, then it's an audio config if it has one of the following attributes:
+        #    - `num_mel_bins`
+        #    - `num_channels`  (this one may co-exist with `image_size`, but we check for image configs first)
+        #    - `audio_vocab_size`
+        # 3. If it's not any of the above and it has a `vocab_size` attribute, then it's a text config. (`vocab_size`
+        #    often exists in audio configs)
         if modality is None:
             valid_sub_config_names = possible_sub_config_names
         else:
             valid_sub_config_names = []
             for sub_config_name in possible_sub_config_names:
                 sub_config = getattr(self, sub_config_name)
-                if modality == "text" and "vocab_size" in sub_config and "audio_vocab_size" not in sub_config:
+                is_image_config = "image_size" in sub_config
+                is_audio_config = not is_image_config and (
+                    "num_mel_bins" in sub_config or "num_channels" in sub_config or "audio_vocab_size" in sub_config
+                )
+                is_text_config = not is_image_config and not is_audio_config and "vocab_size" in sub_config
+                if modality == "text" and is_text_config:
                     valid_sub_config_names.append(sub_config_name)
-                elif modality == "image" and "image_size" in sub_config:
+                elif modality == "image" and is_image_config:
                     valid_sub_config_names.append(sub_config_name)
-                elif modality == "audio" and (
-                    "num_mel_bins" in sub_config or ("num_channels" in sub_config and "image_size" not in sub_config)
-                ):
+                elif modality == "audio" and is_audio_config:
                     valid_sub_config_names.append(sub_config_name)
 
         # If exactly one sub-config is found, return it. Otherwise, check `strict` -- if True, raise an error,
