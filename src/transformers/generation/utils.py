@@ -3713,11 +3713,14 @@ class GenerationMixin(ContinuousMixin):
             return input_ids
 
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
-        model_kwargs.update({"output_attentions": generation_config.output_attentions})
-        model_kwargs.update({"output_hidden_states": generation_config.output_hidden_states})
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
             return self(**model_inputs, return_dict=True)
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
@@ -3743,6 +3746,8 @@ class GenerationMixin(ContinuousMixin):
                 )
                 model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+                model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
