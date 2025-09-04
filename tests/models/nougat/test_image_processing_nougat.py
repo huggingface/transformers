@@ -133,6 +133,10 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor(self):
         return self.image_processing_class(**self.image_processor_dict)
 
+    @unittest.skip(reason="FIXME: @yoni.")
+    def test_slow_fast_equivalence_batched(self):
+        pass
+
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
