@@ -266,11 +266,9 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
 class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers.
-    This version folds the former "AudioFlamingo3SoundTower" wrapper functionality directly into the encoder.
 
     Use cases:
       - HF-native: forward(input_features=..., attention_mask=...) -> BaseModelOutput
-      - Tower-style (old wrapper): forward_tower(sounds, mask) -> last_hidden_state
     """
 
     # Keep HF typing and split rules
@@ -331,31 +329,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         attn[square] = float("-inf")
         return attn
 
-    @torch.no_grad()
-    def forward_tower(self, sounds: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Tower-compatible entry point.
-        sounds: (B, num_mel_bins, T_mel) or (1, 1, B, num_mel_bins, T_mel)
-        mask:   (B, T_mel) 0/1 mask for valid mel frames (required)
-
-        Returns last_hidden_state: (B, S, d_model) in sounds.dtype
-        """
-        if sounds.ndim == 5:
-            sounds = sounds.squeeze(0).squeeze(1)  # -> (B, M, T)
-            if mask is not None:
-                mask = mask.squeeze(0)
-
-        if mask is None:
-            raise ValueError("forward_tower requires a frame mask of shape (B, T_mel).")
-
-        B, M, T_mel = sounds.shape
-        if M != self.num_mel_bins:
-            raise ValueError(f"Expected sounds with num_mel_bins={self.num_mel_bins}, got {M}.")
-
-        attn_mask = self._build_square_attn_mask(mask, max_mel_seq_len=T_mel)
-        out = self.forward(input_features=sounds, attention_mask=attn_mask)
-        return out.last_hidden_state.to(sounds.dtype)
-
     # HF-required embeddings API (kept)
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
@@ -383,6 +356,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             raise ValueError(
                 f"AudioFlamingo3 expects the mel input features to be of length {expected_seq_length}, " f"but found {input_features.shape[-1]}. Pad/truncate mel features to {expected_seq_length}."
             )
+
+        # If the caller provided a (B, T_mel) frame mask, convert to (B, 1, S, S).
+        if attention_mask is not None and attention_mask.dim() == 2:
+            # attention_mask is a frame-validity mask; build square mask for self-attn.
+            attention_mask = self._build_square_attn_mask(attention_mask, max_mel_seq_len=input_features.shape[-1])
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -505,7 +483,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         sounds = sounds.to(device=device, dtype=proj_dtype)
         masks = masks.to(device) if masks is not None else None
 
-        feats = self.sound_tower.forward_tower(sounds, masks).to(dtype=proj_dtype)
+        # Call encoder.forward directly; it will up-convert masks if needed
+        enc_out = self.sound_tower(
+            input_features=sounds,
+            attention_mask=masks if masks is not None else None,
+        )
+        feats = enc_out.last_hidden_state.to(dtype=proj_dtype)
         return self.sound_mm_projector(feats)
 
     def _embed(
