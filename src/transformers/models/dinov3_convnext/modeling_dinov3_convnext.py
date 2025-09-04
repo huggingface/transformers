@@ -294,9 +294,9 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
 
         # hidden_states are already in NCHW (batch_size, channels, height, width) format
         feature_maps: list[torch.Tensor] = []
-        for stage, hs in zip(self.stage_names, all_hidden_states):
+        for stage, hidden_states in zip(self.stage_names, all_hidden_states):
             if stage in self.out_features:
-                feature_maps.append(hs)
+                feature_maps.append(hidden_states)
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
