@@ -21,8 +21,9 @@ import importlib
 import io
 import os
 import warnings
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import requests

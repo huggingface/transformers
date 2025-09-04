@@ -357,7 +357,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=batch_size,
             max_cache_length=self.config.codec_config.sliding_window,
         )

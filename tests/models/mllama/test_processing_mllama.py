@@ -52,6 +52,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.image1.close()
+        cls.image2.close()
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def prepare_processor_dict(self):
@@ -172,9 +174,19 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Describe this image in two sentences"},
-                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                        ),
+                    },
                     {"type": "text", "text": " Test sentence   "},
-                    {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "ok\n"},
                 ],
             }

@@ -495,8 +495,6 @@ class MambaPreTrainedModel(PreTrainedModel):
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.copy_(torch.log(A))
-            module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True
             module.D.data.fill_(1.0)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale

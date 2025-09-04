@@ -327,8 +327,12 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg"),
-                url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg"),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

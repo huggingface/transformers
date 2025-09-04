@@ -378,7 +378,10 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = PaliGemmaProcessor.from_pretrained(model_id)
         prompt = "answer en There is no snowman in any of the images. Is this true or false?"
         stop_sign_image = Image.open(
-            requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
         )
         snow_image = Image.open(
             requests.get(

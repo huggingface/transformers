@@ -677,7 +677,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -734,7 +739,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {

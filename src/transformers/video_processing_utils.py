@@ -694,8 +694,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     _raise_exceptions_for_missing_entries=False,
                 )
                 resolved_video_processor_file = resolved_video_processor_files[0]
-            except EnvironmentError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+            except OSError:
+                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
