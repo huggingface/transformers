@@ -156,13 +156,8 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        # router_scores has shape (batch_size, num_experts_per_tok)
-        # router_logits has shape (batch_size, num_experts)
         router_scores, router_logits = self.router(hidden_states)
-        # routed_in has shape (num_experts_per_tok * batch_size, hidden_dim).
-        # Note that num_experts_per_tok goes before batch_size because this is how repeat works.
         routed_in = hidden_states.repeat(router_scores.shape[1], 1)
-        # router_scores should be transposed to (num_experts_per_tok, batch_size) before reshaping.
         routed_in = routed_in * router_scores.transpose(0, 1).reshape(-1, 1)
         routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
