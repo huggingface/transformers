@@ -34,12 +34,11 @@ The encoder processes images at their native resolution up to 512×512 pixels, e
 
 ## Example
 
-The following example shows how to generate an answer using the `AutoModelForCausalLM` class.
+The following example shows how to generate an answer using the `AutoModelForImageTextToText` class.
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from transformers.image_utils import load_image
-
+\
 # Load model and processor
 model_id = "LiquidAI/LFM2-VL-1.6B"
 model = AutoModelForImageTextToText.from_pretrained(
@@ -74,6 +73,14 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
 ```
 
+## Lfm2VlImageProcessorFast
+
+[[autodoc]] Lfm2VlImageProcessorFast
+
+## Lfm2VlProcessor
+
+[[autodoc]] Lfm2VlProcessor
+
 ## Lfm2VlConfig
 
 [[autodoc]] Lfm2VlConfig
@@ -85,5 +92,5 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
 ## Lfm2VlForConditionalGeneration
 
-[[autodoc]] AutoModelForImageTextToText
+[[autodoc]] Lfm2VlForConditionalGeneration
     - forward
