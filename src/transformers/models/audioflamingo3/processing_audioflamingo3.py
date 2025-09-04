@@ -17,8 +17,7 @@ Processor class for AudioFlamingo3.
 """
 
 import math
-from collections import defaultdict
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -58,9 +57,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
     def _tokenize_conversation(
         self,
-        messages: Sequence[Dict[str, str]],
+        messages: Sequence[dict[str, str]],
         add_generation_prompt: bool = False,
-        overrides: Optional[Dict[str, str]] = None,
+        overrides: Optional[dict[str, str]] = None,
         no_system_prompt: bool = False,
     ) -> torch.Tensor:
         # Normalize conversation before tokenization
@@ -93,7 +92,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return self.tokenizer(text, return_tensors="pt").input_ids[0]
 
-    def _get_num_windows(self, T: int, sr: int) -> Tuple[int, int]:
+    def _get_num_windows(self, T: int, sr: int) -> tuple[int, int]:
         window_length = int(30.0 * sr)
         window_overlap = int(0.0 * sr)
         max_num_window = 20
@@ -117,7 +116,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         window_length: float = 30.0,
         window_overlap: float = 0.0,
         max_num_window: int = 20,
-    ) -> Optional[Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]]:
+    ) -> Optional[tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]]:
         """
         Returns 3 flat lists (one entry per window):
           - input_features      : [ (num_mel_bins, T_mel), ... ]
@@ -130,16 +129,20 @@ class AudioFlamingo3Processor(ProcessorMixin):
         wl = int(window_length * sample_rate)
         wo = int(window_overlap * sample_rate)
 
-        feats_per_win: List[torch.Tensor] = []
-        feat_masks: List[torch.Tensor] = []
-        embed_masks: List[torch.Tensor] = []
+        feats_per_win: list[torch.Tensor] = []
+        feat_masks: list[torch.Tensor] = []
+        embed_masks: list[torch.Tensor] = []
 
         T = len(audio_data)
         audio = audio_data.reshape(1, -1)
 
         # convert to float32 in a stable way (keeps your original normalization)
-        int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
-        float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+        def int16_to_float32(x):
+            return (x / 32767.0).astype(np.float32)
+
+        def float32_to_int16(x):
+            return (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+
         audio_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio))).float()
 
         num_windows, _ = self._get_num_windows(T, sample_rate)
@@ -171,8 +174,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, List[TextInput]],
-        audio: Union[np.ndarray, List[np.ndarray]],
+        text: Union[TextInput, list[TextInput]],
+        audio: Union[np.ndarray, list[np.ndarray]],
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -203,10 +206,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
         )
 
         # Build per-sample prompts and flatten windowed audio across the batch
-        final_texts: List[str] = []
-        audio_features_all: List[torch.Tensor] = []
-        audio_feat_masks_all: List[torch.Tensor] = []
-        audio_embed_masks_all: List[torch.Tensor] = []
+        final_texts: list[str] = []
+        audio_features_all: list[torch.Tensor] = []
+        audio_feat_masks_all: list[torch.Tensor] = []
+        audio_embed_masks_all: list[torch.Tensor] = []
 
         for t, a in zip(text, audio):
             loaded = self._load_sound_mask(a)
@@ -224,9 +227,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
             final_texts.append(("<sound>" * num_windows) + clean_t)
 
             # Flatten (row-major order): all windows of sample_0, then sample_1, ...
-            audio_features_all.extend([f for f in feats_per_win])  # each f: (M, T_mel)
-            audio_feat_masks_all.extend([m for m in feat_masks])  # each m: (T_mel,)
-            audio_embed_masks_all.extend([m for m in embed_masks])  # each m: (750,)
+            audio_features_all.extend(list(feats_per_win))  # each f: (M, T_mel)
+            audio_feat_masks_all.extend(list(feat_masks))  # each m: (T_mel,)
+            audio_embed_masks_all.extend(list(embed_masks))  # each m: (750,)
 
         # Tokenize all prompts as a batch using the chat template
         convs = [[{"role": "user", "content": txt}] for txt in final_texts]
@@ -248,7 +251,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             }
         )
 
-    def decode(self, token_ids: torch.Tensor) -> Union[str, List[str]]:
+    def decode(self, token_ids: torch.Tensor) -> Union[str, list[str]]:
         out = [self.tokenizer.decode(ids, skip_special_tokens=True).strip() for ids in token_ids]
         return out[0] if len(out) == 1 else out
 

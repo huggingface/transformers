@@ -157,7 +157,6 @@ class AudioFlamingo3Config(PretrainedConfig):
         encoder_config=None,
         **kwargs,
     ) -> None:
-
         if isinstance(encoder_config, dict):
             encoder_config["model_type"] = encoder_config.get("model_type", "audioflamingo3_encoder")
             encoder_config = CONFIG_MAPPING[encoder_config["model_type"]](**encoder_config)
