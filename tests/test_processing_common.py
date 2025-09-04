@@ -332,7 +332,9 @@ class ProcessorTesterMixin:
                             {"type": "text", "text": "What is the capital of France?"},
                             {
                                 "type": "image",
-                                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                                "url": url_to_local_path(
+                                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+                                ),
                             },
                         ],
                     },
