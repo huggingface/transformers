@@ -128,7 +128,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Now test the ability to return dict
         messages[0][0]["content"][1].update(
-            {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertTrue(self.images_input_name in out_dict)
@@ -269,7 +274,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Verify image inputs are included in the output dict
         batched_messages[0][0]["content"][1].update(
-            {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         batched_messages[1][0]["content"][1].update(
             {"type": "image", "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")}
@@ -419,7 +429,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test 3: Image processing kwargs
         # Add an image and test image processing parameters
         messages[0][0]["content"].append(
-            {"type": "image", "url": url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         # Process with image rescaling and verify the pixel values are negative
         out_dict = processor.apply_chat_template(
