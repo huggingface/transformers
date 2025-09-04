@@ -1215,7 +1215,7 @@ class PretrainedConfig(PushToHubMixin):
             encoder (`Optional[bool]`, *optional*):
                 If set to `True` and `decoder` is unset or `False`, then only search for encoder sub-configs.
             strict (`bool`, *optional*, defaults to `False`):
-                Whether to raise an error if there are multiple matches or no matches found. When False, when these
+                Whether to raise an error if there are multiple matches. When False, when these
                 situations arise, the original config instance is returned instead.
         """
         # Add more modalities as needed, make sure to update the docstring above and the assumptions below accordingly
@@ -1234,8 +1234,7 @@ class PretrainedConfig(PushToHubMixin):
         # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
         #    to decoders. "perceiver" is a name exclusive to encoders.
         # 3. Decoder sub-configs may have `is_decoder=True`. Encoder sub-configs may have `max_source_positions`.
-        # 4. We don't have image decoders. (Changing this assumption breaks KV cache initialization unless we add more
-        #    logic)
+        # 4. We don't have image decoders.
 
         # Modality assumptions:
         # 1. All image configs have one of the following attributes:
@@ -1280,17 +1279,11 @@ class PretrainedConfig(PushToHubMixin):
         # otherwise return the original config (no match / ambiguous match)
         if len(valid_sub_config_names) == 1:
             config_to_return = getattr(self, valid_sub_config_names[0])
-        elif strict:
-            if len(valid_sub_config_names) > 1:
-                raise ValueError(
-                    f"Multiple sub-configs found for modality={modality}, encoder={encoder}, and decoder={decoder} "
-                    f"in {self.model_type} ({valid_sub_config_names})"
-                )
-            elif len(valid_sub_config_names) == 0:
-                raise ValueError(
-                    f"No sub-configs found for modality={modality}, encoder={encoder}, and decoder={decoder} in "
-                    f"{self.model_type}"
-                )
+        elif strict and len(valid_sub_config_names) > 1:
+            raise ValueError(
+                f"Multiple sub-configs found for modality={modality}, encoder={encoder}, and decoder={decoder} "
+                f"in {self.model_type} ({valid_sub_config_names})"
+            )
         else:
             config_to_return = self
 
@@ -1340,6 +1333,37 @@ class PretrainedConfig(PushToHubMixin):
             "`config.get_text_config(...)` -> `config.get_sub_config(modality='text', ...)`"
         )
         return self.get_sub_config(modality="text", decoder=decoder, encoder=encoder, strict=False)
+
+    def get_autoregressive_config(self) -> "PretrainedConfig":
+        """Returns the sub-config that parameterizes the section of the model that is an autoregressive decoder."""
+
+
+        # NOTE TO SELF -> this has to be a function method, the cache has to stop calling config.get(...)
+
+
+        # The goal of this function is abstract fetching the right sub-config for autoregressive purposes --
+        # to power `generate`, to initialize the KV caches, ...
+        #
+        # Why isn't `get_sub_config(decoder=True)` enough?
+        # 1. We can't pin `modality`. For instance, TTS and STT both have an audio and a text component, but TTS
+        #    models want the audio decoder here, while STT want the text decoder.
+        # 2. Some models, like Moshi, have more than one decoder. In this specific case, both decoders have their own
+        #    config, and both can be used for autoregressive purposes. Having a separate function that can be
+        #    overwritten allow us to pick the right one.
+        #
+        # This function intentionally raises exceptions. If you hit an exception with a new model, one of the three
+        # things have to happen:
+        # 1. Your model has 1 decoder   -> the heuristics in `get_sub_config` need to be updated
+        # 2. Your model has >1 decoders -> this function needs to be overwritten, you should specify which decoder you want to use
+        # 3. Your model has  0 decoders -> you shouldn't use this function :)
+
+        # raises an exception if there are multiple decoders
+        autoregressive_config = self.get_sub_config(decoder=True, strict=True)
+        # no decoder sub-configs found -> let's check this could be used for autoregressive purposes
+        if autoregressive_config == self:
+            if not hasattr(self, "vocab_size"):
+                raise ValueError("TODO")
+        return autoregressive_config
 
     @classmethod
     def from_text_vision_configs(cls, text_config, vision_config, **kwargs):

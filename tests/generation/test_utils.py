@@ -149,15 +149,15 @@ class GenerationTesterMixin:
         }
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_sub_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
+        gen_config = config.get_autoregressive_config()
+        if gen_config.eos_token_id is not None and gen_config.pad_token_id is None:
+            gen_config.pad_token_id = (
+                gen_config.eos_token_id
+                if isinstance(gen_config.eos_token_id, int)
+                else gen_config.eos_token_id[0]
             )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
+        gen_config.eos_token_id = None
+        gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
 
@@ -192,7 +192,7 @@ class GenerationTesterMixin:
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
                     token_index = getattr(self.model_tester, key, None)
-                if token_index is not None and token_index < config.get_sub_config(decoder=True).vocab_size:
+                if token_index is not None and token_index < config.get_autoregressive_config().vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
