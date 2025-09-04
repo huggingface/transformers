@@ -65,10 +65,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
         ct_transform_config = self.quantization_config.transform_config
 
-        # Always initialize compressed wrappers to match the checkpoint
-        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+        # apply transform config first (before modules are converted to run compressed)
         if ct_transform_config is not None:
             apply_transform_config(model, ct_transform_config)
+
+        # apply quantization config (potentially convert to run compressed)
+        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+
+        # compress meta model to match checkpoint format
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
