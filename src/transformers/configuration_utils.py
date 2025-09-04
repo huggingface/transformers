@@ -1232,13 +1232,15 @@ class PretrainedConfig(PushToHubMixin):
         #    decoder attributes. The logic for this legacy case with flat config structure is handled separately at
         #    the bottom of this function.
         # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
-        #    to decoders.
-        # 3. Decoder sub-configs may have `is_decoder=True`
+        #    to decoders. "perceiver" is a name exclusive to encoders.
+        # 3. Decoder sub-configs may have `is_decoder=True`. Encoder sub-configs may have `max_source_positions`.
         # 4. We don't have image decoders. (Changing this assumption breaks KV cache initialization unless we add more
         #    logic)
 
         # Modality assumptions:
-        # 1. All image configs have a `image_size` attribute
+        # 1. All image configs have one of the following attributes:
+        #    - `image_size`
+        #    - `do_pooling`
         # 2. If it's not an image config, then it's an audio config if it has one of the following attributes:
         #    - `num_mel_bins`
         #    - `num_channels`  (this one may co-exist with `image_size`, but we check for image configs first)
@@ -1249,7 +1251,7 @@ class PretrainedConfig(PushToHubMixin):
         valid_sub_config_names = []
         for sub_config_name in possible_sub_config_names:
             sub_config = getattr(self, sub_config_name)
-            is_image_config = "image_size" in sub_config
+            is_image_config = "image_size" in sub_config or "do_pooling" in sub_config
             is_audio_config = not is_image_config and (
                 any(attr in sub_config for attr in ["num_mel_bins", "num_channels", "audio_vocab_size"])
             )
@@ -1257,7 +1259,12 @@ class PretrainedConfig(PushToHubMixin):
 
             if encoder and ("decoder" in sub_config_name or "generator" in sub_config_name or sub_config.is_decoder):
                 continue
-            if decoder and ("encoder" in sub_config_name or is_image_config):
+            if decoder and (
+                "encoder" in sub_config_name
+                or "perceiver" in sub_config_name
+                or is_image_config
+                or hasattr(sub_config, "max_source_positions")
+            ):
                 continue
 
             if modality is None:

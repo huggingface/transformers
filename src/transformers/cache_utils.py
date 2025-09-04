@@ -1011,7 +1011,8 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
-            # `DynamicCache(config=model.config)`
+            # `DynamicCache(config=model.config)`. Pulling the right decoder with `decoder=True` only is brittle,
+            # and may break in the future with complex composite models.
             config = config.get_sub_config(decoder=True)
             sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
@@ -1126,7 +1127,8 @@ class StaticCache(Cache):
         **kwargs,
     ):
         # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
-        # `StaticCache(config=model.config)`
+        # `StaticCache(config=model.config)`. Pulling the right decoder with `decoder=True` only is brittle,
+        # and may break in the future with complex composite models.
         config = config.get_sub_config(decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
@@ -1204,7 +1206,8 @@ class QuantizedCache(Cache):
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
         # We pull the decoder sub-config here to allow composite models to easily initialize the cache as
-        # `QuantizedCache(config=model.config)`
+        # `QuantizedCache(config=model.config)`. Pulling the right decoder with `decoder=True` only is brittle,
+        # and may break in the future with complex composite models.
         config = config.get_sub_config(decoder=True)
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
