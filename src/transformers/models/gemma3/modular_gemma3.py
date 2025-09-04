@@ -404,6 +404,7 @@ class Gemma3Attention(Gemma2Attention):
 
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -665,7 +666,6 @@ class Gemma3TextModel(Gemma2Model):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                is_causal=not self.config.use_bidirectional_attention,
                 **kwargs,
             )
 

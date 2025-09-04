@@ -279,7 +279,7 @@ class Gemma3Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        self.is_causal = True
+        self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -581,7 +581,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                is_causal=not self.config.use_bidirectional_attention,
                 **kwargs,
             )
 
