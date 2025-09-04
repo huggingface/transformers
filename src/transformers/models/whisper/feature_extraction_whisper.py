@@ -149,6 +149,14 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if self.dither != 0.0:
             waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
 
+        # Apply progressive taper to last 5% of audio to reduce end artifacts
+        taper_length = max(self.n_fft, waveform.shape[-1] // 20)
+        if waveform.shape[-1] > taper_length:
+            # Create smooth taper (Hann window)
+            taper = torch.hann_window(taper_length * 2, device=waveform.device)[-taper_length:]
+            waveform = waveform.clone()  # we don't modify original
+            waveform[..., -taper_length:] *= taper
+
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
