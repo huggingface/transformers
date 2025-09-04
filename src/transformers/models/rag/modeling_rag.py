@@ -22,7 +22,14 @@ from torch import nn
 
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationConfig, GenerationMixin, GenerationMode, LogitsProcessorList, StoppingCriteriaList
+from ...generation import (
+    GENERATION_MODES_MAPPING,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+    StoppingCriteriaList,
+)
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -1482,18 +1489,18 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         )
         generation_mode = generation_config.get_generation_mode()
         # Cannot be root level constant since subclasses might override the methods
-        generation_modes_mapping = {
-            GenerationMode.SAMPLE: type(self)._sample,
-            GenerationMode.GREEDY_SEARCH: type(self)._sample,
-            GenerationMode.BEAM_SEARCH: type(self)._beam_search,
-            GenerationMode.BEAM_SAMPLE: type(self)._beam_search,
-        }
-        if generation_mode not in generation_modes_mapping:
+        if generation_mode not in [
+            GenerationMode.SAMPLE,
+            GenerationMode.GREEDY_SEARCH,
+            GenerationMode.BEAM_SEARCH,
+            GenerationMode.BEAM_SAMPLE,
+        ]:
             raise ValueError(
                 f"RAG model is not compatible with {generation_mode} generation. Please check your generation parameters."
             )
-        generation_call = generation_modes_mapping[generation_mode]
+        decoding_method = GENERATION_MODES_MAPPING[generation_mode]
         self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
@@ -1593,7 +1600,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         # Prefill pass
         generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
-        return generation_call(
+        return decoding_method(
             self,
             input_ids,
             logits_processor=prepared_logits_processor,
