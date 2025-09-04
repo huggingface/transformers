@@ -624,10 +624,14 @@ class ContinuousBatchingManager:
     def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
         if self.do_sample:  # sample
             probs = nn.functional.softmax(probs, dim=-1)
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+            # Add batch dimension back to match argmax output
+            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)
-        tokens = next_tokens.size(1)
+            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+
+        tokens = next_tokens.size(1)  # Get seq_len dimension
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):

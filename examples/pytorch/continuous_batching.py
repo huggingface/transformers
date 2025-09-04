@@ -229,7 +229,9 @@ if __name__ == "__main__":
         use_cuda_graph=args.use_cuda_graph,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=False,
+        do_sample=True,
+        temperature=0.8,
+        top_p=1.0,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
