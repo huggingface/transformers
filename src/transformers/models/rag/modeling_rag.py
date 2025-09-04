@@ -1492,7 +1492,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             raise ValueError(
                 f"RAG model is not compatible with {generation_mode} generation. Please check your generation parameters."
             )
-        decoding_method = GENERATION_MODES_MAPPING[generation_mode]
+        # type() required to access the unbound class-level method
+        decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
