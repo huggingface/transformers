@@ -504,7 +504,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None:
+        if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_embeds(input_features)
 
             # replace text-audio token placeholders with audio embeddings
