@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 """PyTorch BitNet model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 

@@ -38,7 +38,8 @@ python utils/custom_init_isort.py --check_only
 import argparse
 import os
 import re
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 
 # Path is defined with the intent you should run this script from the root of the repo.
