@@ -26,7 +26,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoA
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
@@ -265,11 +265,6 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
         super()._init_backbone(config)
-
-        if not hasattr(config, "apply_layernorm"):
-            config.apply_layernorm = False
-        if not hasattr(config, "reshape_hidden_states"):
-            config.reshape_hidden_states = False
 
         self.num_features = [config.num_channels] + list(config.hidden_sizes)
 
