@@ -22,14 +22,8 @@ from torch import nn
 
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
-from ...generation import (
-    GENERATION_MODES_MAPPING,
-    GenerationConfig,
-    GenerationMixin,
-    GenerationMode,
-    LogitsProcessorList,
-    StoppingCriteriaList,
-)
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode, LogitsProcessorList, StoppingCriteriaList
+from ...generation.utils import GENERATION_MODES_MAPPING
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
