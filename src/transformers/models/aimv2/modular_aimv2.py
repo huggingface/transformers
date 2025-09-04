@@ -32,6 +32,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
@@ -486,6 +487,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
+    @deprecate_kwarg("attention_mask", version="v4.58.0")
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -518,7 +520,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
             **kwargs,
         )
 

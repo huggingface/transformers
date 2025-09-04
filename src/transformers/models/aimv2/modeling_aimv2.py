@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
@@ -442,6 +443,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
+    @deprecate_kwarg("attention_mask", version="v4.58.0")
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -474,7 +476,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
             **kwargs,
         )
 
