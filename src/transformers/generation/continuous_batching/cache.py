@@ -158,6 +158,7 @@ class PagedAttentionCache:
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+        logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
@@ -258,11 +259,12 @@ class PagedAttentionCache:
         return key_states_with_cache, value_states_with_cache
 
 
+# TODO: rework computation with the groups and their sizes
 class PagedAttentionMemoryHandler:
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
     _upper_bound_max_batch_tokens = 256
-    _upper_bound_num_blocks = 4096 * 32
+    _upper_bound_num_blocks = 4096
 
     def __init__(self, block_size: int, page_size: int, num_groups: int, hidden_size: int, vocab_size: int) -> None:
         self.block_size = block_size
