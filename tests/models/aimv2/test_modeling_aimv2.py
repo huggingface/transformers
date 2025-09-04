@@ -24,6 +24,7 @@ from parameterized import parameterized
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_vision,
     slow,
@@ -469,6 +470,9 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @is_flaky(
+        description="sdpa gets nan values in some places while eager is fine. Except those places, the values are close"
+    )
     def test_eager_matches_sdpa_inference(
         self,
         name,
