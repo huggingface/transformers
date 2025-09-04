@@ -1062,7 +1062,7 @@ class GenerationTesterMixin:
                 num_key_value_heads = (
                     decoder_config.num_key_value_heads
                     if getattr(decoder_config, "num_key_value_heads", None) is not None
-                    else decoder_config
+                    else num_query_attention_heads
                 )
                 if config.is_encoder_decoder:
                     batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
