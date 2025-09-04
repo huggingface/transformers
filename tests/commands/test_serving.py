@@ -19,7 +19,7 @@ from threading import Thread
 from unittest.mock import patch
 
 import aiohttp.client_exceptions
-import httpx
+import requests
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from parameterized import parameterized
 
@@ -504,40 +504,24 @@ def _get_scheduler(serve_command):
     return sched
 
 
-async def _open_stream_and_cancel(base_url: str, request_id: str):
-    async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
-        first_chunk = asyncio.Event()
+def _open_stream_and_cancel(base_url: str, request_id: str):
+    with requests.Session() as s:
+        with s.post(
+            f"{base_url}/v1/chat/completions",
+            json={
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "stream": True,
+                "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
+                "request_id": request_id,
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            assert resp.status_code == 200
 
-        async def _reader():
-            async with client.stream(
-                "POST",
-                "/v1/chat/completions",
-                json={
-                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
-                    "stream": True,
-                    "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
-                    "request_id": request_id,
-                },
-            ) as resp:
-                # Ensure stream started OK
-                assert resp.status_code == 200
-
-                try:
-                    # Read the first chunk to ensure the server has entered the generation loop
-                    async for _ in resp.aiter_raw():
-                        if not first_chunk.is_set():
-                            first_chunk.set()
-
-                except httpx.ReadError:
-                    pass
-
-        task = asyncio.create_task(_reader())
-        await asyncio.wait_for(first_chunk.wait(), timeout=30.0)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            for _ in resp.iter_content(chunk_size=None):
+                resp.close()
+                break
 
 
 @slow  # server startup time is slow on our push CI
@@ -614,7 +598,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         base_url = f"http://127.0.0.1:{self.port}"
         request_id = "test-cancel"
 
-        asyncio.run(_open_stream_and_cancel(base_url, request_id))
+        _open_stream_and_cancel(base_url, request_id)
 
         scheduler = _get_scheduler(self.serve_command)
 
@@ -622,15 +606,15 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         deadline = time.time() + 8.0  # generous but still CI-friendly
         last_seen = None
         while time.time() < deadline:
-            present = scheduler.request_is_cancelled(request_id)
-            if not present:
+            is_cancelled = scheduler.request_is_cancelled(request_id)
+            if is_cancelled:
                 break
             last_seen = time.time()
             time.sleep(0.1)  # don't spin the CPU
 
-        still_present = scheduler.request_is_cancelled(request_id)
-        self.assertFalse(
-            still_present,
+        is_cancelled = scheduler.request_is_cancelled(request_id)
+        self.assertTrue(
+            is_cancelled,
             f"Request {request_id} still present in scheduler after cancellation "
             f"(last seen at {last_seen}). Check cancellation propagation.",
         )
