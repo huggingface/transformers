@@ -2546,20 +2546,7 @@ class GenerationMixin(ContinuousMixin):
         # 8b. Prefill pass
         # Some decoding methods (e.g. assisted generation) do not admit the prefill pass
         if "prefill_outputs" in inspect.signature(generation_call).parameters:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            if generation_config.prefill_chunk_size is None:
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                model_inputs.update({"output_attentions": generation_config.output_attentions})
-                model_inputs.update({"output_hidden_states": generation_config.output_hidden_states})
-                generation_mode_kwargs["prefill_outputs"] = self(**model_inputs, return_dict=True)
-            else:
-                model_kwargs = self._prefill_chunking(
-                    input_ids,
-                    generation_config,
-                    model_kwargs,
-                    output_attentions=generation_config.output_attentions,
-                    output_hidden_states=generation_config.output_hidden_states,
-                )
+            generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         # 9. Call generation mode
         result = generation_call(
@@ -2756,20 +2743,7 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
-                # only raise warning if the user passed an explicit compile-config
-                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
-                    logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
-                    )
-                    generation_config.compile_config.fullgraph = False
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = self.maybe_get_compiled_call(model_kwargs, generation_config)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_outputs is not None:
@@ -3737,49 +3711,48 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
-    def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
-        # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
-        # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
-        torch._dynamo.config.cache_size_limit = 64
+    def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
+        model_kwargs.update({"output_attentions": generation_config.output_attentions})
+        model_kwargs.update({"output_hidden_states": generation_config.output_hidden_states})
+        if generation_config.prefill_chunk_size is None:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            return self(**model_inputs, return_dict=True)
+        else:  # Chunked prefill
+            # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
+            # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
+            torch._dynamo.config.cache_size_limit = 64
 
-        chunk_size = generation_config.prefill_chunk_size
-        # Only chunk up the token just before last, so that decoding is completely performed outside this function
-        # (here we simply prefill the cache)
-        input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
+            chunk_size = generation_config.prefill_chunk_size
+            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
 
-        if "past_key_values" not in model_kwargs:
-            raise ValueError("Cannot use prefill chunking without a cache")
+            if "past_key_values" not in model_kwargs:
+                raise ValueError("Cannot use prefill chunking without a cache")
 
-        model_forward = self.forward
+            model_forward = self.maybe_get_compiled_call(model_kwargs, generation_config)
+            attention_mask = model_kwargs.pop("attention_mask", None)
+            past_length = 0
+            for input_chunk in input_chunks:
+                current_length = past_length + input_chunk.shape[-1]
+                # Prepare inputs
+                if attention_mask is not None:
+                    model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+                model_kwargs["cache_position"] = torch.arange(
+                    past_length, current_length, dtype=torch.long, device=input_chunk.device
+                )
+                model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
+                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+                outputs = model_forward(**model_inputs, return_dict=True)
 
-        attention_mask = model_kwargs.pop("attention_mask", None)
+                model_kwargs["past_key_values"] = outputs.past_key_values
+                past_length = current_length
 
-        past_length = 0
-        for input_chunk in input_chunks:
-            current_length = past_length + input_chunk.shape[-1]
-            # Prepare inputs
-            if attention_mask is not None:
-                model_kwargs["attention_mask"] = attention_mask[:, :current_length]
-            model_kwargs["cache_position"] = torch.arange(
-                past_length, current_length, dtype=torch.long, device=input_chunk.device
-            )
-            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
-            model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
-
-            outputs = model_forward(**model_inputs, return_dict=True)
-
-            model_kwargs["past_key_values"] = outputs.past_key_values
-            past_length = current_length
-
-        model_kwargs["attention_mask"] = attention_mask
-        model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
-        _ = model_kwargs.pop("position_ids", None)
-
-        return model_kwargs
+            model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+            _ = model_kwargs.pop("position_ids", None)
+            # Latest outputs contain next token logits
+            return outputs
 
 
 def _speculative_sampling(

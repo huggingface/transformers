@@ -1591,21 +1591,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         )
 
         # Prefill pass
-        model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-        if generation_config.prefill_chunk_size is None:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            model_inputs.update({"output_attentions": generation_config.output_attentions})
-            model_inputs.update({"output_hidden_states": generation_config.output_hidden_states})
-            generation_mode_kwargs["prefill_outputs"] = self(**model_inputs, return_dict=True)
-        else:
-            # TODO: test prefill chunking with other models
-            model_kwargs = self._prefill_chunking(
-                input_ids,
-                generation_config,
-                model_kwargs,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-            )
+        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         return generation_call(
             self,
