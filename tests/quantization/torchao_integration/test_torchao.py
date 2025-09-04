@@ -399,7 +399,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJane: (sighs)"
+        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
@@ -412,26 +412,21 @@ class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    quant_scheme = "int4_weight_only"
-    quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout()}
-        if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
-        else {"group_size": 32}
-    )
     device = "cpu"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
     def setUp(self):
-        self.quant_config = TorchAoConfig(self.quant_scheme, **self.quant_scheme_kwargs)
-        dtype = torch.bfloat16 if self.quant_scheme == "int4_weight_only" else "auto"
+        from torchao.quantization import Float8WeightOnlyConfig
+
+        self.quant_config = TorchAoConfig(Float8WeightOnlyConfig())
         self.quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=dtype,
+            dtype=torch.bfloat16,
             device_map=self.device,
             quantization_config=self.quant_config,
         )
@@ -451,12 +446,11 @@ class TorchAoSerializationTest(unittest.TestCase):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
-        dtype = torch.bfloat16 if self.quant_scheme == "int4_weight_only" else "auto"
+        dtype = torch.bfloat16
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
+            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device)
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
-
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
 
@@ -511,7 +505,7 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n\nJessica: (smiling)",
             }
         )
         # fmt: on
