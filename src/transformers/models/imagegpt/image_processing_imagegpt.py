@@ -26,7 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -238,7 +238,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         clusters = clusters if clusters is not None else self.clusters
         clusters = np.array(clusters)
 
-        images = make_flat_list_of_images(images)
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -247,7 +247,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             )
 
         # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need image_mean and image_std.
+        # hence, the method does not need iamge_mean and image_std.
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,
