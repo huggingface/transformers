@@ -255,14 +255,14 @@ if __name__ == "__main__":
         )
 
     # Run warmup batch generation # TODO: understand why warmup incurs a large overhead during cache creation
-    # batch_generate(
-    #     model,
-    #     simple_batch_inputs[: min(5, args.samples)],
-    #     generation_config,
-    #     tokenizer,
-    #     displayed_samples=-1,
-    #     slice_inputs=args.slice_inputs,
-    # )
+    batch_generate(
+        model,
+        simple_batch_inputs[: min(5, args.samples)],
+        generation_config,
+        tokenizer,
+        displayed_samples=-1,
+        slice_inputs=args.slice_inputs,
+    )
 
     # Run batch generation
     gen_time, tok_per_sec = batch_generate(

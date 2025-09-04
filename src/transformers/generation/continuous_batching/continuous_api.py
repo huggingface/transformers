@@ -730,8 +730,10 @@ class ContinuousBatchingManager:
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
+            logger.info(f"batch_processor created at {time.time() - self.creation_time} seconds")
             while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
                 self._inner_generation_loop(batch_processor)
+                logger.debug(f"Inner generation loop {self.current_batch} ended at {time.time() - self.creation_time} seconds")
                 self.current_batch += 1
 
         except Exception as e:
