@@ -1854,7 +1854,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         expected_ids_and_text = Expectations(
             {
-                ("cuda", None): ([0, 2335, 1556, 28, 1782, 30, 8, 2608, 1], "woman playing with dog on the beach"),
+                ("cuda", None): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
                 ("rocm", (9, 5)): (
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
                     "a woman is playing with her dog on the beach",
@@ -1874,11 +1877,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         expected_ids_and_text = Expectations(
             {
-                ("cuda", None): ([0, 3, 7, 152, 67, 839, 1], "san diego"),
-                ("rocm", (9, 5)): (
-                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
-                    "san francisco",  # TODO: check if this is ok
-                ),
+                ("cuda", None): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
+                ("rocm", (9, 5)): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
             }
         ).get_expectation()
         self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
