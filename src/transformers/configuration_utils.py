@@ -1262,7 +1262,7 @@ class PretrainedConfig(PushToHubMixin):
                 sub_config = getattr(self, sub_config_name)
                 is_image_config = "image_size" in sub_config
                 is_audio_config = not is_image_config and (
-                    "num_mel_bins" in sub_config or "num_channels" in sub_config or "audio_vocab_size" in sub_config
+                    any(attr in sub_config for attr in ["num_mel_bins", "num_channels", "audio_vocab_size"])
                 )
                 is_text_config = not is_image_config and not is_audio_config and "vocab_size" in sub_config
                 if modality == "text" and is_text_config:
