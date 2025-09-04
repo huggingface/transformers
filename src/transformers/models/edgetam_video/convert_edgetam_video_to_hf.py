@@ -28,13 +28,14 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
-    EdgeTamConfig,
-    EdgeTamMaskDecoderConfig,
-    EdgeTamModel,
-    EdgeTamPromptEncoderConfig,
+    EdgeTamVideoConfig,
+    EdgeTamVideoMaskDecoderConfig,
+    EdgeTamVideoModel,
+    EdgeTamVideoPromptEncoderConfig,
     EdgeTamVisionConfig,
     Sam2ImageProcessorFast,
-    Sam2Processor,
+    Sam2VideoProcessor,
+    Sam2VideoVideoProcessor,
     TimmWrapperConfig,
 )
 
@@ -46,18 +47,16 @@ def get_config(model_name):
     )
     vision_config = EdgeTamVisionConfig(backbone_config=backbone_config)
 
-    prompt_encoder_config = EdgeTamPromptEncoderConfig()
-    mask_decoder_config = EdgeTamMaskDecoderConfig()
+    prompt_encoder_config = EdgeTamVideoPromptEncoderConfig()
+    mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
     enable_temporal_pos_encoding_for_object_pointers = False
-    project_temporal_pos_encoding_in_object_pointers = False
     enable_occlusion_spatial_embedding = False
 
-    config = EdgeTamConfig(
+    config = EdgeTamVideoConfig(
         vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,
         mask_decoder_config=mask_decoder_config,
         enable_temporal_pos_encoding_for_object_pointers=enable_temporal_pos_encoding_for_object_pointers,
-        project_temporal_pos_encoding_in_object_pointers=project_temporal_pos_encoding_in_object_pointers,
         enable_occlusion_spatial_embedding=enable_occlusion_spatial_embedding,
     )
 
@@ -117,10 +116,29 @@ def replace_keys(state_dict):
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
+    output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
+    perceiver_resampler_patterns = {
+        r"spatial_perceiver.latents": r"spatial_perceiver.latents_1d",
+        r"spatial_perceiver.latents_1d_2d": r"spatial_perceiver.latents_2d",
+        r"spatial_perceiver.layers.(\d+).attn.layer_norm_x": r"spatial_perceiver.layers.\1.cross_attention.layer_norm_input",
+        r"spatial_perceiver.layers.(\d+).attn.to_q": r"spatial_perceiver.layers.\1.cross_attention.query_proj",
+        r"spatial_perceiver.layers.(\d+).attn.to_kv": r"spatial_perceiver.layers.\1.cross_attention.key_value_proj",
+        r"spatial_perceiver.layers.(\d+).attn.to_out": r"spatial_perceiver.layers.\1.cross_attention.output_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_q": r"spatial_perceiver.layers.\1.self_attention.query_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_kv": r"spatial_perceiver.layers.\1.self_attention.key_value_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_out": r"spatial_perceiver.layers.\1.self_attention.output_proj",
+        r"spatial_perceiver.layers.(\d+).attn": r"spatial_perceiver.layers.\1.cross_attention",
+        r"spatial_perceiver.layers.(\d+).self_attn": r"spatial_perceiver.layers.\1.self_attention",
+    }
+
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
+
+        for pattern, replacement in perceiver_resampler_patterns.items():
+            if re.match(pattern, key):
+                key = re.sub(pattern, replacement, key)
 
         # vision_encoder.blocks.0.mlp.layers.1.weight -> vision_encoder.blocks.0.mlp.proj_out.weight
         if re.match(output_vision_encoder_mlps_pattern, key):
@@ -176,6 +194,15 @@ def replace_keys(state_dict):
 
                 key = key.replace("layers.2", "proj_out")
 
+        if re.match(output_memory_encoder_mask_downsampler_pattern, key):
+            layer_nb = int(re.match(output_memory_encoder_mask_downsampler_pattern, key).group(1))
+            if layer_nb == 12:
+                key = key.replace(f"encoder.{layer_nb}", "final_conv")
+            elif layer_nb % 3 == 0:
+                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.conv")
+            elif layer_nb % 3 == 1:
+                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.layer_norm")
+
         model_state_dict[key] = value
 
     model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
@@ -196,20 +223,17 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     state_dict = replace_keys(state_dict)
 
     image_processor = Sam2ImageProcessorFast()
-    processor = Sam2Processor(image_processor=image_processor)
-    hf_model = EdgeTamModel(config)
+    video_processor = Sam2VideoVideoProcessor()
+    processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
+    hf_model = EdgeTamVideoModel(config)
     hf_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
+    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=True)
     hf_model = hf_model.to(device)
-    for pattern in EdgeTamModel._keys_to_ignore_on_load_unexpected:
-        unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
-    if missing_keys or unexpected_keys:
-        print("Missing keys:", missing_keys)
-        print("Unexpected keys:", unexpected_keys)
-        raise ValueError("Missing or unexpected keys in the state dict")
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -222,7 +246,7 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     ).to(device)
 
     with torch.no_grad():
-        output = hf_model(**inputs)
+        output = hf_model._single_frame_forward(**inputs)
     scores = output.iou_scores.squeeze()
 
     # commented scores are from original edgetam.1 model with Sam2Processor input, changes might be from bfloat16

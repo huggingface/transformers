@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -209,10 +210,6 @@ class EdgeTamMaskDecoderConfig(PretrainedConfig):
             The stability delta for the dynamic multimask.
         dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
             The stability threshold for the dynamic multimask.
-        feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feed-forward network.
-        two_way_transformer_activation (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the two-way transformer.
 
     """
 
@@ -232,8 +229,6 @@ class EdgeTamMaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_via_stability=True,
         dynamic_multimask_stability_delta=0.05,
         dynamic_multimask_stability_thresh=0.98,
-        feed_forward_hidden_act="relu",
-        two_way_transformer_activation="relu",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -243,7 +238,6 @@ class EdgeTamMaskDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.feed_forward_hidden_act = feed_forward_hidden_act
         self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
         self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
         self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
@@ -253,7 +247,6 @@ class EdgeTamMaskDecoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.mlp_dim = mlp_dim
-        self.two_way_transformer_activation = two_way_transformer_activation
         self.attention_downsample_rate = attention_downsample_rate
 
 
@@ -262,7 +255,7 @@ class EdgeTamConfig(PretrainedConfig):
     [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
     EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
+    [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -276,98 +269,6 @@ class EdgeTamConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation for parameter initialization.
-        num_maskmem (`int`, *optional*, defaults to 7):
-            The number of memory slots for the mask memory.
-        image_size (`int`, *optional*, defaults to 1024):
-            The size of the input images.
-        sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
-            Scale factor for the sigmoid function in the memory encoder.
-        sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
-            Bias for the sigmoid function in the memory encoder.
-        binarize_mask_from_pts_for_mem_enc (`bool`, *optional*, defaults to `True`):
-            Whether to binarize the mask from points for the memory encoder.
-        enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
-            Whether to enable spatial embedding for occlusions.
-        multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
-            Whether to output multiple masks from the SAM head.
-        multimask_min_pt_num (`int`, *optional*, defaults to 0):
-            The minimum number of points to trigger multimask output.
-        multimask_max_pt_num (`int`, *optional*, defaults to 1):
-            The maximum number of points to trigger multimask output.
-        multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
-            Whether to use multimask output for tracking.
-        non_overlap_masks_for_mem_enc (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks for the memory encoder.
-        max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
-            The maximum number of object pointers in the encoder.
-        enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to enable temporal positional encoding for object pointers.
-        project_temporal_pos_encoding_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to project temporal positional encoding in object pointers.
-        preserve_temporal_direction_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to preserve temporal direction in object pointers.
-        memory_attention_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory attention hidden states.
-        memory_attention_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory attention module.
-        memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the memory attention.
-        memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
-            The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feedforward network in the memory attention module.
-        memory_attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the memory attention module.
-        memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-            The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
-            The feature sizes for the Rope positional encoding.
-        memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
-        memory_attention_apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the self-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
-            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
-        memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory encoder hidden states.
-        memory_encoder_output_channels (`int`, *optional*, defaults to 64):
-            The number of output channels for the memory encoder.
-        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the mask downsampler embedding.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            The stride for the mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            The padding for the mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
-            The total stride for the mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the mask downsampler.
-        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the memory fuser embedding.
-        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            The kernel size for the memory fuser.
-        memory_fuser_padding (`int`, *optional*, defaults to 3):
-            The padding for the memory fuser.
-        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            The initial value for the layer scale in the memory fuser.
-        memory_fuser_use_depthwise_conv (`bool`, *optional*, defaults to `True`):
-            Whether to use a depthwise convolution for the memory fuser.
-        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the memory fuser.
-        fill_hole_area (`int`, *optional*, defaults to 8):
-            The maximum area of holes to fill in the masks.
-        non_overlap_masks (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
 
     Example:
 
@@ -400,7 +301,7 @@ class EdgeTamConfig(PretrainedConfig):
 
     model_type = "edgetam"
     sub_configs = {
-        "vision_config": EdgeTamVisionConfig,
+        "vision_config": AutoConfig,
         "prompt_encoder_config": EdgeTamPromptEncoderConfig,
         "mask_decoder_config": EdgeTamMaskDecoderConfig,
     }
@@ -411,69 +312,6 @@ class EdgeTamConfig(PretrainedConfig):
         prompt_encoder_config=None,
         mask_decoder_config=None,
         initializer_range=0.02,
-        num_maskmem=7,
-        image_size=1024,
-        sigmoid_scale_for_mem_enc=20.0,
-        sigmoid_bias_for_mem_enc=-10.0,
-        binarize_mask_from_pts_for_mem_enc=True,
-        enable_occlusion_spatial_embedding=True,
-        multimask_output_in_sam=True,
-        multimask_min_pt_num=0,
-        multimask_max_pt_num=1,
-        multimask_output_for_tracking=True,
-        non_overlap_masks_for_mem_enc=False,
-        max_object_pointers_in_encoder=16,
-        enable_temporal_pos_encoding_for_object_pointers=True,
-        project_temporal_pos_encoding_in_object_pointers=True,
-        preserve_temporal_direction_in_object_pointers=True,
-        # memory attention
-        memory_attention_hidden_size=256,
-        memory_attention_num_layers=2,
-        memory_attention_num_attention_heads=1,
-        memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
-        memory_attention_dropout=0.1,
-        memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=[64, 64],
-        memory_attention_rope_q_sizes=[64, 64],
-        memory_attention_rope_k_sizes=[16, 16],
-        memory_attention_rope_dropout=0.1,
-        memory_attention_apply_pe_at_self_attn=False,
-        memory_attention_apply_pe_at_cross_attn_keys=True,
-        memory_attention_apply_pe_at_cross_attn_queries=False,
-        # spatial perceiver resampler
-        perceiver_resampler_num_latents=256,
-        perceiver_resampler_num_latents_2d=256,
-        perceiver_resampler_hidden_size=64,
-        perceiver_resampler_num_attention_heads=1,
-        perceiver_resampler_attention_head_dim=64,
-        perceiver_resampler_num_layers=2,
-        perceiver_resampler_use_self_attention=True,
-        perceiver_resampler_hidden_dropout=0.0,
-        perceiver_resampler_attention_dropout=0.0,
-        perceiver_resampler_concat_kv_latents=False,
-        perceiver_resampler_pos_encoding_at_input=True,
-        perceiver_resampler_ff_intermediate_size_multiplier=4,
-        # memory encoder
-        memory_encoder_hidden_size=256,
-        memory_encoder_output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_use_depthwise_conv=True,
-        memory_fuser_hidden_act="gelu",
-        # post-processing parameters
-        fill_hole_area=8,
-        non_overlap_masks=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -481,85 +319,21 @@ class EdgeTamConfig(PretrainedConfig):
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
 
-        if isinstance(vision_config, EdgeTamVisionConfig):
-            vision_config = vision_config.to_dict()
+        if isinstance(vision_config, dict):
+            vision_config["model_type"] = vision_config.get("model_type", "edgetam_vision_model")
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif isinstance(vision_config, PretrainedConfig):
+            vision_config = vision_config
         if isinstance(prompt_encoder_config, EdgeTamPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, EdgeTamMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
-        self.vision_config = EdgeTamVisionConfig(**vision_config)
+        self.vision_config = vision_config
         self.prompt_encoder_config = EdgeTamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = EdgeTamMaskDecoderConfig(**mask_decoder_config)
 
         self.initializer_range = initializer_range
-        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
-        self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
-        self.binarize_mask_from_pts_for_mem_enc = binarize_mask_from_pts_for_mem_enc
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        self.multimask_output_in_sam = multimask_output_in_sam
-        self.multimask_min_pt_num = multimask_min_pt_num
-        self.multimask_max_pt_num = multimask_max_pt_num
-        self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
-        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
-        self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
-        self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
-
-        # memory attention
-        self.memory_attention_hidden_size = memory_attention_hidden_size
-        self.memory_attention_num_layers = memory_attention_num_layers
-        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
-        self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
-        self.memory_attention_dropout = memory_attention_dropout
-        self.memory_attention_rope_theta = memory_attention_rope_theta
-        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_q_sizes = memory_attention_rope_q_sizes
-        self.memory_attention_rope_k_sizes = memory_attention_rope_k_sizes
-        self.memory_attention_rope_dropout = memory_attention_rope_dropout
-        self.memory_attention_apply_pe_at_self_attn = memory_attention_apply_pe_at_self_attn
-        self.memory_attention_apply_pe_at_cross_attn_keys = memory_attention_apply_pe_at_cross_attn_keys
-        self.memory_attention_apply_pe_at_cross_attn_queries = memory_attention_apply_pe_at_cross_attn_queries
-
-        # spatial perceiver resampler
-        self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
-        self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
-        self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
-        self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
-        self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
-        self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
-        self.perceiver_resampler_use_self_attention = perceiver_resampler_use_self_attention
-        self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
-        self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
-        self.perceiver_resampler_concat_kv_latents = perceiver_resampler_concat_kv_latents
-        self.perceiver_resampler_pos_encoding_at_input = perceiver_resampler_pos_encoding_at_input
-        self.perceiver_resampler_ff_intermediate_size_multiplier = perceiver_resampler_ff_intermediate_size_multiplier
-
-        # memory encoder
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
-        self.memory_encoder_output_channels = memory_encoder_output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
-
-        # post-processing parameters
-        self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
-        self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 __all__ = ["EdgeTamConfig", "EdgeTamVisionConfig", "EdgeTamPromptEncoderConfig", "EdgeTamMaskDecoderConfig"]

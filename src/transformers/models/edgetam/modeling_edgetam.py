@@ -20,28 +20,23 @@
 # limitations under the License.
 
 import math
-import warnings
-from collections import OrderedDict
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tqdm import tqdm
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, logging
+from ...pytorch_utils import compile_compatible_method_lru_cache
+from ...utils import ModelOutput, auto_docstring
 from ..auto import AutoModel
 from .configuration_edgetam import (
     EdgeTamConfig,
@@ -51,117 +46,30 @@ from .configuration_edgetam import (
 )
 
 
-logger = logging.get_logger(__name__)
-
-
-class EdgeTamHieraDetModel:
-    pass
-
-
-class EdgeTamLayerNorm(nn.Module):
+class EdgeTamLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
-
-# TODO refactor or remove?
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class EdgeTamDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
-# Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
-class EdgeTamMemoryFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: EdgeTamConfig, drop_path: float = 0.0):
-        super().__init__()
-        memory_fuser_embed_dim = config.memory_fuser_embed_dim
-        memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
-        self.depthwise_conv = nn.Conv2d(
-            memory_fuser_embed_dim,
-            memory_fuser_embed_dim,
-            kernel_size=config.memory_fuser_kernel_size,
-            padding=config.memory_fuser_padding,
-            groups=memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
-        )  # depthwise conv
-        self.layer_norm = EdgeTamLayerNorm(memory_fuser_embed_dim, eps=1e-6)
-        self.activation = ACT2FN[config.memory_fuser_hidden_act]
-        self.pointwise_conv1 = nn.Linear(
-            memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
-        )  # pointwise/1x1 convs, implemented with linear layers
-        self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
-        self.scale = nn.Parameter(
-            memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
-        )
-        self.drop_path = EdgeTamDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-
-    def forward(self, hidden_states):
-        input = hidden_states
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = self.scale * hidden_states
-        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        hidden_states = input + self.drop_path(hidden_states)
-        return hidden_states
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 @dataclass
@@ -193,55 +101,6 @@ class EdgeTamVisionEncoderOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-def init_2d_position_ids(end_x: int, end_y: int):
-    """Generate 2D position indices for axial rotary embedding."""
-    t = torch.arange(end_x * end_y, dtype=torch.long)
-    t_x = t % end_x
-    t_y = torch.div(t, end_x, rounding_mode="floor")
-    return t_x, t_y
-
-
-class EdgeTamVisionRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for EDGETAM, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
-
-    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
-        super().__init__()
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-
-        self.dim = dim
-        self.theta = theta
-        self.max_end_x = end_x
-
-        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-        t_x, t_y = init_2d_position_ids(end_x, end_y)
-        freqs_x = torch.outer(t_x, freqs).float()
-        freqs_y = torch.outer(t_y, freqs).float()
-        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
-
-    @torch.no_grad()
-    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Generate cosine and sine position embeddings for 2D spatial dimensions.
-
-        Args:
-            feat_sizes (`tuple[int, int]`):
-                Tuple of (width, height) for the feature map
-
-        Returns:
-            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
-        """
-        end_x, end_y = feat_sizes
-        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
-        cos = freqs.cos()
-        sin = freqs.sin()
-        return cos, sin
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -270,67 +129,38 @@ class EdgeTamAttention(nn.Module):
     values.
     """
 
-    def __init__(
-        self,
-        config: Union[EdgeTamConfig, EdgeTamMaskDecoderConfig],
-        hidden_size: Optional[int] = None,
-        num_attention_heads: Optional[int] = None,
-        downsample_rate: Optional[int] = None,
-        kv_in_dim: Optional[int] = None,
-    ):
+    def __init__(self, config, downsample_rate=None):
         super().__init__()
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
         self.config = config
-        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
-
-        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
-
-        self.internal_dim = self.hidden_size // downsample_rate
-        self.num_attention_heads = (
-            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
-        )
-        if self.internal_dim % self.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
-
-        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
+        self.hidden_size = config.hidden_size
+        self.internal_dim = config.hidden_size // downsample_rate
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.internal_dim // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
     def forward(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_similarity: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
+        batch_size, point_batch_size = query.shape[:2]
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
 
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        # EdgeTamAttention
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -347,157 +177,12 @@ class EdgeTamAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
-    x_rotated[..., ::2] = -x[..., 1::2]
-    x_rotated[..., 1::2] = x[..., ::2]
-    return x_rotated
-
-
-# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
-def apply_rotary_pos_emb_2d(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    repeat_freqs_k: bool = False,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
-    q_embed = q.float()  # force upscale to float32 as in the original implementation
-    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
-    if k.shape[-2] == 0:
-        # Handle case where keys might be empty due to dropout
-        return q_embed.type_as(q), k
-
-    # Handle key tensor - may need to repeat frequencies if different sequence length
-    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
-        # Repeat cos/sin to match key sequence length
-        repeat_factor = k.shape[-2] // q.shape[-2]
-        cos_k = cos.repeat(1, 1, repeat_factor, 1)
-        sin_k = sin.repeat(1, 1, repeat_factor, 1)
-    else:
-        cos_k = cos
-        sin_k = sin
-
-    # Apply rotary embedding to keys
-    k_embed = k.float()  # force upscale to float32 as in the original implementation
-    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
-    return q_embed.type_as(q), k_embed.type_as(k)
-
-
-class EdgeTamRoPEAttention(EdgeTamAttention):
-    """Attention with rotary position encoding."""
-
-    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, rope_k_repeat=False, feat_sizes=(64, 64), **kwargs):
-        super().__init__(*args, **kwargs)
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        self.rotary_emb = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
-        )
-        self.rope_k_repeat = rope_k_repeat
-        self.feat_sizes = feat_sizes
-        self.dropout_p = dropout
-
-        # Cache for position embeddings
-        self._cached_cos = None
-        self._cached_sin = None
-        self._cached_feat_sizes = None
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        num_k_exclude_rope: int = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len = query.shape[-2]
-        width = height = int(math.sqrt(seq_len))
-        current_feat_sizes = (width, height)
-
-        # Generate or use cached position embeddings
-        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
-            cos, sin = self.rotary_emb(current_feat_sizes)
-            self._cached_cos = cos
-            self._cached_sin = sin
-            self._cached_feat_sizes = current_feat_sizes
-        else:
-            cos = self._cached_cos
-            sin = self._cached_sin
-
-        # Apply rotary position encoding, excluding some keys if specified
-        if num_k_exclude_rope > 0:
-            # Split keys into rope and non-rope parts
-            k_rope = key[:, :, :-num_k_exclude_rope]
-            k_no_rope = key[:, :, -num_k_exclude_rope:]
-
-            # Apply rope only to the rope part
-            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-            # Concatenate back
-            key = torch.cat([k_rope, k_no_rope], dim=-2)
-            query = q_rope
-        else:
-            # Apply rope to all queries and keys
-            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-        scale = query.shape[-1] ** -0.5
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
 
 
 class EdgeTamTwoWayAttentionBlock(nn.Module):
@@ -523,11 +208,7 @@ class EdgeTamTwoWayAttentionBlock(nn.Module):
         self.layer_norm2 = nn.LayerNorm(config.hidden_size)
 
         self.mlp = EdgeTamFeedForward(
-            config.hidden_size,
-            config.mlp_dim,
-            config.hidden_size,
-            num_layers=config.num_hidden_layers,
-            activation=config.two_way_transformer_activation,
+            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
         )
         self.layer_norm3 = nn.LayerNorm(config.hidden_size)
 
@@ -581,177 +262,6 @@ class EdgeTamTwoWayAttentionBlock(nn.Module):
         return queries, keys, attn_out
 
 
-class EdgeTamPositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
-    """
-
-    def __init__(
-        self,
-        num_pos_feats,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        self.num_pos_feats = num_pos_feats // 2
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    def _encode_xy(self, x, y):
-        # The positions are expected to be normalized
-        x_embed = x * self.scale
-        y_embed = y * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, None] / dim_t
-        pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
-        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
-        return pos_x, pos_y
-
-    @torch.no_grad()
-    def encode_boxes(self, x, y, w, h):
-        pos_x, pos_y = self._encode_xy(x, y)
-        pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
-        return pos
-
-    @torch.no_grad()
-    def encode_points(self, x, y, labels):
-        (bx, nx), (by, ny) = x.shape, y.shape
-        pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
-        pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
-        pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
-        return pos
-
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor):
-        cache_key = (x.shape[-2], x.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
-        y_embed = (
-            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
-            .view(1, -1, 1)
-            .repeat(x.shape[0], 1, x.shape[-1])
-        )
-        x_embed = (
-            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
-            .view(1, 1, -1)
-            .repeat(x.shape[0], x.shape[-2], 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = pos[0]
-        return pos
-
-
-class EdgeTamMemoryFuser(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([EdgeTamMemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
-
-    def forward(self, hidden_states):
-        # normally hidden_states: (N, C, H, W)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-class EdgeTamMaskDownSampler(nn.Module):
-    """
-    Progressively downsample a mask by total_stride, each time by stride.
-    Note that LayerNorm is applied per *token*, like in ViT.
-
-    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
-    In the end, we linearly project to embed_dim channels.
-    """
-
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-
-        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
-
-        self.encoder = nn.Sequential()
-        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
-        mask_in_chans, mask_out_chans = 1, 1
-        for _ in range(num_layers):
-            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
-            self.encoder.append(
-                nn.Conv2d(
-                    mask_in_chans,
-                    mask_out_chans,
-                    kernel_size=config.mask_downsampler_kernel_size,
-                    stride=config.mask_downsampler_stride,
-                    padding=config.mask_downsampler_padding,
-                )
-            )
-            self.encoder.append(EdgeTamLayerNorm(mask_out_chans))
-            self.encoder.append(self.activation)
-            mask_in_chans = mask_out_chans
-
-        self.encoder.append(nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1))
-
-    def forward(self, x):
-        return self.encoder(x)
-
-
-class EdgeTamMemoryEncoder(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-
-        hidden_size = config.memory_encoder_hidden_size
-        output_channels = config.memory_encoder_output_channels
-        self.mask_downsampler = EdgeTamMaskDownSampler(config)
-        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
-        self.memory_fuser = EdgeTamMemoryFuser(config)
-        self.position_encoding = EdgeTamPositionEmbeddingSine(num_pos_feats=output_channels)
-        self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
-
-    def forward(
-        self,
-        vision_features: torch.Tensor,
-        masks: torch.Tensor,
-        skip_mask_sigmoid: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ## Process masks
-        # sigmoid, so that less domain shift from gt masks which are bool
-        if not skip_mask_sigmoid:
-            masks = F.sigmoid(masks)
-        masks = self.mask_downsampler(masks)
-        ## Fuse pixel_features and downsampled masks
-
-        vision_features = self.feature_projection(vision_features)
-        vision_features = vision_features + masks
-        vision_features = self.memory_fuser(vision_features)
-        vision_features = self.projection(vision_features)
-
-        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
-
-        return vision_features, [vision_pos_enc]
-
-
 class EdgeTamFeedForward(nn.Module):
     def __init__(
         self,
@@ -782,6 +292,182 @@ class EdgeTamFeedForward(nn.Module):
         return hidden_states
 
 
+@auto_docstring
+class EdgeTamPreTrainedModel(PreTrainedModel):
+    config_class = EdgeTamConfig
+    base_model_prefix = "edgetam"
+    main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        if isinstance(module, EdgeTamModel):
+            if module.no_memory_embedding is not None:
+                module.no_memory_embedding.data.zero_()
+
+
+# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
+class EdgeTamSinePositionEmbedding(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
+    """
+
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+    ):
+        super().__init__()
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        self.num_pos_feats = num_pos_feats
+        self.temperature = temperature
+        self.normalize = normalize
+        self.scale = 2 * math.pi if scale is None else scale
+
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
+        if mask is None:
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        not_mask = (~mask).to(dtype)
+        y_embed = not_mask.cumsum(1)
+        x_embed = not_mask.cumsum(2)
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
+
+
+class EdgeTamVisionNeck(nn.Module):
+    def __init__(self, config: EdgeTamVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.position_encoding = EdgeTamSinePositionEmbedding(
+            num_pos_feats=config.fpn_hidden_size // 2, normalize=True
+        )
+        self.convs = nn.ModuleList()
+        for in_channels in config.backbone_channel_list:
+            self.convs.append(
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=config.fpn_hidden_size,
+                    kernel_size=config.fpn_kernel_size,
+                    stride=config.fpn_stride,
+                    padding=config.fpn_padding,
+                ),
+            )
+        self.fpn_top_down_levels = config.fpn_top_down_levels
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
+        fpn_hidden_states = ()
+        fpn_position_encoding = ()
+
+        # forward in top-down order (from low to high resolution)
+        n = len(self.convs) - 1
+        for i in range(n, -1, -1):
+            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
+            lateral_features = self.convs[n - i](lateral_features)
+            if i not in self.fpn_top_down_levels or i == n:
+                prev_features = lateral_features
+            else:
+                top_down_features = F.interpolate(
+                    prev_features.to(dtype=torch.float32),
+                    scale_factor=2.0,
+                    mode="nearest",
+                    align_corners=None,
+                    antialias=False,
+                ).to(lateral_features.dtype)
+                prev_features = lateral_features + top_down_features
+
+            prev_position_encoding = self.position_encoding(
+                prev_features.shape, prev_features.device, prev_features.dtype
+            ).to(prev_features.dtype)
+
+            fpn_hidden_states += (prev_features,)
+            fpn_position_encoding += (prev_position_encoding,)
+
+        return fpn_hidden_states, fpn_position_encoding
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision model from EdgeTAM without any head or projection on top.
+    """
+)
+class EdgeTamVisionModel(EdgeTamPreTrainedModel):
+    config_class = EdgeTamVisionConfig
+    main_input_name = "pixel_values"
+    _can_record_outputs = {"hidden_states": AutoModel, "attentions": AutoModel}
+
+    def __init__(self, config: EdgeTamVisionConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.backbone = AutoModel.from_config(config.backbone_config)
+
+        self.neck = EdgeTamVisionNeck(config)
+        self.num_feature_levels = config.num_feature_levels
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.backbone.get_input_embeddings()
+
+    @check_model_inputs
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        # Forward through backbone
+        backbone_output = self.backbone(pixel_values)
+        intermediate_hidden_states = backbone_output.last_hidden_state
+        intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
+
+        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
+        # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
+        fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
+        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
+
+        return EdgeTamVisionEncoderOutput(
+            last_hidden_state=intermediate_hidden_states[-1],
+            fpn_hidden_states=fpn_hidden_states,
+            fpn_position_encoding=fpn_position_encoding,
+        )
+
+
 @dataclass
 @auto_docstring(custom_intro="Base class for the EdgeTam model's output.")
 class EdgeTamImageSegmentationOutput(ModelOutput):
@@ -791,13 +477,6 @@ class EdgeTamImageSegmentationOutput(ModelOutput):
     pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
-        original image size.
-    high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
-        The predicted masks, upscaled to the original image size. Only used for EdgeTamVideoModel.
-    object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
-        A tensor representing the object pointer, used for tracking in videos. Only used for EdgeTamVideoModel.
     object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
     image_embeddings (`tuple(torch.FloatTensor)`):
@@ -816,33 +495,11 @@ class EdgeTamImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
-    low_res_masks: torch.FloatTensor = None
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
     object_score_logits: torch.FloatTensor = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
-@dataclass
-@auto_docstring(custom_intro="Base class for the EdgeTam model's output.")
-class EdgeTamVideoSegmentationOutput(ModelOutput):
-    r"""
-    video_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-        The predicted masks, upscaled to the original video resolution.
-    consolidated_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-        The predicted masks stored as consolidated masks.
-        These masks will be at the model's resolution if `consolidate_at_video_res=False` when calling
-        `EdgeTamVideoModel.forward`. Otherwise, they will be at the video resolution.
-    frame_idx (`int`):
-        The frame index of the video.
-    """
-
-    video_res_masks: torch.FloatTensor = None
-    consolidated_res_masks: torch.FloatTensor = None
-    frame_idx: int = None
 
 
 class EdgeTamPositionalEmbedding(nn.Module):
@@ -908,9 +565,7 @@ class EdgeTamPromptEncoder(nn.Module):
         self.mask_input_size = (4 * config.image_size // config.patch_size, 4 * config.image_size // config.patch_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
-        )
+        self.point_embed = nn.Embedding(config.num_point_embeddings, config.hidden_size)
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 
@@ -918,49 +573,24 @@ class EdgeTamPromptEncoder(nn.Module):
         """Embeds point prompts."""
         points = points + 0.5  # Shift to center of pixel
         if pad:
-            target_point_shape = (points.shape[0], points.shape[1], 1, points.shape[-1])
-            target_labels_shape = (points.shape[0], points.shape[1], 1)
-            padding_point = torch.zeros(target_point_shape, device=points.device)
-            padding_label = -torch.ones(target_labels_shape, device=labels.device)
-            points = torch.cat([points, padding_point], dim=2)
-            labels = torch.cat([labels, padding_label], dim=2)
+            points = torch.nn.functional.pad(points, (0, 0, 0, 1), mode="constant", value=0)
+            labels = torch.nn.functional.pad(labels, (0, 1), mode="constant", value=-1)
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
             torch.zeros_like(point_embedding),
         )
 
-        point_embedding = torch.where(
-            (labels == 0)[:, :, :, None],
-            point_embedding + self.point_embed[0].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 1)[:, :, :, None],
-            point_embedding + self.point_embed[1].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 2)[:, :, :, None],
-            point_embedding + self.point_embed[2].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 3)[:, :, :, None],
-            point_embedding + self.point_embed[3].weight[None, None, :, :],
-            point_embedding,
-        )
+        # Add point embeddings for labels >= 0
+        point_embedding = point_embedding + self.point_embed(labels.clamp(min=0)) * (labels >= 0).unsqueeze(-1)
 
         return point_embedding
 
@@ -971,8 +601,8 @@ class EdgeTamPromptEncoder(nn.Module):
         coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
         input_shape = (self.input_image_size, self.input_image_size)
         corner_embedding = self.shared_embedding(coords, input_shape)
-        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
-        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
+        corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
+        corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
         return corner_embedding
 
     def forward(
@@ -1083,96 +713,39 @@ class EdgeTamMaskDecoder(nn.Module):
 
         self.num_multimask_outputs = config.num_multimask_outputs
         self.num_mask_tokens = config.num_multimask_outputs + 1
-        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
-        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
-        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
 
         self.iou_token = nn.Embedding(1, self.hidden_size)
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.hidden_size)
 
         self.transformer = EdgeTamTwoWayTransformer(config)
 
+        # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upscale_layer_norm = EdgeTamLayerNorm(config.hidden_size // 4, data_format="channels_first")
+        self.upscale_layer_norm = EdgeTamLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.activation = nn.GELU()
-
-        self.conv_s0 = nn.Conv2d(config.hidden_size, config.hidden_size // 8, kernel_size=1, stride=1)
-        self.conv_s1 = nn.Conv2d(config.hidden_size, config.hidden_size // 4, kernel_size=1, stride=1)
 
         mlps_list = []
         for _ in range(self.num_mask_tokens):
-            mlps_list += [
-                EdgeTamFeedForward(
-                    self.hidden_size,
-                    self.hidden_size,
-                    self.hidden_size // 8,
-                    3,
-                    activation=config.feed_forward_hidden_act,
-                )
-            ]
+            mlps_list += [EdgeTamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)]
         self.output_hypernetworks_mlps = nn.ModuleList(mlps_list)
-
         self.iou_prediction_head = EdgeTamFeedForward(
             self.hidden_size,
             config.iou_head_hidden_dim,
             self.num_mask_tokens,
             config.iou_head_depth,
-            activation=config.feed_forward_hidden_act,
             sigmoid_output=True,
         )
 
+        self.conv_s0 = nn.Conv2d(config.hidden_size, config.hidden_size // 8, kernel_size=1, stride=1)
+        self.conv_s1 = nn.Conv2d(config.hidden_size, config.hidden_size // 4, kernel_size=1, stride=1)
+
         self.obj_score_token = nn.Embedding(1, self.hidden_size)
-        self.pred_obj_score_head = EdgeTamFeedForward(self.hidden_size, self.hidden_size, 1, 3, activation="relu")
+        self.pred_obj_score_head = EdgeTamFeedForward(self.hidden_size, self.hidden_size, 1, 3)
 
-    def _get_stability_scores(self, mask_logits):
-        """
-        Compute stability scores of the mask logits based on the IoU between upper and
-        lower thresholds.
-        """
-        mask_logits = mask_logits.flatten(-2)
-        stability_delta = self.dynamic_multimask_stability_delta
-        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
-        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
-        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
-        return stability_scores
-
-    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
-        """
-        When outputting a single mask, if the stability score from the current single-mask
-        output (based on output token 0) falls below a threshold, we instead select from
-        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
-        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
-        """
-        # The best mask from multimask output tokens (1~3)
-        multimask_logits = all_mask_logits[:, :, 1:, :, :]
-        multimask_iou_scores = all_iou_scores[:, :, 1:]
-        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)  # [B, P]
-        best_scores_inds_expanded = best_scores_inds.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        best_scores_inds_expanded = best_scores_inds_expanded.expand(
-            -1, -1, 1, multimask_logits.size(-2), multimask_logits.size(-1)
-        )
-        best_multimask_logits = torch.gather(multimask_logits, 2, best_scores_inds_expanded)  # [B, P, 1, H, W]
-        best_multimask_iou_scores = torch.gather(multimask_iou_scores, 2, best_scores_inds.unsqueeze(-1))  # [B, P, 1]
-
-        # The mask from singlemask output token 0 and its stability score
-        singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
-        singlemask_iou_scores = all_iou_scores[:, :, 0:1]
-        stability_scores = self._get_stability_scores(singlemask_logits)
-        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
-
-        # Dynamically fall back to best multimask output upon low stability scores.
-        mask_logits_out = torch.where(
-            is_stable[..., None, None].expand_as(singlemask_logits),
-            singlemask_logits,
-            best_multimask_logits,
-        )
-        iou_scores_out = torch.where(
-            is_stable.expand_as(singlemask_iou_scores),
-            singlemask_iou_scores,
-            best_multimask_iou_scores,
-        )
-        return mask_logits_out, iou_scores_out
+        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
+        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
+        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
 
     def forward(
         self,
@@ -1285,321 +858,54 @@ class EdgeTamMaskDecoder(nn.Module):
 
         return masks, iou_pred, sam_tokens_out, object_score_logits
 
+    def _get_stability_scores(self, mask_logits):
+        """
+        Compute stability scores of the mask logits based on the IoU between upper and
+        lower thresholds.
+        """
+        mask_logits = mask_logits.flatten(-2)
+        stability_delta = self.dynamic_multimask_stability_delta
+        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
+        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
+        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
+        return stability_scores
 
-CONNECTED_COMPONENTS_CUDA_KERNEL = None
-
-
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global CONNECTED_COMPONENTS_CUDA_KERNEL
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "edgetam"
-    src_files = [root / "connected_components.cu"]
-    CONNECTED_COMPONENTS_CUDA_KERNEL = load(
-        "CONNECTED_COMPONENTS_CUDA_KERNEL",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=0",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
-
-class EdgeTamVideoInferenceCache:
-    """Cache for vision features and model constants."""
-
-    def __init__(
-        self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        max_vision_features_cache_size: int = 1,
-    ):
-        self.inference_device = inference_device
-        self.inference_state_device = inference_state_device
-        self.max_vision_features_cache_size = max_vision_features_cache_size
-
-        self._vision_features = {}
-        self._model_constants = {}
-
-    def cache_vision_features(self, frame_idx: int, features: dict):
-        """Cache vision features with automatic device management."""
-        cached = {}
-        if len(self._vision_features) >= self.max_vision_features_cache_size:
-            # remove the oldest frame
-            self._vision_features.pop(min(self._vision_features.keys()))
-
-        for key, value in features.items():
-            if isinstance(value, torch.Tensor):
-                cached[key] = value.to(self.inference_state_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-            else:
-                cached[key] = value
-        self._vision_features[frame_idx] = cached
-
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
-        """Get cached vision features, automatically moved to inference device."""
-        if frame_idx not in self._vision_features:
-            return None
-
-        cached = self._vision_features[frame_idx]
-        moved = {}
-        for key, value in cached.items():
-            if isinstance(value, torch.Tensor):
-                moved[key] = value.to(self.inference_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
-            else:
-                moved[key] = value
-        return moved
-
-    def cache_model_constant(self, key: str, value):
-        """Cache model constants that are reused across frames."""
-        if isinstance(value, torch.Tensor):
-            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-        else:
-            self._model_constants[key] = value
-
-    def get_model_constant(self, key: str):
-        """Get cached model constant, automatically moved to inference device if needed."""
-        if key not in self._model_constants:
-            return None
-
-        value = self._model_constants[key]
-        if isinstance(value, torch.Tensor):
-            return value.to(self.inference_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            return [v.to(self.inference_device, non_blocking=True) for v in value]
-        return value
-
-    def clear_vision_cache(self):
-        """Clear vision feature cache (but keep model constants)."""
-        self._vision_features.clear()
-
-    def clear_all(self):
-        """Clear all cached data."""
-        self._vision_features.clear()
-        self._model_constants.clear()
-
-
-# a large negative value as a placeholder score for missing objects
-NO_OBJ_SCORE = -1024.0
-
-
-def get_1d_sine_pe(pos_inds, dim, temperature=10000):
-    """
-    Get 1D sine positional embedding as in the original Transformer paper.
-    """
-    pe_dim = dim // 2
-    dim_t = torch.arange(pe_dim, dtype=torch.float32, device=pos_inds.device)
-    dim_t = temperature ** (2 * (dim_t // 2) / pe_dim)
-
-    pos_embed = pos_inds.unsqueeze(-1) / dim_t
-    pos_embed = torch.cat([pos_embed.sin(), pos_embed.cos()], dim=-1)
-    return pos_embed
-
-
-def get_connected_components(mask):
-    """
-    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
-    Inputs:
-    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
-            background.
-    Outputs:
-    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
-              for foreground pixels and 0 for background pixels.
-    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
-              components for foreground pixels and 0 for background pixels.
-    """
-    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
-
-
-def fill_holes_in_mask_scores(mask, max_area):
-    """
-    A post processor to fill small holes in mask scores with area under `max_area`.
-    """
-    # Holes are those connected components in background with area <= self.max_area
-    # (background regions are those with mask scores <= 0)
-    if max_area <= 0:
-        raise ValueError("max_area must be positive")
-    input_mask = mask
-    try:
-        labels, areas = get_connected_components(mask <= 0)
-        is_hole = (labels > 0) & (areas <= max_area)
-        # We fill holes with a small positive mask score (0.1) to change them to foreground.
-        mask = torch.where(is_hole, 0.1, mask)
-    except Exception as e:
-        # Skip the post-processing step on removing small holes if the CUDA kernel fails
-        warnings.warn(
-            f"{e}\n\nSkipping the post-processing step due to the error above. You can "
-            "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
-            "functionality may be limited (which doesn't affect the results in most cases; see "
-            "https://github.com/facebookresearch/edgetam/blob/main/INSTALL.md).",
-            category=UserWarning,
-            stacklevel=2,
+    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
+        """
+        When outputting a single mask, if the stability score from the current single-mask
+        output (based on output token 0) falls below a threshold, we instead select from
+        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
+        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
+        """
+        # The best mask from multimask output tokens (1~3)
+        multimask_logits = all_mask_logits[:, :, 1:, :, :]
+        multimask_iou_scores = all_iou_scores[:, :, 1:]
+        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)  # [B, P]
+        best_scores_inds_expanded = best_scores_inds.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        best_scores_inds_expanded = best_scores_inds_expanded.expand(
+            -1, -1, 1, multimask_logits.size(-2), multimask_logits.size(-1)
         )
-        mask = input_mask
+        best_multimask_logits = torch.gather(multimask_logits, 2, best_scores_inds_expanded)  # [B, P, 1, H, W]
+        best_multimask_iou_scores = torch.gather(multimask_iou_scores, 2, best_scores_inds.unsqueeze(-1))  # [B, P, 1]
 
-    return mask
+        # The mask from singlemask output token 0 and its stability score
+        singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
+        singlemask_iou_scores = all_iou_scores[:, :, 0:1]
+        stability_scores = self._get_stability_scores(singlemask_logits)
+        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
 
-
-@auto_docstring
-class EdgeTamPreTrainedModel(PreTrainedModel):
-    config_class = EdgeTamConfig
-    base_model_prefix = "edgetam"
-    main_input_name = "pixel_values"
-    _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        if isinstance(module, EdgeTamModel):
-            if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
-        elif isinstance(module, EdgeTamVideoModel):
-            if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
-            if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
-            if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
-            if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
-        if isinstance(module, EdgeTamMemoryFuserCXBlock):
-            if module.scale is not None:
-                module.scale.data.zero_()
-
-
-class EdgeTamVisionNeck(nn.Module):
-    def __init__(self, config: EdgeTamVisionConfig):
-        super().__init__()
-        self.config = config
-
-        self.position_encoding = EdgeTamPositionEmbeddingSine(
-            num_pos_feats=config.fpn_hidden_size, normalize=True, temperature=10000
+        # Dynamically fall back to best multimask output upon low stability scores.
+        mask_logits_out = torch.where(
+            is_stable[..., None, None].expand_as(singlemask_logits),
+            singlemask_logits,
+            best_multimask_logits,
         )
-        self.convs = nn.ModuleList()
-        for in_channels in config.backbone_channel_list:
-            self.convs.append(
-                nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=config.fpn_hidden_size,
-                    kernel_size=config.fpn_kernel_size,
-                    stride=config.fpn_stride,
-                    padding=config.fpn_padding,
-                ),
-            )
-
-        self.fpn_interpolation_mode = config.fpn_interpolation_mode
-        self.fuse_type = config.fuse_type
-
-        # levels to have top-down features in its outputs
-        # e.g. if fpn_top_down_levels is [2, 3], then only outputs of level 2 and 3
-        # have top-down propagation, while outputs of level 0 and level 1 have only
-        # lateral features from the same backbone level.
-        if config.fpn_top_down_levels is None:
-            # default is to have top-down features on all levels
-            config.fpn_top_down_levels = range(len(self.convs))
-        self.fpn_top_down_levels = list(config.fpn_top_down_levels)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
-        fpn_hidden_states = ()
-        fpn_position_encoding = ()
-
-        # forward in top-down order (from low to high resolution)
-        n = len(self.convs) - 1
-        for i in range(n, -1, -1):
-            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
-            if i not in self.fpn_top_down_levels or i == n:
-                prev_features = lateral_features
-            else:
-                top_down_features = F.interpolate(
-                    prev_features.to(dtype=torch.float32),
-                    scale_factor=2.0,
-                    mode=self.fpn_interpolation_mode,
-                    align_corners=(None if self.fpn_interpolation_mode == "nearest" else False),
-                    antialias=False,
-                ).to(lateral_features.dtype)
-                prev_features = lateral_features + top_down_features
-                if self.fuse_type == "average":
-                    prev_features /= 2
-
-            prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
-
-            fpn_hidden_states += (prev_features,)
-            fpn_position_encoding += (prev_position_encoding,)
-
-        return fpn_hidden_states, fpn_position_encoding
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from Sam without any head or projection on top.
-    """
-)
-class EdgeTamVisionModel(EdgeTamPreTrainedModel):
-    config_class = EdgeTamVisionConfig
-    main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": AutoModel, "attentions": AutoModel}
-
-    def __init__(self, config: EdgeTamVisionConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.backbone = AutoModel.from_config(config.backbone_config)
-
-        self.neck = EdgeTamVisionNeck(config)
-        self.num_feature_levels = config.num_feature_levels
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.backbone.get_input_embeddings()
-
-    @check_model_inputs
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
-        intermediate_hidden_states = backbone_output.last_hidden_state
-        intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
-
-        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
-        # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
-        fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
-        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
-
-        return EdgeTamVisionEncoderOutput(
-            last_hidden_state=intermediate_hidden_states[-1],
-            fpn_hidden_states=fpn_hidden_states,
-            fpn_position_encoding=fpn_position_encoding,
+        iou_scores_out = torch.where(
+            is_stable.expand_as(singlemask_iou_scores),
+            singlemask_iou_scores,
+            best_multimask_iou_scores,
         )
+        return mask_logits_out, iou_scores_out
 
 
 @auto_docstring(
@@ -1616,6 +922,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
+        r"spatial_perceiver.*",
         r"^object_pointer_proj.*",
         r"^temporal_positional_encoding_projection_layer.*",
         "no_memory_positional_encoding",
@@ -1635,18 +942,8 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         self.num_feature_levels = config.vision_config.num_feature_levels
         self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
         # a single token to indicate no memory embedding from previous frames
-        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.vision_config.fpn_hidden_size))
-
         self.hidden_dim = config.vision_config.fpn_hidden_size
-        # prompt encoder part
-        self.image_size = config.image_size
-
-        if torch.cuda.is_available():
-            try:
-                logger.info("Building CUDA kernel, this might take some time...")
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
+        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
 
         self.post_init()
 
@@ -1685,13 +982,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(pixel_values, **kwargs)
-        # flatten NxCxHxW to HWxNxC
-        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
-        ]
+        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1780,7 +1071,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1830,34 +1121,13 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         ... )
         ```
         """
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
-                " got {}.".format(input_boxes.shape),
-            )
+        if not ((pixel_values is None) ^ (image_embeddings is None)):
+            raise ValueError("Exactly one of pixel_values or image_embeddings must be provided.")
         if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
+            if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
-        else:
-            point_batch_size = 1
-            box_batch_size = 1
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
@@ -1868,18 +1138,10 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
-                self.get_image_features(
-                    pixel_values,
-                    **kwargs,
-                )
+            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
+                pixel_values,
+                **kwargs,
             )
-            # flatten NxCxHxW to HWxNxC
-            feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-            feature_maps_position_embeddings = [
-                feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-                for feature_map_position_embedding in feature_maps_position_embeddings
-            ]
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1896,16 +1158,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         if input_points is None and input_boxes is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(
-                batch_size,
-                point_batch_size,
-                1,
-                2,
-                dtype=image_embeddings[-1].dtype,
-                device=image_embeddings[-1].device,
+                batch_size, 1, 1, 2, dtype=image_embeddings[-1].dtype, device=image_embeddings[-1].device
             )
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
+            input_labels = -torch.ones(batch_size, 1, 1, dtype=torch.int32, device=image_embeddings[-1].device)
 
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed
@@ -1937,16 +1192,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             **kwargs,
         )
 
-        low_res_masks = low_res_multimasks
-        high_res_masks = None
-        object_pointer = None
-
         return EdgeTamImageSegmentationOutput(
             iou_scores=iou_scores,
-            pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
-            high_res_masks=high_res_masks,
-            object_pointer=object_pointer,
+            pred_masks=low_res_multimasks,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,
@@ -1984,8 +1232,6 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
-        vision_hidden_states = vision_outputs.hidden_states
-        vision_attentions = vision_outputs.attentions
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -1993,2431 +1239,14 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
-        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+            for feature_map_position_embedding in feature_maps_position_embeddings
+        ]
 
+        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
-class EdgeTamVideoInferenceSession:
-    """Manages video inference session parameters, state and cache."""
 
-    def __init__(
-        self,
-        video: torch.FloatTensor = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        torch_dtype: Union[torch.dtype, str] = "float32",
-        max_vision_features_cache_size: int = 1,
-    ):
-        # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
-        self.video_height = video_height
-        self.video_width = video_width
-
-        self.inference_device = inference_device
-        self.inference_state_device = inference_state_device
-        self.video_storage_device = video_storage_device
-        self.torch_dtype = torch_dtype
-        self.max_vision_features_cache_size = max_vision_features_cache_size
-
-        # Cache for computed features
-        self.cache = EdgeTamVideoInferenceCache(
-            inference_device=self.inference_device,
-            inference_state_device=self.inference_state_device,
-            max_vision_features_cache_size=self.max_vision_features_cache_size,
-        )
-
-        # Persistent object tracking state
-        self._obj_id_to_idx = OrderedDict()
-        self._obj_idx_to_id = OrderedDict()
-        self.obj_ids = []
-
-        # Persistent user inputs
-        self.point_inputs_per_obj = {}
-        self.mask_inputs_per_obj = {}
-
-        # Persistent model outputs/history
-        self.output_dict_per_obj = {}
-        self.temp_output_dict_per_obj = {}
-        self.frames_tracked_per_obj = {}
-
-        # Session state flags
-        self.obj_with_new_inputs = []
-
-    @property
-    def num_frames(self) -> Optional[int]:
-        return len(self.processed_frames) if self.processed_frames is not None else None
-
-    # Object management
-    def obj_id_to_idx(self, obj_id: int) -> int:
-        """Map object ID to index, creating new entry if needed."""
-        obj_idx = self._obj_id_to_idx.get(obj_id, None)
-        if obj_idx is not None:
-            return obj_idx
-
-        obj_idx = len(self._obj_id_to_idx)
-        self._obj_id_to_idx[obj_id] = obj_idx
-        self._obj_idx_to_id[obj_idx] = obj_id
-        self.obj_ids = list(self._obj_id_to_idx)
-
-        self.point_inputs_per_obj[obj_idx] = {}
-        self.mask_inputs_per_obj[obj_idx] = {}
-        self.output_dict_per_obj[obj_idx] = {
-            "cond_frame_outputs": {},
-            "non_cond_frame_outputs": {},
-        }
-        self.temp_output_dict_per_obj[obj_idx] = {
-            "cond_frame_outputs": {},
-            "non_cond_frame_outputs": {},
-        }
-        self.frames_tracked_per_obj[obj_idx] = {}
-
-        return obj_idx
-
-    # Video Inference specific functions
-    def obj_idx_to_id(self, obj_idx: int) -> int:
-        """Map model-side object index to client-side object id."""
-        return self._obj_idx_to_id[obj_idx]
-
-    def get_obj_num(self) -> int:
-        """Get the total number of unique object ids received so far in this session."""
-        return len(self._obj_idx_to_id)
-
-    # Input management with device handling
-    def add_point_inputs(self, obj_idx: int, frame_idx: int, inputs: dict):
-        """Add point inputs with automatic device placement."""
-        device_inputs = {}
-        for key, value in inputs.items():
-            if isinstance(value, torch.Tensor):
-                device_inputs[key] = value.to(self.inference_device, non_blocking=True)
-            else:
-                device_inputs[key] = value
-        self.point_inputs_per_obj[obj_idx][frame_idx] = device_inputs
-
-    def remove_point_inputs(self, obj_idx: int, frame_idx: int):
-        """Remove point inputs."""
-        self.point_inputs_per_obj[obj_idx].pop(frame_idx, None)
-
-    def add_mask_inputs(self, obj_idx: int, frame_idx: int, inputs: torch.Tensor):
-        """Add mask inputs with automatic device placement."""
-        self.mask_inputs_per_obj[obj_idx][frame_idx] = inputs.to(
-            self.inference_device, dtype=self.torch_dtype, non_blocking=True
-        )
-
-    def remove_mask_inputs(self, obj_idx: int, frame_idx: int):
-        """Remove mask inputs."""
-        self.mask_inputs_per_obj[obj_idx].pop(frame_idx, None)
-
-    # Output management with smart device placement
-    def store_output(
-        self,
-        obj_idx: int,
-        frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
-        is_temporary_output: bool = False,
-        is_conditioning_frame: bool = True,
-    ):
-        """
-        Store output with smart device management.
-        If output_key is None, the output is stored as a dictionary.
-
-        Args:
-            obj_idx (int): The index of the object.
-            frame_idx (int): The index of the frame.
-            output_key (Optional[str]): The key of the output. If None, the output is stored as a dictionary.
-            output_value (Optional[Union[torch.Tensor, dict]]): The value of the output.
-            is_temporary_output (bool): Whether the output is temporary.
-            is_conditioning_frame (bool): Whether the output is for a conditioning frame.
-        """
-        target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
-        storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
-
-        if output_key is None and isinstance(output_value, dict):
-            target_dict[obj_idx][storage_key][frame_idx] = {}
-            for key, value in output_value.items():
-                self.store_output(obj_idx, frame_idx, key, value, is_temporary_output, is_conditioning_frame)
-            return
-
-        # Device placement: small tensors stay on inference device, large ones go to inference state device
-        if output_key in ["object_pointer", "object_score_logits"]:  # Small tensors
-            target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value
-        elif isinstance(output_value, torch.Tensor):  # Large tensors like masks, features
-            target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value.to(
-                self.inference_state_device, non_blocking=True
-            )
-        else:
-            target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value
-
-    def get_output(
-        self,
-        obj_idx: int,
-        frame_idx: int,
-        output_key: str,
-        is_temporary_output: bool = False,
-        is_conditioning_frame: bool = True,
-    ):
-        """
-        Get output with smart device management.
-
-        Args:
-            obj_idx (int): The index of the object.
-            frame_idx (int): The index of the frame.
-            output_key (str): The key of the output.
-            is_temporary_output (bool): Whether the output is temporary.
-            is_conditioning_frame (bool): Whether the output is for a conditioning frame.
-        """
-        target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
-        storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
-        out = target_dict[obj_idx][storage_key].get(frame_idx, None)
-        # move to inference device if needed
-        if out is None:
-            return None
-        value = out[output_key]
-        if isinstance(value, torch.Tensor):
-            value = value.to(self.inference_device, non_blocking=True)
-        return value
-
-    # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor) -> int:
-        """Add new frame with automatic device placement."""
-        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.torch_dtype, non_blocking=True)
-        if pixel_values.dim() == 4:
-            pixel_values = pixel_values.squeeze(0)
-
-        if self.processed_frames is None:
-            self.processed_frames = [pixel_values]
-        else:
-            self.processed_frames.append(pixel_values)
-
-        return self.num_frames - 1
-
-    def get_frame(self, frame_idx: int) -> torch.Tensor:
-        """Get frame from video."""
-        return self.processed_frames[frame_idx].to(self.inference_device, non_blocking=True)
-
-    def reset_tracking_data(self):
-        """Reset tracking data but keep cache."""
-        self._obj_id_to_idx.clear()
-        self._obj_idx_to_id.clear()
-        self.obj_ids.clear()
-        self.point_inputs_per_obj.clear()
-        self.mask_inputs_per_obj.clear()
-        self.output_dict_per_obj.clear()
-        self.temp_output_dict_per_obj.clear()
-        self.frames_tracked_per_obj.clear()
-        self.obj_with_new_inputs = []
-        # Note: cache and video data are preserved
-
-    def reset_inference_session(self):
-        """Reset tracking data and cache."""
-        self._obj_id_to_idx.clear()
-        self._obj_idx_to_id.clear()
-        self.obj_ids.clear()
-        self.point_inputs_per_obj.clear()
-        self.mask_inputs_per_obj.clear()
-        self.output_dict_per_obj.clear()
-        self.temp_output_dict_per_obj.clear()
-        self.frames_tracked_per_obj.clear()
-        self.obj_with_new_inputs = []
-        self.cache.clear_all()
-
-
-def apply_rotary_pos_emb_2d_v2(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    repeat_freqs: int = 0,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
-    batch_size, num_heads, num_tokens, channels_per_head = x.shape
-    if num_tokens == cos.shape[-2]:
-        x_rope = x
-        x_no_rope = None
-    else:
-        rope_tokens = cos.shape[-2]
-        no_rope_tokens = num_tokens // repeat_freqs - rope_tokens
-        x = x.view(batch_size, num_heads, repeat_freqs, num_tokens // repeat_freqs, channels_per_head)
-        x_rope = x[..., no_rope_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
-        x_no_rope = x[..., :no_rope_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
-
-    if repeat_freqs > 1:
-        cos = cos.repeat(1, 1, repeat_freqs, 1)
-        sin = sin.repeat(1, 1, repeat_freqs, 1)
-    x_embed = (x_rope * cos) + (rotate_half(x_rope) * sin)
-    if x_no_rope is not None:
-        x_embed = x_embed.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
-        x_no_rope = x_no_rope.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
-        x_embed = torch.cat((x_no_rope, x_embed), dim=3).view(batch_size, num_heads, num_tokens, channels_per_head)
-    return x_embed.type_as(x)
-
-
-class EdgeTamRoPEAttentionV2(EdgeTamAttention):
-    """Attention with rotary position encoding."""
-
-    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, q_sizes=(64, 64), k_sizes=(16, 16), **kwargs):
-        super().__init__(*args, **kwargs)
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        self.rotary_emb_q = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=q_sizes[0], end_y=q_sizes[1], theta=rope_theta
-        )
-        self.rotary_emb_k = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=k_sizes[0], end_y=k_sizes[1], theta=rope_theta
-        )
-        self.q_sizes = q_sizes
-        self.k_sizes = k_sizes
-        self.dropout_p = dropout
-
-        # Cache for position embeddings
-        self._cached_cos_q = None
-        self._cached_sin_q = None
-        self._cached_cos_k = None
-        self._cached_sin_k = None
-        self._cached_feat_sizes_q = None
-        self._cached_feat_sizes_k = None
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        num_k_exclude_rope: int = 0,
-        rope_k_repeat: int = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len_q = query.shape[-2]
-        width_q = height_q = int(math.sqrt(seq_len_q))
-        current_feat_sizes_q = (width_q, height_q)
-        seq_len_k = key.shape[-2]
-        width_k = height_k = int(math.sqrt(seq_len_k))
-        current_feat_sizes_k = (width_k, height_k)
-        # Generate or use cached position embeddings
-        if (
-            self._cached_cos_q is None
-            or self._cached_sin_q is None
-            or self._cached_feat_sizes_q != current_feat_sizes_q
-        ):
-            cos_q, sin_q = self.rotary_emb_q(current_feat_sizes_q)
-            self._cached_cos_q = cos_q
-            self._cached_sin_q = sin_q
-            self._cached_feat_sizes_q = current_feat_sizes_q
-        else:
-            cos_q = self._cached_cos_q
-            sin_q = self._cached_sin_q
-        if (
-            self._cached_cos_k is None
-            or self._cached_sin_k is None
-            or self._cached_feat_sizes_k != current_feat_sizes_k
-        ):
-            cos_k, sin_k = self.rotary_emb_k(current_feat_sizes_k)
-            self._cached_cos_k = cos_k
-            self._cached_sin_k = sin_k
-            self._cached_feat_sizes_k = current_feat_sizes_k
-        else:
-            cos_k = self._cached_cos_k
-            sin_k = self._cached_sin_k
-
-        query = apply_rotary_pos_emb_2d_v2(query, cos_q, sin_q, repeat_freqs=1)
-        num_k_rope = key.shape[-2] - num_k_exclude_rope
-        key[:, :, :num_k_rope] = apply_rotary_pos_emb_2d_v2(
-            key[:, :, :num_k_rope], cos_k, sin_k, repeat_freqs=rope_k_repeat
-        )
-        scale = query.shape[-1] ** -0.5
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
-
-
-class EdgeTamMemoryAttentionLayer(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        hidden_size = config.memory_attention_hidden_size
-        self.self_attn = EdgeTamRoPEAttention(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            feat_sizes=config.memory_attention_rope_feat_sizes,
-            dropout=config.memory_attention_rope_dropout,
-        )
-        self.cross_attn_image = EdgeTamRoPEAttentionV2(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            dropout=config.memory_attention_rope_dropout,
-            q_sizes=config.memory_attention_rope_q_sizes,
-            k_sizes=config.memory_attention_rope_k_sizes,
-            kv_in_dim=64,
-        )
-
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
-        self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
-
-        self.layer_norm1 = nn.LayerNorm(hidden_size)
-        self.layer_norm2 = nn.LayerNorm(hidden_size)
-        self.layer_norm3 = nn.LayerNorm(hidden_size)
-        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
-
-        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
-
-        # Where to add pos enc
-        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
-        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Optional[Tensor] = None,
-        key_point_embedding: Optional[Tensor] = None,
-        num_k_exclude_rope: int = 0,
-        rope_k_repeat: int = 0,
-    ) -> torch.Tensor:
-        # Self-Attention
-        query = self.layer_norm1(queries)
-        if self.apply_pe_at_self_attn:
-            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
-        else:
-            query = self.self_attn(query=query, key=query, value=query)
-        queries = queries + self.dropout1(query)
-
-        # Cross-Attention
-        query = self.layer_norm2(queries)
-        query = self.cross_attn_image(
-            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
-            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
-            value=keys,
-            num_k_exclude_rope=num_k_exclude_rope,
-            rope_k_repeat=rope_k_repeat,
-        )
-        queries = queries + self.dropout2(query)
-        # MLP
-        query = self.layer_norm3(queries)
-        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
-        queries = queries + self.dropout3(query)
-        return queries
-
-
-class EdgeTamPerceiverFeedForward(nn.Module):
-    def __init__(self, config: EdgeTamConfig, hidden_size: int):
-        super().__init__()
-        intermediate_size = int(hidden_size * config.perceiver_resampler_ff_intermediate_size_multiplier)
-
-        self.layer_norm = nn.LayerNorm(hidden_size)
-        self.linear1 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.activation = nn.GELU()
-        self.linear2 = nn.Linear(intermediate_size, hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
-class EdgeTamPerceiverCrossAttention(nn.Module):
-    def __init__(self, config: EdgeTamConfig, hidden_size: int):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size
-        self.num_attention_heads = config.perceiver_resampler_num_attention_heads
-        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
-        self.attention_dropout = config.perceiver_resampler_attention_dropout
-        self.concat_kv_latents = config.perceiver_resampler_concat_kv_latents
-
-        self.inner_dim = self.attention_head_dim * self.num_attention_heads
-        self.scale = self.attention_head_dim**-0.5
-
-        self.layer_norm_input = nn.LayerNorm(hidden_size)
-        self.layer_norm_latents = nn.LayerNorm(hidden_size)
-
-        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
-        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
-        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
-        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
-
-    def forward(
-        self,
-        latents: torch.Tensor,
-        input_features: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        normalized_latents = self.layer_norm_latents(latents)
-        normalized_input = self.layer_norm_input(input_features)
-
-        query_states = self.query_proj(normalized_latents)
-
-        if self.concat_kv_latents:
-            key_value_input = torch.cat((normalized_input, normalized_latents), dim=-2)
-        else:
-            key_value_input = normalized_input
-
-        key_value_states = self.key_value_proj(key_value_input)
-        key_states, value_states = key_value_states.chunk(2, dim=-1)
-
-        query_states = self._separate_heads(query_states)
-        key_states = self._separate_heads(key_states)
-        value_states = self._separate_heads(value_states)
-
-        if positional_encoding is not None:
-            if self.concat_kv_latents:
-                raise ValueError("Position encoding is not supported when concat_kv_latents is True")
-            pos_encoding = self._separate_heads(positional_encoding)
-            key_states = key_states + pos_encoding
-            value_states = value_states + pos_encoding
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attention_output, _ = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attention_output = self._recombine_heads(attention_output)
-        return self.output_proj(attention_output)
-
-
-class EdgeTamPerceiverSelfAttention(nn.Module):
-    def __init__(self, config: EdgeTamConfig, hidden_size: int):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size
-        self.num_attention_heads = config.perceiver_resampler_num_attention_heads
-        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
-        self.attention_dropout = config.perceiver_resampler_attention_dropout
-
-        self.inner_dim = self.attention_head_dim * self.num_attention_heads
-        self.scale = self.attention_head_dim**-0.5
-
-        self.layer_norm = nn.LayerNorm(hidden_size)
-
-        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
-        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
-        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
-        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        normalized_states = self.layer_norm(hidden_states)
-
-        query_states = self.query_proj(normalized_states)
-        key_value_states = self.key_value_proj(normalized_states)
-        key_states, value_states = key_value_states.chunk(2, dim=-1)
-
-        query_states = self._separate_heads(query_states)
-        key_states = self._separate_heads(key_states)
-        value_states = self._separate_heads(value_states)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attention_output, _ = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attention_output = self._recombine_heads(attention_output)
-        return self.output_proj(attention_output)
-
-
-class EdgeTamPerceiverEncoderLayer(nn.Module):
-    def __init__(self, config: EdgeTamConfig, hidden_size: int):
-        super().__init__()
-        self.use_self_attention = config.perceiver_resampler_use_self_attention
-
-        self.cross_attention = EdgeTamPerceiverCrossAttention(config, hidden_size)
-        self.feed_forward = EdgeTamPerceiverFeedForward(config, hidden_size)
-        self.dropout = nn.Dropout(config.perceiver_resampler_hidden_dropout)
-
-        if self.use_self_attention:
-            self.self_attention = EdgeTamPerceiverSelfAttention(config, hidden_size)
-            self.self_feed_forward = EdgeTamPerceiverFeedForward(config, hidden_size)
-
-    def forward(
-        self,
-        latents: torch.Tensor,
-        input_features: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        cross_attention_output = self.cross_attention(latents, input_features, positional_encoding)
-        latents = latents + self.dropout(cross_attention_output)
-
-        feed_forward_output = self.feed_forward(latents)
-        latents = latents + feed_forward_output
-
-        if self.use_self_attention:
-            self_attention_output = self.self_attention(latents)
-            latents = latents + self_attention_output
-
-            self_feed_forward_output = self.self_feed_forward(latents)
-            latents = latents + self_feed_forward_output
-
-        return latents
-
-
-class EdgeTamPerceiverPositionEmbeddingSine(nn.Module):
-    def __init__(
-        self,
-        num_position_features: int,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        if num_position_features % 2 != 0:
-            raise ValueError(f"num_position_features must be even, got {num_position_features}")
-
-        self.num_position_features_per_dim = num_position_features // 2
-        self.temperature = temperature
-        self.normalize = normalize
-
-        if scale is not None and not normalize:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        cache_key = (hidden_states.shape[-2], hidden_states.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(hidden_states.shape[0], 1, 1, 1)
-
-        height, width = hidden_states.shape[-2:]
-
-        y_embed = (
-            torch.arange(1, height + 1, dtype=torch.float32, device=hidden_states.device)
-            .view(1, -1, 1)
-            .repeat(hidden_states.shape[0], 1, width)
-        )
-        x_embed = (
-            torch.arange(1, width + 1, dtype=torch.float32, device=hidden_states.device)
-            .view(1, 1, -1)
-            .repeat(hidden_states.shape[0], height, 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_position_features_per_dim, dtype=torch.float32, device=hidden_states.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features_per_dim)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-
-        positional_encoding = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = positional_encoding[0]
-        return positional_encoding
-
-
-def window_partition(hidden_state, window_size):
-    """
-    Partition into non-overlapping windows with padding if needed.
-
-    Args:
-        hidden_state (`torch.Tensor`):
-            Input tokens with [batch_size, height, width, num_channels].
-        window_size (`int`):
-            Window size.
-
-    Returns:
-        `tuple(torch.FloatTensor)` comprising various elements:
-        - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
-        - (padded_height, padded_width): padded height and width before partition
-    """
-    batch_size, height, width, num_channels = hidden_state.shape
-
-    pad_height = (window_size - height % window_size) % window_size
-    pad_width = (window_size - width % window_size) % window_size
-
-    # Noop in case pad_width == 0 and pad_height == 0.
-    hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
-
-    padded_height, padded_width = height + pad_height, width + pad_width
-
-    hidden_state = hidden_state.view(
-        batch_size, padded_height // window_size, window_size, padded_width // window_size, window_size, num_channels
-    )
-    windows = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
-    return windows, (padded_height, padded_width)
-
-
-class EdgeTamPerceiverResampler(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.perceiver_resampler_hidden_size
-        self.num_latents_1d = config.perceiver_resampler_num_latents
-        self.num_latents_2d = config.perceiver_resampler_num_latents_2d
-        self.num_layers = config.perceiver_resampler_num_layers
-        self.use_positional_encoding_at_input = config.perceiver_resampler_pos_encoding_at_input
-
-        if self.num_latents_1d > 0:
-            self.latents_1d = nn.Parameter(torch.randn(self.num_latents_1d, self.hidden_size))
-        if self.num_latents_2d > 0:
-            self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, self.hidden_size))
-
-        self.positional_encoding = EdgeTamPerceiverPositionEmbeddingSine(self.hidden_size)
-
-        self.layers = nn.ModuleList(
-            [EdgeTamPerceiverEncoderLayer(config, self.hidden_size) for _ in range(self.num_layers)]
-        )
-
-        self.layer_norm = nn.LayerNorm(self.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        output_latents = []
-        output_positional_encodings = []
-
-        if self.num_latents_1d > 0:
-            latents_1d, pos_1d = self._forward_1d(hidden_states, positional_encoding)
-            output_latents.append(latents_1d)
-            output_positional_encodings.append(pos_1d)
-
-        if self.num_latents_2d > 0:
-            latents_2d, pos_2d = self._forward_2d(hidden_states)
-            output_latents.append(latents_2d)
-            output_positional_encodings.append(pos_2d)
-
-        combined_latents = torch.cat(output_latents, dim=1)
-
-        combined_positional_encoding = None
-        if positional_encoding is not None and output_positional_encodings:
-            combined_positional_encoding = torch.cat(output_positional_encodings, dim=1)
-
-        return combined_latents, combined_positional_encoding
-
-    def _forward_1d(
-        self,
-        hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size = hidden_states.shape[0]
-
-        latents = self.latents_1d.unsqueeze(0).expand(batch_size, -1, -1)
-        flattened_features = hidden_states.permute(0, 2, 3, 1).flatten(1, 2)
-
-        positional_features = None
-        if self.use_positional_encoding_at_input and positional_encoding is not None:
-            positional_features = positional_encoding.permute(0, 2, 3, 1).flatten(1, 2)
-
-        for layer in self.layers:
-            latents = layer(latents, flattened_features, positional_features)
-
-        latents = self.layer_norm(latents)
-
-        output_positional_encoding = None
-        if positional_encoding is not None:
-            output_positional_encoding = torch.zeros_like(latents)
-
-        return latents, output_positional_encoding
-
-    def _forward_2d(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, channels, height, width = hidden_states.shape
-
-        latents_2d = self.latents_2d.unsqueeze(0).expand(batch_size, -1, -1).view(-1, 1, channels)
-
-        num_windows_per_dim = int(math.sqrt(self.num_latents_2d))
-        window_size = height // num_windows_per_dim
-
-        windowed_input = hidden_states.permute(0, 2, 3, 1)
-        windowed_features, _ = window_partition(windowed_input, window_size)
-        windowed_features = windowed_features.flatten(1, 2)
-
-        for layer in self.layers:
-            latents_2d = layer(latents_2d, windowed_features, positional_encoding=None)
-
-        latents_2d = latents_2d.view(batch_size, num_windows_per_dim, num_windows_per_dim, channels).permute(
-            0, 3, 1, 2
-        )
-
-        positional_encoding_2d = self.positional_encoding(latents_2d).to(dtype=hidden_states.dtype)
-        positional_encoding_2d = positional_encoding_2d.permute(0, 2, 3, 1).flatten(1, 2)
-
-        latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
-        latents_2d = self.layer_norm(latents_2d)
-
-        return latents_2d, positional_encoding_2d
-
-
-class EdgeTamMemoryAttention(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.layers = nn.ModuleList(
-            [EdgeTamMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
-        )
-        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
-
-    def forward(
-        self,
-        current_vision_features: torch.Tensor,
-        memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
-        num_object_pointer_tokens: int = 0,
-        num_spatial_memory_tokens: int = -1,
-    ):
-        """
-        Args:
-            current_vision_features (`torch.FloatTensor`):
-                The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
-                The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the memory features.
-            num_object_pointer_tokens (`int`, *optional*, defaults to 0):
-                The number of object pointer tokens.
-        """
-        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
-            current_vision_features, current_vision_position_embeddings = (
-                current_vision_features[0],
-                current_vision_position_embeddings[0],
-            )
-
-        output = current_vision_features
-        if current_vision_position_embeddings is not None:
-            output = output + 0.1 * current_vision_position_embeddings
-
-        # Convert to batch first
-        output = output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-        memory = memory.transpose(0, 1)
-        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
-
-        for layer in self.layers:
-            output = layer(
-                queries=output.unsqueeze(1) if output.ndim == 3 else output,
-                keys=memory.unsqueeze(1),
-                query_point_embedding=current_vision_position_embeddings.unsqueeze(1),
-                key_point_embedding=memory_posision_embeddings.unsqueeze(1),
-                num_k_exclude_rope=num_object_pointer_tokens,
-                rope_k_repeat=num_spatial_memory_tokens,
-            )
-
-        normed_output = self.layer_norm(output)
-
-        # Convert back to seq first
-        normed_output = normed_output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-
-        return normed_output
-
-
-@auto_docstring
-class EdgeTamVideoModel(EdgeTamModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
-    _keys_to_ignore_on_load_unexpected = []
-    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamTwoWayAttentionBlock, index=2)}
-
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__(config)
-        # For video sequence inference
-        self.memory_attention = EdgeTamMemoryAttention(config)
-        self.memory_encoder = EdgeTamMemoryEncoder(config)
-        self.no_memory_positional_encoding = torch.nn.Parameter(
-            torch.zeros(1, 1, config.vision_config.fpn_hidden_size)
-        )
-        self.mem_dim = config.memory_encoder_output_channels
-        self.num_maskmem = config.num_maskmem  # Number of memories accessible
-        # Temporal encoding of the memories
-        self.memory_temporal_positional_encoding = torch.nn.Parameter(
-            torch.zeros(self.num_maskmem, 1, 1, self.mem_dim)
-        )
-
-        # prompt encoder part
-        self.project_temporal_pos_encoding_in_object_pointers = (
-            config.project_temporal_pos_encoding_in_object_pointers
-        )  # compatibility with EdgeTam
-
-        self.no_object_pointer = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
-        # A conv layer to downsample the mask prompt to stride 4 (the same stride as
-        # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
-        # so that it can be fed into the SAM mask decoder to generate a pointer.
-        self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
-        # a feedforward layer on SAM output tokens to turn them into object pointers
-        self.object_pointer_proj = EdgeTamFeedForward(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
-
-        if self.project_temporal_pos_encoding_in_object_pointers:
-            # a linear projection on temporal positional encoding in object pointers to
-            # avoid potential interference with spatial positional encoding
-            self.temporal_positional_encoding_projection_layer = torch.nn.Linear(self.hidden_dim, self.mem_dim)
-        else:
-            self.temporal_positional_encoding_projection_layer = torch.nn.Identity()
-
-        self.occlusion_spatial_embedding_parameter = None  # compatibility with EdgeTam
-        if config.enable_occlusion_spatial_embedding:
-            self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
-
-        # Video Inference specific parameters
-        self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
-        # Additional configuration for video tracking
-        self.non_overlap_masks = config.non_overlap_masks
-        self.fill_hole_area = config.fill_hole_area
-        self.multimask_output_in_sam = config.multimask_output_in_sam
-        self.multimask_min_pt_num = config.multimask_min_pt_num
-        self.multimask_max_pt_num = config.multimask_max_pt_num
-        self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
-        self.max_object_pointers_in_encoder = config.max_object_pointers_in_encoder
-        # Compatibility with EDGETAM
-        self.enable_temporal_pos_encoding_for_object_pointers = config.enable_temporal_pos_encoding_for_object_pointers
-        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
-        # Compatibility with EDGETAM
-        self.preserve_temporal_direction_in_object_pointers = config.preserve_temporal_direction_in_object_pointers
-        self.multimask_output_for_tracking = config.multimask_output_for_tracking
-        self.spatial_perceiver = EdgeTamPerceiverResampler(config)
-
-        self.post_init()
-
-    @torch.no_grad()
-    def get_prompt_embeddings(
-        self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        r"""
-        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
-
-        Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
-                Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
-                point. The model will output `point_batch_size` times 3 masks in total.
-            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
-                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
-                processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
-                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes.
-            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
-                Optional input masks for the prompt encoder.
-        """
-        prompt_output = self.prompt_encoder(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            input_masks=input_masks,
-        )
-        return prompt_output
-
-    def _single_frame_forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
-        multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> EdgeTamImageSegmentationOutput:
-        """
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
-            Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
-            better results. The points can be obtained by passing a list of list of list to the processor that will
-            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
-            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
-            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
-            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
-            coordinates of the point. If a different number of points is passed either for each image, or for each
-            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
-            computation of the embedding will be skipped for these points using the labels.
-        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
-            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
-            official implementation, there are 3 types of labels
-
-            - `1`: the point is a point that contains the object of interest
-            - `0`: the point is a point that does not contain the object of interest
-            - `-1`: the point corresponds to the background
-
-            We added the label:
-
-            - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
-
-            The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
-            Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
-            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
-            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
-            In the order (`x1`, `y1`, `x2`, `y2`):
-
-            - `x1`: the x coordinate of the top left point of the input box
-            - `y1`: the y coordinate of the top left point of the input box
-            - `x2`: the x coordinate of the bottom right point of the input box
-            - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
-            SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
-            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
-            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
-            Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
-            efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
-            method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
-        multimask_output (`bool`, *optional*):
-            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
-            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
-            "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
-            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
-            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        """
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
-                " got {}.".format(input_boxes.shape),
-            )
-        if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
-                raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
-                )
-        else:
-            point_batch_size = 1
-            box_batch_size = 1
-
-        image_positional_embeddings = self.get_image_wide_positional_embeddings()
-        # repeat with batch size
-        batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings[-1].shape[0]
-        image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
-
-        vision_attentions = None
-        vision_hidden_states = None
-
-        if pixel_values is not None:
-            feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
-                self.get_image_features(
-                    pixel_values,
-                    **kwargs,
-                )
-            )
-            # flatten NxCxHxW to HWxNxC
-            feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-            feature_maps_position_embeddings = [
-                feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-                for feature_map_position_embedding in feature_maps_position_embeddings
-            ]
-
-            # add no memory embedding to the last feature map
-            feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
-
-            # reshape feature maps to the same shape as the backbone feature sizes
-            image_embeddings = [
-                feat.permute(1, 2, 0).view(batch_size, -1, *feat_size)
-                for feat, feat_size in zip(feature_maps, self.backbone_feature_sizes)
-            ]
-
-        if input_points is not None and input_labels is None:
-            input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
-
-        if input_points is None and input_boxes is None:
-            # If no points are provide, pad with an empty point (with label -1)
-            input_points = torch.zeros(
-                batch_size,
-                point_batch_size,
-                1,
-                2,
-                dtype=image_embeddings[-1].dtype,
-                device=image_embeddings[-1].device,
-            )
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
-
-        if input_masks is not None:
-            # If mask_inputs is provided, downsize it into low-res mask input if needed
-            # and feed it as a dense mask prompt into the SAM mask encoder
-            if input_masks.shape[-2:] != self.prompt_encoder.mask_input_size:
-                input_masks = F.interpolate(
-                    input_masks.float(),
-                    size=self.prompt_encoder.mask_input_size,
-                    align_corners=False,
-                    mode="bilinear",
-                    antialias=True,  # use antialias for downsampling
-                ).to(input_masks.dtype)
-
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            input_masks=input_masks,
-        )
-        low_res_multimasks, iou_scores, sam_output_tokens, object_score_logits = self.mask_decoder(
-            image_embeddings=image_embeddings[-1],
-            image_positional_embeddings=image_positional_embeddings,
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output,
-            high_resolution_features=image_embeddings[:-1],
-            attention_similarity=attention_similarity,
-            target_embedding=target_embedding,
-            **kwargs,
-        )
-
-        is_obj_appearing = object_score_logits > 0
-        # Mask used for spatial memories is always a *hard* choice between obj and no obj,
-        # consistent with the actual mask prediction
-        low_res_multimasks = torch.where(
-            is_obj_appearing[:, None, None],
-            low_res_multimasks,
-            NO_OBJ_SCORE,
-        )
-
-        # convert masks from possibly bfloat16 (or float16) to float32
-        # (older PyTorch versions before 2.1 don't support `interpolate` on bf16)
-        high_res_multimasks = (
-            F.interpolate(
-                low_res_multimasks.squeeze(1).float(),
-                size=(self.image_size, self.image_size),
-                mode="bilinear",
-                align_corners=False,
-            )
-            .unsqueeze(1)
-            .to(low_res_multimasks.dtype)
-        )
-        sam_output_token = sam_output_tokens[:, :, 0]
-        if multimask_output:
-            # take the best mask prediction (with the highest IoU estimation)
-            best_iou_inds = torch.argmax(iou_scores, dim=-1)
-            batch_inds = torch.arange(batch_size, device=high_res_multimasks.device)
-            point_batch_inds = torch.arange(point_batch_size, device=high_res_multimasks.device)
-            low_res_masks = low_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
-            high_res_masks = high_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
-            if sam_output_tokens.size(2) > 1:
-                sam_output_token = sam_output_tokens[batch_inds, point_batch_inds, best_iou_inds]
-        else:
-            low_res_masks, high_res_masks = low_res_multimasks[:, :, 0], high_res_multimasks[:, :, 0]
-
-        # Extract object pointer from the SAM output token (with occlusion handling)
-        object_pointer = self.object_pointer_proj(sam_output_token)
-        lambda_is_obj_appearing = is_obj_appearing.to(object_pointer.dtype)
-
-        object_pointer = lambda_is_obj_appearing * object_pointer
-        object_pointer = object_pointer + (1 - lambda_is_obj_appearing) * self.no_object_pointer
-
-        return EdgeTamImageSegmentationOutput(
-            iou_scores=iou_scores,
-            pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
-            high_res_masks=high_res_masks,
-            object_pointer=object_pointer,
-            object_score_logits=object_score_logits,
-            image_embeddings=image_embeddings,
-            vision_hidden_states=vision_hidden_states,
-            vision_attentions=vision_attentions,
-        )
-
-    def _get_orig_video_res_output(
-        self, inference_session: EdgeTamVideoInferenceSession, any_res_masks: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Resize the object scores to the original video resolution (video_res_masks)
-        and apply non-overlapping constraints for final output.
-        """
-        video_H = inference_session.video_height
-        video_W = inference_session.video_width
-        if any_res_masks.shape[-2:] == (video_H, video_W):
-            video_res_masks = any_res_masks
-        else:
-            video_res_masks = torch.nn.functional.interpolate(
-                any_res_masks,
-                size=(video_H, video_W),
-                mode="bilinear",
-                align_corners=False,
-            )
-        if self.non_overlap_masks:
-            video_res_masks = self._apply_non_overlapping_constraints(video_res_masks)
-        return any_res_masks, video_res_masks
-
-    def _consolidate_temp_output_across_obj(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        is_conditioning_frame: bool,
-        consolidate_at_video_res: bool = False,
-    ) -> dict[str, torch.Tensor]:
-        """
-        Consolidate per-object temporary outputs into a single unified output for all objects on a given frame.
-
-        This method merges individual object outputs stored in `temp_output_dict_per_obj` and `output_dict_per_obj`
-        into a consolidated output tensor. "Consolidate" here means combining separate per-object mask predictions
-        into a single tensor where each object occupies a different channel/batch dimension, filling missing objects
-        with placeholder values and optionally resizing to video resolution for better editing experience.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The inference session object containing per-object outputs, video metadata, and a feature cache.
-            frame_idx (`int`):
-                The frame index for which to consolidate outputs.
-            is_conditioning_frame (`bool`):
-                Whether this is a conditioning frame (True) or non-conditioning frame (False).
-            consolidate_at_video_res (`bool`, *optional*, defaults to `False`):
-                Whether to consolidate outputs at original video resolution rather than model resolution.
-
-        Returns:
-            `dict`: Consolidated output dictionary containing:
-                - pred_masks or pred_masks_video_res: Unified mask tensor with shape `(num_objects, 1, height, width)`.
-                Missing objects are filled with `NO_OBJ_SCORE` placeholder values.
-        """
-        batch_size = inference_session.get_obj_num()
-        # Optionally, we allow consolidating the temporary outputs at the original
-        # video resolution (to provide a better editing experience for mask prompts).
-        if consolidate_at_video_res:
-            consolidated_H = inference_session.video_height
-            consolidated_W = inference_session.video_width
-            consolidated_mask_key = "pred_masks_video_res"
-        else:
-            consolidated_H = consolidated_W = self.image_size // 4
-            consolidated_mask_key = "pred_masks"
-
-        # Initialize `consolidated_out`. Its "maskmem_features" and "maskmem_pos_enc"
-        # will be added when rerunning the memory encoder after applying non-overlapping
-        # constraints to object scores. Its "pred_masks" are prefilled with a large
-        # negative value (NO_OBJ_SCORE) to represent missing objects.
-        consolidated_out = {
-            consolidated_mask_key: torch.full(
-                size=(batch_size, 1, consolidated_H, consolidated_W),
-                fill_value=NO_OBJ_SCORE,
-                dtype=inference_session.torch_dtype,
-                device=inference_session.inference_state_device,
-            ),
-        }
-        for obj_idx in range(batch_size):
-            obj_mask = inference_session.get_output(
-                obj_idx, frame_idx, "pred_masks", is_temporary_output=True, is_conditioning_frame=is_conditioning_frame
-            )
-            # If the object doesn't appear in "temp_output_dict_per_obj" on this frame,
-            # we fall back and look up its previous output in "output_dict_per_obj".
-            # We look up both "cond_frame_outputs" and "non_cond_frame_outputs" in
-            # "output_dict_per_obj" to find a previous output for this object.
-            if obj_mask is None:
-                obj_mask = inference_session.get_output(
-                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=True
-                )
-            if obj_mask is None:
-                obj_mask = inference_session.get_output(
-                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=False
-                )
-            # If the object doesn't appear in "output_dict_per_obj" either, we skip it
-            # and leave its mask scores to the default scores (i.e. the NO_OBJ_SCORE
-            # placeholder above) and set its object pointer to be a dummy pointer.
-            if obj_mask is None:
-                continue
-            # Add the temporary object output mask to consolidated output mask
-            consolidated_pred_masks = consolidated_out[consolidated_mask_key]
-            if obj_mask.shape[-2:] == consolidated_pred_masks.shape[-2:]:
-                consolidated_pred_masks[obj_idx : obj_idx + 1] = obj_mask
-            else:
-                # Resize first if temporary object mask has a different resolution
-                resized_obj_mask = torch.nn.functional.interpolate(
-                    obj_mask,
-                    size=consolidated_pred_masks.shape[-2:],
-                    mode="bilinear",
-                    align_corners=False,
-                )
-                consolidated_pred_masks[obj_idx : obj_idx + 1] = resized_obj_mask
-
-        return consolidated_out
-
-    def _infer_on_video_frame_with_new_inputs(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
-        consolidate_at_video_res: bool = True,
-        **kwargs,
-    ) -> EdgeTamVideoSegmentationOutput:
-        """
-        Add new conditioning inputs to a video frame and run inference.
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-            obj_ids (`list[int]` or `int`):
-                The object ID(s) to associate with the new inputs.
-            frame_idx (`int`, *optional*):
-                The index of the frame on which to run inference. No need to provide when infering
-                on a new streamed frame.
-            frame (`torch.Tensor`, *optional*):
-                The frame to process. Provide when streaming.
-            consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
-                Whether to consolidate the output at the original video resolution
-        """
-        # Only batch size 1 is supported (single frame inference)
-        batch_size = 1
-        obj_ids = inference_session.obj_with_new_inputs
-        obj_idxs = [inference_session.obj_id_to_idx(obj_id) for obj_id in obj_ids]
-
-        for obj_idx in obj_idxs:
-            is_init_cond_frame = frame_idx not in inference_session.frames_tracked_per_obj[obj_idx]
-            if is_init_cond_frame:
-                reverse = False
-            else:
-                reverse = inference_session.frames_tracked_per_obj[obj_idx][frame_idx]["reverse"]
-
-            point_inputs = inference_session.point_inputs_per_obj[obj_idx].get(frame_idx, None)
-            mask_inputs = inference_session.mask_inputs_per_obj[obj_idx].get(frame_idx, None)
-
-            # Run single frame inference
-            current_out, _ = self._run_single_frame_inference(
-                inference_session=inference_session,
-                frame_idx=frame_idx,
-                obj_idx=obj_idx,
-                batch_size=batch_size,
-                is_init_cond_frame=is_init_cond_frame,
-                point_inputs=point_inputs,
-                mask_inputs=mask_inputs,
-                run_mem_encoder=False,
-                reverse=reverse,
-                streaming=frame is not None,
-            )
-
-            # Update the temporary output state
-            inference_session.store_output(
-                obj_idx,
-                frame_idx,
-                output_value=current_out,
-                is_temporary_output=True,
-                is_conditioning_frame=is_init_cond_frame,
-            )
-
-            # Resize the output mask to the original video resolution
-            consolidated_out = self._consolidate_temp_output_across_obj(
-                inference_session,
-                frame_idx,
-                is_conditioning_frame=is_init_cond_frame,
-                consolidate_at_video_res=consolidate_at_video_res,
-            )
-            consolidated_mask_key = "pred_masks_video_res" if consolidate_at_video_res else "pred_masks"
-            any_res_masks, video_res_masks = self._get_orig_video_res_output(
-                inference_session, consolidated_out[consolidated_mask_key]
-            )
-
-        self._propagate_in_video_preflight(inference_session)
-
-        return EdgeTamVideoSegmentationOutput(
-            video_res_masks=video_res_masks, consolidated_res_masks=any_res_masks, frame_idx=frame_idx
-        )
-
-    def _propagate_in_video_preflight(self, inference_session: EdgeTamVideoInferenceSession):
-        """
-        Prepare inference session and consolidate temporary outputs before video tracking begins.
-
-        This method performs essential pre-tracking operations by consolidating (merging and organizing)
-        per-object temporary outputs from user interactions into the main output storage. "Consolidate" here
-        means moving temporary outputs from `temp_output_dict_per_obj` into `output_dict_per_obj` after
-        running memory encoder on frames that lack memory features, ensuring all objects have proper
-        memory representations for consistent tracking across video frames.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-        """
-        # Check and make sure that every object has received input points or masks.
-        batch_size = inference_session.get_obj_num()
-        if batch_size == 0:
-            raise RuntimeError("No input points or masks are provided for any object; please add inputs first.")
-
-        # Consolidate per-object temporary outputs in "temp_output_dict_per_obj" and
-        # add them into "output_dict".
-        for obj_idx in range(batch_size):
-            for is_conditioning_frame in [False, True]:
-                # Separately consolidate conditioning and non-conditioning temp outputs
-                storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
-                # Find all the frames that contain temporary outputs for any objects
-                # (these should be the frames that have just received clicks for mask inputs
-                # via `_infer_on_video_frame_with_new_inputs`)
-                for frame_idx in inference_session.temp_output_dict_per_obj[obj_idx][storage_key]:
-                    # Run memory encoder on the temporary outputs (if the memory feature is missing)
-                    # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                    if (
-                        inference_session.temp_output_dict_per_obj[obj_idx][storage_key][frame_idx]["maskmem_features"]
-                        is None
-                    ):
-                        high_res_masks = torch.nn.functional.interpolate(
-                            inference_session.get_output(
-                                obj_idx,
-                                frame_idx,
-                                "pred_masks",
-                                is_temporary_output=True,
-                                is_conditioning_frame=is_conditioning_frame,
-                            ),
-                            size=(self.image_size, self.image_size),
-                            mode="bilinear",
-                            align_corners=False,
-                        )
-                        maskmem_features, maskmem_pos_enc = self._run_memory_encoder(
-                            inference_session=inference_session,
-                            frame_idx=frame_idx,
-                            batch_size=1,  # run on the slice of a single object
-                            high_res_masks=high_res_masks,
-                            object_score_logits=inference_session.get_output(
-                                obj_idx,
-                                frame_idx,
-                                "object_score_logits",
-                                is_temporary_output=True,
-                                is_conditioning_frame=is_conditioning_frame,
-                            ),
-                            # these frames are what the user interacted with
-                            is_mask_from_pts=True,
-                        )
-                        inference_session.store_output(
-                            obj_idx,
-                            frame_idx,
-                            "maskmem_features",
-                            maskmem_features,
-                            is_temporary_output=True,
-                            is_conditioning_frame=is_conditioning_frame,
-                        )
-                        inference_session.store_output(
-                            obj_idx,
-                            frame_idx,
-                            "maskmem_pos_enc",
-                            maskmem_pos_enc,
-                            is_temporary_output=True,
-                            is_conditioning_frame=is_conditioning_frame,
-                        )
-                        # transfer temporary output to non-temporary output
-                        inference_session.output_dict_per_obj[obj_idx][storage_key][frame_idx] = (
-                            inference_session.temp_output_dict_per_obj[obj_idx][storage_key][frame_idx]
-                        )
-                # clear temporary outputs in `temp_output_dict_per_obj`
-                inference_session.temp_output_dict_per_obj[obj_idx][storage_key].clear()
-
-            # make sure that every object has received input points or masks
-            obj_output_dict = inference_session.output_dict_per_obj[obj_idx]
-            if len(obj_output_dict["cond_frame_outputs"]) == 0:
-                obj_id = inference_session.obj_idx_to_id(obj_idx)
-                raise RuntimeError(
-                    f"No input points or masks are provided for object id {obj_id}; please add inputs first."
-                )
-            # edge case: if an output is added to "cond_frame_outputs", we remove any prior
-            # output on the same frame in "non_cond_frame_outputs"
-            for frame_idx in obj_output_dict["cond_frame_outputs"]:
-                obj_output_dict["non_cond_frame_outputs"].pop(frame_idx, None)
-
-        inference_session.obj_with_new_inputs = []
-
-    @torch.inference_mode()
-    @auto_docstring(custom_intro="Propagate the objects through a streamed video frame.")
-    def forward(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
-        reverse: bool = False,
-        consolidate_at_video_res: bool = True,
-    ) -> EdgeTamVideoSegmentationOutput:
-        r"""
-        inference_session (`EdgeTamVideoInferenceSession`):
-            The video inference session object.
-        frame_idx (`int`, *optional*):
-            The index of the frame on which to run inference. No need to provide when inferring
-            on a new streamed frame.
-        frame (`torch.Tensor`, *optional*):
-            The frame to process. Provide when streaming.
-        reverse (`bool`, *optional*, defaults to `False`):
-            Whether to propagate in reverse.
-        consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
-            Whether to consolidate the output at the original video resolution
-        """
-        if frame is not None:
-            frame_idx = inference_session.add_new_frame(frame)
-
-        if inference_session.obj_with_new_inputs:
-            return self._infer_on_video_frame_with_new_inputs(
-                inference_session, frame_idx=frame_idx, frame=frame, consolidate_at_video_res=consolidate_at_video_res
-            )
-        elif frame is not None and inference_session.get_obj_num() == 0:
-            raise ValueError("No objects are provided for tracking; please add inputs first.")
-
-        batch_size = inference_session.get_obj_num()
-        pred_masks_per_obj = [None] * batch_size
-        for obj_idx in range(batch_size):
-            # We skip those frames already in consolidated outputs (these are frames
-            # that received input clicks or mask). Note that we cannot directly run
-            # batched forward on them via `_run_single_frame_inference` because the
-            # number of clicks on each object might be different.
-            if frame_idx in inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]:
-                pred_masks = inference_session.get_output(
-                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=True
-                )
-            else:
-                current_out, pred_masks = self._run_single_frame_inference(
-                    inference_session=inference_session,
-                    obj_idx=obj_idx,
-                    frame_idx=frame_idx,
-                    batch_size=1,  # run on the slice of a single object
-                    is_init_cond_frame=False,
-                    point_inputs=None,
-                    mask_inputs=None,
-                    reverse=reverse,
-                    run_mem_encoder=True,
-                    streaming=frame is not None,
-                )
-                inference_session.store_output(
-                    obj_idx,
-                    frame_idx,
-                    output_value=current_out,
-                    is_temporary_output=False,
-                    is_conditioning_frame=False,
-                )
-
-            inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
-            pred_masks_per_obj[obj_idx] = pred_masks
-
-        # Resize the output mask to the original video resolution (we directly use
-        # the mask scores on GPU for output to avoid any CPU conversion in between)
-        if len(pred_masks_per_obj) > 1:
-            all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
-        else:
-            all_pred_masks = pred_masks_per_obj[0]
-        consolidated_res_masks, video_res_masks = self._get_orig_video_res_output(inference_session, all_pred_masks)
-
-        return EdgeTamVideoSegmentationOutput(
-            video_res_masks=video_res_masks, consolidated_res_masks=consolidated_res_masks, frame_idx=frame_idx
-        )
-
-    @torch.inference_mode()
-    @auto_docstring(
-        custom_intro="""
-        Propagate the objects through the video frames. Used when initializing an inference session with a whole video.
-        Yields EdgeTamVideoSegmentationOutput for each frame.
-        """
-    )
-    def propagate_in_video_iterator(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        start_frame_idx: Optional[int] = None,
-        max_frame_num_to_track: Optional[int] = None,
-        reverse: bool = False,
-    ) -> Iterator[EdgeTamVideoSegmentationOutput]:
-        r"""
-        inference_session (`EdgeTamVideoInferenceSession`):
-            The video inference session object.
-        start_frame_idx (`int`, *optional*):
-            The starting frame index for propagation.
-            Need to be provided if `forward` hasn't been called on new inputs yet.
-            If not provided, the starting frame index will be the earliest frame with input points.
-        max_frame_num_to_track (`int`, *optional*):
-            The maximum number of frames to track.
-        reverse (`bool`, *optional*, defaults to `False`):
-            Whether to propagate in reverse.
-        """
-        num_frames = inference_session.num_frames
-
-        # set start index, end index, and processing order
-        if start_frame_idx is None:
-            # default: start from the earliest frame with input points
-            frames_with_inputs = [
-                frame_idx
-                for obj_output_dict in inference_session.output_dict_per_obj.values()
-                for frame_idx in obj_output_dict["cond_frame_outputs"]
-            ]
-            if not frames_with_inputs:
-                raise ValueError(
-                    "Cannot determine the starting frame index; please specify it manually, or run inference on a frame with inputs first."
-                )
-            start_frame_idx = min(frames_with_inputs)
-        if max_frame_num_to_track is None:
-            # default: track all the frames in the video
-            max_frame_num_to_track = num_frames
-        if reverse:
-            end_frame_idx = max(start_frame_idx - max_frame_num_to_track, 0)
-            if start_frame_idx > 0:
-                processing_order = range(start_frame_idx, end_frame_idx - 1, -1)
-            else:
-                processing_order = []  # skip reverse tracking if starting from frame 0
-        else:
-            end_frame_idx = min(start_frame_idx + max_frame_num_to_track, num_frames - 1)
-            processing_order = range(start_frame_idx, end_frame_idx + 1)
-
-        for frame_idx in tqdm(processing_order, desc="propagate in video"):
-            edgetam_video_output = self(inference_session, frame_idx=frame_idx)
-            yield edgetam_video_output
-
-    def _prepare_vision_features(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        batch_size: int,
-    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        """Prepare vision features for a frame."""
-
-        # Check if features are cached
-        if cached_features := inference_session.cache.get_vision_features(frame_idx):
-            vision_feats = cached_features["vision_feats"]
-            vision_pos_embeds = cached_features["vision_pos_embeds"]
-        else:
-            # Compute features using image encoder
-            image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(image_batch)
-            vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
-            vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_position_embeddings]
-            # Cache features
-            inference_session.cache.cache_vision_features(
-                frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
-            )
-
-        # Expand to batch size if needed
-        if batch_size > 1:
-            vision_feats = vision_feats.expand(batch_size, -1, -1, -1)
-            vision_pos_embeds = [pe.expand(batch_size, -1, -1, -1) for pe in vision_pos_embeds]
-
-        return vision_feats, vision_pos_embeds
-
-    def _run_memory_encoder(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        batch_size: int,
-        high_res_masks: torch.Tensor,
-        object_score_logits: torch.Tensor,
-        is_mask_from_pts: bool,
-    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        """
-        Run the memory encoder on `high_res_masks`. This is usually after applying
-        non-overlapping constraints to object scores. Since their scores changed, their
-        memory also need to be computed again with the memory encoder.
-        """
-        # Retrieve correct image features
-        current_vision_feats, _ = self._prepare_vision_features(inference_session, frame_idx, batch_size)
-        maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-            current_vision_feats=current_vision_feats,
-            pred_masks_high_res=high_res_masks,
-            object_score_logits=object_score_logits,
-            is_mask_from_pts=is_mask_from_pts,
-        )
-
-        # save in bfloat16 to save memory, and for consistency with the original implementation
-        maskmem_features = maskmem_features.to(torch.bfloat16)
-        # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-        maskmem_pos_enc = self._get_maskmem_pos_enc(inference_session, {"maskmem_pos_enc": maskmem_pos_enc})
-        return maskmem_features, maskmem_pos_enc
-
-    def _get_maskmem_pos_enc(
-        self, inference_session: EdgeTamVideoInferenceSession, current_out: dict[str, Any]
-    ) -> Optional[list[torch.Tensor]]:
-        """
-        `maskmem_pos_enc` is the same across frames and objects, so we cache it as
-        a constant in the inference session to reduce session storage size.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-            current_out (`dict`):
-                The output dictionary for the current frame and object.
-        """
-        # "out_maskmem_pos_enc" should be either a list of tensors or None
-        out_maskmem_pos_enc = current_out["maskmem_pos_enc"]
-        if out_maskmem_pos_enc is not None:
-            if inference_session.cache.get_model_constant("maskmem_pos_enc") is None:
-                if not isinstance(out_maskmem_pos_enc, list):
-                    raise ValueError("maskmem_pos_enc must be a list of tensors")
-                # only take the slice for one object, since it's same across objects
-                maskmem_pos_enc = [x[0:1].clone() for x in out_maskmem_pos_enc]
-                inference_session.cache.cache_model_constant("maskmem_pos_enc", maskmem_pos_enc)
-            else:
-                maskmem_pos_enc = inference_session.cache.get_model_constant("maskmem_pos_enc")
-            # expand the cached maskmem_pos_enc to the actual batch size
-            batch_size = out_maskmem_pos_enc[0].size(0)
-            expanded_maskmem_pos_enc = [x.expand(batch_size, -1, -1, -1) for x in maskmem_pos_enc]
-        else:
-            expanded_maskmem_pos_enc = None
-        return expanded_maskmem_pos_enc
-
-    def _run_single_frame_inference(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        obj_idx: int,
-        batch_size: int,
-        is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
-        reverse: bool,
-        run_mem_encoder: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
-        streaming: bool = False,
-    ) -> tuple[dict[str, Any], torch.Tensor]:
-        """Run tracking on a single frame based on current inputs and previous memory."""
-        # Retrieve correct image features
-
-        current_vision_feats, current_vision_pos_embeds = self._prepare_vision_features(
-            inference_session, frame_idx, batch_size
-        )
-        # point and mask should not appear as input simultaneously on the same frame
-        if point_inputs is not None and mask_inputs is not None:
-            raise ValueError(
-                "point_inputs and mask_inputs should not appear as input simultaneously on the same frame"
-            )
-        current_out = self.track_step(
-            inference_session=inference_session,
-            frame_idx=frame_idx,
-            obj_idx=obj_idx,
-            is_init_cond_frame=is_init_cond_frame,
-            current_vision_feats=current_vision_feats,
-            current_vision_pos_embeds=current_vision_pos_embeds,
-            point_inputs=point_inputs,
-            mask_inputs=mask_inputs,
-            num_frames=inference_session.num_frames,
-            track_in_reverse=reverse,
-            run_mem_encoder=run_mem_encoder,
-            prev_sam_mask_logits=prev_sam_mask_logits,
-            streaming=streaming,
-        )
-
-        maskmem_features = current_out["maskmem_features"]
-        if maskmem_features is not None:
-            # save in bfloat16 to save memory, and for consistency with the original implementation
-            maskmem_features = maskmem_features.to(torch.bfloat16)
-        pred_masks = current_out["pred_masks"]
-        # potentially fill holes in the predicted masks
-        if self.fill_hole_area > 0:
-            pred_masks = fill_holes_in_mask_scores(pred_masks, self.fill_hole_area)
-        # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-        maskmem_pos_enc = self._get_maskmem_pos_enc(inference_session, current_out)
-        # object pointer is a small tensor, so we always keep it on GPU memory for fast access
-        object_pointer = current_out["object_pointer"]
-        object_score_logits = current_out["object_score_logits"]
-        # make a compact version of this frame's output to reduce the state size
-        compact_current_out = {
-            "maskmem_features": maskmem_features,
-            "maskmem_pos_enc": maskmem_pos_enc,
-            "pred_masks": pred_masks,
-            "object_pointer": object_pointer,
-            "object_score_logits": object_score_logits,
-        }
-        return compact_current_out, pred_masks
-
-    def _use_mask_as_output(
-        self,
-        backbone_features: torch.Tensor,
-        high_res_features: list[torch.Tensor],
-        mask_inputs: torch.Tensor,
-    ) -> EdgeTamImageSegmentationOutput:
-        """
-        Directly turn binary `mask_inputs` into a output mask logits without using SAM.
-        (same input and output shapes as in forward above).
-        """
-        # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
-        out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
-        mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
-        high_res_masks = mask_inputs_float * out_scale + out_bias
-        low_res_masks = F.interpolate(
-            high_res_masks.float(),
-            size=(high_res_masks.size(-2) // 4, high_res_masks.size(-1) // 4),
-            align_corners=False,
-            mode="bilinear",
-            antialias=True,  # use antialias for downsampling
-        ).to(backbone_features[0].dtype)
-        # a dummy IoU prediction of all 1's under mask input
-        iou_scores = mask_inputs.new_ones(mask_inputs.size(0), 1).to(backbone_features[0].dtype)
-        # produce an object pointer using the SAM decoder from the mask input
-        object_pointer = self._single_frame_forward(
-            input_masks=self.mask_downsample(mask_inputs_float.to(backbone_features[0].dtype)),
-            image_embeddings=high_res_features + [backbone_features],
-        ).object_pointer
-        # In this method, we are treating mask_input as output, e.g. using it directly to create spatial mem;
-        # Below, we follow the same design axiom to use mask_input to decide if obj appears or not instead of relying
-        # on the object_scores from the SAM decoder.
-        is_obj_appearing = torch.any(mask_inputs.flatten(1).float() > 0.0, dim=1)
-        is_obj_appearing = is_obj_appearing[..., None]
-        lambda_is_obj_appearing = is_obj_appearing.to(backbone_features[0].dtype)
-        object_score_logits = out_scale * lambda_is_obj_appearing + out_bias
-        object_pointer = lambda_is_obj_appearing * object_pointer
-        object_pointer = object_pointer + (1 - lambda_is_obj_appearing) * self.no_object_pointer
-        return EdgeTamImageSegmentationOutput(
-            iou_scores=iou_scores,
-            pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
-            high_res_masks=high_res_masks,
-            object_pointer=object_pointer,
-            object_score_logits=object_score_logits,
-            image_embeddings=high_res_features + [backbone_features],
-        )
-
-    def _prepare_memory_conditioned_features(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        obj_idx: int,
-        is_initial_conditioning_frame: bool,
-        current_vision_features: list[torch.Tensor],
-        current_vision_positional_embeddings: list[torch.Tensor],
-        num_total_frames: int,
-        track_in_reverse_time: bool = False,
-        streaming: bool = False,
-    ) -> torch.Tensor:
-        """
-        Fuse current frame's visual features with memory from previous frames for enhanced object tracking.
-
-        This method conditions the current frame's visual features on temporal memory from previous frames,
-        enabling consistent object tracking across video sequences. For initial conditioning frames, it uses
-        no-memory embeddings. For subsequent frames, it retrieves and integrates memory features from both
-        conditioning frames (user interactions) and non-conditioning frames (tracked results) via cross-attention.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-            frame_idx (`int`):
-                Index of the current frame being processed.
-            obj_idx (`int`):
-                Index of the object being processed.
-            is_initial_conditioning_frame (`bool`):
-                Whether this is an initial conditioning frame with user inputs (True) or a subsequent
-                tracking frame (False).
-            current_vision_features (`list[torch.Tensor]`):
-                List of vision feature tensors for the current frame, with the last element being the
-                highest-level features of shape `(seq_len, batch_size, channels)`.
-            current_vision_positional_embeddings (`list[torch.Tensor]`):
-                List of positional embedding tensors corresponding to the vision features.
-            num_total_frames (`int`):
-                Total number of frames in the video sequence.
-            track_in_reverse_time (`bool`, *optional*, defaults to `False`):
-                Whether tracking is performed in reverse temporal order.
-            streaming (`bool`, *optional*, defaults to `False`):
-                Whether this is streaming inference mode.
-
-        Returns:
-            `torch.Tensor`: Memory-conditioned feature tensor of shape `(batch_size, channels, height, width)`
-                suitable for input to the SAM decoder.
-        """
-        # Get dimensions from the highest-level (lowest-resolution) feature map
-        batch_size = current_vision_features[-1].size(1)
-        num_channels = self.hidden_dim
-        height, width = self.backbone_feature_sizes[-1]
-        device = current_vision_features[-1].device
-
-        # If memory is disabled (e.g., for single image SAM), return current features directly.
-        if self.num_maskmem == 0:
-            # Permute (SeqLen, Batch, Channels) -> (Batch, Channels, SeqLen) then view as (Batch, Channels, Height, Width)
-            # Assuming SeqLen = Height * Width for the last feature map
-            current_feature_map = (
-                current_vision_features[-1].permute(1, 2, 0).view(batch_size, num_channels, height, width)
-            )
-            return current_feature_map
-
-        num_object_pointer_tokens = 0
-        temporal_position_sign_multiplier = -1 if track_in_reverse_time else 1
-
-        # Step 1: Condition the visual features of the current frame on previous memories
-        if not is_initial_conditioning_frame:
-            # Retrieve memories encoded from previous frames
-            memories_to_concatenate = []
-            memory_positional_embeddings_to_concatenate = []
-
-            # Ensure there are conditioning frame outputs to process
-            conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
-            if not conditioning_outputs:
-                raise ValueError(
-                    "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
-                )
-
-            # Select a maximum number of temporally closest conditioning frames for cross-attention
-            # Store (temporal_position, output_data) tuples
-            temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
-
-            # Add non-conditioning memory frames (up to self.num_maskmem - 1)
-            # These are typically frames tracked by the model without direct user input.
-            # Frames are selected with a stride, prioritizing the most recent ones.
-            for temporal_pos_offset in range(1, self.num_maskmem):
-                # relative_temporal_offset: how many frames before (or after if reversing) the current frame
-                relative_temporal_offset = self.num_maskmem - temporal_pos_offset
-                previous_frame_idx = -1  # Initialize with an invalid index
-
-                if relative_temporal_offset == 1:
-                    # For the immediately preceding/succeeding frame, always take it regardless of stride
-                    if not track_in_reverse_time:
-                        previous_frame_idx = frame_idx - relative_temporal_offset
-                    else:
-                        previous_frame_idx = frame_idx + relative_temporal_offset
-                else:
-                    # For other memory frames, select based on stride
-                    if not track_in_reverse_time:
-                        # Find the nearest frame among every stride-th frame before the current one (excluding current-1)
-                        base_idx = frame_idx - 2
-                        previous_frame_idx = base_idx - (relative_temporal_offset - 2)
-                    else:
-                        base_idx = frame_idx + 2
-                        previous_frame_idx = base_idx + (relative_temporal_offset - 2)
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    previous_frame_idx, None
-                )
-
-                temporal_positions_and_previous_outputs.append((temporal_pos_offset, output_data))
-
-            for temporal_pos_offset, prev_output_data in temporal_positions_and_previous_outputs:
-                if prev_output_data is None:
-                    continue  # Skip if no output data for this temporal position (e.g., padding frames)
-
-                # Load memory features (potentially from CPU to GPU)
-                # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
-                memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
-                memories_to_concatenate.append(memory_features.permute(1, 0, 2))
-
-                # Spatial positional encoding (potentially from CPU to GPU)
-                spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"][-1].to(device, non_blocking=True)
-                spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1).permute(1, 0, 2)
-                # Add temporal positional encoding
-                # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
-                temporal_encoding_index = self.num_maskmem - temporal_pos_offset - 1
-                combined_memory_pos_embed = (
-                    spatial_memory_pos_embed + self.memory_temporal_positional_encoding[temporal_encoding_index]
-                )
-                memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
-
-            num_spatial_memory_tokens = len(memories_to_concatenate)
-
-            # Construct the list of past object pointers to be used in attention
-            if streaming:
-                max_object_pointers_to_use = self.max_object_pointers_in_encoder
-            else:
-                max_object_pointers_to_use = min(num_total_frames, self.max_object_pointers_in_encoder)
-            temporal_diff_and_pointers = []
-
-            # Add object pointers from selected conditioning frames
-            # Optionally, only include pointers from past frames during evaluation
-            eligible_conditioning_outputs = conditioning_outputs
-            if not self.training:
-                eligible_conditioning_outputs = {
-                    t: out
-                    for t, out in conditioning_outputs.items()
-                    if (t >= frame_idx if track_in_reverse_time else t <= frame_idx)
-                }
-
-            for t_idx, out_data in eligible_conditioning_outputs.items():
-                temporal_difference = (frame_idx - t_idx) * temporal_position_sign_multiplier
-                if not self.preserve_temporal_direction_in_object_pointers:
-                    temporal_difference = abs(temporal_difference)
-                temporal_diff_and_pointers.append((temporal_difference, out_data["object_pointer"]))
-
-            # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
-            for t_diff_offset in range(1, max_object_pointers_to_use):
-                ref_frame_idx = frame_idx + t_diff_offset if track_in_reverse_time else frame_idx - t_diff_offset
-                if ref_frame_idx < 0 or (
-                    not streaming and num_total_frames is not None and ref_frame_idx >= num_total_frames
-                ):
-                    break  # Stop if frame index is out of bounds
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                out_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    ref_frame_idx, None
-                )
-                if out_data is not None:
-                    temporal_diff_and_pointers.append((t_diff_offset, out_data["object_pointer"]))
-
-            if temporal_diff_and_pointers:
-                temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
-                # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
-                object_pointers = torch.stack(object_pointers_list, dim=0)
-
-                if self.enable_temporal_pos_encoding_for_object_pointers:
-                    max_temporal_diff = float(max_object_pointers_to_use - 1)
-                    # Determine dimensionality for temporal positional encoding of pointers
-                    pointer_tpos_dim = (
-                        num_channels if self.project_temporal_pos_encoding_in_object_pointers else self.mem_dim
-                    )
-
-                    # Normalize temporal differences before sine PE calculation
-                    normalized_temporal_diffs = (
-                        torch.tensor(temporal_differences, device=device, dtype=torch.float32) / max_temporal_diff
-                    )
-                    sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
-                    projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
-                    object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
-                else:
-                    object_pointers_pos_embed = object_pointers.new_zeros(
-                        len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
-                    )
-
-                if self.mem_dim < num_channels:
-                    # If memory dimension is smaller, reshape/split pointers and repeat positional encoding
-                    num_splits = num_channels // self.mem_dim
-                    object_pointers = object_pointers.reshape(-1, batch_size, num_splits, self.mem_dim)
-                    object_pointers = object_pointers.permute(0, 2, 1, 3).flatten(
-                        0, 1
-                    )  # (SeqLen_ptr*num_splits, Batch, MemDim)
-                    object_pointers_pos_embed = object_pointers_pos_embed.repeat_interleave(num_splits, dim=0)
-
-                memories_to_concatenate.append(object_pointers)
-                memory_positional_embeddings_to_concatenate.append(object_pointers_pos_embed)
-                num_object_pointer_tokens = object_pointers.shape[0]
-        else:
-            # For initial conditioning frames, no prior memory is used directly in this block.
-            # The model might handle this with a special token or mechanism.
-            # If configured, directly add a learnable "no memory" embedding.
-            # current_vision_features[-1] has shape (SeqLen, Batch, Channels)
-            conditioned_feature_map_flat = current_vision_features[-1] + self.no_memory_embedding
-            # Reshape to (Batch, Channels, Height, Width)
-            conditioned_feature_map = conditioned_feature_map_flat.permute(1, 2, 0).view(
-                batch_size, num_channels, height, width
-            )
-            return conditioned_feature_map
-
-        # Step 2: Concatenate all retrieved memories and their positional embeddings.
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
-        combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
-
-        # Step 3: Forward through the memory attention mechanism.
-        conditioned_feature_map_flat = self.memory_attention(
-            current_vision_features=current_vision_features,  # Pass the list as expected
-            current_vision_position_embeddings=current_vision_positional_embeddings,
-            memory=combined_memory,
-            memory_posision_embeddings=combined_memory_positional_embeddings,  # Corrected typo from API
-            num_object_pointer_tokens=num_object_pointer_tokens,
-            num_spatial_memory_tokens=num_spatial_memory_tokens,
-        )
-
-        # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
-        conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
-        )
-        return conditioned_feature_map
-
-    def _encode_new_memory(
-        self,
-        current_vision_feats: list[torch.Tensor],
-        pred_masks_high_res: torch.Tensor,
-        object_score_logits: torch.Tensor,
-        is_mask_from_pts: bool,
-    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        """Encode the current image and its prediction into a memory feature."""
-        batch_size = current_vision_feats[-1].size(1)  # batch size on this frame
-        channels = self.hidden_dim
-        height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
-        # top-level feature, (HW)BC => BCHW
-        pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(batch_size, channels, height, width)
-        if self.non_overlap_masks_for_mem_enc and not self.training:
-            # optionally, apply non-overlapping constraints to the masks (it's applied
-            # in the batch dimension and should only be used during eval, where all
-            # the objects come from the same video under batch size 1).
-            pred_masks_high_res = self._apply_non_overlapping_constraints(pred_masks_high_res)
-        # scale the raw mask logits with a temperature before applying sigmoid
-        binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
-        if binarize and not self.training:
-            mask_for_mem = (pred_masks_high_res > 0).to(pred_masks_high_res.dtype)
-        else:
-            # apply sigmoid on the raw mask logits to turn them into range (0, 1)
-            mask_for_mem = torch.sigmoid(pred_masks_high_res)
-        # apply scale and bias terms to the sigmoid probabilities
-        mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
-        mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
-
-        maskmem_features, maskmem_pos_enc = self.memory_encoder(
-            pix_feat,
-            mask_for_mem,
-            skip_mask_sigmoid=True,  # sigmoid already applied
-        )
-        # add a no-object embedding to the spatial memory to indicate that the frame
-        # is predicted to be occluded (i.e. no object is appearing in the frame)
-        if self.occlusion_spatial_embedding_parameter is not None:
-            is_obj_appearing = (object_score_logits > 0).float()
-            maskmem_features += (1 - is_obj_appearing[..., None]) * self.occlusion_spatial_embedding_parameter[
-                ..., None, None
-            ].expand(*maskmem_features.shape)
-
-        maskmem_features, maskmem_pos_enc[0] = self.spatial_perceiver(maskmem_features, maskmem_pos_enc[0])
-
-        return maskmem_features, maskmem_pos_enc
-
-    def _track_step(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        obj_idx: int,
-        is_init_cond_frame: bool,
-        current_vision_feats: list[torch.Tensor],
-        current_vision_pos_embeds: list[torch.Tensor],
-        point_inputs: Optional[dict],
-        mask_inputs: Optional[torch.Tensor],
-        num_frames: int,
-        track_in_reverse: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor],
-        streaming: bool = False,
-    ) -> tuple[dict[str, Any], EdgeTamImageSegmentationOutput, Optional[list[torch.Tensor]], torch.Tensor]:
-        """
-        Perform a single tracking step, processing vision features and inputs to generate SAM outputs.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-            frame_idx (`int`):
-                Index of the current frame.
-            is_init_cond_frame (`bool`):
-                Whether this is an initial conditioning frame.
-            current_vision_feats (`list[torch.Tensor]`):
-                Current frame's vision features.
-            current_vision_pos_embeds (`list[torch.Tensor]`):
-                Current frame's positional embeddings.
-            point_inputs (`dict`, *optional*):
-                Point prompt inputs for the current frame.
-            mask_inputs (`torch.Tensor`, *optional*):
-                Mask prompt inputs for the current frame.
-            output_dict (`dict[str, Any]`):
-                Output dictionary containing previous frame outputs.
-            num_frames (`int`):
-                Total number of frames in the video.
-            track_in_reverse (`bool`):
-                Whether tracking is performed in reverse time order.
-            prev_sam_mask_logits (`torch.Tensor`, *optional*):
-                Previously predicted SAM mask logits.
-            streaming (`bool`, *optional*, defaults to `False`):
-                Whether this is streaming inference.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - current_out (`dict`): Dictionary with current frame outputs including point and mask inputs.
-                - sam_outputs: SAM model outputs for the current frame.
-                - high_res_features: High-resolution features for the SAM head.
-                - pix_feat: Pixel features used in the SAM head.
-        """
-        current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
-        # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
-        if len(current_vision_feats) > 1:
-            high_res_features = [
-                x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
-                for x, s in zip(current_vision_feats[:-1], self.backbone_feature_sizes[:-1])
-            ]
-        else:
-            high_res_features = None
-        if mask_inputs is not None:
-            # We directly output the mask input (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
-            pix_feat = current_vision_feats[-1].permute(1, 2, 0)
-            pix_feat = pix_feat.view(-1, self.hidden_dim, *self.backbone_feature_sizes[-1])
-            sam_outputs = self._use_mask_as_output(pix_feat, high_res_features, mask_inputs)
-        else:
-            # fused the visual feature with previous memory features in the memory bank
-            pix_feat = self._prepare_memory_conditioned_features(
-                inference_session=inference_session,
-                frame_idx=frame_idx,
-                obj_idx=obj_idx,
-                is_initial_conditioning_frame=is_init_cond_frame,
-                current_vision_features=current_vision_feats[-1:],
-                current_vision_positional_embeddings=current_vision_pos_embeds[-1:],
-                num_total_frames=num_frames,
-                track_in_reverse_time=track_in_reverse,
-                streaming=streaming,
-            )
-            # apply SAM-style segmentation head
-            # here we might feed previously predicted low-res SAM mask logits into the SAM mask decoder,
-            # e.g. in demo where such logits come from earlier interaction instead of correction sampling
-            # (in this case, any `mask_inputs` shouldn't reach here as they are sent to _use_mask_as_output instead)
-            if prev_sam_mask_logits is not None:
-                mask_inputs = prev_sam_mask_logits
-            multimask_output = self._use_multimask(is_init_cond_frame, point_inputs)
-            sam_outputs = self._single_frame_forward(
-                pixel_values=None,  # Vision features already computed
-                input_points=point_inputs["point_coords"] if point_inputs is not None else None,
-                input_labels=point_inputs["point_labels"] if point_inputs is not None else None,
-                input_masks=mask_inputs,
-                image_embeddings=high_res_features + [pix_feat],
-                multimask_output=multimask_output,
-            )
-
-        return current_out, sam_outputs, high_res_features, pix_feat
-
-    def _encode_memory_in_output(
-        self,
-        current_vision_feats: list[torch.Tensor],
-        point_inputs: Optional[dict],
-        run_mem_encoder: bool,
-        high_res_masks: torch.Tensor,
-        object_score_logits: torch.Tensor,
-        current_out: dict[str, Any],
-    ) -> None:
-        """
-        Encode memory features into the current output dictionary if memory encoder should be run.
-
-        Args:
-            current_vision_feats (`list[torch.Tensor]`):
-                Current frame's vision features.
-            point_inputs (`dict`, *optional*):
-                Point prompt inputs for the current frame.
-            run_mem_encoder (`bool`):
-                Whether to run the memory encoder.
-            high_res_masks (`torch.Tensor`):
-                High-resolution masks for memory encoding.
-            object_score_logits (`torch.Tensor`):
-                Object score logits.
-            current_out (`dict[str, Any]`):
-                Current output dictionary to update with memory features.
-        """
-        if run_mem_encoder and self.num_maskmem > 0:
-            high_res_masks_for_mem_enc = high_res_masks
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=current_vision_feats,
-                pred_masks_high_res=high_res_masks_for_mem_enc,
-                object_score_logits=object_score_logits,
-                is_mask_from_pts=(point_inputs is not None),
-            )
-            current_out["maskmem_features"] = maskmem_features
-            current_out["maskmem_pos_enc"] = maskmem_pos_enc
-        else:
-            current_out["maskmem_features"] = None
-            current_out["maskmem_pos_enc"] = None
-
-    def track_step(
-        self,
-        inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: int,
-        obj_idx: int,
-        is_init_cond_frame: bool,
-        current_vision_feats: list[torch.Tensor],
-        current_vision_pos_embeds: list[torch.Tensor],
-        point_inputs: Optional[dict],
-        mask_inputs: Optional[torch.Tensor],
-        num_frames: int,
-        track_in_reverse: bool = False,
-        run_mem_encoder: bool = True,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
-        streaming: bool = False,
-    ) -> dict[str, Any]:
-        """
-        Perform a single tracking step for video object segmentation.
-
-        Args:
-            inference_session (`EdgeTamVideoInferenceSession`):
-                The video inference session object.
-            frame_idx (`int`):
-                Index of the current frame.
-            is_init_cond_frame (`bool`):
-                Whether this is an initial conditioning frame with user inputs.
-            current_vision_feats (`list[torch.Tensor]`):
-                Vision features for the current frame.
-            current_vision_pos_embeds (`list[torch.Tensor]`):
-                Positional embeddings for the current frame.
-            point_inputs (`dict`, *optional*):
-                Point prompt inputs for the current frame.
-            mask_inputs (`torch.Tensor`, *optional*):
-                Mask prompt inputs for the current frame.
-            output_dict (`dict[str, Any]`):
-                Dictionary containing outputs from previous frames.
-            num_frames (`int`):
-                Total number of frames in the video.
-            track_in_reverse (`bool`, *optional*, defaults to `False`):
-                Whether to track in reverse time order.
-            run_mem_encoder (`bool`, *optional*, defaults to `True`):
-                Whether to run the memory encoder on predicted masks.
-            prev_sam_mask_logits (`torch.Tensor`, *optional*):
-                Previously predicted SAM mask logits that can be fed with new clicks.
-            streaming (`bool`, *optional*, defaults to `False`):
-                Whether this is streaming inference.
-
-        Returns:
-            `dict`: Dictionary containing the tracking results for the current frame, including:
-                - pred_masks: Predicted low-resolution masks.
-                - pred_masks_high_res: Predicted high-resolution masks.
-                - object_pointer: Object pointer for memory.
-                - object_score_logits: Object score logits (inference only).
-                - maskmem_features: Memory features for future frames.
-                - maskmem_pos_enc: Memory positional encodings.
-        """
-        current_out, sam_outputs, _, _ = self._track_step(
-            inference_session=inference_session,
-            frame_idx=frame_idx,
-            obj_idx=obj_idx,
-            is_init_cond_frame=is_init_cond_frame,
-            current_vision_feats=current_vision_feats,
-            current_vision_pos_embeds=current_vision_pos_embeds,
-            point_inputs=point_inputs,
-            mask_inputs=mask_inputs,
-            num_frames=num_frames,
-            track_in_reverse=track_in_reverse,
-            prev_sam_mask_logits=prev_sam_mask_logits,
-            streaming=streaming,
-        )
-
-        low_res_masks = sam_outputs.low_res_masks
-        high_res_masks = sam_outputs.high_res_masks
-        object_pointer = sam_outputs.object_pointer
-        object_score_logits = sam_outputs.object_score_logits
-
-        current_out["pred_masks"] = low_res_masks
-        current_out["pred_masks_high_res"] = high_res_masks
-        current_out["object_pointer"] = object_pointer
-        if not self.training:
-            # Only add this in inference (to avoid unused param in activation checkpointing;
-            # it's mainly used in the demo to encode spatial memories w/ consolidated masks)
-            current_out["object_score_logits"] = object_score_logits
-        # Finally run the memory encoder on the predicted mask to encode
-        # it into a new memory feature (that can be used in future frames)
-        self._encode_memory_in_output(
-            current_vision_feats,
-            point_inputs,
-            run_mem_encoder,
-            high_res_masks,
-            object_score_logits,
-            current_out,
-        )
-
-        return current_out
-
-    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
-        """Whether to use multimask output in the SAM head."""
-        num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
-        multimask_output = (
-            self.multimask_output_in_sam
-            and (is_init_cond_frame or self.multimask_output_for_tracking)
-            and (self.multimask_min_pt_num <= num_pts <= self.multimask_max_pt_num)
-        )
-        return multimask_output
-
-    def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
-        """
-        Apply non-overlapping constraints to the object scores in pred_masks. Here we
-        keep only the highest scoring object at each spatial location in pred_masks.
-        """
-        batch_size = pred_masks.size(0)
-        if batch_size == 1:
-            return pred_masks
-
-        device = pred_masks.device
-        # "max_obj_inds": object index of the object with the highest score at each location
-        max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
-        # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
-        batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
-        keep = max_obj_inds == batch_obj_inds
-        # suppress overlapping regions' scores below -10.0 so that the foreground regions
-        # don't overlap (here sigmoid(-10.0)=4.5398e-05)
-        pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
-        return pred_masks
-
-
-__all__ = [
-    "EdgeTamModel",
-    "EdgeTamVideoModel",
-    "EdgeTamVisionModel",
-    "EdgeTamVideoInferenceSession",
-    "EdgeTamPreTrainedModel",
-]
+__all__ = ["EdgeTamModel", "EdgeTamVisionModel", "EdgeTamPreTrainedModel"]

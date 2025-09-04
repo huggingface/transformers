@@ -379,8 +379,6 @@ class Sam2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation for parameter initialization.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
 
     Example:
 

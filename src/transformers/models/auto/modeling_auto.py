@@ -131,6 +131,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("edgetam", "EdgeTamModel"),
+        ("edgetam_video", "EdgeTamVideoModel"),
         ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientloftr", "EfficientLoFTRModel"),
@@ -1676,6 +1677,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("edgetam", "EdgeTamModel"),
+        ("edgetam_video", "Sam2Model"),
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
         ("sam2_video", "Sam2Model"),
