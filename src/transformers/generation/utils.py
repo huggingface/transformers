@@ -2358,11 +2358,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
-        # Cannot be root level constant since subclasses might override the methods
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
         else:
-            decoding_method = getattr(self, GENERATION_MODES_MAPPING[generation_mode])
+            # type() required to access the unbound class-level method
+            decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
