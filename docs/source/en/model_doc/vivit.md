@@ -9,7 +9,6 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2021-03-29 and added to Hugging Face Transformers on 2023-07-11.*
 
 # Video Vision Transformer (ViViT)
 
@@ -74,6 +73,11 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 ## VivitImageProcessor
 
 [[autodoc]] VivitImageProcessor
+    - preprocess
+
+## VivitImageProcessorFast
+
+[[autodoc]] VivitImageProcessorFast
     - preprocess
 
 ## VivitModel
