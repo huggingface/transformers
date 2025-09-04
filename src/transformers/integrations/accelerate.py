@@ -103,6 +103,8 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
             kwargs["requires_grad"] = param.requires_grad
+            if "fake_device" in kwargs:
+                kwargs["device"] = kwargs.pop("fake_device")
             module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
 
     def register_empty_buffer(module, name, buffer, persistent=True):
