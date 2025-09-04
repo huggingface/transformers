@@ -70,9 +70,10 @@ def sdpa_attention_forward(
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
     # NOTE: It is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
-    # NOTE: The last condition is for encoder (decoder) models which specify this by passing their own `is_causal` flag
-    # This is mainly due to those models having mixed implementations for encoder, decoder, and encoder-decoder attns
-    is_causal = query.shape[2] > 1 and attention_mask is None and (getattr(module, "is_causal", True) or is_causal)
+    # NOTE: We give priority to the passed kwarg. Otherwise, we check for the module's set flag. This is especially important for models with
+    # mixed attentions such as encoder-decoder models (encoder, decoder, and encoder-decoder/cross attention).
+    is_causal = getattr(module, "is_causal", True) if is_causal is None else is_causal
+    is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
