@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -162,6 +162,8 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
+        use_bidirectional_attention (`bool`, *optional*, defaults to `False`): If True, the model will attend to all
+            text tokens instead of using a causal mask. This does not change behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -204,6 +206,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         PretrainedConfig.__init__(
@@ -233,6 +236,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
@@ -535,6 +539,19 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
             module.mm_input_projection_weight.data.zero_()
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        half the sliding window size (distance <= sliding_window // 2)."""
+        return abs(q_idx - kv_idx) <= sliding_window // 2
+
+    return inner_mask
+
+
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
 
@@ -609,10 +626,16 @@ class Gemma3TextModel(Gemma2Model):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         # embed positions
@@ -869,6 +892,10 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
+
     @auto_docstring
     def forward(
         self,
@@ -1166,6 +1193,15 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
         )
 
 
+class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    """
+    Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma3TextConfig
+
+
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
@@ -1175,4 +1211,5 @@ __all__ = [
     "Gemma3ForConditionalGeneration",
     "Gemma3Model",
     "Gemma3ForSequenceClassification",
+    "Gemma3TextForSequenceClassification",
 ]
