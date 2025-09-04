@@ -2184,10 +2184,11 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        if synced_gpus is not None:
-            generation_mode_kwargs["synced_gpus"] = (
-                is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
-            ) and dist.get_world_size() > 1
+        generation_mode_kwargs["synced_gpus"] = (
+            (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
+            if synced_gpus is None
+            else synced_gpus
+        )
         generation_mode_kwargs = {k: v for k, v in generation_mode_kwargs.items() if v is not None}
         # Custom_generate callables can have their own set of arguments
         # To extract them, we compare the signature with the standard _sample method
