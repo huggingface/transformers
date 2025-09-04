@@ -600,7 +600,7 @@ class TFCLIPTextTransformer(keras.layers.Layer):
                 ),
             )
         else:
-            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of extra new tokens is possible)
             pooled_output = tf.gather_nd(
                 params=sequence_output,
                 indices=tf.stack(

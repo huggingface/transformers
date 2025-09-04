@@ -17,7 +17,15 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    filter_out_non_signature_kwargs,
+    logging,
+    torch_int,
+)
 from ...utils.generic import check_model_inputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 
@@ -483,9 +491,6 @@ class MetaClip2TextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-        # For attention mask, it differs between `flash_attention_2` and other attention implementations
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -508,7 +513,7 @@ class MetaClip2TextTransformer(nn.Module):
         )
 
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -542,6 +547,36 @@ class MetaClip2TextTransformer(nn.Module):
     """
 )
 class MetaClip2TextModel(MetaClip2PreTrainedModel):
+    """
+    The text model from MetaClip2 without any head or projection on top.
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`MetaClip2TextConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, MetaClip2TextModel
+
+    >>> model = MetaClip2TextModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+
+    >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+    ```"""
+
     config: MetaClip2TextConfig
 
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
@@ -575,8 +610,8 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MetaClip2TextModel
 
-        >>> model = MetaClip2TextModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2TextModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -614,8 +649,39 @@ class MetaClip2TextModelOutput(ModelOutput):
 
 @auto_docstring
 class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
+    """
+    MetaClip2 text model with a projection layer on top (a linear layer on top of the pooled output).
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`MetaClip2TextConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, MetaClip2TextModelWithProjection
+
+    >>> model = MetaClip2TextModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+
+    >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    >>> text_embeds = outputs.text_embeds
+    ```"""
+
     config: MetaClip2TextConfig
 
+    _supports_flash_attn = False
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2TextConfig):
@@ -651,8 +717,8 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MetaClip2TextModelWithProjection
 
-        >>> model = MetaClip2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2TextModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -715,54 +781,6 @@ class MetaClip2Output(ModelOutput):
         )
 
 
-class MetaClip2VisionTransformer(nn.Module):
-    def __init__(self, config: MetaClip2VisionConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = MetaClip2VisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MetaClip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-    ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-metaclip_2.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -788,6 +806,42 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class MetaClip2Model(MetaClip2PreTrainedModel):
+    """
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`MetaClip2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Examples:
+
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import AutoProcessor, MetaClip2Model
+
+    >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+    >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> inputs = processor(
+    ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+    ... )
+
+    >>> outputs = model(**inputs)
+    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+    >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+    ```"""
+
     config: MetaClip2Config
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer", "MetaClip2VisionEmbeddings"]
     _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
@@ -827,6 +881,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
@@ -846,31 +901,23 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MetaClip2Model
 
-        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
         )
-
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
@@ -891,8 +938,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2Model
 
-        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -901,19 +948,10 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use METACLIP_2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
-
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
 
@@ -933,8 +971,9 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> MetaClip2Output:
         r"""
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
+        Args:
+            return_loss (`bool`, *optional*):
+                Whether or not to return the contrastive loss.
 
         Examples:
 
@@ -943,8 +982,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2Model
 
-        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1009,12 +1048,96 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         )
 
 
+class MetaClip2VisionTransformer(nn.Module):
+    def __init__(self, config: MetaClip2VisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = MetaClip2VisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = MetaClip2Encoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> BaseModelOutputWithPooling:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
 @auto_docstring(
     custom_intro="""
     The vision model from METACLIP_2 without any head or projection on top.
     """
 )
 class MetaClip2VisionModel(MetaClip2PreTrainedModel):
+    """
+    The vision model from MetaClip2 without any head or projection on top.
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`MetaClip2VisionConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Examples:
+
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import AutoProcessor, MetaClip2VisionModel
+
+    >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+    >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> inputs = processor(images=image, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooled_output = outputs.pooler_output  # pooled CLS states
+    ```"""
+
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MetaClip2EncoderLayer"]
@@ -1038,15 +1161,15 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Example:
+        Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
-        >>> model = MetaClip2VisionModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1086,6 +1209,41 @@ class MetaClip2VisionModelOutput(ModelOutput):
 
 @auto_docstring
 class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
+    """
+    MetaClip2 vision model with a projection layer on top (a linear layer on top of the pooled output).
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`MetaClip2VisionConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Examples:
+
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
+
+    >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+    >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> inputs = processor(images=image, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    >>> image_embeds = outputs.image_embeds
+    ```"""
+
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
 
@@ -1120,8 +1278,8 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
-        >>> model = MetaClip2VisionModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
+        >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

@@ -273,41 +273,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support prompt lookup decoding.")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass

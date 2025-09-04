@@ -1542,7 +1542,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         if labels is not None:
             # scores = batch x selected position x visual_feature
             # scores = selected_positions.bmm(visual_features.transpose(1,2))
-            # label = batch x selected_postion x needed position
+            # label = batch x selected_position x needed position
             loss_fct = KLDivLoss(reduction="batchmean")
             log_softmax = LogSoftmax(dim=-1)
             scores = log_softmax(logits)
