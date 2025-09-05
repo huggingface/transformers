@@ -16,8 +16,8 @@ import inspect
 import json
 import re
 import types
-from copy import deepcopy
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
@@ -552,7 +552,7 @@ def render_jinja_template(
                     "ensure they are compatible."
                 )
             tag_loc = rendered_chat.rindex(continue_final_message_tag)
-            rendered_chat = rendered_chat[: tag_loc]
+            rendered_chat = rendered_chat[:tag_loc]
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices
