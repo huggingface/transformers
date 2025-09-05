@@ -22,17 +22,21 @@ import re
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
-import torch
 import json
 from copy import deepcopy
+from functools import lru_cache
 
+from jinja2 import Environment
 from PIL import Image
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...feature_extraction_utils import BatchFeature
-from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType, logging
+from ...utils import is_torch_device, is_torch_dtype, is_torch_available, requires_backends, TensorType, logging
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -144,6 +148,29 @@ class MiniCPM_o_2_6ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
+
+PARSE_TEMPLATE = "{%- for i, msg in enumerate(msgs) -%}{%- set role = msg[\"role\"] -%}{%- set content = msg[\"content\"] -%}{%- if role not in [\"system\", \"user\", \"assistant\"] -%}{{ raise_error(\"Invalid role: \" + role) }}{%- endif -%}{%- if i == 0 and role not in [\"user\", \"system\"] -%}{{ raise_error(\"The role of first msg should be user or system\") }}{%- endif -%}{%- if content is string -%}{%- set content = [content] -%}{%- endif -%}{%- set cur_msgs = [] -%}{%- for c in content -%}{%- if isinstance(c, Image.Image) -%}{{ collect_image(c, cur_msgs) }}{%- elif c.__class__.__name__ == \"ndarray\" -%}{{ collect_audio(c, i, cur_msgs) }}{%- elif c is string -%}{{ collect_text(c, cur_msgs) }}{%- endif -%}{%- endfor -%}{%- set _ = msg.update({\"content\": join_content(cur_msgs, omni_input)}) -%}{%- endfor -%}"
+
+
+@lru_cache(maxsize=1)
+def get_precompiled_template():
+    env = Environment(
+        cache_size=100,
+        auto_reload=False,
+        optimized=True
+    )
+
+    env.globals.update({
+        'enumerate': enumerate,
+        'isinstance': isinstance,
+        'Image': Image,
+        'np': np
+    })
+
+    return env.from_string(PARSE_TEMPLATE)
+
+
 class MiniCPM_o_2_6Processor(ProcessorMixin):
     r"""
     Constructs a MiniCPMV processor which wraps a MiniCPMV image processor and a MiniCPMV tokenizer into a single processor.
@@ -163,9 +190,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "MiniCPMVImageProcessorFast"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
 
-    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None):
+    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=DEFAULT_CHAT_TEMPLATE):
         super().__init__(tokenizer, image_processor, feature_extractor, chat_template=chat_template)
-        self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
+        self.tts_chat_template = tts_chat_template
 
     def __call__(
         self,
@@ -208,6 +235,94 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
         return MiniCPMOBatchFeature(data={**model_inputs})
 
+    def parse_msgs(self, msgs, omni_input=False, use_tts_template=False):
+        images = []
+        audios = []
+        audio_parts = []
+
+        for i, msg in enumerate(msgs):
+            role = msg["role"]
+            content = msg["content"]
+            assert role in ["system", "user", "assistant"]
+            if i == 0:
+                assert role in ["user", "system"], "The role of first msg should be user"
+            if isinstance(content, str):
+                content = [content]
+            cur_msgs = []
+            for c in content:
+                if isinstance(c, Image.Image):
+                    images.append(c)
+                    cur_msgs.append("(<image>./</image>)")
+                elif isinstance(c, np.ndarray):  # audio
+                    audios.append(c)
+                    audio_parts.append(i)
+                    cur_msgs.append("(<audio>./</audio>)")
+                    use_tts_template = True
+                elif isinstance(c, str):
+                    cur_msgs.append(c)
+            if omni_input:
+                msg["content"] = "".join(cur_msgs)
+            else:
+                msg["content"] = "\n".join(cur_msgs)
+
+        return msgs, images, audios, audio_parts, use_tts_template
+
+    def parse_msgs_jinja(self, msgs, omni_input=False, use_tts_template=False):
+        results = {
+            'images': [],
+            'audios': [],
+            'audio_parts': [],
+            'use_tts_template': use_tts_template
+        }
+
+        # 获取预编译的模板
+        template = get_precompiled_template()
+
+        # 添加自定义函数
+        def collect_image(img, msg_list):
+            results['images'].append(img)
+            msg_list.append("(<image>./</image>)")
+            return ""
+
+        def collect_audio(audio, i, msg_list):
+            results['audios'].append(audio)
+            results['audio_parts'].append(i)
+            results['use_tts_template'] = True
+            msg_list.append("(<audio>./</audio>)")
+            return ""
+
+        def collect_text(text, msg_list):
+            msg_list.append(text)
+            return ""
+
+        def join_content(msg_list, omni_input):
+            if omni_input:
+                return "".join(msg_list)
+            else:
+                return "\n".join(msg_list)
+
+        def raise_error(msg):
+            raise AssertionError(msg)
+
+        # 渲染模板
+        template.render(
+            msgs=msgs,
+            omni_input=omni_input,
+            collect_image=collect_image,
+            collect_audio=collect_audio,
+            collect_text=collect_text,
+            join_content=join_content,
+            raise_error=raise_error
+        )
+
+        return (
+            msgs,
+            results['images'],
+            results['audios'],
+            results['audio_parts'],
+            results['use_tts_template']
+        )
+
     def apply_chat_template(
         self,
         msgs,
@@ -232,13 +347,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             use_tts_template: if the msgs contain audio, use_tts_template should be True
         """
         if isinstance(msgs[0], list):
-            batched = True
+            msgs_list = msgs
         else:
-            batched = False
-
-        msgs_list = msgs
-        if not batched:
-            msgs_list = [msgs_list]
+            msgs_list = [msgs]
 
         prompts_lists = []
         input_images_list = []
@@ -248,46 +359,17 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         for msgs in msgs_list:
             if isinstance(msgs, str):
                 msgs = json.loads(msgs)
-            copy_msgs = deepcopy(msgs)
-
             assert len(msgs) > 0, "msgs is empty"
 
-            images = []
-            audios = []
-            audio_parts = []
-            for i, msg in enumerate(copy_msgs):
-                role = msg["role"]
-                content = msg["content"]
-                assert role in ["system", "user", "assistant"]
-                if i == 0:
-                    assert role in ["user", "system"], "The role of first msg should be user"
-                if isinstance(content, str):
-                    content = [content]
-                cur_msgs = []
-                for c in content:
-                    if isinstance(c, Image.Image):
-                        images.append(c)
-                        cur_msgs.append("(<image>./</image>)")
-                    elif isinstance(c, np.ndarray):  # audio
-                        audios.append(c)
-                        audio_parts.append(i)
-                        cur_msgs.append("(<audio>./</audio>)")
-                        use_tts_template = True
-                    elif isinstance(c, str):
-                        cur_msgs.append(c)
-                if omni_input:
-                    msg["content"] = "".join(cur_msgs)
-                else:
-                    msg["content"] = "\n".join(cur_msgs)
-
-            prompts_lists.append(
-                self.tokenizer.apply_chat_template(
-                    copy_msgs,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    chat_template=self.default_tts_chat_template if use_tts_template else None,
-                )
+            parsed_msgs, images, audios, audio_parts, use_tts_template = self.parse_msgs_jinja(deepcopy(msgs), omni_input, use_tts_template)
+            prompts = self.tokenizer.apply_chat_template(
+                parsed_msgs,
+                tokenize=False,
+                add_generation_prompt=True,
+                chat_template=self.tts_chat_template if use_tts_template else None,
             )
+
+            prompts_lists.append(prompts)
             input_images_list.append(images)
             input_audios_list.append(audios)
             audio_parts_list.append(audio_parts)

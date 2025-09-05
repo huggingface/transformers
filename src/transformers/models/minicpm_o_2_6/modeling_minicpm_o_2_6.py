@@ -49,7 +49,7 @@ from ...generation.utils import GenerateOutput
 from ...integrations import is_deepspeed_zero3_enabled, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_attention_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _get_unpad_data
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -99,7 +99,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class OmniOutput(ModelOutput):
     text: Optional[Union[str, list[str], Iterator]] = None
-    outputs: GenerateOutput | torch.LongTensor = None
+    outputs: Optional[Union[GenerateOutput, torch.LongTensor]] = None
     spk_embeds: Optional[torch.FloatTensor] = None
     audio_wav: Optional[np.ndarray] = None
     sampling_rate: Optional[int] = None
@@ -761,76 +761,77 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             img_cnt.append(len(pixel_values))
             all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
 
-        # exist image
-        if all_pixel_values:
-            tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
-            tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
+        tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
+        tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
 
-            max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
+        max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
 
-            all_pixel_values = torch.nn.utils.rnn.pad_sequence(all_pixel_values, batch_first=True, padding_value=0.0)
-            B, L, _ = all_pixel_values.shape
-            all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
+        all_pixel_values = torch.nn.utils.rnn.pad_sequence(all_pixel_values, batch_first=True, padding_value=0.0)
+        B, L, _ = all_pixel_values.shape
+        all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
 
-            patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
-            for i in range(B):
-                patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
+        patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
+        for i in range(B):
+            patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
 
-            vision_batch_size = self.omni_config.vision_batch_size
-            all_pixel_values = all_pixel_values.type(dtype)
-            if B > vision_batch_size:
-                hs = []
-                for i in range(0, B, vision_batch_size):
-                    start_idx = i
-                    end_idx = i + vision_batch_size
-                    tmp_hs = self.vpm(
-                        all_pixel_values[start_idx:end_idx],
-                        patch_attention_mask=patch_attn_mask[start_idx:end_idx],
-                        tgt_sizes=tgt_sizes[start_idx:end_idx],
-                    ).last_hidden_state
-                    hs.append(tmp_hs)
-                vision_embedding = torch.cat(hs, dim=0)
-            else:
-                vision_embedding = self.vpm(
-                    all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
+        vision_batch_size = self.omni_config.vision_batch_size
+        all_pixel_values = all_pixel_values.type(dtype)
+        # edge-side model, senstive to gpu memory size in use
+        # without batching, it will occur cuda oom
+        if B > vision_batch_size:
+            hs = []
+            for i in range(0, B, vision_batch_size):
+                start_idx = i
+                end_idx = i + vision_batch_size
+                tmp_hs = self.vpm(
+                    all_pixel_values[start_idx:end_idx],
+                    patch_attention_mask=patch_attn_mask[start_idx:end_idx],
+                    tgt_sizes=tgt_sizes[start_idx:end_idx],
                 ).last_hidden_state
+                hs.append(tmp_hs)
+            vision_embedding = torch.cat(hs, dim=0)
+        else:
+            vision_embedding = self.vpm(
+                all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
+            ).last_hidden_state
 
-            vision_embedding = self.resampler(vision_embedding, tgt_sizes)
+        vision_embedding = self.resampler(vision_embedding, tgt_sizes)
 
-            start = 0
-            for pixel_values in pixel_values_list:
-                img_cnt = len(pixel_values)
-                if img_cnt > 0:
-                    vision_hidden_states.append(vision_embedding[start : start + img_cnt])
-                    start += img_cnt
-                else:
-                    vision_hidden_states.append([])
-        else:  # no image
-            vision_hidden_states.extend([[]] * len(pixel_values_list))
+        start = 0
+        for pixel_values in pixel_values_list:
+            img_cnt = len(pixel_values)
+            if img_cnt > 0:
+                vision_hidden_states.append(vision_embedding[start : start + img_cnt])
+                start += img_cnt
+            else:
+                vision_hidden_states.append([])
 
         return vision_hidden_states
 
-    def get_vllm_embedding(self, data):
+    def get_vllm_embedding(
+        self, tgt_sizes=None, pixel_values=None, image_bound=None, input_ids=None, vision_hidden_states=None, **kwargs
+    ):
         """
         Compute all visual embeddings, and set into llm embeddings.
         Args:
-            data: Dict
-                - tgt_sizes: image size after patch embedding
-                - pixel_values: image features
-                - image_bound: position of each picture corresponding to input_ids
-                - input_ids: full input_ids, include placeholder
+            - tgt_sizes: image size after patch embedding
+            - pixel_values: image features
+            - image_bound: position of each picture corresponding to input_ids
+            - input_ids: full input_ids, include placeholder
+            - vision_hidden_states: if already have vision hidden states, can input directly
 
         Returns:
             embedding with vision, vision_hidden_states
         """
         dtype = self.language_model.embed_tokens.weight.dtype
         device = self.language_model.embed_tokens.weight.device
-        if "vision_hidden_states" not in data:
-            vision_hidden_states = self.get_image_features(data["pixel_values"], data["tgt_sizes"], dtype, device)
-        else:
-            vision_hidden_states = data["vision_hidden_states"]
+        if not vision_hidden_states:
+            if pixel_values and len(pixel_values[0]) > 0:
+                vision_hidden_states = self.get_image_features(pixel_values, tgt_sizes, dtype, device)
+            else:
+                vision_hidden_states = [[]] * len(pixel_values)
 
-        vllm_embedding = self.language_model.embed_tokens(data["input_ids"]) * self.scale_emb
+        vllm_embedding = self.language_model.embed_tokens(input_ids) * self.scale_emb
 
         new_vllm_embedding = vllm_embedding.clone()
 
@@ -838,12 +839,12 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             i.type(vllm_embedding.dtype) if isinstance(i, torch.Tensor) else i for i in vision_hidden_states
         ]
 
-        bs = len(data["input_ids"])
+        bs = len(input_ids)
         for i in range(bs):
             cur_vs_hs = vision_hidden_states[i]
             if len(cur_vs_hs) > 0:
                 cur_vllm_emb = vllm_embedding[i]
-                cur_image_bound = data["image_bound"][i]
+                cur_image_bound = image_bound[i]
                 if len(cur_image_bound) > 0:
                     image_indices = torch.stack(
                         [torch.arange(r[0], r[1], dtype=torch.long) for r in cur_image_bound]
@@ -1001,10 +1002,18 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         else:
             return []
 
-    def get_omni_embedding(self, data, input_embeddings, chunk_length=-1, stream_input=False):
+    def get_omni_embedding(
+        self,
+        input_embeddings,
+        chunk_length=-1,
+        stream_input=False,
+        audio_features=[],
+        audio_feature_lens=[],
+        audio_bounds=None,
+        **kwargs,
+    ):
         """
         Args:
-            data:
             input_embeddings:
             chunk_length: whisper use full attention or chunk attention
             stream_input: use streaming audio embedding
@@ -1012,18 +1021,13 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             final embeddings with audio feature
         """
         if stream_input:
-            audio_embeddings = self.get_audio_embedding_streaming(
-                data.get("audio_features", []), data.get("audio_feature_lens", [])
-            )
+            audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
         else:
-            audio_embeddings = self.get_audio_embedding(
-                data.get("audio_features", []), data.get("audio_feature_lens", []), chunk_length
-            )
+            audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
 
         bs = len(input_embeddings)
-        if len(data.get("audio_features", [])) > 0:
+        if len(audio_features) > 0:
             assert len(audio_embeddings) == len(input_embeddings)
-            audio_bounds = data["audio_bounds"]
 
             if self.omni_config.chunk_input:
                 for i in range(bs):
@@ -1211,11 +1215,11 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             model_inputs["vision_hidden_states"] = vision_hidden_states
 
         with torch.inference_mode():
-            model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(model_inputs)
+            model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(**model_inputs)
             model_inputs["inputs_embeds"] = self.get_omni_embedding(
-                model_inputs,
                 input_embeddings=model_inputs["inputs_embeds"],
                 chunk_length=self.omni_config.audio_chunk_length,
+                **model_inputs,
             )
 
             if stream:
@@ -1338,7 +1342,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
                 copy_msgs,
                 tokenize=False,
                 add_generation_prompt=False,
-                chat_template=processor.default_tts_chat_template,
+                chat_template=processor.tts_chat_template,
             )
             add_special_tokens = True  # add bos
         else:
@@ -1359,10 +1363,10 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         ).to(self.device)
 
         # 1. prepare input embeddings
-        model_inputs["inputs_embeds"], _ = self.get_vllm_embedding(model_inputs)
+        model_inputs["inputs_embeds"], _ = self.get_vllm_embedding(**model_inputs)
         # get audio embedding with audio_past_key_values
         inputs_embeds = self.get_omni_embedding(
-            model_inputs, input_embeddings=model_inputs["inputs_embeds"], stream_input=True
+            input_embeddings=model_inputs["inputs_embeds"], stream_input=True, **model_inputs
         )
 
         if self.is_first:
@@ -4501,8 +4505,7 @@ class MiniCPMVisionEmbedding(nn.Module):
 class MiniCPMVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
-    def __init__(self, config):
+    def __init__(self, config: MiniCPMVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -4572,19 +4575,6 @@ class MiniCPMVisionAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 class MiniCPMVisionFlashAttention2(MiniCPMVisionAttention):

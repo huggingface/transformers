@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .modeling_minicpm_o_2_6 import *
     from .processing_minicpm_o_2_6 import *
     from .tokenization_minicpm_o_2_6_fast import *
-    from .tokenization_minicpm_o_2_6 import *
 else:
     import sys
 

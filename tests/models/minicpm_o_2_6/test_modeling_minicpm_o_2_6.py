@@ -21,7 +21,6 @@ import tempfile
 import numpy as np
 import librosa
 import soundfile as sf
-from moviepy import VideoFileClip
 from PIL import Image
 import requests
 from io import BytesIO
@@ -29,19 +28,28 @@ from io import BytesIO
 from transformers import (
     AutoModel,
     AutoProcessor,
+)
+from transformers.utils.import_utils import(
     is_torch_available,
+    is_soundfile_available,
+    _is_package_available
 )
 from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
     require_vision,
-    require_soundfile,
     require_sentencepiece,
 )
 
 if is_torch_available():
     import torch
+
+if is_soundfile_available():
+    import soundfile as sf
+
+if _is_package_available("moviepy"):
+    from moviepy import VideoFileClip
 
 
 @require_torch
@@ -113,9 +121,13 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
 
     @slow
     @require_vision
-    @require_soundfile
     @require_sentencepiece
     def test_omni_generate(self):
+        if not is_soundfile_available():
+            self.skipTest("test requires soundfile")
+        if not _is_package_available("moviepy"):
+            self.skipTest("test requires moviepy")
+
         try:
             ref_audio, _ = librosa.load(self.ref_audio_path, sr=16000, mono=True)
             sys_msg = self.processor.get_sys_prompt(ref_audio=ref_audio, mode="omni", language="en")
@@ -141,7 +153,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 use_image_id=False,
                 return_dict=True,
             )
-            res = self.processor.decode(res.outputs)
+            res = self.processor.decode(res.outputs.sequences)
 
             self.assertIsNotNone(res, "Chat response should not be empty")
             self.assertTrue(len(res) > 0, "Chat response text should not be empty")
@@ -155,9 +167,13 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
 
     @slow
     @require_vision
-    @require_soundfile
     @require_sentencepiece
     def test_streaming_inference(self):
+        if not is_soundfile_available():
+            self.skipTest("test requires soundfile")
+        if not _is_package_available("moviepy"):
+            self.skipTest("test requires moviepy")
+
         try:
             self.model.reset_session()
 
@@ -216,9 +232,11 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 os.remove(output_audio_path)
 
     @slow
-    @require_soundfile
     @require_sentencepiece
     def test_audio_mimick(self):
+        if not is_soundfile_available():
+            self.skipTest("test requires soundfile")
+    
         try:
             self.model.init_tts()
 
@@ -259,7 +277,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                         generate_audio=True,
                         output_audio_path=output_audio_path,
                     )
-                    res = self.processor.decode(res.outputs)
+                    res = self.processor.decode(res.outputs.sequences)
 
                     self.assertIsNotNone(res, "Mimic response should not be empty")
                     self.assertTrue(os.path.exists(output_audio_path), "Output audio file should exist")
@@ -297,7 +315,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 **inputs,
                 processor=self.processor,
             )
-            res = self.processor.decode(res)
+            res = self.processor.decode(res.sequences)
 
             self.assertIsNotNone(res, "Normal inference response should not be empty")
             self.assertTrue(len(res) > 0, "Normal inference response text should not be empty")
