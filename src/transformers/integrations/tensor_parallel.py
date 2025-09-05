@@ -878,11 +878,22 @@ class RouterParallel(TensorParallelLayer):
         Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
         num_local_experts = mod.num_experts // ep_size
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
-        router_indices = router_indices % num_local_experts
+        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(
+            router_indices == -1, num_local_experts
+        )  # masking class for one hot
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
