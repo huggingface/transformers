@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Keypoint matching
 
-Keypoint matching matches different points of interests that belong to same object appearing in two different images. Most modern keypoint matchers only take images as input. They output following:
+Keypoint matching matches different points of interests that belong to same object appearing in two different images. Most modern keypoint matchers take images as input and output the following:
 
 - **Keypoint coordinations (x,y):** They output two separate lists of keypoint coordinations where first one is location of the keypoint in the first image, and second one (on the same index) is the coordination of the keypoint matched. 
 - **Matching scores:** Scores assigned to the keypoint matches.
