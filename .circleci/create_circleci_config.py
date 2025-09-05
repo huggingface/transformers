@@ -16,10 +16,8 @@
 import argparse
 import copy
 import os
-import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-import glob
 import yaml
 
 
@@ -149,7 +147,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
-        junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
@@ -200,9 +198,9 @@ class CircleCIJob:
                         fi"""
                 },
             },
-            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
-            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
-            {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
+            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
+            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
+            {"run": {"name": "Errors",                       "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},

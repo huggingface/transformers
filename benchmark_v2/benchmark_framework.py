@@ -15,16 +15,14 @@
 import gc
 import json
 import os
-import subprocess
 import sys
 import time
 import statistics
 import threading
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union, TypedDict
+from typing import Any, Dict, List, Optional, Union, TypedDict
 import logging
 
 import numpy as np
@@ -877,7 +875,7 @@ class ModelBenchmark(AbstractModelBenchmark):
             # Use SDPA context if specified
             with SDPAContext(config.sdpa_backend, self.logger):
                 with torch.no_grad():
-                    outputs = model_to_use.generate(**generation_kwargs)
+                    model_to_use.generate(**generation_kwargs)
         
         return timer.elapsed_time()
     

@@ -72,7 +72,6 @@ class LLaMABenchmark(ModelBenchmark):
     
     def get_model_init_kwargs(self, config) -> Dict[str, Any]:
         """Get LLaMA-specific model initialization kwargs."""
-        from benchmark_framework import BenchmarkConfig
         return {
             "torch_dtype": getattr(torch, config.torch_dtype),
             "attn_implementation": config.attn_implementation,

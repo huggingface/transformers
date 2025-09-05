@@ -16,6 +16,7 @@ exclude_lines = [
 [tool.ruff]
 target-version = "py39"
 line-length = 119
+exclude = ["templates/**"]
 
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
