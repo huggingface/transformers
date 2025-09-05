@@ -488,6 +488,7 @@ class ServeCommand(BaseTransformersCLICommand):
             # checking if attn_implementation is supported by continuous batching
             if self.args.attn_implementation is None:
                 self.args.attn_implementation = default_attn_impl  # default to sdpa_paged
+                logger.info(f"No attn_implementation passed, defaulting to {default_attn_impl}")
             supported_attn_impl = ContinuousBatchingManager.supported_attention_implementations()
             if self.args.attn_implementation not in supported_attn_impl:
                 raise ValueError(
