@@ -347,7 +347,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         return self.model.get_decoder()
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -374,23 +373,44 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         Example:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, PerceptionLMForConditionalGeneration
+        from transformers import AutoProcessor, AutoModelForImageTextToText
+        from huggingface_hub import hf_hub_download
 
-        >>> model = PerceptionLMForConditionalGeneration.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
+        MODEL_PATH = "facebook/Perception-LM-1B"
+        processor = AutoProcessor.from_pretrained(MODEL_PATH, use_fast=True)
+        model = AutoModelForImageTextToText.from_pretrained(MODEL_PATH).to("cuda")
+        test_image_file = hf_hub_download(
+                    repo_id="shumingh/perception_lm_test_images",
+                    filename="14496_0.PNG",
+                    repo_type="dataset",
+        )
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": test_image_file,
+                    },
+                    {"type": "text", "text": "Describe the bar plot in the image."},
+                ],
+            }
+        ]
 
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        inputs = processor.apply_chat_template(
+            [conversation],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(model.device)
+        generate_ids = model.generate(**inputs, max_new_tokens=256)
+        input_length = inputs["input_ids"].shape[1]
+        generate_ids_without_inputs = generate_ids[:, input_length:]
 
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        for output in processor.batch_decode(generate_ids_without_inputs, skip_special_tokens=True):
+            print(output)
         ```"""
         outputs = self.model(
             input_ids=input_ids,
