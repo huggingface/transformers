@@ -20,11 +20,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_minicpm_o_2_6 import *
-    from .image_processing_minicpm_fast import *
     from .modeling_minicpm_o_2_6 import *
     from .processing_minicpm_o_2_6 import *
-    from .tokenization_minicpm_o_2_6_fast import *
+    from .image_processing_minicpm_fast import *
+    from .feature_extractor_minicpm_o_2_6 import *
+    from .tts_processing_minicpm_o_2_6 import *
+    from .configuration_minicpm_o_2_6 import *
 else:
     import sys
 

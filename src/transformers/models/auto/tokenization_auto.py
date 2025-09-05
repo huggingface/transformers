@@ -415,7 +415,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
             "minicpm_o_2_6",
-            ("Qwen2Tokenizer", "MiniCPM_o_2_6TokenizerFast" if is_tokenizers_available() else None),
+            ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ),
         (
             "minimax",

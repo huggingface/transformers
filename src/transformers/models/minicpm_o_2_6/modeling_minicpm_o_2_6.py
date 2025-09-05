@@ -1134,12 +1134,12 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             attentions=outputs.attentions,
         )
 
-    def _decode_stream(self, inputs_embeds, tokenizer, **kwargs):
-        streamer = TextIteratorStreamer(tokenizer=tokenizer)
+    def _decode_stream(self, inputs_embeds, processor, **kwargs):
+        streamer = TextIteratorStreamer(tokenizer=processor.tokenizer)
         generation_kwargs = {
             "inputs_embeds": inputs_embeds,
             "pad_token_id": 0,
-            "eos_token_id": tokenizer.terminator_ids,
+            "eos_token_id": processor.terminator_ids,
             "streamer": streamer,
         }
         generation_kwargs.update(kwargs)
@@ -1223,12 +1223,12 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             )
 
             if stream:
-                result = self._decode_stream(model_inputs["inputs_embeds"], processor.tokenizer, **generation_config)
+                result = self._decode_stream(model_inputs["inputs_embeds"], processor, **generation_config)
             else:
                 outputs = super().generate(
                     inputs_embeds=model_inputs["inputs_embeds"],
                     pad_token_id=0,
-                    eos_token_id=processor.tokenizer.terminator_ids,
+                    eos_token_id=processor.terminator_ids,
                     attention_mask=attention_mask,
                     output_hidden_states=True,
                     return_dict_in_generate=True,
@@ -1239,7 +1239,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
             def stream_gen():
                 for text in result:
-                    for term in processor.tokenizer.terminators:
+                    for term in processor.terminators:
                         text = text.replace(term, "")
                     yield text
 
@@ -1535,7 +1535,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
         generation_config["max_new_tokens"] = max_new_tokens
         streamer = self.llm_generate_chunk(
-            input_ids, attention_mask, tokenizer, tokenizer.terminator_ids, generation_config, processor
+            input_ids, attention_mask, tokenizer, processor.terminator_ids, generation_config, processor
         )
 
         if generate_audio:

@@ -26,17 +26,20 @@ import json
 from copy import deepcopy
 from functools import lru_cache
 
-from jinja2 import Environment
 from PIL import Image
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...feature_extraction_utils import BatchFeature
-from ...utils import is_torch_device, is_torch_dtype, is_torch_available, requires_backends, TensorType, logging
+from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType, logging
+from ...utils.import_utils import is_jinja_available, is_torch_available
 
 if is_torch_available():
     import torch
+
+if is_jinja_available():
+    from jinja2 import Environment
 
 logger = logging.get_logger(__name__)
 
@@ -148,8 +151,6 @@ class MiniCPM_o_2_6ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
-
 PARSE_TEMPLATE = "{%- for i, msg in enumerate(msgs) -%}{%- set role = msg[\"role\"] -%}{%- set content = msg[\"content\"] -%}{%- if role not in [\"system\", \"user\", \"assistant\"] -%}{{ raise_error(\"Invalid role: \" + role) }}{%- endif -%}{%- if i == 0 and role not in [\"user\", \"system\"] -%}{{ raise_error(\"The role of first msg should be user or system\") }}{%- endif -%}{%- if content is string -%}{%- set content = [content] -%}{%- endif -%}{%- set cur_msgs = [] -%}{%- for c in content -%}{%- if isinstance(c, Image.Image) -%}{{ collect_image(c, cur_msgs) }}{%- elif c.__class__.__name__ == \"ndarray\" -%}{{ collect_audio(c, i, cur_msgs) }}{%- elif c is string -%}{{ collect_text(c, cur_msgs) }}{%- endif -%}{%- endfor -%}{%- set _ = msg.update({\"content\": join_content(cur_msgs, omni_input)}) -%}{%- endfor -%}"
 
 
@@ -190,9 +191,20 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "MiniCPMVImageProcessorFast"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
 
-    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=DEFAULT_CHAT_TEMPLATE):
+    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=None):
         super().__init__(tokenizer, image_processor, feature_extractor, chat_template=chat_template)
+
         self.tts_chat_template = tts_chat_template
+
+        self.image_tag = getattr(tokenizer, 'image_tag', "(<image>./</image>)")
+        self.image_pattern = getattr(tokenizer, 'image_pattern', "\(<image>./</image>\)")
+        self.audio_tag = getattr(tokenizer, 'audio_tag', "(<audio>./</audio>)")
+        self.audio_pattern = getattr(tokenizer, 'audio_pattern', "\(<audio>./</audio>\)")
+        self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
+
+        self.terminators = [tokenizer.eos_token, tokenizer.pad_token, tokenizer.tts_end]
+        self.terminator_ids = [tokenizer.convert_tokens_to_ids(t) for t in self.terminators]
+        
 
     def __call__(
         self,
@@ -393,12 +405,12 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             result = result[result != 0]
             start, end = 0, len(result)
             for i, tok in enumerate(result):
-                if tok == self.tokenizer.bos_id:
+                if tok == self.tokenizer.bos_token_id:
                     start = i + 1
                 else:
                     break
             for i in range(len(result) - 1, -1, -1):
-                if result[i] in self.tokenizer.terminator_ids:
+                if result[i] in self.terminator_ids:
                     end = i
                 else:
                     break
@@ -563,10 +575,10 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         spk_bounds_list = []
 
         for index, text in enumerate(texts):
-            text_chunks = re.split(self.tokenizer.split_pattern, text)
+            text_chunks = re.split(self.split_pattern, text)
 
-            image_tags = re.findall(self.tokenizer.image_pattern, text)
-            audio_tags = re.findall(self.tokenizer.audio_pattern, text)
+            image_tags = re.findall(self.image_pattern, text)
+            audio_tags = re.findall(self.audio_pattern, text)
 
             if image_tags:
                 assert images is not None
@@ -578,13 +590,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             image_id = 0
             audio_id = 0
             for i, chunk in enumerate(text_chunks):
-                if chunk == self.tokenizer.image_tag:
+                if chunk == self.image_tag:
                     image_placeholder = self.get_slice_image_placeholder(
                         image_sizes[index][image_id], image_id, max_slice_nums, use_image_id
                     )
                     image_id += 1
                     text_chunks[i] = image_placeholder
-                elif chunk == self.tokenizer.audio_tag:
+                elif chunk == self.audio_tag:
                     audio_placeholder = audio_phs[index][audio_id]
                     audio_id += 1
                     text_chunks[i] = audio_placeholder
@@ -717,7 +729,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         return audio_placeholder
 
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
