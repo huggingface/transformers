@@ -110,7 +110,7 @@ def update_version_in_examples(version: str, patch: bool = False):
         for fname in fnames:
             if fname.endswith(".py"):
                 if UV_SCRIPT_MARKER in Path(folder, fname).read_text():
-                    # Update the depdendencies in UV scripts
+                    # Update the dependencies in UV scripts
                     uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
                     update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
                 if not patch:

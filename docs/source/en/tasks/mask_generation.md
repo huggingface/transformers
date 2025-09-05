@@ -156,13 +156,13 @@ axes[0].set_title('Original Image')
 mask_list = [masks[0][0][0].numpy(), masks[0][0][1].numpy(), masks[0][0][2].numpy()]
 
 for i, mask in enumerate(mask_list, start=1):
-    overlayed_image = np.array(image).copy()
+    overlaid_image = np.array(image).copy()
 
-    overlayed_image[:,:,0] = np.where(mask == 1, 255, overlayed_image[:,:,0])
-    overlayed_image[:,:,1] = np.where(mask == 1, 0, overlayed_image[:,:,1])
-    overlayed_image[:,:,2] = np.where(mask == 1, 0, overlayed_image[:,:,2])
+    overlaid_image[:,:,0] = np.where(mask == 1, 255, overlaid_image[:,:,0])
+    overlaid_image[:,:,1] = np.where(mask == 1, 0, overlaid_image[:,:,1])
+    overlaid_image[:,:,2] = np.where(mask == 1, 0, overlaid_image[:,:,2])
     
-    axes[i].imshow(overlayed_image)
+    axes[i].imshow(overlaid_image)
     axes[i].set_title(f'Mask {i}')
 for ax in axes:
     ax.axis('off')

@@ -250,7 +250,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.skipTest(reason="Dia only supports greedy search / sampling with one sequence.")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        """Overriden to account for the 2D flattened structure"""
+        """Overridden to account for the 2D flattened structure"""
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:

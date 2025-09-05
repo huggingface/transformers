@@ -105,7 +105,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         - llama -> my_new_model     and     my_new_model    -> llama
         - Llama -> MyNewModel       and     MyNewModel      -> Llama
         - LLAMA -> MY_NEW_MODEL     and     MY_NEW_MODEL    -> LLAMA
-        - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
+        - LLaMa -> MyNewModel       and     MyNewModel      -> Llama
     """
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
@@ -378,7 +378,7 @@ def find_all_dependencies(
             If provided, entities already present in `initial_checked_dependencies` will not be part of the returned dependencies.
         return_parent (bool, *optional*):
             If `True`, will return a list consisting of tuples (dependency, parent) instead of a simple set of dependencies. Note
-            that the order of the items in the list reflects the traversal order. Thus, no parent can ever appear before childs.
+            that the order of the items in the list reflects the traversal order. Thus, no parent can ever appear before children.
     Returns:
         A set of all the dependencies, or a list of tuples `(dependency, parent)` if `return_parent=True`.
 
@@ -864,7 +864,7 @@ def replace_class_node(
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
     - start from the methods and class attributes of the original modeling code node, and replace their definition
-    if overriden in the modular
+    if overridden in the modular
     - append all new methods and class attributes defined in the child class
     - all potential method/class docstrings and decorators use the ones found in modular if any, else in original modeling
     - replace all calls to super() with the unravelled code

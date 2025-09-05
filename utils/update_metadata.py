@@ -152,9 +152,9 @@ def get_frameworks_table() -> pd.DataFrame:
     modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_mapping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_prefix_to_model_type = {
-        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+        config.replace("Config", ""): model_type for model_type, config in config_mapping_names.items()
     }
 
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.

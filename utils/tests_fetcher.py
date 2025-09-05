@@ -67,7 +67,7 @@ from important_files import IMPORTANT_MODELS
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
-PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
+PATH_TO_TRANSFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
 # The value is just a heuristic to determine if we `guess` all models are impacted.
@@ -734,7 +734,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
@@ -820,7 +820,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     for framework in ["flax", "pytorch", "tensorflow"]:
         test_files = list((PATH_TO_EXAMPLES / framework).glob("test_*.py"))
         all_examples.extend(test_files)
-        # Remove the files at the root of examples/framework since they are not proper examples (they are eith utils
+        # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
         # or example test files).
         examples = [
             f for f in (PATH_TO_EXAMPLES / framework).glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / framework
@@ -854,7 +854,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
