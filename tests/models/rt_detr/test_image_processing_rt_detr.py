@@ -14,8 +14,7 @@
 import json
 import unittest
 
-import requests
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_vision_available():
@@ -234,7 +234,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         images = []
         for url in images_urls:
-            image = Image.open(requests.get(url, stream=True).raw)
+            image = load_image(url_to_local_path(url))
             images.append(image)
 
         for image_processing_class in self.image_processor_list:

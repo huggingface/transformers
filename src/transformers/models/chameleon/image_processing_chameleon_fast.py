@@ -14,6 +14,8 @@
 # limitations under the License.
 """Fast Image processor class for Chameleon."""
 
+from typing import Optional
+
 import numpy as np
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -87,7 +89,7 @@ class ChameleonImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> "torch.Tensor":
         """

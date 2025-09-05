@@ -496,21 +496,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -538,8 +523,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
-            self.assertTrue(attentions[0] is None)
+            self.assertFalse(attentions[0] is None)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -556,8 +541,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
-            self.assertTrue(self_attentions[0] is None)
+            self.assertFalse(self_attentions[0] is None)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

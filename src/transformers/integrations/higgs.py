@@ -14,6 +14,7 @@
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
 from math import sqrt
+from typing import Optional
 
 from ..utils import (
     is_flute_available,
@@ -496,8 +497,8 @@ class HiggsLinear(torch.nn.Module):
         out_features: int,
         num_bits: int,
         bias=True,
-        dtype: torch.dtype = None,
-        device: torch.device = None,
+        dtype: Optional[torch.dtype] = None,
+        device: Optional[torch.device] = None,
         group_size: int = 256,
         hadamard_size: int = 1024,
     ):

@@ -206,7 +206,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,

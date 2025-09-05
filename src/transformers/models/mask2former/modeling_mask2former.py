@@ -65,7 +65,7 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
         or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -98,8 +98,8 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
-    intermediate_hidden_states: tuple[torch.FloatTensor] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -132,7 +132,7 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: tuple[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -178,8 +178,8 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    transformer_decoder_intermediate_states: tuple[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
+    transformer_decoder_intermediate_states: Optional[tuple[torch.FloatTensor]] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 

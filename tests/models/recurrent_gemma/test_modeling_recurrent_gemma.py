@@ -66,18 +66,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate(self):
-        pass
-
     @unittest.skip(reason="SQRBound is known to have issues with gc")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

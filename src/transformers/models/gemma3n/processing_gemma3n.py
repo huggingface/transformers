@@ -98,7 +98,7 @@ class Gemma3nProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
         videos=None,

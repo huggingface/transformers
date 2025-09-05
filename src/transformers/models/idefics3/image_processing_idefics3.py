@@ -608,7 +608,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_image_splitting: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         max_image_size: Optional[dict[str, int]] = None,

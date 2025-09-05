@@ -16,7 +16,7 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -114,10 +114,10 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
     ) -> BatchFeature:
         """

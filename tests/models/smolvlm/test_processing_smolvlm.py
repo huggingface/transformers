@@ -15,22 +15,16 @@
 import shutil
 import tempfile
 import unittest
-from io import BytesIO
 from typing import Optional
 
 import numpy as np
-import requests
 
 from transformers import SmolVLMProcessor
+from transformers.image_utils import load_image
 from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 @require_torch
@@ -45,21 +39,19 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = cls.prepare_processor_dict()
         processor = SmolVLMProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct", **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path(
+                url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            )
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -74,6 +66,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.image1.close()
+        cls.image2.close()
+        cls.image3.close()
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -129,10 +128,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
@@ -398,7 +393,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -419,10 +414,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -434,7 +429,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
 
         # NOTE: the last assert checks are removed
         # Loading video as a list of frames (i.e. images) is not supported in SmolVLM

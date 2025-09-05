@@ -226,6 +226,7 @@ class ContinuousBatchProcessor:
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
+        self.scheduler.clear_cancelled_requests()
         if not self.scheduler.has_pending_requests():
             return False
 
@@ -547,6 +548,15 @@ class ContinuousBatchingManager:
         for input_ids in inputs:
             self.add_request(input_ids, **kwargs)
 
+    def cancel_request(self, request_id: str):
+        """Cancel a request by its ID.
+
+        Args:
+            request_id: The ID of the request to cancel
+        """
+        if self.batch_processor is not None:
+            self.batch_processor.scheduler.set_request_cancellation(request_id)
+
     def get_result(self, request_id=None, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
@@ -577,10 +587,13 @@ class ContinuousBatchingManager:
 
     def request_id_iter(self, request_id):
         """Iterate over results matching a specific request id as they become available."""
-        while self._generation_thread is not None and self._generation_thread.is_alive():
+        request_cancelled = False
+        while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
             result = self.get_result(request_id=request_id, timeout=0.1)
             if result is not None:
                 yield result
+            if self.batch_processor is not None:
+                request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
 
     @traced
     def warmup(self, batch_processor):

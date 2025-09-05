@@ -406,27 +406,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         )
 
     @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
         pass
@@ -984,7 +963,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -1040,7 +1022,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },

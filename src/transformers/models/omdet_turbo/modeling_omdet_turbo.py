@@ -59,7 +59,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
-    extracted_states: tuple[torch.FloatTensor] = None
+    extracted_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -92,7 +92,7 @@ class OmDetTurboDecoderOutput(ModelOutput):
     decoder_coords: Optional[torch.FloatTensor] = None
     decoder_classes: Optional[torch.FloatTensor] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
@@ -147,7 +147,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None

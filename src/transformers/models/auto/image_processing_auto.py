@@ -111,7 +111,7 @@ else:
             ("idefics2", ("Idefics2ImageProcessor", "Idefics2ImageProcessorFast")),
             ("idefics3", ("Idefics3ImageProcessor", "Idefics3ImageProcessorFast")),
             ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("imagegpt", ("ImageGPTImageProcessor", None)),
+            ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor", None)),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),

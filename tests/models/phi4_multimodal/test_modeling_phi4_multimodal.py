@@ -281,8 +281,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-    audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests

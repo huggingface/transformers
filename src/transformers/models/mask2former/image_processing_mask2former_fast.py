@@ -194,7 +194,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """

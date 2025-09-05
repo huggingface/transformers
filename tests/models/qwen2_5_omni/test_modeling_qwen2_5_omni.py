@@ -418,18 +418,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
@@ -595,9 +583,11 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-        self.audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        self.audio_url = (
+            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+        )
         self.audio_url_additional = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
         )
         self.image_url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
         self.messages = [

@@ -115,6 +115,7 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
+        self.codebook_dim = config.codebook_dim
         self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)

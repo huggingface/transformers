@@ -16,7 +16,7 @@
 Processor class for Pixtral.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -118,7 +118,7 @@ class PixtralProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,

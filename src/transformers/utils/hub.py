@@ -176,7 +176,7 @@ def list_repo_templates(
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (HTTPError, requests.exceptions.ConnectionError):
+        except (HTTPError, OfflineModeIsEnabled, requests.exceptions.ConnectionError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files

@@ -19,6 +19,7 @@ import unittest.mock as mock
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import LocalEntryNotFoundError, OfflineModeIsEnabled
 from requests.exceptions import HTTPError
 
 from transformers.utils import (
@@ -29,6 +30,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
     cached_file,
     has_file,
+    list_repo_templates,
 )
 
 
@@ -198,3 +200,12 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class OfflineModeTests(unittest.TestCase):
+    def test_list_repo_templates_w_offline(self):
+        with mock.patch("transformers.utils.hub.list_repo_tree", side_effect=OfflineModeIsEnabled()):
+            with mock.patch(
+                "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
+            ):
+                self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])

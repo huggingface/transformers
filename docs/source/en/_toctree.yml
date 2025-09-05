@@ -277,6 +277,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
+      - local: tasks/keypoint_matching
+        title: Keypoint matching
       title: Computer vision
     - sections:
       - local: tasks/image_captioning

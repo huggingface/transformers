@@ -43,6 +43,7 @@ if is_torch_available():
     from transformers import (
         DeepseekV3ForCausalLM,
         DeepseekV3ForSequenceClassification,
+        DeepseekV3ForTokenClassification,
         DeepseekV3Model,
     )
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
@@ -217,6 +218,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             DeepseekV3Model,
             DeepseekV3ForCausalLM,
             DeepseekV3ForSequenceClassification,
+            DeepseekV3ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -226,6 +228,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         {
             "feature-extraction": DeepseekV3Model,
             "text-classification": DeepseekV3ForSequenceClassification,
+            "token-classification": DeepseekV3ForTokenClassification,
             "text-generation": DeepseekV3ForCausalLM,
             "zero-shot": DeepseekV3ForSequenceClassification,
         }
@@ -258,10 +261,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
