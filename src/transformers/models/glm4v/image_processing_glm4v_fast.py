@@ -187,7 +187,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
             processed_grids.append([grid_t, grid_h, grid_w])
 
         pixel_values = torch.stack(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        image_grid_thw = torch.tensor(processed_grids, device="cpu")
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
