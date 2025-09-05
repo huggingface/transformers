@@ -195,10 +195,6 @@ messages = [
 
 Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. There are a few extra parameters to include in [`~ProcessorMixin.apply_chat_template`] that controls the sampling process.
 
-The `video_load_backend` parameter refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
-
-The examples below use Decord as the backend because it is a bit faster than PyAV.
-
 <hfoptions id="sampling">
 <hfoption id="fixed number of frames">
 
@@ -213,7 +209,6 @@ processed_chat = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     num_frames=32,
-    video_load_backend="decord",
 )
 print(processed_chat.keys())
 ```
@@ -223,7 +218,7 @@ These inputs are now ready to be used in [`~GenerationMixin.generate`].
 </hfoption>
 <hfoption id="fps">
 
-For longer videos, it may be better to sample more frames for better representation with the `video_fps` parameter. This determines how many frames per second to extract. As an example, if a video is 10 seconds long and `video_fps=2`, then the model samples 20 frames. In other words, 2 frames are uniformly sampled every 10 seconds.
+For longer videos, it may be better to sample more frames for better representation with the `fps` parameter. This determines how many frames per second to extract. As an example, if a video is 10 seconds long and `fps=2`, then the model samples 20 frames. In other words, 2 frames are uniformly sampled every 10 seconds.
 
 ```py
 processed_chat = processor.apply_chat_template(
@@ -231,8 +226,7 @@ processed_chat = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
-    video_fps=16,
-    video_load_backend="decord",
+    fps=16,
 )
 print(processed_chat.keys())
 ```

@@ -99,7 +99,7 @@ conversation = [
 
 inputs = processor.apply_chat_template(
     conversation,
-    video_fps=1,
+    fps=1,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -169,7 +169,7 @@ conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
 ipnuts = processor.apply_chat_template(
     conversations,
-    video_fps=1,
+    fps=1,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,

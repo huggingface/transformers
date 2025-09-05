@@ -1448,7 +1448,6 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     @deprecate_kwarg(
         "video_load_backend",
         version="4.59",
@@ -1622,7 +1621,7 @@ class ProcessorMixin(PushToHubMixin):
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
 
-            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
+            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
             if "do_sample_frames" not in kwargs and (
                 kwargs.get("fps") is not None or kwargs.get("num_frames") is not None

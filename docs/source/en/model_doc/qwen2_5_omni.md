@@ -83,7 +83,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-    video_fps=1,
+    fps=1,
 
     # kwargs to be passed to `Qwen2-5-OmniProcessor`
     padding=True,
