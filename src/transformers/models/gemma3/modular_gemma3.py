@@ -237,6 +237,8 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
         self.use_bidirectional_attention = use_bidirectional_attention
+        if use_bidirectional_attention:
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
@@ -402,6 +404,7 @@ class Gemma3Attention(Gemma2Attention):
 
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -546,8 +549,8 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         """A token can attend to any other token if their absolute distance is within
-        half the sliding window size (distance <= sliding_window // 2)."""
-        return abs(q_idx - kv_idx) <= sliding_window // 2
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
 
     return inner_mask
 
