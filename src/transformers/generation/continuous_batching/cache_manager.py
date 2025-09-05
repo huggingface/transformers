@@ -7,6 +7,8 @@ from .requests import logger
 
 
 class CacheManager(ABC):
+    """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine 
+    when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
     _index: int
     _block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
@@ -17,7 +19,7 @@ class CacheManager(ABC):
         pass
 
     def free_blocks(self, request_id: str, free_blocks: deque[int]) -> None:
-        """Frees all blocks associated with a request_id."""
+        """Free all blocks associated with a request_id."""
         if request_id in self._block_table:
             blocks_to_free = self._block_table.pop(request_id)
             free_blocks.extend(blocks_to_free)
@@ -28,22 +30,31 @@ class CacheManager(ABC):
 
     @abstractmethod
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
-        """Maps logical sequence indices to physical cache indices to read from."""
+        """Returns the physical indices of where to read request_id's cache in the cache tensor."""
         pass
 
     @abstractmethod
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
-        """Maps logical sequence indices to physical cache indices to write to."""
+        """Returns the physical indices of where to write request_id's cache in the cache tensor."""
         pass
 
 
 class FullAttentionCacheManager(CacheManager):
+    """Cache manager for a group of full attention layers."""
+
     def __init__(self, index: int, block_size: int) -> None:
+        """Initializes the cache manager for a group of full attention layers. 
+        Args:
+            - index: the index of the associated layer group
+            - block_size: the size of the blocks in the cache
+        """
         self._index = index
         self.block_size = block_size
         self._block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+        """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
+        otherwise. For group of full attention layers, we always allocate the number of requested blocks."""
         if len(free_blocks) < n_blocks:
             return None
         if request_id not in self._block_table:
@@ -52,6 +63,8 @@ class FullAttentionCacheManager(CacheManager):
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
+        """Returns the physical indices of where to read request_id's cache. For a group of full attention layers, we
+        first write the new cache to the cache tensor and then read the entire cache from the beginning to the end."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self._block_table.get(request_id)
         if block_table is None:
@@ -66,6 +79,8 @@ class FullAttentionCacheManager(CacheManager):
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
+        """Get physical indices for writing to the cache. For a group of full attention layers, we write the new cache
+        as a continuation of the existing cache for the same request."""
         block_table = self._block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
@@ -80,7 +95,15 @@ class FullAttentionCacheManager(CacheManager):
 
 
 class SlidingAttentionCacheManager(CacheManager):
+    """Cache manager for sliding window attention layers."""
+
     def __init__(self, index: int, block_size: int, sliding_window: int) -> None:
+        """Initializes the cache manager for a group of sliding window attention layers. 
+        Args:
+            - index: the index of the associated layer group
+            - block_size: the size of the blocks in the cache
+            - sliding_window: the size of the sliding window
+        """
         self._index = index
         self.block_size = block_size
         self.sliding_window = sliding_window
@@ -88,6 +111,9 @@ class SlidingAttentionCacheManager(CacheManager):
         self._block_table = {}
 
     def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
+        """Allocate blocks for a given request_id. Returns the number of blocks allocated if successful and None
+        otherwise. For group of sliding window attention layers, we only allocate up to the point where we can fit an 
+        entire sliding window in the cache tensor."""
         if request_id not in self._block_table:
             self._block_table[request_id] = []
         # Early return if we are already at the max number of blocks per request
@@ -104,6 +130,11 @@ class SlidingAttentionCacheManager(CacheManager):
         return actual_n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
+        """Returns the physical indices of where to read request_id's cache in the cache tensor. 
+        For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the 
+        new cache can overwrite the old one. To form the cache + new key / values states, we read the at most 
+        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the -1 indices 
+        which indicate where to store the new key or values indices."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self._block_table.get(request_id)
         if block_table is None:
@@ -122,6 +153,9 @@ class SlidingAttentionCacheManager(CacheManager):
         return physical_indices + [-1] * query_length
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
+        """Returns the physical indices of where to write request_id's cache in the cache tensor. For a group of 
+        sliding window attention layers, we write the new cache in rolling-buffer kind of way: if we reach the end of
+        the allocated physical cache, we start writing from the beginning of the physical cache again."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self._block_table.get(request_id)
         if block_table is None:
