@@ -38,7 +38,6 @@ if is_torch_available():
         MiniMaxForTokenClassification,
         MiniMaxModel,
     )
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 

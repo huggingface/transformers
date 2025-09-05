@@ -48,7 +48,6 @@ if is_torch_available():
         MistralForTokenClassification,
         MistralModel,
     )
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 

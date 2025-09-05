@@ -40,7 +40,6 @@ if is_torch_available():
         Phi3ForTokenClassification,
         Phi3Model,
     )
-    from transformers.models.phi3.modeling_phi3 import Phi3RotaryEmbedding
 
     end_of_text_token = 32000
 
@@ -116,7 +115,6 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Phi3ModelTester
-    rotary_embedding_layer = Phi3RotaryEmbedding
 
 
 @slow

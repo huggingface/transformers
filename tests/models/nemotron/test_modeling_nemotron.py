@@ -16,6 +16,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -94,6 +96,15 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):
+        pass
+
+    @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 
