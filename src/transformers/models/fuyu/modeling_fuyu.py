@@ -175,9 +175,8 @@ class FuyuModel(FuyuPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        image_patches: Optional[
-            torch.Tensor
-        ] = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
         image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -283,9 +282,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        image_patches: Optional[
-            torch.Tensor
-        ] = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
         image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
