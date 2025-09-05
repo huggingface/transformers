@@ -35,6 +35,7 @@ from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -743,6 +744,13 @@ class ServeCommand(BaseTransformersCLICommand):
             response = await call_next(request)
             response.headers[X_REQUEST_ID] = request_id
             return response
+
+        FastAPIInstrumentor.instrument_app(
+            app,
+            excluded_urls="health",
+            http_capture_headers_server_request=[X_REQUEST_ID],
+            http_capture_headers_server_response=[X_REQUEST_ID],
+        )
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
