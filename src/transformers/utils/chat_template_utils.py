@@ -504,7 +504,7 @@ def render_jinja_template(
 
     rendered = []
     all_generation_indices = []
-    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG"
+    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
     for chat in conversations:
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
@@ -544,15 +544,20 @@ def render_jinja_template(
                 **kwargs,
             )
         if continue_final_message:
-            if (final_message.strip() not in rendered_chat) or (continue_final_message_tag not in rendered_chat):
+            if (final_message.strip() not in rendered_chat) or (continue_final_message_tag.strip() not in rendered_chat):
                 raise ValueError(
                     "continue_final_message is set but the final message does not appear in the chat after "
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
                 )
-            tag_loc = rendered_chat.rindex(continue_final_message_tag)
-            rendered_chat = rendered_chat[:tag_loc]
+            tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
+            if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
+                # The template preserves spacing, so things are simple
+                rendered_chat = rendered_chat[:tag_loc]
+            else:
+                # The message has trailing spacing that was trimmed, so we must be more cautious
+                rendered_chat = rendered_chat[:tag_loc].rstrip()
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices
