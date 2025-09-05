@@ -17,7 +17,7 @@ Image/Text processor class for Chinese-CLIP
 """
 
 import warnings
-from typing import Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -69,7 +69,7 @@ class ChineseCLIPProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ChineseClipProcessorKwargs],

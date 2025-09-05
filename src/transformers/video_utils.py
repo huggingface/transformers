@@ -66,7 +66,7 @@ VideoInput = Union[
     list["np.ndarray"],
     list["torch.Tensor"],
     list[list["PIL.Image.Image"]],
-    list[list["np.ndarrray"]],
+    list[list[np.ndarray]],
     list[list["torch.Tensor"]],
     URL,
     list[URL],
@@ -80,12 +80,12 @@ VideoInput = Union[
 @dataclass
 class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: float = None
-    width: int = None
-    height: int = None
-    duration: float = None
-    video_backend: str = None
-    frames_indices: list[int] = None
+    fps: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+    video_backend: Optional[str] = None
+    frames_indices: Optional[list[int]] = None
 
     def __iter__(self):
         return (f.name for f in fields(self))
@@ -245,7 +245,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadat
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
