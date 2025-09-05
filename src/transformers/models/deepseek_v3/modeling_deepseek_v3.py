@@ -167,6 +167,7 @@ class DeepseekV3MoE(nn.Module):
         self.shared_experts = DeepseekV3MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        self.total_experts = len(self.experts)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         r"""
@@ -174,10 +175,10 @@ class DeepseekV3MoE(nn.Module):
         to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
         expert_mask = expert_mask.permute(2, 0, 1)
 
-        for expert_idx in range(len(self.experts)):
+        for expert_idx in range(self.total_experts):
             expert = self.experts[expert_idx]
             mask = expert_mask[expert_idx]
             token_indices, weight_indices = torch.where(mask)
@@ -372,6 +373,10 @@ class DeepseekV3Attention(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
+    def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
+        """Hook to apply LoRA scaling. Default: no-op."""
+        return q_pass, q_rot, k_pass
+
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -395,8 +400,12 @@ class DeepseekV3Attention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(k_pass)
 
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        # Apply LoRA scaling hook (no-op by default, overridden by subclasses)
+        q_pass, q_rot, k_pass = self._apply_lora_scaling(q_pass, q_rot, k_pass)
+
+        k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
