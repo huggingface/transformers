@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Keypoint matching matches different points of interests that belong to same object appearing in two different images. Most modern keypoint matchers take images as input and output the following:
 
-- **Keypoint coordinations (x,y):** They output two separate lists of keypoint coordinations where first one is location of the keypoint in the first image, and second one (on the same index) is the coordination of the keypoint matched. 
+- **Keypoint coordinates (x,y):** one-to-one mapping of pixel coordinates between the first and the second image using two lists. Each keypoint at a given index in the first list is matched to the keypoint at the same index in the second list.
 - **Matching scores:** Scores assigned to the keypoint matches.
 
 In this tutorial we will extract keypoint matches with [EfficientLoFTR model trained with MatchAnything framework](https://huggingface.co/zju-community/matchanything_eloftr), and refine the matches. There's two ways to do this, using `AutoModelForKeypointMatching` or `keypoint-matching` pipeline. Let's see the former in action. This model is only 16M parameters so we can conveniently run on CPU.
