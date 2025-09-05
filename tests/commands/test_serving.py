@@ -710,3 +710,29 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
                 "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
             )
         )
+
+
+class ServeInfrastructureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.port = 8042
+        args = ServeArguments(port=cls.port)
+        serve_command = ServeCommand(args)
+        thread = Thread(target=serve_command.run)
+        thread.daemon = True
+        thread.start()
+
+    def test_healthcheck(self):
+        """Tests that the healthcheck endpoint works."""
+        response = None
+        retries = 10
+        while retries > 0:
+            try:
+                response = requests.get(f"http://localhost:{self.port}/health")
+                break
+            except requests.exceptions.ConnectionError:
+                time.sleep(0.1)
+                retries -= 1
+        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
