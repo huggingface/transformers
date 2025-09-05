@@ -345,12 +345,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
     @pytest.mark.generate
     @is_flaky(description="TODO: check why flaky")
     def test_generate_methods_with_logits_to_keep(self):
