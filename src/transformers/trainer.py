@@ -294,9 +294,6 @@ def safe_globals():
 if TYPE_CHECKING:
     import optuna
 
-    if is_datasets_available():
-        import datasets
-
 logger = logging.get_logger(__name__)
 
 
@@ -425,7 +422,7 @@ class Trainer:
         processing_class: Optional[
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
         ] = None,
-        model_init: Optional[Callable[[], PreTrainedModel]] = None,
+        model_init: Optional[Callable[..., PreTrainedModel]] = None,
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
         callbacks: Optional[list[TrainerCallback]] = None,
