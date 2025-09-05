@@ -175,8 +175,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
-                dtype, device = self._get_dtype_device()
-                pixel_values = pixel_values.to(dtype=dtype, device=device)
+                pixel_values = pixel_values.to(inputs_embeds.device, inputs_embeds.dtype)
                 image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
@@ -250,14 +249,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
-
-    def _get_dtype_device(self) -> tuple[str, str]:
-        if self.config.use_qwen2_5:
-            parameters = next(self.vlm.visual.parameters())
-        else:
-            parameters = next(self.parameters())
-        dtype, device = parameters.dtype, parameters.device
-        return dtype, device
 
 
 __all__ = ["ColQwen2ForRetrieval", "ColQwen2PreTrainedModel"]

@@ -99,7 +99,6 @@ def convert_colqwen2_weights_to_hf(
     push_to_hub: bool,
     revision: Optional[str] = None,
     original_vlm_name_or_path: Optional[str] = None,
-    use_qwen2_5=False,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
@@ -120,7 +119,6 @@ def convert_colqwen2_weights_to_hf(
     config = ColQwen2Config(
         vlm_config=original_config,
         embedding_dim=128,  # hardcoded in the original model
-        use_qwen2_5=use_qwen2_5,
     )
     config.model_type = "colqwen2"
     config.is_composition = False
@@ -203,12 +201,7 @@ if __name__ == "__main__":
         help="Name or path of the original VLM backbone model",
         default=None,
     )
-    parser.add_argument(
-        "--use_qwen2_5",
-        help="Whether the original VLM backbone is Qwen2.5",
-        action="store_true",
-        default=False,
-    )
+    
     args = parser.parse_args()
 
     convert_colqwen2_weights_to_hf(
@@ -217,5 +210,4 @@ if __name__ == "__main__":
         push_to_hub=args.push_to_hub,
         revision=args.revision,
         original_vlm_name_or_path=args.original_vlm_name_or_path,
-        use_qwen2_5=args.use_qwen2_5,
     )

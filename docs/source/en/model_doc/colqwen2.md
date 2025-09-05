@@ -157,6 +157,25 @@ print("Retrieval scores (query x image):")
 print(scores)
 ```
 
+You can also use checkpoints for `ColQwen2.5` that are **compatible with the ColQwen2 architecture**. This version of the model uses [Qwen2_5_VL](./qwen2_5_vl) as the backbone, and this should be specified when instantiating the processor.
+
+```python
+import torch
+from transformers import ColQwen2ForRetrieval, ColQwen2Processor
+from transformers.utils.import_utils import is_flash_attn_2_available
+
+model_name = "Sahil-Kabir/colqwen2.5-v0.2" # An existing compatible checkpoint
+vlm_name = "Qwen/Qwen2.5-VL-3B-Instruct" # Processor source
+
+model = ColQwen2ForRetrieval.from_pretrained(
+    model_name,
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa"
+)
+processor = ColQwen2Processor.from_pretrained(vlm_name)
+```
+
 ## Notes
 
 - [`~ColQwen2Processor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.

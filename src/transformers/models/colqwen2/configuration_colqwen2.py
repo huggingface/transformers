@@ -61,15 +61,12 @@ class ColQwen2Config(PretrainedConfig):
         vlm_config=None,
         embedding_dim: int = 128,
         initializer_range: float = 0.02,
-        use_qwen2_5=False,
         **kwargs,
     ):
         if vlm_config is None:
-            model_name = "qwen2_5_vl" if use_qwen2_5 else "qwen2_vl"
-            vlm_config = CONFIG_MAPPING[model_name]()
-            config_name = "Qwen2_5VLConfig" if use_qwen2_5 else "Qwen2VLConfig"
+            vlm_config = CONFIG_MAPPING["qwen2_vl"]()
             logger.info(
-                "`vlm_config` is `None`. Initializing `vlm_config` with the `%s` with default values." % config_name
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )
         elif isinstance(vlm_config, dict):
             vlm_config = deepcopy(vlm_config)
