@@ -347,3 +347,40 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
         assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"
+
+    @slow
+    def test_model_integration_test_2(self):
+        """
+        Test if the model is able to retrieve the correct pages for a small and easy dataset.
+        This test uses a ColQwen2.5 checkpoint that is compatible with the ColQwen2 architecture.
+        """
+        model = ColQwen2ForRetrieval.from_pretrained(
+            "Sahil-Kabir/colqwen2.5-v0.2",
+            dtype=torch.bfloat16,
+        ).eval()
+        processor = ColQwen2Processor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct", trust_remote_code=True)
+
+        # Load the test dataset
+        ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
+
+        # Preprocess the examples
+        batch_images = self.processor(images=list(ds["image"])).to(torch_device)
+        batch_queries = self.processor(text=list(ds["query"])).to(torch_device)
+        
+        with torch.inference_mode():
+            image_embeddings = model(**batch_images).embeddings
+            query_embeddings = model(**batch_queries).embeddings
+
+        # Compute retrieval scores
+        scores = processor.score_retrieval(
+            query_embeddings=query_embeddings,
+            passage_embeddings=image_embeddings,
+        )
+
+        assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
+        assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
+
+        # Check if the maximum scores per row are in the diagonal of the matrix score
+        self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
+
+
