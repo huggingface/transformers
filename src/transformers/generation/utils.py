@@ -1768,6 +1768,11 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
+        # And keep in model_kwargs variable output controls
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
+        model_kwargs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
         return generation_config, model_kwargs
 
@@ -2772,10 +2777,6 @@ class GenerationMixin(ContinuousMixin):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
             if is_prefill:
                 outputs = self(**model_inputs, return_dict=True)
                 is_prefill = False
@@ -3256,10 +3257,6 @@ class GenerationMixin(ContinuousMixin):
             flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
             model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
             model_outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
@@ -3553,9 +3550,6 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             outputs = self(**model_inputs)
 
