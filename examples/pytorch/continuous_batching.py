@@ -231,7 +231,7 @@ if __name__ == "__main__":
         pad_token_id=tokenizer.pad_token_id,
         do_sample=True,
         temperature=0.8,
-        top_p=1.0,
+        top_p=0.9,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
