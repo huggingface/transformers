@@ -124,6 +124,7 @@ class Olmo2Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         rms_norm_eps=1e-5,
+        use_sinks=False,
         **kwargs,
     ):
         super().__init__(
@@ -155,6 +156,7 @@ class Olmo2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         self.rms_norm_eps = rms_norm_eps
+        self.use_sinks = use_sinks
 
     def _rope_scaling_validation(self):
         """
@@ -173,8 +175,14 @@ class Olmo2Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+        if (
+            rope_scaling_factor is None
+            or not isinstance(rope_scaling_factor, float)
+            or rope_scaling_factor <= 1.0
+        ):
+            raise ValueError(
+                f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}"
+            )
 
 
 __all__ = ["Olmo2Config"]

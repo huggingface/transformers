@@ -4,7 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_olmo3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PretrainedConfig
 
 
 class Olmo3Config(PretrainedConfig):
@@ -72,6 +73,8 @@ class Olmo3Config(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         sliding_window (`int`, *optional*, defaults to 4097):
             Size of the sliding window for sliding window attention.
+        use_sinks (`bool`, *optional*, defaults to `False`):
+            Whether to use attention sinks for improved long context performance.
         layer_types (`list`, *optional*):
             Attention pattern for each layer. Defaults to full attention in each layer.
 
@@ -127,6 +130,7 @@ class Olmo3Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         rms_norm_eps=1e-5,
+        use_sinks=False,
         sliding_window=4097,
         layer_types=None,
         **kwargs,
@@ -160,12 +164,14 @@ class Olmo3Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         self.rms_norm_eps = rms_norm_eps
+        self.use_sinks = use_sinks
 
         self.sliding_window = sliding_window
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if i % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
+                "sliding_attention" if i % 4 != 0 else "full_attention"
+                for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
 
@@ -186,8 +192,14 @@ class Olmo3Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+        if (
+            rope_scaling_factor is None
+            or not isinstance(rope_scaling_factor, float)
+            or rope_scaling_factor <= 1.0
+        ):
+            raise ValueError(
+                f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}"
+            )
 
 
 __all__ = ["Olmo3Config"]

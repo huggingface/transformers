@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_olmo3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -12,62 +12,24 @@ from torch.nn import functional as F
 
 from transformers.utils.generic import TransformersKwargs
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils.deprecation import deprecate_kwarg
+from typing import Union
+
+from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_olmo3 import Olmo3Config
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def olmo3_eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    sliding_window: Optional[int] = None,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
-
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -99,34 +61,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -164,6 +102,94 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def olmo3_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    """Forward pass using eager attention that matches flex attention logic."""
+    B, H, Q, D = query.shape
+    _, _, K, _ = key.shape
+
+    # Apply GQA by repeating key/value for compatibility
+    key = repeat_kv(key, module.num_key_value_groups)
+    value = repeat_kv(value, module.num_key_value_groups)
+
+    s_param = module.sinks
+    if s_param is not None:
+        if s_param.ndim == 1:
+            num_sink_tokens = 1
+        elif s_param.ndim == 2:
+            num_sink_tokens = s_param.size(1)
+        else:
+            raise ValueError("module.sinks must have shape [H] or [H, S]")
+
+        # Add dummy sink K/V tensors like in flex attention (zeros are fine since we'll override scores)
+        sink_k = key.new_zeros(B, H, num_sink_tokens, D)
+        sink_v = value.new_zeros(B, H, num_sink_tokens, D)
+        key = torch.cat([sink_k, key], dim=2)
+        value = torch.cat([sink_v, value], dim=2)
+
+        local_sinks = s_param  # Use s_param.to_local() if DTensor
+
+    # Standard attention computation
+    attn_logits = torch.matmul(query, key.transpose(2, 3)) * scaling  # [B, H, Q, K+S]
+
+    if attention_mask is not None:
+        # causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        causal_mask = attention_mask[:, :, :, :K]
+        # If we have sinks, we need to pad the mask with zeros for sink positions
+        if s_param is not None:
+            # Pad causal mask with zeros for sink tokens (sinks can attend to everything)
+            sink_mask = torch.zeros(
+                causal_mask.shape[:-1] + (num_sink_tokens,),
+                device=causal_mask.device,
+                dtype=causal_mask.dtype,
+            )
+            causal_mask = torch.cat([sink_mask, causal_mask], dim=-1)
+        attn_logits = attn_logits + causal_mask
+
+    # Apply score_mod_fn logic exactly like flex attention
+    if s_param is not None:
+        if local_sinks.ndim == 1:
+            # For 1D sinks, each head gets its own sink value (like score_mod_fn)
+            for h in range(H):
+                sink_logit = local_sinks[h].to(attn_logits.dtype)
+                # Apply to all query positions for sink kv positions (first num_sink_tokens)
+                attn_logits[:, h, :, :num_sink_tokens] = sink_logit
+        elif local_sinks.ndim == 2:
+            # For 2D sinks, each head gets different values per sink position
+            for h in range(H):
+                for s in range(num_sink_tokens):
+                    sink_logit = local_sinks[h, s].to(attn_logits.dtype)
+                    attn_logits[:, h, :, s] = sink_logit
+
+    # Apply precision casting like flex attention AFTER sink logits
+    cast_to_bf16 = query.device.type == "cuda"
+    og_dtype = query.dtype
+    if cast_to_bf16:
+        query, key, value = query.bfloat16(), key.bfloat16(), value.bfloat16()
+        attn_logits = attn_logits.bfloat16()
+
+    # Use autocast context like flex attention
+    with torch.autocast(enabled=False, device_type=query.device.type):
+        attn_probs = F.softmax(attn_logits, dim=-1, dtype=torch.float32).to(attn_logits.dtype)
+        probs = F.dropout(attn_probs, p=dropout, training=module.training)
+        attn_out = torch.matmul(probs, value)  # [B, H, Q, D]
+
+    # Cast back to original dtype
+    if cast_to_bf16:
+        attn_out = attn_out.to(og_dtype)
+
+    # Return only attn_out to match OLMo-core format (no weights)
+    return attn_out.transpose(1, 2).contiguous()
+
+
 class Olmo3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -171,31 +197,47 @@ class Olmo3Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
         )
         self.q_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
+        if config.use_sinks:
+            self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        else:
+            self.sinks = None
         assert config.layer_types is not None
         self.attention_type = config.layer_types[layer_idx]
-        self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sliding_window = (
+            config.sliding_window if self.attention_type == "sliding_attention" else None
+        )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -229,7 +271,9 @@ class Olmo3Attention(nn.Module):
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = olmo3_eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -278,23 +322,26 @@ class Olmo3DecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Olmo3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Olmo3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -312,6 +359,8 @@ class Olmo3DecoderLayer(GradientCheckpointingLayer):
 
 
 class Olmo3RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Olmo3Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -332,10 +381,14 @@ class Olmo3RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = (
+            x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -346,17 +399,16 @@ class Olmo3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Olmo3PreTrainedModel(PreTrainedModel):
-    config_class = Olmo3Config
+    config: Olmo3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Olmo3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Olmo3DecoderLayer,
@@ -375,7 +427,9 @@ class Olmo3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Olmo3RMSNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, Olmo3Attention):
+        elif isinstance(module, Olmo3Attention) and module.sinks is not None:
+            module.sinks.data.normal_(mean=0.0, std=std)
+        if isinstance(module, Olmo3Attention) and module.sinks is not None:
             module.sinks.data.normal_(mean=0.0, std=std)
 
 
@@ -396,12 +450,6 @@ class Olmo3Model(Olmo3PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     @auto_docstring
@@ -426,9 +474,13 @@ class Olmo3Model(Olmo3PreTrainedModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
@@ -478,7 +530,7 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: Olmo3Config):
         super().__init__(config)
         self.model = Olmo3Model(config)
         self.vocab_size = config.vocab_size
@@ -486,18 +538,6 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -521,11 +561,6 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -555,12 +590,16 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,

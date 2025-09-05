@@ -140,6 +140,15 @@ def write_model(
                 f"transformer.blocks.{layer_i}.ff_norm.weight"
             ],
         }
+        sinks_key = f"transformer.blocks.{layer_i}.attention.sinks"
+        if sinks_key in loaded:
+            state_dict[f"model.layers.{layer_i}.self_attn.sinks"] = (
+                loaded[sinks_key]
+            )
+
+        state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = (
+            inv_freq
+        )
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
@@ -179,6 +188,8 @@ def write_model(
         print("Changing eos_token_id from 0 to 50279.")
         olmo2_config["eos_token_id"] = 50279
 
+    use_sinks = f"transformer.blocks.0.attention.sinks" in loaded
+
     config = Olmo2Config(
         vocab_size=vocab_size,
         hidden_size=dim,
@@ -193,6 +204,7 @@ def write_model(
         tie_word_embeddings=olmo2_config["weight_tying"],
         rms_norm_eps=olmo2_config["layer_norm_eps"],
         rope_theta=base,
+        use_sinks=use_sinks,
     )
     config.save_pretrained(tmp_model_path)
 
