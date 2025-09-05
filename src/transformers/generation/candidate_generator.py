@@ -1019,11 +1019,15 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         num_output_tokens: int = 10,
         max_matching_ngram_size: Optional[int] = None,
         max_length: int = 20,
+        bad_words_ids: Optional[list[list[int]]] = None,
     ):
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
         self.max_length = max_length
         self.eos_token_id = eos_token_id
+        self.bad_words_ids = (
+            [torch.tensor(bad_word_id) for bad_word_id in bad_words_ids] if bad_words_ids is not None else None
+        )
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -1068,6 +1072,13 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
+
+                    # If `chosen_ids` contains any of the sequences in `bad_words_ids`, skips this match -- this
+                    # sequence could never be generated in normal circumstances.
+                    if self.bad_words_ids is not None:
+                        if any(bad_word_id.to(chosen_ids.device) in chosen_ids for bad_word_id in self.bad_words_ids):
+                            continue
+
                     match_found = True
 
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
@@ -1082,8 +1093,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             if match_found:
                 break
 
-        if chosen_ids is None or len(chosen_ids) == 0:
-            # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+        # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+        if not match_found or len(chosen_ids) == 0:
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids

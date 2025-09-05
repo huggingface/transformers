@@ -1025,6 +1025,7 @@ class GenerationMixin(ContinuousMixin):
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
                 max_matching_ngram_size=generation_config.max_matching_ngram_size,
                 max_length=generation_config.max_length,
+                bad_words_ids=generation_config.bad_words_ids,
             )
         elif different_tokenizers:
             if generation_config.do_sample is True:
