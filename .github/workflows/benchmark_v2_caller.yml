@@ -6,7 +6,7 @@ on:
     - cron: "30 2 * * *"
   push:
     branches:
-      - run_nvidia_benchmark*
+      - benchmarking-gh-actions*
   workflow_dispatch:
     inputs:
       model_id:
