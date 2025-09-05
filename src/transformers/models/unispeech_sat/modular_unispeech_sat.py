@@ -101,7 +101,7 @@ class UniSpeechSatEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
 
 class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.weight_proj = nn.Linear(config.hidden_size, self.num_groups * self.num_vars)
 
     @staticmethod
@@ -227,7 +227,7 @@ UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechSatConfig):
-        UniSpeechSatPreTrainedModel.__init__(config)
+        UniSpeechSatPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = UniSpeechSatFeatureEncoder(config)
         self.feature_projection = UniSpeechSatFeatureProjection(config)

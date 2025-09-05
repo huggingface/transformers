@@ -35,7 +35,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -219,7 +218,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -453,7 +452,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", self.size)
+        size = images_kwargs.get("size", {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000})
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

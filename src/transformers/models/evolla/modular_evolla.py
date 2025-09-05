@@ -65,7 +65,7 @@ logger = logging.get_logger(__name__)
 
 class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         # remove the position_ids in EsmEmbeddings
         self.position_ids = None
 
@@ -127,7 +127,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         )
 
 
-class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
+class EvollaSaProtSelfAttention(EsmSelfAttention):
     def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         nn.Module.__init__(self)
         self.config = config
@@ -607,7 +607,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
         # Compute the scaled dot-product attention scores
         attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
-        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
+        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stabilize score
         attention_scores = attn_weights.masked_fill(
             (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
         )  # [bs, numheads, querylength, keylength]
@@ -872,7 +872,7 @@ class EvollaModel(EvollaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
