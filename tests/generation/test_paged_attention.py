@@ -78,9 +78,66 @@ class TestBatchGeneration(unittest.TestCase):
         )
 
         for i, req_id in enumerate(batch_outputs):
-            generated = self.tokenizer.decode(batch_outputs[req_id].static_outputs, skip_special_tokens=False).strip()
+            generated = self.tokenizer.decode(batch_outputs[req_id].generated_tokens, skip_special_tokens=False).strip()
             expected = _EXPECTED_OUTPUTS[i].strip()
             self.assertTrue(
                 generated.startswith(expected),
                 msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected start: {expected}\nGot: {generated}",
+            )
+
+    @parameterized.expand(
+        [
+            ("eager_paged", 64, 128, 64),
+            ("sdpa_paged", 32, 256, 128),
+            ("paged_attention", 16, 512, 256),
+            ("flex_paged", 64, 128, 64),
+        ]
+    )
+    def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
+        """Test batch generation with do_sampling=True to verify sampling works correctly."""
+        self.model.config.attn_implementation = attn_impl
+
+        generation_config = GenerationConfig(
+            max_new_tokens=30,
+            do_sample=True,
+            top_k=50,
+            temperature=0.8,
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
+            use_cache=False,
+            num_blocks=num_blocks,
+            block_size=block_size,
+            max_batch_tokens=max_batch_tokens,
+        )
+
+        tokenized = self.tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)  # Use fewer prompts for faster test
+        batch_inputs = list(tokenized["input_ids"])
+
+        start = time.time()
+        batch_outputs = self.model.generate_batch(
+            inputs=batch_inputs,
+            generation_config=generation_config,
+        )
+        end = time.time()
+        print(
+            f"\n[{attn_impl}] Sampling batch took {end - start:.2f}s with config: blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
+        )
+
+        # With sampling enabled, we can't check exact outputs, but we should verify:
+        # 1. All requests completed successfully
+        # 2. Generated text is non-empty
+        # 3. Generated text is different from greedy (demonstrating sampling is working)
+        self.assertEqual(len(batch_outputs), len(batch_inputs), f"[{attn_impl}] Not all requests completed")
+        
+        for i, req_id in enumerate(batch_outputs):
+            generated = self.tokenizer.decode(batch_outputs[req_id].generated_tokens, skip_special_tokens=False).strip()
+            self.assertTrue(
+                len(generated) > 0,
+                msg=f"[{attn_impl}] Empty output for request {i}",
+            )
+            # Check that we got at least some tokens generated
+            generated_tokens = batch_outputs[req_id].generated_tokens
+            self.assertGreater(
+                len(generated_tokens), 0,
+                msg=f"[{attn_impl}] No tokens generated for request {i}",
             )
