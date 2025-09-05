@@ -815,7 +815,6 @@ def _proxies_to_metas(v):
 
 def create_cache_proxy_factory_fn(orig_cache_cls: type[Cache]) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
-        global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
             raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
         cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)

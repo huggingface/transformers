@@ -79,7 +79,7 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when model is in train mode, `jnp.ndarray` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477).
         projected_states (`jnp.ndarray` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.

@@ -19,7 +19,8 @@ from threading import Thread
 from unittest.mock import patch
 
 import aiohttp.client_exceptions
-from huggingface_hub import AsyncInferenceClient
+import requests
+from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
@@ -492,6 +493,37 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
+def _get_scheduler(serve_command):
+    # Defensive navigation in case any layer is renamed in the future
+    cbm = getattr(serve_command, "running_continuous_batching_manager", None)
+    assert cbm is not None, "ServeCommand has no running_continuous_batching_manager"
+    bp = getattr(cbm, "batch_processor", None)
+    assert bp is not None, "CBM has no batch_processor"
+    sched = getattr(bp, "scheduler", None)
+    assert sched is not None, "batch_processor has no scheduler"
+    return sched
+
+
+def _open_stream_and_cancel(base_url: str, request_id: str):
+    with requests.Session() as s:
+        with s.post(
+            f"{base_url}/v1/chat/completions",
+            json={
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "stream": True,
+                "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
+                "request_id": request_id,
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            assert resp.status_code == 200
+
+            for _ in resp.iter_content(chunk_size=None):
+                resp.close()
+                break
+
+
 @slow  # server startup time is slow on our push CI
 @require_openai
 class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
@@ -501,11 +533,91 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8002
-        args = ServeArguments(port=cls.port, attn_implementation="sdpa_paged")  # important: toggle continuous batching
-        serve_command = ServeCommand(args)
-        thread = Thread(target=serve_command.run)
+        args = ServeArguments(
+            port=cls.port, continuous_batching=True, attn_implementation="sdpa_paged", default_seed=42
+        )
+        cls.serve_command = ServeCommand(args)
+        thread = Thread(target=cls.serve_command.run)
         thread.daemon = True
         thread.start()
+
+    def test_full_request(self):
+        """Tests that an inference using the Responses API and Continuous Batching works"""
+
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [
+                {"role": "system", "content": "You are a sports assistant designed to craft sports programs."},
+                {"role": "user", "content": "Tell me what you can do."},
+            ],
+            "stream": True,
+            "max_tokens": 30,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
+                content = token.choices[0].delta.get("content", "")
+                full_text += content if content is not None else ""
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
+            )
+        )
+
+    def test_max_tokens_not_set_in_req(self):
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [
+                {"role": "system", "content": "You are a sports assistant designed to craft sports programs."},
+                {"role": "user", "content": "Tell me what you can do."},
+            ],
+            "stream": True,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
+                content = token.choices[0].delta.get("content", "")
+                full_text += content if content is not None else ""
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
+            )
+        )
+
+    def test_request_cancellation(self):
+        """Tests that a request can be cancelled."""
+
+        base_url = f"http://127.0.0.1:{self.port}"
+        request_id = "test-cancel"
+
+        _open_stream_and_cancel(base_url, request_id)
+
+        scheduler = _get_scheduler(self.serve_command)
+
+        # Because cancellation is non-blocking, poll for a short, bounded time.
+        deadline = time.time() + 8.0  # generous but still CI-friendly
+        last_seen = None
+        while time.time() < deadline:
+            is_cancelled = scheduler.request_is_cancelled(request_id)
+            if is_cancelled:
+                break
+            last_seen = time.time()
+            time.sleep(0.1)  # don't spin the CPU
+
+        is_cancelled = scheduler.request_is_cancelled(request_id)
+        self.assertTrue(
+            is_cancelled,
+            f"Request {request_id} still present in scheduler after cancellation "
+            f"(last seen at {last_seen}). Check cancellation propagation.",
+        )
 
 
 @require_openai
@@ -537,7 +649,6 @@ class ServeResponsesMixin:
             "max_output_tokens": 1,
         }
         all_payloads = asyncio.run(self.run_server(request))
-        print("ok")
 
         order_of_payloads = [
             ResponseCreatedEvent,
@@ -599,3 +710,29 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
                 "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
             )
         )
+
+
+class ServeInfrastructureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.port = 8042
+        args = ServeArguments(port=cls.port)
+        serve_command = ServeCommand(args)
+        thread = Thread(target=serve_command.run)
+        thread.daemon = True
+        thread.start()
+
+    def test_healthcheck(self):
+        """Tests that the healthcheck endpoint works."""
+        response = None
+        retries = 10
+        while retries > 0:
+            try:
+                response = requests.get(f"http://localhost:{self.port}/health")
+                break
+            except requests.exceptions.ConnectionError:
+                time.sleep(0.1)
+                retries -= 1
+        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})

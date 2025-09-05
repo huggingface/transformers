@@ -100,6 +100,3 @@ probs = outputs.logits_per_image.softmax(dim=-1)
 
 [[autodoc]] Aimv2TextModel
     - forward
-
-</pt>
-<tf>

@@ -54,11 +54,10 @@ Essentially, we want the student model (a randomly initialized MobileNet) to mim
 
 
 ```python
-from transformers import TrainingArguments, Trainer
+from transformers import TrainingArguments, Trainer, infer_device
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from accelerate.test_utils.testing import get_backend
 
 class ImageDistilTrainer(Trainer):
     def __init__(self, teacher_model=None, student_model=None, temperature=None, lambda_param=None,  *args, **kwargs):
@@ -66,7 +65,7 @@ class ImageDistilTrainer(Trainer):
         self.teacher = teacher_model
         self.student = student_model
         self.loss_function = nn.KLDivLoss(reduction="batchmean")
-        device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+        device = infer_device()
         self.teacher.to(device)
         self.teacher.eval()
         self.temperature = temperature

@@ -203,7 +203,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if tokenizer is None or tokenizer.mask_token_id is None:
             self.skipTest(reason="The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
@@ -214,7 +214,7 @@ class FillMaskPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         examples = [
             f"This is another {tokenizer.mask_token} test",

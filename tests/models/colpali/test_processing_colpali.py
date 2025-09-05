@@ -274,3 +274,15 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(images=image_input, **all_kwargs)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+
+    # Can process only text or images at a time
+    def test_model_input_names(self):
+        processor = self.get_processor()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(images=image_input)
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+
+    @unittest.skip("ColPali can't process text+image inputs at the same time")
+    def test_processor_text_has_no_visual(self):
+        pass

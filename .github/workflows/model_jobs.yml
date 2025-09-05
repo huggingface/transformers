@@ -18,9 +18,18 @@ on:
       docker:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
       report_name_prefix:
         required: false
         default: run_models_gpu
+        type: string
+      runner_type:
+        required: false
+        type: string
+      report_repo_id:
+        required: false
         type: string
 
 env:
@@ -70,7 +79,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -140,3 +149,15 @@ jobs:
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+
+  collated_reports:
+    name: Collated Reports
+    if: ${{ always() }}
+    needs: run_models_gpu
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    with:
+      job: run_models_gpu
+      report_repo_id: ${{ inputs.report_repo_id }}
+      gpu_name: ${{ inputs.runner_type }}
+      machine_type: ${{ inputs.machine_type }}
+    secrets: inherit

@@ -39,7 +39,7 @@ from transformers import BarkModel
 import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
 #### Using 🤗 Better Transformer
@@ -75,7 +75,7 @@ import torch
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load in fp16
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 
 # convert to bettertransformer
 model = BetterTransformer.transform(model, keep_original_model=False)
