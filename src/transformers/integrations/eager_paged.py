@@ -21,7 +21,7 @@ def eager_paged_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor], # shape [seqlen_q, seqlen_k]
+    attention_mask: Optional[torch.Tensor],  # shape [seqlen_q, seqlen_k]
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -33,7 +33,7 @@ def eager_paged_attention_forward(
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling # TODO: fix this
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling  # TODO: fix this
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask

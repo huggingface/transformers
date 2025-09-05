@@ -22,18 +22,19 @@ from transformers.generation.continuous_batching.cache import group_layers_by_at
 
 
 class ContinuousBatchingTest(unittest.TestCase):
-
-    @parameterized.expand([
-        (None,      None, "0"      ),
-        (None,      4096, "0"      ),
-        ("f",       None, "0"      ),
-        ("ffff",    None, "0000"   ),
-        ("sssss",   4096, "00000"  ),
-        ("fs",      4096, "01"     ),
-        ("ssfssf",  4096, "001221" ),
-        ("ssssf",   4096, "01234"  ),
-        ("fffsffs", 4096, "0123456"),
-    ])
+    @parameterized.expand(
+        [
+            (None, None, "0"),
+            (None, 4096, "0"),
+            ("f", None, "0"),
+            ("ffff", None, "0000"),
+            ("sssss", 4096, "00000"),
+            ("fs", 4096, "01"),
+            ("ssfssf", 4096, "001221"),
+            ("ssssf", 4096, "01234"),
+            ("fffsffs", 4096, "0123456"),
+        ]
+    )
     def test_group_layers(
         self,
         layer_types_str: Optional[str],
@@ -61,7 +62,8 @@ class ContinuousBatchingTest(unittest.TestCase):
         # Test layer groups formation
         layer_groups, group_types = group_layers_by_attn_type(config)
         self.assertEqual(
-            sorted(expected_layer_groups), sorted(layer_groups),
+            sorted(expected_layer_groups),
+            sorted(layer_groups),
             f"Test failed for: {layer_types_str = }, {sliding_window = }, {expected_layer_groups = }, {layer_groups = }",
         )
 
@@ -78,5 +80,5 @@ class ContinuousBatchingTest(unittest.TestCase):
                 self.assertEqual(
                     group_type,
                     expected_group_type,
-                    f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }"
+                    f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )

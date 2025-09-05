@@ -8,7 +8,7 @@ from .requests import logger
 
 class CacheManager(ABC):
     _index: int
-    _block_table: dict[str, list[int]] # request_id -> list of block_ids allocated to the request
+    _block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
     @abstractmethod
     def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
@@ -22,7 +22,9 @@ class CacheManager(ABC):
             blocks_to_free = self._block_table.pop(request_id)
             free_blocks.extend(blocks_to_free)
         else:
-            logger.info(f"CacheManager {self._index} attempted to free blocks for non-existent request_id: {request_id}")
+            logger.info(
+                f"CacheManager {self._index} attempted to free blocks for non-existent request_id: {request_id}"
+            )
 
     @abstractmethod
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -76,11 +78,12 @@ class FullAttentionCacheManager(CacheManager):
             physical_indices.append(physical_index)
         return physical_indices
 
+
 class SlidingAttentionCacheManager(CacheManager):
     def __init__(self, index: int, block_size: int, sliding_window: int) -> None:
         self._index = index
         self.block_size = block_size
-        self.sliding_window = sliding_window # TODO: rename to window_size
+        self.sliding_window = sliding_window
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self._block_table = {}
 
