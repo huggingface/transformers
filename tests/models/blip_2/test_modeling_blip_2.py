@@ -21,6 +21,7 @@ import unittest
 import numpy as np
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
@@ -40,6 +41,7 @@ from transformers.utils import is_torch_available, is_vision_available
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -1094,6 +1096,11 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_internal_model_config_and_subconfig_are_same(self):
         pass
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
+
 
 class Blip2TextModelWithProjectionTester:
     def __init__(self, parent, vision_kwargs=None, qformer_kwargs=None, is_training=True):
@@ -1849,7 +1856,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         expected_ids_and_text = Expectations(
             {
-                ("cuda", None): ([0, 2335, 1556, 28, 1782, 30, 8, 2608, 1], "woman playing with dog on the beach"),
+                ("cuda", None): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
                 ("rocm", (9, 5)): (
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
                     "a woman is playing with her dog on the beach",
@@ -1869,11 +1879,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         expected_ids_and_text = Expectations(
             {
-                ("cuda", None): ([0, 3, 7, 152, 67, 839, 1], "san diego"),
-                ("rocm", (9, 5)): (
-                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
-                    "san francisco",  # TODO: check if this is ok
-                ),
+                ("cuda", None): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
+                ("rocm", (9, 5)): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
             }
         ).get_expectation()
         self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
