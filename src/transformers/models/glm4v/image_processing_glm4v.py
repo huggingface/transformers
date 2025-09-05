@@ -369,13 +369,14 @@ class Glm4vImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
+        # Try to use config values if set, otherwise fallback to global defaults
+        size = size if size is not None else self.size
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         elif size is None:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
 
         do_resize = do_resize if do_resize is not None else self.do_resize
-
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
