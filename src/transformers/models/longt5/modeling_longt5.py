@@ -1346,6 +1346,19 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
         return shifted_input_ids
 
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        model = super().from_pretrained(*args, **kwargs)
+        if hasattr(model, "shared"):
+            logger.warning(
+                "Loading a legacy LongT5 checkpoint. Setting embed_tokens weights to shared weights in the decoder and encoder."
+            )
+            if hasattr(model, "encoder") and hasattr(model.encoder, "embed_tokens"):
+                model.encoder.embed_tokens.weight = model.shared.weight
+            if hasattr(model, "decoder") and hasattr(model.decoder, "embed_tokens"):
+                model.decoder.embed_tokens.weight = model.shared.weight
+        return model
+
 
 class LongT5Stack(LongT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
