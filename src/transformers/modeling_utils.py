@@ -220,6 +220,7 @@ VLMS = [
     "qwen2vl",
     "qwen2_5_vl",
     "videollava",
+    "videollama3",
     "vipllava",
 ]
 
