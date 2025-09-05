@@ -15,15 +15,17 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-01-09 and added to Hugging Face Transformers on 2023-04-10.*
 
-# GPTBigCode
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+## GPTBigCode
+
+GPTBigCode was proposed in the BigCode project and released alongside the SantaCoder family. It is a decoder-only Transformer (GPT-style) optimized for code modeling and code-completion tasks, with design choices that favor long-context generation and inference speed.
 
 The GPTBigCode model was proposed in [SantaCoder: don't reach for the stars!](https://huggingface.co/papers/2301.03988) by BigCode. The listed authors are: Loubna Ben Allal, Raymond Li, Denis Kocetkov, Chenghao Mou, Christopher Akiki, Carlos Munoz Ferrandis, Niklas Muennighoff, Mayank Mishra, Alex Gu, Manan Dey, Logesh Kumar Umapathi, Carolyn Jane Anderson, Yangtian Zi, Joel Lamy Poirier, Hailey Schoelkopf, Sergey Troshin, Dmitry Abulkhanov, Manuel Romero, Michael Lappert, Francesco De Toni, Bernardo García del Río, Qian Liu, Shamik Bose, Urvashi Bhattacharyya, Terry Yue Zhuo, Ian Yu, Paulo Villegas, Marco Zocca, Sourab Mangrulkar, David Lansky, Huu Nguyen, Danish Contractor, Luis Villa, Jia Li, Dzmitry Bahdanau, Yacine Jernite, Sean Hughes, Daniel Fried, Arjun Guha, Harm de Vries, Leandro von Werra.
 
@@ -53,6 +55,33 @@ You can read more about the optimizations in the [original pull request](https:/
 > [!NOTE]
 > The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
+Below are concise, copy-pasteable examples showing common ways to use GPTBigCode checkpoints.  
+Replace `bigcode/gpt_bigcode-santacoder` with any specific checkpoint ID (for example `bigcode/starcoder`).
+
+<hfoptions id="usage">
+
+Below are concise, copy-pasteable examples showing common ways to use GPTBigCode checkpoints. Replace `bigcode/gpt_bigcode-santacoder` with any specific checkpoint ID (for example `bigcode/starcoder`).
+
+<hfoption id="pipeline">
+
+```python
+from transformers import pipeline
+
+pipe = pipeline("text-generation", model="bigcode/gpt_bigcode-santacoder")
+
+prompt = """
+# language: python
+# Implement a function to compute the nth Fibonacci number.
+
+def fibonacci(n):
+    """
+"""
+
+outputs = pipe(prompt, max_new_tokens=128, do_sample=True, temperature=0.2)
+print(outputs[0]["generated_text"])
+```
+
+</hfoption> <hfoption id="automodel">
 ## Combining Starcoder and Flash Attention 2
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
@@ -85,33 +114,76 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ### Expected speedups
 
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `bigcode/starcoder` checkpoint and the Flash Attention 2 version of the model using two different sequence lengths.
+Below is an example speedup diagram that compares pure inference time between the native implementation in transformers using `bigcode/starcoder` checkpoint and the Flash Attention 2 version of the model using two different sequence lengths.
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/starcoder-speedup.png">
 </div>
 
+## Notes
+
+* **Infilling (FIM)**: Many GPTBigCode checkpoints support fill-in-the-middle (FIM). You can prompt with special tokens like `<fim_prefix>`, `<fim_middle>`, `<fim_suffix>` if the tokenizer includes them. Check the model card or tokenizer for details.
+
+Example (illustrative):
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+model_id = "bigcode/starcoder"
+
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# This illustrates how you might assemble input ids for a FIM-style prompt if the tokens exist.
+# Check the tokenizer vocabulary for exact special token names.
+
+prefix = "def add(a, b):
+    "
+suffix = "
+
+print(add(2, 3))
+"
+
+# Many tokenizers don't expose token-to-id conversion via convert_tokens_to_ids for string lists directly;
+# this is an illustrative snippet — adjust to your tokenizer's API or the specific checkpoint's docs.
+input_text = "<fim_prefix>" + prefix + "<fim_middle>" + "<fim_suffix>" + suffix
+input_ids = tokenizer(input_text, add_special_tokens=False, return_tensors="pt").input_ids.to(model.device)
+
+with torch.inference_mode():
+    outputs = model.generate(input_ids, max_new_tokens=64)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+* **Longer context**: Some checkpoints expose larger context windows; pick a checkpoint with the context you need or set `model.config.max_position_embeddings` when fine-tuning.
 
 ## GPTBigCodeConfig
 
-[[autodoc]] GPTBigCodeConfig
+\[\[autodoc]] GPTBigCodeConfig
 
 ## GPTBigCodeModel
 
-[[autodoc]] GPTBigCodeModel
-    - forward
+\[\[autodoc]] GPTBigCodeModel
+\- forward
 
 ## GPTBigCodeForCausalLM
 
-[[autodoc]] GPTBigCodeForCausalLM
-    - forward
+\[\[autodoc]] GPTBigCodeForCausalLM
+\- forward
 
 ## GPTBigCodeForSequenceClassification
 
-[[autodoc]] GPTBigCodeForSequenceClassification
-    - forward
+\[\[autodoc]] GPTBigCodeForSequenceClassification
+\- forward
 
 ## GPTBigCodeForTokenClassification
 
-[[autodoc]] GPTBigCodeForTokenClassification
-    - forward
+\[\[autodoc]] GPTBigCodeForTokenClassification
+\- forward
+
+## Resources
+
+* BigCode organization on the Hub: [https://huggingface.co/bigcode](https://huggingface.co/bigcode)
+* SantaCoder paper: [https://arxiv.org/abs/2301.03988](https://arxiv.org/abs/2301.03988)
+* StarCoder paper: [https://arxiv.org/abs/2305.06161](https://arxiv.org/abs/2305.06161)
+* StarCoder 2 paper: [https://arxiv.org/abs/2402.19173](https://arxiv.org/abs/2402.19173)
