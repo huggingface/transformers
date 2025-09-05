@@ -23,8 +23,9 @@ from .requests import RequestState, RequestStatus
 
 class Scheduler(ABC):
     """
-    Abstract base class for scheduling requests in the continuous batch processor.
-    It is expected that cache allocation and scheduling logic will be implemented in subclasses.
+    Abstract base class for scheduling requests in the continuous batch processor. Schedulers manage the lifecycle of
+    requests from when they are added to the waiting queue to when they are scheduled for processing. Different 
+    schedulers implement different strategies for prioritizing and batching requests.
     """
 
     def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False):
@@ -38,36 +39,45 @@ class Scheduler(ABC):
 
     @abstractmethod
     def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
+        """Adds a request to the waiting queue. The request will remain in the waiting queue until it can be scheduled
+        for processing based on available resources and the scheduler's prioritization strategy."""
         pass
 
     @abstractmethod
     def schedule_batch(self, token_budget: int) -> list[RequestState]:
+        """Schedules requests for the next batch based on available token budget. This method selects which requests
+        should be processed in the current batch, considering the token budget and the scheduler's prioritization rules.
+        The token_budget is the maximum number of tokens that can be processed in this batch."""
         pass
 
     @traced
     def has_pending_requests(self) -> bool:
-        """Check if there are requests ready to be processed."""
+        """Checks if there are requests ready to be processed."""
         return len(self.active_requests) or len(self.waiting_requests)
 
     @abstractmethod
     def finish_request(self, request_id: str, evict_from_cache: bool = True):
-        """Finish processing a request and free its allocated blocks."""
+        """Completes processing of a request and optionally frees its allocated cache blocks. This method is called
+        when a request has finished generation or encountered an error.
+        """
         pass
 
     @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
+        """Gets generated tokens for an active request."""
         if request_id in self.active_requests:
             return self.active_requests[request_id].static_outputs
         return []
 
     @traced
     def set_request_cancellation(self, request_id: str):
+        """Marks a request for cancellation."""
         with self._cancellation_lock:
             self._requests_to_cancel.add(request_id)
 
     @traced
     def clear_cancelled_requests(self):
+        """Remove all cancelled requests from active and waiting queues."""
         with self._cancellation_lock:
             for request_id in self._requests_to_cancel:
                 if request_id in self.active_requests:
@@ -81,6 +91,7 @@ class Scheduler(ABC):
 
     @traced
     def request_is_cancelled(self, request_id: str) -> bool:
+        """Checks if a request has been cancelled or removed."""
         return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
@@ -88,12 +99,25 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
+    """This scheduler processes requests in the order they arrive, with decoding requests having priority over prefill 
+    requests. It includes an optional safety margin mechanism to prevent cache exhaustion by limiting new prefill 
+    requests when the remaining proportion of free blocks is low."""
+    
     def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.0):
+        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop 
+        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks, 
+        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
+        """
         super().__init__(cache, retain_cache_on_finish)
         self.safety_margin = safety_margin
 
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
+        """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
+        accommodate the next tokens. It calculates how many blocks are needed based on the request's current
+        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheManager 
+        objects. Returns a boolean indicating if the allocation was successful or not.
+        """
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
@@ -110,7 +134,7 @@ class FIFOScheduler(Scheduler):
     def _prepare_request_for_processing(
         self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ):
-        """Prepare a request for processing in the current batch."""
+        """Prepares a request for processing in the current batch."""
         request_tokens = (
             state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
         )
@@ -137,7 +161,7 @@ class FIFOScheduler(Scheduler):
 
     @traced
     def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
+        """Adds a request to the waiting list."""
         if self.retain_cache_on_finish and state.request_id in self.active_requests:
             old_state = self.active_requests.pop(state.request_id)
             state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]
@@ -210,6 +234,9 @@ class FIFOScheduler(Scheduler):
 
     @traced
     def finish_request(self, request_id: str, evict_from_cache: bool = True):
+        """Completes processing of a request and optionally frees its allocated cache blocks. For FIFO scheduler,
+        this removes the request from active requests and frees its cache blocks if eviction is enabled.
+        """
         if evict_from_cache:
             self.cache.free_blocks(request_id)
             if request_id in self.active_requests:
@@ -218,8 +245,17 @@ class FIFOScheduler(Scheduler):
 
 @attach_tracer()
 class PrefillFirstScheduler(Scheduler):
+    """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
+    prefill requests (which are continuations of partially processed prompts) are completed before processing new
+    decoding requests."""
+    
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
+        """Allocates additional cache blocks for a request if the currently allocated blocks are insufficient to
+        accommodate the next tokens. It calculates how many blocks are needed based on the request's current
+        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheManager 
+        objects. Returns a boolean indicating if the allocation was successful or not.
+        """
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
@@ -236,7 +272,7 @@ class PrefillFirstScheduler(Scheduler):
     def _prepare_request_for_processing(
         self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ):
-        """Prepare a request for processing in the current batch."""
+        """Prepares a request for processing in the current batch."""
         request_tokens = (
             state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
         )
@@ -263,7 +299,7 @@ class PrefillFirstScheduler(Scheduler):
 
     @traced
     def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
+        """Adds a request to the waiting list."""
         if self.retain_cache_on_finish and state.request_id in self.active_requests:
             old_state = self.active_requests.pop(state.request_id)
             state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]  # XXX: check for indexing error?
@@ -329,6 +365,9 @@ class PrefillFirstScheduler(Scheduler):
 
     @traced
     def finish_request(self, request_id: str, evict_from_cache: bool = True):
+        """Completes processing of a request and optionally frees its allocated cache blocks. For PrefillFirst scheduler,
+        this removes the request from active requests and frees its cache blocks if eviction is enabled.
+        """
         if evict_from_cache:
             self.cache.free_blocks(request_id)
             if request_id in self.active_requests:
