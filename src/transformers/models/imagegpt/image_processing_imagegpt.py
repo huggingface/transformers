@@ -181,7 +181,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
