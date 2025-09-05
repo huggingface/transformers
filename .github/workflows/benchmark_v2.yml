@@ -56,7 +56,7 @@ jobs:
 
       - name: Install benchmark dependencies
         run: |
-          run: python3 -m pip install -r benchmark_v2/requirements.txt
+          python3 -m pip install -r benchmark_v2/requirements.txt
 
       - name: Reinstall transformers in edit mode
         run: |
