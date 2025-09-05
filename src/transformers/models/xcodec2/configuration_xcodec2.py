@@ -15,7 +15,6 @@
 """Xcodec2 model configuration"""
 
 import math
-from typing import Union
 
 import numpy as np
 

@@ -28,6 +28,8 @@ from torch import int32, nn, sin, sinc
 from torch.amp import autocast
 from torch.nn import Module, Parameter
 
+from transformers.activations import ACT2FN
+
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -44,7 +46,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from .configuration_xcodec2 import Xcodec2Config
-from transformers.activations import ACT2FN
 
 
 # General docstring
@@ -55,22 +56,31 @@ _CONFIG_FOR_DOC = "Xcodec2Config"
 class Xcodec2Output(ModelOutput):
     """
     Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`, *optional*):
-            Discrete code embeddings computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Xcodec2.
+        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`. These are the quantized
+            representations of the input audio used for further processing or generation.
+        audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+            Decoded audio waveform values in the time domain, obtained using the decoder
+            part of Xcodec2. These represent the reconstructed audio signal.
+        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+            Quantized continuous representation of input's embedding.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
     audio_values: Optional[torch.FloatTensor] = None
+    quantized_representation: Optional[torch.Tensor] = None
 
 
 @dataclass
 class Xcodec2EncoderOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`, *optional*):
-            Discrete code embeddings computed using `model.encode`.
+        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`. These represent
+            the compressed, quantized form of the input audio signal that can be
+            used for storage, transmission, or generation.
+        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+            Quantized continuous representation of input's embedding.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -80,8 +90,10 @@ class Xcodec2EncoderOutput(ModelOutput):
 class Xcodec2DecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Xcodec2.
+        audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+            Decoded audio waveform values in the time domain, obtained by converting
+            the discrete codes back into continuous audio signals. This represents
+            the reconstructed audio that can be played back.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -97,8 +109,6 @@ logger = logging.get_logger(__name__)
 # See here for their attention implementation:
 # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/bs_roformer5.py
 class Xcodec2Attention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
     def __init__(self, config: Xcodec2Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
         self.is_causal = False
@@ -123,6 +133,7 @@ class Xcodec2MLP(nn.Module):
         x = self.fc2(x)
         return x
 
+
 # Original Transformer block: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/bs_roformer5.py#L91
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
     pass
@@ -130,44 +141,49 @@ class Xcodec2DecoderLayer(LlamaDecoderLayer):
 
 class Xcodec2SnakeBeta(nn.Module):
     """
-    A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    A modified Snake function which uses separate parameters for the magnitude and frequency of the periodic components.
+
     Shape:
         - Input: (B, C, T)
         - Output: (B, C, T), same shape as the input
+
     Parameters:
-        - alpha - trainable parameter that controls frequency
-        - beta - trainable parameter that controls magnitude
+        - dim: The number of input features
+        - logscale: Whether to use logarithmic scaling for alpha and beta (default: False)
+
     References:
         - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
         https://arxiv.org/abs/2006.08195
+
     Examples:
-        >>> a1 = snakebeta(256)
-        >>> x = torch.randn(256)
-        >>> x = a1(x)
+        >>> activation = Xcodec2SnakeBeta(256)
+        >>> x = torch.randn(1, 256, 100)  # (batch, channels, time)
+        >>> y = activation(x)
     """
 
-    def __init__(self, in_features, alpha=1.0, alpha_logscale=False):
+    def __init__(self, dim, logscale=True):
         """
-        Initialization.
-        INPUT:
-            - in_features: shape of the input
-            - alpha - trainable parameter that controls frequency
-            - beta - trainable parameter that controls magnitude
-        alpha is initialized to 1 by default, higher values = higher-frequency.
-        beta is initialized to 1 by default, higher values = higher-magnitude.
-        alpha will be trained along with the rest of your model.
+        Args:
+            dim: Shape of the input features (channels dimension)
+            logscale: Whether to use log scale initialization (default: True)
+                            If True, alpha and beta are initialized to zeros
+                            If False, alpha and beta are initialized to ones
+
+        Note:
+            - alpha controls the frequency of the periodic components
+            - beta controls the magnitude of the periodic components
         """
         super(Xcodec2SnakeBeta, self).__init__()
-        self.in_features = in_features
+        self.dim = dim
 
         # initialize alpha
-        self.alpha_logscale = alpha_logscale
-        if self.alpha_logscale:  # log scale alphas initialized to zeros
-            self.alpha = Parameter(torch.zeros(in_features) * alpha)
-            self.beta = Parameter(torch.zeros(in_features) * alpha)
+        self.logscale = logscale
+        if self.logscale:  # log scale alphas initialized to zeros
+            self.alpha = Parameter(torch.zeros(dim))
+            self.beta = Parameter(torch.zeros(dim))
         else:  # linear scale alphas initialized to ones
-            self.alpha = Parameter(torch.ones(in_features) * alpha)
-            self.beta = Parameter(torch.ones(in_features) * alpha)
+            self.alpha = Parameter(torch.ones(dim))
+            self.beta = Parameter(torch.ones(dim))
         self.no_div_by_zero = 0.000000001
 
     def forward(self, x):
@@ -178,7 +194,7 @@ class Xcodec2SnakeBeta(nn.Module):
         """
         alpha = self.alpha.unsqueeze(0).unsqueeze(-1)
         beta = self.beta.unsqueeze(0).unsqueeze(-1)
-        if self.alpha_logscale:
+        if self.logscale:
             alpha = torch.exp(alpha)
             beta = torch.exp(beta)
         x = x + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(x * alpha), 2)
@@ -187,6 +203,17 @@ class Xcodec2SnakeBeta(nn.Module):
 
 
 def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
+    """
+    Creates a Kaiser-windowed sinc filter for low-pass filtering.
+
+    Args:
+        cutoff: Normalized cutoff frequency (0 to 0.5, where 0.5 is the Nyquist frequency)
+        half_width: Transition bandwidth parameter controlling filter roll-off
+        kernel_size: Size of the filter kernel
+
+    Returns:
+        torch.Tensor: A 1D filter kernel of shape (1, 1, kernel_size)
+    """
     even = kernel_size % 2 == 0
     half_size = kernel_size // 2
 
@@ -219,6 +246,10 @@ def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
 
 
 class LowPassFilter1d(nn.Module):
+    """
+    Used by `DownSample1d`.
+    """
+
     def __init__(
         self,
         cutoff=0.5,
@@ -255,6 +286,19 @@ class LowPassFilter1d(nn.Module):
 
 
 class UpSample1d(nn.Module):
+    """
+    1D upsampling module using transposed convolution with a sinc filter.
+
+    This module performs anti-aliased upsampling by first padding the input signal,
+    then applying a transposed convolution with a Kaiser-windowed sinc filter,
+    and finally trimming the resulting signal to remove boundary effects.
+
+    Args:
+        ratio (int): Upsampling ratio (default: 2)
+        kernel_size (int, optional): Size of the filter kernel.
+            If None, it's automatically calculated as 6 * ratio.
+    """
+
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
@@ -277,6 +321,18 @@ class UpSample1d(nn.Module):
 
 
 class DownSample1d(nn.Module):
+    """
+    1D downsampling module using a low-pass filter.
+
+    This module performs anti-aliased downsampling by applying a low-pass filter
+    with an appropriate cutoff frequency followed by strided convolution.
+
+    Args:
+        ratio (int): Downsampling ratio (default: 2)
+        kernel_size (int, optional): Size of the filter kernel.
+            If None, it's automatically calculated as 6 * ratio.
+    """
+
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
@@ -292,6 +348,26 @@ class DownSample1d(nn.Module):
 
 
 class Activation1d(nn.Module):
+    """
+    A module that applies activation function with up-sampling and down-sampling.
+
+    This module first up-samples the input signal, applies an activation function,
+    and then down-samples the result. This architecture allows for more complex
+    non-linear transformations of the signal.
+
+    Args:
+        activation (`torch.nn.Module`):
+            The activation function module to apply (e.g., nn.ReLU(), nn.LeakyReLU()).
+        up_ratio (`int`, *optional*, defaults to 2):
+            The up-sampling ratio for increasing temporal resolution before activation.
+        down_ratio (`int`, *optional*, defaults to 2):
+            The down-sampling ratio for decreasing temporal resolution after activation.
+        up_kernel_size (`int`, *optional*, defaults to 12):
+            The kernel size used in the up-sampling operation.
+        down_kernel_size (`int`, *optional*, defaults to 12):
+            The kernel size used in the down-sampling operation.
+    """
+
     def __init__(
         self, activation, up_ratio: int = 2, down_ratio: int = 2, up_kernel_size: int = 12, down_kernel_size: int = 12
     ):
@@ -311,12 +387,30 @@ class Activation1d(nn.Module):
 
 
 class ResidualUnit(nn.Module):
+    """
+    A residual unit that combines dilated convolutions with activation functions.
+
+    This unit performs a series of operations while maintaining a residual connection:
+    1. First activation with up/down-sampling
+    2. Dilated convolution with kernel size 7
+    3. Second activation with up/down-sampling
+    4. 1x1 convolution for channel mixing
+    5. Addition of the input (residual connection)
+
+    Args:
+        dim (`int`, *optional*, defaults to 16):
+            The number of channels in the input and output tensors.
+        dilation (`int`, *optional*, defaults to 1):
+            The dilation rate for the main convolution operation. Higher values
+            increase the receptive field without increasing parameter count.
+    """
+
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
+        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim, logscale=True))
         self.conv1 = nn.Conv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
-        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim, alpha_logscale=True))
+        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim, logscale=True))
         self.conv2 = nn.Conv1d(dim, dim, kernel_size=1)
 
     def forward(self, x):
@@ -329,10 +423,24 @@ class ResidualUnit(nn.Module):
 
 
 class EncoderBlock(nn.Module):
+    """
+    Encoder block for the Xcodec2 acoustic encoder.
+
+    This block consists of:
+    1. A series of residual units with different dilation rates
+    2. An activation function with upsampling and downsampling
+    3. A strided convolution to change the dimension and downsample if stride > 1
+
+    Args:
+        dim (int): Dimension of the output features. Input dimension is assumed to be dim // 2
+        stride (int): Stride for the final convolution, controls downsampling factor
+        dilations (tuple): Dilation rates for the residual units
+    """
+
     def __init__(self, dim: int = 16, stride: int = 1, dilations=(1, 3, 9)):
         super().__init__()
         self.residual_units = nn.ModuleList([ResidualUnit(dim // 2, dilation=d) for d in dilations])
-        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2, alpha_logscale=True))
+        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2, logscale=True))
         self.conv = nn.Conv1d(
             dim // 2,
             dim,
@@ -350,6 +458,26 @@ class EncoderBlock(nn.Module):
 
 
 class Xcodec2CodecEncoder(nn.Module):
+    """
+    The encoder component of the Xcodec2 model for audio encoding.
+
+    This encoder transforms raw audio waveforms into latent representations:
+    1. Initial convolution to process the raw audio input
+    2. Series of encoder blocks with progressively increasing feature dimensions and downsampling
+    3. Final activation and projection to the target hidden dimension
+
+    Args:
+        d_model (`int`, *optional*, defaults to 48):
+            Initial dimension of the model. This will be doubled at each encoder block.
+        downsampling_ratios (`List[int]`, *optional*, defaults to [2, 2, 4, 4, 5]):
+            List of downsampling ratios for each encoder block. The product of these values
+            determines the total temporal compression factor.
+        dilations (`tuple`, *optional*, defaults to (1, 3, 9)):
+            Tuple of dilation rates used in the residual units within each encoder block.
+        hidden_dim (`int`, *optional*, defaults to 1024):
+            Dimension of the final latent representation after encoding.
+    """
+
     def __init__(
         self,
         d_model=48,
@@ -366,10 +494,25 @@ class Xcodec2CodecEncoder(nn.Module):
             d_model *= 2
             self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
 
-        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, alpha_logscale=True))
+        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, logscale=True))
         self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
     def forward(self, x):
+        """
+        Forward pass of the Xcodec2 encoder.
+
+        Args:
+            x (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+                Input audio waveform tensor. Expected to be a mono audio signal with shape
+                (batch_size, 1, sequence_length).
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, compressed_length, hidden_dim)`:
+                Encoded audio representation with temporal dimension compressed by the product
+                of all downsampling_ratios. The output tensor is transposed to have the
+                sequence dimension second (batch_size, seq_len, features) for compatibility
+                with transformer-based models.
+        """
         # Initial convolution
         x = self.initial_conv(x)
 
@@ -384,20 +527,21 @@ class Xcodec2CodecEncoder(nn.Module):
         return x
 
 
-def is_distributed():
-    return dist.is_initialized() and dist.get_world_size() > 1
-
-
-def get_maybe_sync_seed(device, max_size=10_000):
-    rand_int = torch.randint(0, max_size, (), device=device)
-
-    if is_distributed():
-        dist.all_reduce(rand_int)
-
-    return rand_int.item()
-
-
 class ResNetBlock(nn.Module):
+    """
+    A basic residual block for 1D convolutional networks.
+
+    This block consists of:
+    1. GroupNorm + SiLU-like activation (x * sigmoid(x)) + Conv1d
+    2. GroupNorm + SiLU-like activation + Dropout + Conv1d
+    3. Residual connection, with optional projection if input and output channels differ
+
+    Args:
+        in_channels: Number of input channels
+        out_channels: Number of output channels (defaults to in_channels if None)
+        dropout: Dropout probability (default: 0.1)
+    """
+
     def __init__(self, *, in_channels, out_channels=None, dropout=0.1):
         super().__init__()
         self.in_channels = in_channels
@@ -415,7 +559,7 @@ class ResNetBlock(nn.Module):
     def forward(self, x):
         h = x
         h = self.norm1(h)
-        h = h * torch.sigmoid(h)
+        h = h * torch.sigmoid(h)  # TODO replace with SiLU?
         h = self.conv1(h)
         h = self.norm2(h)
         h = h * torch.sigmoid(h)
@@ -488,11 +632,23 @@ class Xcodec2VocosBackbone(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Args:
-            x (Tensor): Input tensor of shape (B, L, H), where B is the batch size,
-                        L is the sequence length, and H denotes the model dimension.
-        """
+        Forward pass for the Xcodec2VocosBackbone.
 
+        The processing flow includes:
+        1. Initial embedding via 1D convolution
+        2. Processing through ResNet blocks
+        3. Transformer processing with rotary position embeddings
+        4. Final ResNet blocks and normalization
+
+        Args:
+            x (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Input tensor containing features to process.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`:
+                Processed features with the same shape as the input but transformed
+                through the backbone architecture.
+        """
         # Handle initial transformations
         x = x.transpose(1, 2)
         x = self.embed(x)
@@ -635,6 +791,7 @@ class ISTFTHead(nn.Module):
 
         Returns:
             Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
+            Tensor: Predicted STFT coefficients of shape (B, L, N+2), where N is the number of frequency bins.
         """
         x_pred = self.out(x)
         x_pred = x_pred.transpose(1, 2)
@@ -650,18 +807,28 @@ class ISTFTHead(nn.Module):
 
 
 def round_ste(z):
-    """Round with straight through gradients."""
+    """
+    Round with straight through gradients.
+    Used in `Xcodec2FSQ`.
+    """
     zhat = z.round()
     return z + (zhat - z).detach()
 
 
 def floor_ste(z):
-    """Floor with straight through gradients."""
+    """
+    Floor with straight through gradients.
+    Used in `Xcodec2FSQ`.
+    """
     zhat = z.floor()
     return z + (zhat - z).detach()
 
 
 def maybe(fn):
+    """
+    Used in `Xcodec2FSQ`.
+    """
+
     @wraps(fn)
     def inner(x, *args, **kwargs):
         if x is None:
@@ -669,6 +836,18 @@ def maybe(fn):
         return fn(x, *args, **kwargs)
 
     return inner
+
+
+def get_maybe_sync_seed(device, max_size=10_000):
+    """
+    Used in `Xcodec2ResidualFSQ`.
+    """
+    rand_int = torch.randint(0, max_size, (), device=device)
+
+    if dist.is_initialized() and dist.get_world_size() > 1:
+        dist.all_reduce(rand_int)
+
+    return rand_int.item()
 
 
 class Xcodec2FSQ(Module):
@@ -745,17 +924,6 @@ class Xcodec2FSQ(Module):
         offset = torch.where(self._levels % 2 == 0, 0.5, 0.0)
         shift = (offset / half_l).atanh()
         return (z + shift).tanh() * half_l - offset
-
-    def symmetry_preserving_bound(self, z):
-        """
-        # Section 3.2 in https://arxiv.org/abs/2411.19842
-        QL(x) = 2 / (L - 1) * [(L - 1) * (tanh(x) + 1) / 2 + 0.5] - 1
-        """
-        levels_minus_1 = self._levels - 1
-        scale = 2.0 / levels_minus_1
-        bracket = (levels_minus_1 * (torch.tanh(z) + 1) / 2.0) + 0.5
-        bracket = floor_ste(bracket)
-        return scale * bracket - 1.0
 
     def quantize(self, z):
         _, _, noise_dropout, preserve_symmetry, half_width = (
@@ -848,7 +1016,6 @@ class Xcodec2FSQ(Module):
             codes = self.quantize(z)
 
             # returning indices could be optional
-
             indices = None
 
             if self.return_indices:
@@ -859,13 +1026,11 @@ class Xcodec2FSQ(Module):
             codes = codes.to(orig_dtype)
 
         # project out
-
         out = self.project_out(codes)
         if not self.keep_num_codebooks_dim and self.return_indices:
             indices = maybe(lambda t, *_, **__: t.squeeze(-1))(indices)
 
         # return quantized output and indices
-
         return out, indices
 
 
@@ -1048,44 +1213,44 @@ class Xcodec2CodecDecoderVocos(nn.Module):
             dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same"
         )
 
-    def forward(self, x, vq=True):
-        if vq is True:
-            x = x.permute(0, 2, 1)
-            x, q = self.quantizer(x)
-            x = x.permute(0, 2, 1)
-            q = q.permute(0, 2, 1)
-            return x, q, None
-        x = self.backbone(x)
-        x, _ = self.head(x)
+    def quantize(self, x):
+        """
+        Quantize input features using the vector quantizer.
 
-        return x, _
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, D, L) where B is batch size,
+                              D is feature dimension, and L is sequence length.
 
-    def vq2emb(self, vq):
-        self.quantizer = self.quantizer.eval()
-        x = self.quantizer.vq2emb(vq)
+        Returns:
+            Tuple of (quantized_tensor, quantization_indices)
+            - quantized_tensor: The quantized representation with shape (B, L, D)
+            - quantization_indices: The indices in the codebook with shape (B, L, Q)
+              where Q is the number of quantizers
+        """
+        x = x.permute(0, 2, 1)
+        x, q = self.quantizer(x)
+        x = x.permute(0, 2, 1)
+        q = q.permute(0, 2, 1)
+        return x, q
+
+    def forward(self, audio_codes):
+        """
+        audio_codes (torch.Tensor):
+            Audio codes (or codebook indices) with shape (B, L, Q).
+
+        Returns:
+            audio_waveform: The reconstructed audio waveform with shape (B, 1, T).
+        """
+        x = self.backbone(audio_codes)
+        x = self.head(x)[0]
         return x
-
-    def get_emb(self):
-        self.quantizer = self.quantizer.eval()
-        embs = self.quantizer.get_emb()
-        return embs
-
-    def inference_vq(self, vq):
-        x = vq[None, :, :]
-        x = self.model(x)
-        return x
-
-    def inference_0(self, x):
-        x, q, loss, perp = self.quantizer(x)
-        x = self.model(x)
-        return x, None
-
-    def inference(self, x):
-        x = self.model(x)
-        return x, None
 
 
 class Xcodec2SemanticEncoder(nn.Module):
+    """
+    Maps input features of pre-trained semantic model to semantic embedding.
+    """
+
     def __init__(
         self,
         input_channels: int,
@@ -1137,26 +1302,14 @@ class Xcodec2SemanticEncoder(nn.Module):
         )
 
     def forward(self, x):
-        """
-        Forward propagation method.
-
-        Args:
-            x (Tensor): Input tensor, shape (Batch, Input_channels, Length)
-
-        Returns:
-            Tensor: Encoded tensor, shape (Batch, Code_dim, Length)
-        """
-        x = self.initial_conv(x)  # (Batch, Encode_channels, Length)
-
-        # Apply residual block operations
+        x = self.initial_conv(x)
         residual = x
         x = self.act1(x)
         x = self.conv1(x)
         x = self.act2(x)
         x = self.conv2(x)
-        x = x + residual  # Residual connection
-
-        x = self.final_conv(x)  # (Batch, Code_dim, Length)
+        x = x + residual
+        x = self.final_conv(x)
         return x
 
 
@@ -1191,8 +1344,8 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, Xcodec2SnakeBeta):
-            # Initialize alpha and beta based on the alpha_logscale setting
-            if module.alpha_logscale:
+            # Initialize alpha and beta based on the logscale setting
+            if module.logscale:
                 # Log scale alphas initialized to zeros
                 module.alpha.data.zero_()
                 module.beta.data.zero_()
@@ -1314,7 +1467,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            `codebook` of shape `[batch_size, num_codebooks, frames]`, the discrete encoded codes for the input audio waveform.
+            `audio_codes` of shape `[batch_size, 1, frames]`, the discrete encoded codes for the input audio waveform.
+            `quantized_representation` of shape `[batch_size, hidden_size, frames]`, the continuous quantized
+                representation after quantization.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1352,13 +1507,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
         # 4) Get codes for decoder
-        _, vq_code, _ = self.decoder(concat_emb, vq=True)
+        quantized_representation, audio_codes = self.decoder.quantize(concat_emb)
 
         if not return_dict:
-            return vq_code
+            return audio_codes, quantized_representation
 
         return Xcodec2EncoderOutput(
-            audio_codes=vq_code,
+            audio_codes=audio_codes,
+            quantized_representation=quantized_representation,
         )
 
     def decode(
@@ -1390,7 +1546,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         )
         vq_post_emb = vq_post_emb.transpose(1, 2)
         vq_post_emb = self.fc_post_a(vq_post_emb.transpose(1, 2)).transpose(1, 2)
-        recon_audio = self.decoder(vq_post_emb.transpose(1, 2), vq=False)[0]
+        recon_audio = self.decoder(vq_post_emb.transpose(1, 2))
 
         if not return_dict:
             return recon_audio
@@ -1409,6 +1565,13 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
         r"""
         Returns:
+            `Xcodec2Output` or `tuple(torch.FloatTensor, torch.LongTensor, torch.FloatTensor)`:
+            - `audio_values` (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
+                Reconstructed audio waveform.
+            - `audio_codes` (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`):
+                Discrete code indices computed using `model.encode`.
+            - `quantized_representation` (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
+                The continuous quantized representation after quantization.
 
         Examples:
 
@@ -1433,16 +1596,17 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         length = input_values.shape[-1]
 
         if audio_codes is None:
-            audio_codes = self.encode(input_values, return_dict=False)
+            audio_codes, quantized_representation = self.encode(input_values, return_dict=False)
 
         audio_values = self.decode(audio_codes, return_dict=False)[0][..., :length]
 
         if not return_dict:
-            return (audio_codes, audio_values)
+            return (audio_values, audio_codes, quantized_representation)
 
         return Xcodec2Output(
             audio_values=audio_values,
             audio_codes=audio_codes,
+            quantized_representation=quantized_representation,
         )
 
 
