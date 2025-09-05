@@ -54,11 +54,6 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha || github.sha }}
 
-      - name: Update clone
-        if: inputs.commit_sha
-        run: |
-          git fetch && git checkout ${{ inputs.commit_sha }}
-
       - name: Install benchmark dependencies
         working-directory: benchmark_v2
         run: |
