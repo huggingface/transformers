@@ -280,7 +280,7 @@ class ContinuousBatchProcessor:
             return False
 
         # Get the request objects for this batch
-        self.reset_static_tensors()
+        self.reset_static_tensors() # TOOD: with slice_inputs, this might be unnecessary
         position_ids = []
         input_ids = []
         read_index = [[] for _ in range(self.cache.num_groups)]
@@ -761,8 +761,9 @@ class ContinuousBatchingManager:
             torch.cuda.synchronize()
         if not batch_processor.prepare_next_batch():
             return
-        device, total, reserved, allocated = get_device_and_memory_breakdown()
-        logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
+        if logger.level <= logging.DEBUG:
+            device, total, reserved, allocated = get_device_and_memory_breakdown()
+            logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if self.current_batch == 0:
                 self.warmup(batch_processor)
