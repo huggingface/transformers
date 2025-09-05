@@ -50,7 +50,7 @@ image2 = load_image("https://huggingface.co/datasets/huggingface/documentation-i
 images = [image1, image2]
 ```
 
-We can pass the images to processor and infer.
+We can pass the images to the processor and infer.
 
 ```python
 inputs = processor(images, return_tensors="pt")
