@@ -56,9 +56,6 @@ jobs:
       warmup_iterations: ${{ inputs.warmup_iterations || 3 }}
       measurement_iterations: ${{ inputs.measurement_iterations || 5 }}
       num_tokens_to_generate: ${{ inputs.num_tokens_to_generate || 100 }}
-      include_benchmarks: ${{ inputs.include_benchmarks || '' }}
-      exclude_benchmarks: ${{ inputs.exclude_benchmarks || '' }}
       enable_file_logging: ${{ inputs.enable_file_logging || false }}
-      slack_report_channel: '#transformers-ci-benchmark-v2'
       commit_sha: ${{ github.sha }}
     secrets: inherit
