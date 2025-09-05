@@ -13,8 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
-_This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-18._
+*This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-18.*
 
 # Voxtral
 
@@ -23,7 +22,6 @@ Voxtral is an upgrade of [Ministral 3B and Mistral Small 3B](https://mistral.ai/
 You can read more in Mistral's [release blog post](https://mistral.ai/news/voxtral).
 
 The model is available in two checkpoints:
-
 - 3B: [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 - 24B: [mistralai/Voxtral-Small-24B-2507](https://huggingface.co/mistralai/Voxtral-Small-24B-2507)
 
@@ -31,11 +29,11 @@ The model is available in two checkpoints:
 
 Voxtral builds on Ministral-3B by adding audio processing capabilities:
 
-- **Transcription mode**: Includes a dedicated mode for speech transcription. By default, Voxtral detects the spoken language and transcribes it accordingly.
-- **Long-form context**: With a 32k token context window, Voxtral can process up to 30 minutes of audio for transcription or 40 minutes for broader audio understanding.
-- **Integrated Q&A and summarization**: Supports querying audio directly and producing structured summaries without relying on separate ASR and language models.
-- **Multilingual support**: Automatically detects language and performs well across several widely spoken languages, including English, Spanish, French, Portuguese, Hindi, German, Dutch, and Italian.
-- **Function calling via voice**: Can trigger functions or workflows directly from spoken input based on detected user intent.
+- **Transcription mode**: Includes a dedicated mode for speech transcription. By default, Voxtral detects the spoken language and transcribes it accordingly.  
+- **Long-form context**: With a 32k token context window, Voxtral can process up to 30 minutes of audio for transcription or 40 minutes for broader audio understanding.  
+- **Integrated Q&A and summarization**: Supports querying audio directly and producing structured summaries without relying on separate ASR and language models.  
+- **Multilingual support**: Automatically detects language and performs well across several widely spoken languages, including English, Spanish, French, Portuguese, Hindi, German, Dutch, and Italian.  
+- **Function calling via voice**: Can trigger functions or workflows directly from spoken input based on detected user intent.  
 - **Text capabilities**: Maintains the strong text processing performance of its Ministral-3B foundation.
 
 ## Usage
@@ -45,7 +43,6 @@ Voxtral builds on Ministral-3B by adding audio processing capabilities:
 The model supports audio-text instructions, including multi-turn and multi-audio interactions, all processed in batches.
 
 ➡️ audio + text instruction
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -81,8 +78,7 @@ print(decoded_outputs[0])
 print("=" * 80)
 ```
 
-➡️ multi-audio + text instruction
-
+➡️ multi-audio + text instruction 
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -123,7 +119,6 @@ print("=" * 80)
 ```
 
 ➡️ multi-turn:
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -178,7 +173,6 @@ print("=" * 80)
 ```
 
 ➡️ text only:
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -214,7 +208,6 @@ print("=" * 80)
 ```
 
 ➡️ audio only:
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -250,7 +243,6 @@ print("=" * 80)
 ```
 
 ➡️ batched inference!
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()
@@ -351,8 +343,10 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 ## VoxtralEncoder
 
-[[autodoc]] VoxtralEncoder - forward
+[[autodoc]] VoxtralEncoder
+    - forward
 
 ## VoxtralForConditionalGeneration
 
-[[autodoc]] VoxtralForConditionalGeneration - forward
+[[autodoc]] VoxtralForConditionalGeneration
+    - forward
