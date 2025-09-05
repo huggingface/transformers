@@ -157,9 +157,8 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
     if list(match_shape) != list(weight.shape):
         try:
             weight = reshape(weight, match_shape)
-        except AssertionError as e:
-            e.args += (match_shape, match_shape)
-            raise e
+        except (RuntimeError, ValueError) as e:
+            raise RuntimeError(f"Cannot reshape tensor from {list(weight.shape)} to {match_shape}.") from e
 
     return weight
 
