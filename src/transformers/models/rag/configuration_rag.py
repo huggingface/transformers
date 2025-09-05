@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
+from ..auto.configuration_auto import AutoConfig
 
 
 RAG_CONFIG_DOC = r"""
@@ -80,6 +81,7 @@ RAG_CONFIG_DOC = r"""
 class RagConfig(PretrainedConfig):
     model_type = "rag"
     has_no_defaults_at_init = True
+    sub_configs = {"question_encoder": AutoConfig, "generator": AutoConfig}
 
     def __init__(
         self,
@@ -133,8 +135,6 @@ class RagConfig(PretrainedConfig):
         question_encoder_model_type = question_encoder_config.pop("model_type")
         decoder_config = kwargs.pop("generator")
         decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)

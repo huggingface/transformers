@@ -1156,7 +1156,7 @@ class PretrainedConfig(PushToHubMixin):
         try:
             default_config = self.__class__()
         except ValueError:
-            decoder_config = self.get_text_config(decoder=True)
+            decoder_config = self.get_sub_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
             else:
@@ -1188,67 +1188,182 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=None, encoder=None) -> "PretrainedConfig":
+    def get_sub_config(
+        self,
+        modality: Optional[str] = None,
+        encoder: Optional[bool] = None,
+        decoder: Optional[bool] = None,
+        strict: bool = False,
+    ) -> "PretrainedConfig":
         """
-        Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
-        `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
-        which is useful on models that have both text input and output modalities.
+        Returns the sub-config present in the config that matches the desired modality and/or whether it is an
+        encoder or a decoder. This function is particularly useful to get sub-configs from composite models in a
+        model-agnostic way.
 
-        There are three possible outcomes of using this method:
-        1. On most models, it returns the original config instance itself.
-        2. On newer (2024+) composite models, it returns the text section of the config, which is nested under a set
-            of valid names.
+        By default (`strict=False`), if no nested sub-configs are found in the config OR if there are multiple matches,
+        then the original config instance is considered to match the desired criteria. This results in three common
+        outcomes from using this method:
+        1. On non-composite models, it returns the original config instance itself.
+        2. On newer (2024+) composite models, it returns the corresponding nested sub-config.
         3. On older (2023-) composite models, it discards decoder-only parameters when `encoder=True` and vice-versa.
 
         Args:
+            modality (`Optional[str]`, *optional*):
+                The modality of the sub-config to search for. Supported values are: ("text", "image", "audio").
             decoder (`Optional[bool]`, *optional*):
-                If set to `True`, then only search for decoder config names.
+                If set to `True` and `encoder` is unset or `False`, then only search for decoder sub-configs.
             encoder (`Optional[bool]`, *optional*):
-                If set to `True`, then only search for encoder config names.
+                If set to `True` and `decoder` is unset or `False`, then only search for encoder sub-configs.
+            strict (`bool`, *optional*, defaults to `False`):
+                Whether to raise an error if there are multiple matches. When False, when these
+                situations arise, the original config instance is returned instead.
         """
-        return_both = decoder == encoder  # both unset or both set -> search all possible names
-
-        decoder_possible_text_config_names = ("decoder", "generator", "text_config")
-        encoder_possible_text_config_names = ("text_encoder",)
-        if return_both:
-            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
-        elif decoder:
-            possible_text_config_names = decoder_possible_text_config_names
-        else:
-            possible_text_config_names = encoder_possible_text_config_names
-
-        valid_text_config_names = []
-        for text_config_name in possible_text_config_names:
-            if hasattr(self, text_config_name):
-                text_config = getattr(self, text_config_name, None)
-                if text_config is not None:
-                    valid_text_config_names += [text_config_name]
-
-        if len(valid_text_config_names) > 1:
+        # Add more modalities as needed, make sure to update the docstring above and the assumptions below accordingly
+        supported_modalities = ("text", "image", "audio")
+        if modality is not None and modality not in supported_modalities:
             raise ValueError(
-                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
-                "case, using `get_text_config()` would be ambiguous. Please specify the desired text config directly, "
-                "e.g. `text_config = config.sub_config_name`"
+                f"Invalid modality in `get_sub_config`: {modality}. Supported modalities are: {supported_modalities}. "
+                "If you need a modality that's not yet supported, please open a GH issue (after checking the existing "
+                "ones first)"
             )
-        elif len(valid_text_config_names) == 1:
-            config_to_return = getattr(self, valid_text_config_names[0])
+
+        # Encoder vs Decoder assumptions:
+        # 1. If the config has `is_encoder_decoder=True` and no nested sub-configs, then it has both encoder and
+        #    decoder attributes. The logic for this legacy case with flat config structure is handled separately at
+        #    the bottom of this function.
+        # 2. Decoder sub-configs can't have "encoder" in their name (and vice-versa). "generator" is a name exclusive
+        #    to decoders. "perceiver" is a name exclusive to encoders.
+        # 3. Decoder sub-configs may have `is_decoder=True`. Encoder sub-configs may have `max_source_positions`.
+        # 4. We don't have image decoders.
+
+        # Modality assumptions:
+        # 1. All image configs have one of the following attributes:
+        #    - `image_size`
+        #    - `do_pooling`
+        # 2. If it's not an image config, then it's an audio config if it has one of the following attributes:
+        #    - `num_mel_bins`
+        #    - `num_channels`  (this one may co-exist with `image_size`, but we check for image configs first)
+        #    - `audio_vocab_size`
+        # 3. If it's not any of the above and it has a `vocab_size` attribute, then it's a text config. (`vocab_size`
+        #    often exists in audio configs)
+        possible_sub_config_names = self.sub_configs.keys()
+        valid_sub_config_names = []
+        for sub_config_name in possible_sub_config_names:
+            sub_config = getattr(self, sub_config_name)
+            is_image_config = "image_size" in sub_config or "do_pooling" in sub_config
+            is_audio_config = not is_image_config and (
+                any(attr in sub_config for attr in ["num_mel_bins", "num_channels", "audio_vocab_size"])
+            )
+            is_text_config = not is_image_config and not is_audio_config and "vocab_size" in sub_config
+
+            if encoder and ("decoder" in sub_config_name or "generator" in sub_config_name or sub_config.is_decoder):
+                continue
+            if decoder and (
+                "encoder" in sub_config_name
+                or "perceiver" in sub_config_name
+                or is_image_config
+                or hasattr(sub_config, "max_source_positions")
+            ):
+                continue
+
+            if modality is None:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "text" and is_text_config:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "image" and is_image_config:
+                valid_sub_config_names.append(sub_config_name)
+            elif modality == "audio" and is_audio_config:
+                valid_sub_config_names.append(sub_config_name)
+
+        # If exactly one sub-config is found, return it. Otherwise, check `strict` -- if True, raise an error,
+        # otherwise return the original config (no match / ambiguous match)
+        if len(valid_sub_config_names) == 1:
+            config_to_return = getattr(self, valid_sub_config_names[0])
+        elif strict and len(valid_sub_config_names) > 1:
+            raise ValueError(
+                f"Multiple sub-configs found for modality={modality}, encoder={encoder}, and decoder={decoder} "
+                f"in {self.model_type} ({valid_sub_config_names})"
+            )
         else:
             config_to_return = self
 
         # handle legacy models with flat config structure, when we only want one of the configs
-        if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
+        if (
+            len(self.sub_configs) == 0
+            and decoder != encoder
+            and len(valid_sub_config_names) == 0
+            and config_to_return.is_encoder_decoder
+        ):
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_discard = "encoder" if decoder else "decoder"
+            prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
-                if key.startswith(prefix_to_discard):
+                # NOTE: We don't want to discard the key if it is mapped from a different attribute name at read time
+                if key.startswith(prefix_to_discard) and key not in config_to_return.attribute_map.values():
                     delattr(config_to_return, key)
-            # old encoder/decoder models may use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
-            if decoder and hasattr(config_to_return, "decoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.decoder_layers
-            elif encoder and hasattr(config_to_return, "encoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.encoder_layers
+                if key.startswith(prefix_to_keep):
+                    if key == prefix_to_keep + "_layers":  # [encoder/decoder]_layers -> num_hidden_layers
+                        new_key = "num_hidden_layers"
+                    elif (
+                        key == prefix_to_keep + "_attention_heads"
+                    ):  # [encoder/decoder]_attention_heads -> num_attention_heads
+                        new_key = "num_attention_heads"
+                    else:  # e.g. encoder_hidden_act -> hidden_act
+                        new_key = key[len(prefix_to_keep) + 1 :]
+
+                    # Does the class map the new key into a different attribute name at read time? if so, let's write
+                    # into that attribute instead
+                    if new_key in config_to_return.attribute_map:
+                        new_key = config_to_return.attribute_map[new_key]
+
+                    value = getattr(config_to_return, key)
+                    delattr(config_to_return, key)
+                    setattr(config_to_return, new_key, value)
 
         return config_to_return
+
+    def get_text_config(self, decoder: Optional[bool] = None, encoder: Optional[bool] = None) -> "PretrainedConfig":
+        """
+        Deprecated. `get_text_config(...)` is equivalent to `get_sub_config(modality="text",  ...)`. See the
+        corresponding docstring for more details.
+        """
+        logger.warning_once(
+            "The `get_text_config` method is deprecated and will be removed in v4.61 of Transformers. "
+            "Please replace its call by the `get_sub_config` method instead: "
+            "`config.get_text_config(...)` -> `config.get_sub_config(modality='text', ...)`"
+        )
+        return self.get_sub_config(modality="text", decoder=decoder, encoder=encoder, strict=False)
+
+    def get_autoregressive_config(self) -> "PretrainedConfig":
+        """Returns the sub-config that parameterizes the section of the model that is an autoregressive decoder."""
+
+
+        # NOTE TO SELF -> this has to be a function method, the cache has to stop calling config.get(...)
+
+
+        # The goal of this function is abstract fetching the right sub-config for autoregressive purposes --
+        # to power `generate`, to initialize the KV caches, ...
+        #
+        # Why isn't `get_sub_config(decoder=True)` enough?
+        # 1. We can't pin `modality`. For instance, TTS and STT both have an audio and a text component, but TTS
+        #    models want the audio decoder here, while STT want the text decoder.
+        # 2. Some models, like Moshi, have more than one decoder. In this specific case, both decoders have their own
+        #    config, and both can be used for autoregressive purposes. Having a separate function that can be
+        #    overwritten allow us to pick the right one.
+        #
+        # This function intentionally raises exceptions. If you hit an exception with a new model, one of the three
+        # things have to happen:
+        # 1. Your model has 1 decoder   -> the heuristics in `get_sub_config` need to be updated
+        # 2. Your model has >1 decoders -> this function needs to be overwritten, you should specify which decoder you want to use
+        # 3. Your model has  0 decoders -> you shouldn't use this function :)
+
+        # raises an exception if there are multiple decoders
+        autoregressive_config = self.get_sub_config(decoder=True, strict=True)
+        # no decoder sub-configs found -> let's check this could be used for autoregressive purposes
+        if autoregressive_config == self:
+            if not hasattr(self, "vocab_size"):
+                raise ValueError("TODO")
+        return autoregressive_config
 
     @classmethod
     def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
@@ -1261,8 +1376,9 @@ class PretrainedConfig(PushToHubMixin):
         """
 
         warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. "
+            "Please instantiate the config class directly with "
+            "`MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
             FutureWarning,
         )
 
@@ -1279,8 +1395,9 @@ class PretrainedConfig(PushToHubMixin):
         """
 
         warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. "
+            "Please instantiate the config class directly with "
+            "`MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
             FutureWarning,
         )
 

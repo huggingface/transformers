@@ -1108,7 +1108,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    def get_text_config(self, *args, **kwargs):
+    def get_sub_config(self, *args, **kwargs):
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
@@ -1120,7 +1120,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         # Overridden for deeply nested config like Qwen2-Omni. We don't have any omni model
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
-        return self.thinker_config.get_text_config(*args, **kwargs)
+        return self.thinker_config.get_sub_config(*args, **kwargs)
 
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -2344,6 +2344,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
+        batch_size, seq_length, _ = inputs_embeds.shape
 
         # 2. Merge text , audios , image and video
         if input_features is not None:
@@ -2396,9 +2397,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 rope_deltas = rope_deltas - delta0
                 self.rope_deltas = rope_deltas
             else:
-                batch_size, seq_length = input_ids.shape
                 delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
-                position_ids = torch.arange(seq_length, device=input_ids.device)
+                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
@@ -2422,7 +2422,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.get_sub_config(modality="text").vocab_size,
             )
 
         if not return_dict:
