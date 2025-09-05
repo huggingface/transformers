@@ -353,7 +353,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
         return config
 
-    def update_tp_plan(self, config):
+    def update_ep_plan(self, config):
         if "GptOssConfig" in config.__class__.__name__:
             if getattr(config, "base_model_ep_plan", None) is not None:
                 config.base_model_ep_plan.update(
