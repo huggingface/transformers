@@ -631,7 +631,18 @@ class ContinuousBatchingManager:
             self.logit_processor.set_continuous_batching_context(
                 batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
-        return self.logit_processor(batch_data["input_ids"], logits)
+
+        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_2d = logits.view(batch_size * seq_len, vocab_size)
+        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+
+        # Process with 2D tensors
+        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d)
+
+        # Reshape back to 3D
+        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
     def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
