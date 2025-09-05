@@ -174,6 +174,7 @@ class ContinuousBatchProcessor:
         self.output_ids = torch.empty((1, T), **tensor_metadata)
         # Since attenention_mask is not always needed, we only allocate it if it is needed
         if self.return_attention_mask():
+            # TODO: this could be 2 iff model is hybrid, and then we can also change memory handler to account for it
             size_0 = 1 if self.sliding_window == NO_SLIDING_WINDOW else 2
             self.attention_mask = torch.empty(
                 (size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
@@ -718,8 +719,6 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
-                # FIXME: this is unused, why was it added?
-                num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
             logger.info(f"PagedAttentionCache created at {time.time() - self.creation_time} seconds")
