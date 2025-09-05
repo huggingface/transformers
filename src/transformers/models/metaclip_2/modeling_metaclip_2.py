@@ -23,14 +23,10 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    logging,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class MetaClip2TextEmbeddings(nn.Module):
@@ -233,13 +229,7 @@ class MetaClip2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
