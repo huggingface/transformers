@@ -172,3 +172,23 @@ class SlidingAttentionCacheManager(CacheManager):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         return physical_indices
+
+
+
+# TODO: test the impact of this
+# def get_read_indices(self, request_id: str, past_length: int) -> list[int]:
+#     # Retrieve the block table for the request and raise an error if it doesn't exist
+#     block_table = self._block_table.get(request_id)
+#     if block_table is None:
+#         raise ValueError(f"No block table found for request {request_id}")
+#     # Compute the physical indices
+#     physical_indices = []
+#     n_left = past_length
+#     for block_idx in block_table:
+#         block_physical_index = block_idx * self.block_size
+#         pages_used = min(self.block_size, n_left)
+#         physical_indices.extend(block_physical_index + i for i in range(pages_used))
+#         n_left -= pages_used
+#         if n_left == 0:
+#             return physical_indices
+#     raise ValueError(f"Request {request_id} required too many indices: {past_length = } and {len(block_table) = }")
