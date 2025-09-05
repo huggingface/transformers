@@ -23,7 +23,6 @@ from packaging import version
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_vision,
