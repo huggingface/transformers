@@ -21,7 +21,7 @@ Keypoint matching matches different points of interests that belong to same obje
 - **Keypoint coordinates (x,y):** one-to-one mapping of pixel coordinates between the first and the second image using two lists. Each keypoint at a given index in the first list is matched to the keypoint at the same index in the second list.
 - **Matching scores:** Scores assigned to the keypoint matches.
 
-In this tutorial we will extract keypoint matches with [EfficientLoFTR model trained with MatchAnything framework](https://huggingface.co/zju-community/matchanything_eloftr), and refine the matches. There's two ways to do this, using `AutoModelForKeypointMatching` or `keypoint-matching` pipeline. Let's see the former in action. This model is only 16M parameters so we can conveniently run on CPU.
+In this tutorial, you will extract keypoint matches with the [`EfficientLoFTR`] model trained with the [MatchAnything framework](https://huggingface.co/zju-community/matchanything_eloftr), and refine the matches. This model is only 16M parameters and can be run on a CPU. You will use the [`AutoModelForKeypointMatching`] class.
 
 ```python
 from transformers import AutoImageProcessor, AutoModelForKeypointMatching
