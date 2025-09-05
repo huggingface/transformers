@@ -38,7 +38,7 @@ Load two images that have same objects of interest, one photo is taken second ap
          alt="Bee" 
          style="height: 200px; object-fit: contain; margin-right: 10px;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_edited.jpg" 
-         alt="Cats" 
+         alt="Bee edited" 
          style="height: 200px; object-fit: contain;">
 </div>
 
