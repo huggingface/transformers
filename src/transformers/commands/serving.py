@@ -737,7 +737,7 @@ class ServeCommand(BaseTransformersCLICommand):
             return JSONResponse({"status": "ok"})
 
         @app.middleware("http")
-        async def get_or_set_requst_id(request: Request, call_next):
+        async def get_or_set_request_id(request: Request, call_next):
             request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
             request.state.request_id = request_id
             response = await call_next(request)
