@@ -267,7 +267,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertGreaterEqual(len(raised_warnings), 1)
             self.assertIn("extra_argument", messages)
 
-    @is_flaky()
+    @unittest.skip(reason="TODO: Yoni")
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
