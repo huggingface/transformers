@@ -16,7 +16,11 @@
 Image/Text processor class for ALIGN
 """
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from typing import Optional, Union
+
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class AlignProcessorKwargs(ProcessingKwargs, total=False):

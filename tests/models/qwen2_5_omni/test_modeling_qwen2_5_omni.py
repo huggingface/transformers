@@ -418,18 +418,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

@@ -129,7 +129,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -275,7 +275,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     def process_images(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """

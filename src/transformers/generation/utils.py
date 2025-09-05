@@ -1091,7 +1091,7 @@ class GenerationMixin(ContinuousMixin):
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: torch.LongTensor = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,

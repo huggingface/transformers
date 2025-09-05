@@ -17,7 +17,6 @@ Image/Text processor class for AltCLIP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils.deprecation import deprecate_kwarg
 
 
 class AltCLIPProcessor(ProcessorMixin):
