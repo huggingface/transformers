@@ -455,18 +455,10 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
     return_dict: Optional[bool] = False
 
 
-class AllKwargsForChatTemplate(
-    TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, ProcessorChatTemplateKwargs
-):
-    processor_kwargs: ProcessingKwargs = {
-        **ProcessingKwargs.__annotations__,
-    }
-    mm_load_kwargs: ChatTemplateLoadKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    template_kwargs: ProcessorChatTemplateKwargs = {
-        **ProcessorChatTemplateKwargs.__annotations__,
-    }
+class AllKwargsForChatTemplate(TypedDict, total=False):
+    processor_kwargs: ProcessingKwargs
+    mm_load_kwargs: ChatTemplateLoadKwargs
+    template_kwargs: ProcessorChatTemplateKwargs
 
 
 @dataclass
