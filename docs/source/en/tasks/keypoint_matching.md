@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Keypoint Matching
+# Keypoint matching
 
 Keypoint matching matches different points of interests that belong to same object appearing in two different images. Most modern keypoint matchers only take images as input. They output following:
 
