@@ -56,12 +56,12 @@ class FullAttentionCacheManager(CacheManager):
             raise ValueError(f"No block table found for request {request_id}")
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length):
+        for i in range(past_length + query_length):
             block_idx = i // self.block_size
             block_offset = i % self.block_size
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
-        return physical_indices + [-1] * query_length
+        return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         block_table = self._block_table.get(request_id)

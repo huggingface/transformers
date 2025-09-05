@@ -233,25 +233,37 @@ class PagedAttentionCache:
         `num_blocks * block_size = num_pages` and `page_size = num_heads * num_layers_per_group * head_size`,
         we can view the cache as a tensor of shape [num_layers_per_group, num_pages, num_heads, head_size]
         """
-        # Retrieve the layer read and write indices
+        # Retrieve the layer read and write indices, and if there is a sliding window
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
         layer_read_index = read_index[group_idx]
         layer_write_index = write_index[group_idx]
-        # Reshape cache for easier indexing
+        # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
-        # Add the cache to the key and value states
-        mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
-        key_states_with_cache = k_cache[layer_read_index, :, :]
-        key_states_with_cache[mask] = key_states
-        value_states_with_cache = v_cache[layer_read_index, :, :]
-        value_states_with_cache[mask] = value_states
-        # Write new KV values to the cache
-        k_cache[layer_write_index, :, :] = key_states
-        v_cache[layer_write_index, :, :] = value_states
+
+        # Case: full attention
+        sliding_window = self.sliding_windows[layer_idx]
+        if sliding_window == NO_SLIDING_WINDOW:
+            k_cache[layer_write_index, :, :] = key_states
+            v_cache[layer_write_index, :, :] = value_states
+            key_states_with_cache = k_cache[layer_read_index, :, :]
+            value_states_with_cache = v_cache[layer_read_index, :, :]
+
+        # Case: sliding window
+        else:
+            # Add the cache to the key and value states
+            mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
+            key_states_with_cache = k_cache[layer_read_index, :, :]
+            key_states_with_cache[mask] = key_states
+            value_states_with_cache = v_cache[layer_read_index, :, :]
+            value_states_with_cache[mask] = value_states
+            # Write new KV values to the cache
+            k_cache[layer_write_index, :, :] = key_states
+            v_cache[layer_write_index, :, :] = value_states
+
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
