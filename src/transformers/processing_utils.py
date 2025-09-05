@@ -332,7 +332,7 @@ class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
-class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False):
+class ProcessingKwargs(TypedDict, total=False):
     """
     Base class for kwargs passing to processors.
     A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
@@ -455,18 +455,10 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
     return_dict: Optional[bool] = False
 
 
-class AllKwargsForChatTemplate(
-    TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, ProcessorChatTemplateKwargs
-):
-    processor_kwargs: ProcessingKwargs = {
-        **ProcessingKwargs.__annotations__,
-    }
-    mm_load_kwargs: ChatTemplateLoadKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    template_kwargs: ProcessorChatTemplateKwargs = {
-        **ProcessorChatTemplateKwargs.__annotations__,
-    }
+class AllKwargsForChatTemplate(TypedDict, total=False):
+    processor_kwargs: ProcessingKwargs
+    mm_load_kwargs: ChatTemplateLoadKwargs
+    template_kwargs: ProcessorChatTemplateKwargs
 
 
 @dataclass
@@ -481,10 +473,10 @@ class MultiModalData:
     and we might change its API in the future.
     """
 
-    num_image_tokens: list[int] = None
-    num_video_tokens: list[int] = None
-    num_audio_tokens: list[int] = None
-    num_image_patches: list[int] = None
+    num_image_tokens: Optional[list[int]] = None
+    num_video_tokens: Optional[list[int]] = None
+    num_audio_tokens: Optional[list[int]] = None
+    num_image_patches: Optional[list[int]] = None
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None
@@ -1637,8 +1629,8 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 kwargs["do_sample_frames"] = True
 
-            images_exist = any(len(im) > 0 for im_list in batch_images for im in im_list)
-            videos_exist = any(len(vid) > 0 for vid_list in batch_videos for vid in vid_list)
+            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
+            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
                 images=batch_images if images_exist else None,

@@ -305,10 +305,14 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # Only sample frames if an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
+            sampled_metadata = []
             for video, metadata in zip(videos, video_metadata):
                 indices = sample_indices_fn(metadata=metadata)
+                metadata.frames_indices = indices
                 sampled_videos.append(video[indices])
+                sampled_metadata.append(metadata)
             videos = sampled_videos
+            video_metadata = sampled_metadata
         elif not is_valid_video(videos[0]):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
@@ -677,7 +681,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
-                # Try to load with a new config name first and if not successfull try with the old file name
+                # Try to load with a new config name first and if not successful try with the old file name
                 # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
                 resolved_video_processor_files = cached_files(
                     pretrained_model_name_or_path,
@@ -694,8 +698,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     _raise_exceptions_for_missing_entries=False,
                 )
                 resolved_video_processor_file = resolved_video_processor_files[0]
-            except EnvironmentError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+            except OSError:
+                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:

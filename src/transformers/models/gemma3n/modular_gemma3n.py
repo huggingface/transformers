@@ -1744,6 +1744,7 @@ def apply_rotary_pos_emb(
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = True
         del self.attn_logit_softcapping
         del self.scaling
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
