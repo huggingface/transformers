@@ -91,7 +91,7 @@ len(outputs[0]["keypoints0"])
 # 401
 ``` 
 
-We can visualize them using `visualize_keypoint_matching` method of the processor. 
+We can visualize them using the processor's [`~EfficientLoFTRImageProcessor.visualize_keypoint_matching`] method. 
 
 ```python
 plot_images = processor.visualize_keypoint_matching(images, outputs)
