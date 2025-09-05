@@ -278,7 +278,7 @@ class DiaGenerationMixin(GenerationMixin):
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
