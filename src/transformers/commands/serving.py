@@ -1157,14 +1157,31 @@ class ServeCommand(BaseTransformersCLICommand):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append({"role": "user", "content": req["input"]})
         elif isinstance(req["input"], list):
-            if "instructions" in req:
-                if req["input"][0]["role"] != "system":
-                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+            # Normalization logic starts here
+            normalized_input = []
+            for message in req["input"]:
+                if isinstance(message.get("content"), list):
+                    # This is the complex case we need to handle.
+                    # We'll combine the text parts into a single string.
+                    combined_content = "".join(
+                        part["text"] for part in message["content"] if part.get("type") == "input_text"
+                    )
+                    normalized_input.append({"role": message["role"], "content": combined_content})
                 else:
-                    inputs = req["input"]
-                    inputs[0]["content"] = req["instructions"]
+                    # This is the simple case, no changes needed.
+                    normalized_input.append(message)
+            # Normalization logic ends here
+
+            # Now, we use the `normalized_input` instead of `req["input"]`
+            if "instructions" in req:
+                if normalized_input and normalized_input[0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *normalized_input]
+                else:
+                    inputs = normalized_input
+                    if inputs:
+                        inputs[0]["content"] = req["instructions"]
             else:
-                inputs = req["input"]
+                inputs = normalized_input
         elif isinstance(req["input"], dict):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append(req["input"])
