@@ -24,12 +24,12 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeTopkRouter,
@@ -408,20 +408,28 @@ class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
         super().__init__(config)
 
 
-class Glm4vMoeTextMoE(Glm4MoeMoE):
+class Glm4vMoeTextNaiveMoe(DeepseekV3NaiveMoe):
+    pass
+
+
+class Glm4vMoeTextMoE(nn.Module):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
-        self.experts = nn.ModuleList(
-            [
-                Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
+        self.experts = Glm4vMoeTextNaiveMoe(config)
         self.gate = Glm4vMoeTextTopkRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        topk_indices, topk_weights = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class Glm4vMoeTextMLP(Glm4MoeMLP):
