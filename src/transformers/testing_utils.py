@@ -141,9 +141,6 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tensorflow_probability_available,
-    is_tensorflow_text_available,
-    is_tf2onnx_available,
     is_tf_available,
     is_tiktoken_available,
     is_timm_available,
@@ -514,14 +511,6 @@ def require_jinja(test_case):
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
-def require_tf2onnx(test_case):
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf2onnx`, is deprecated and will be removed in "
-        "Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf2onnx_available(), "test requires tf2onnx")(test_case)
-
-
 def require_onnx(test_case):
     return unittest.skipUnless(is_onnx_available(), "test requires ONNX")(test_case)
 
@@ -716,47 +705,11 @@ def require_intel_extension_for_pytorch(test_case):
     )(test_case)
 
 
-def require_tensorflow_probability(test_case):
-    """
-    Decorator marking a test that requires TensorFlow probability.
-
-    These tests are skipped when TensorFlow probability isn't installed.
-
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_probability`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_probability_available(), "test requires TensorFlow probability")(
-        test_case
-    )
-
-
 def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
     """
     return unittest.skipUnless(is_torchaudio_available(), "test requires torchaudio")(test_case)
-
-
-def require_tf(test_case):
-    """
-    Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf_available(), "test requires TensorFlow")(test_case)
-
-
-def require_flax(test_case):
-    """
-    Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
-    """
-    logger.warning_once(
-        "JAX test-related code, including `require_flax`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
 
 def require_sentencepiece(test_case):
@@ -792,18 +745,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_tensorflow_text(test_case):
-    """
-    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
-    installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_text`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
 def require_keras_nlp(test_case):
