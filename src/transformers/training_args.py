@@ -1574,6 +1574,16 @@ class TrainingArguments:
         },
     )
 
+    sample_based_train: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to enable sample-based training. If enabled, the trainer will save or load the "
+                "checkpoint based on the number of samples processed instead of the number of steps."
+            )
+        },
+    )
+
     def __post_init__(self):
         # Set default output_dir if not provided
         if self.output_dir is None:

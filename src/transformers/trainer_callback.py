@@ -50,6 +50,8 @@ class TrainerState:
         epoch (`float`, *optional*):
             Only set during training, will represent the epoch the training is at (the decimal part being the
             percentage of the current epoch completed).
+        samples_trained (`int`, *optional*, defaults to 0):
+            During training, represents the number of samples the model has been trained.
         global_step (`int`, *optional*, defaults to 0):
             During training, represents the number of update steps completed.
         max_steps (`int`, *optional*, defaults to 0):
@@ -94,6 +96,7 @@ class TrainerState:
     """
 
     epoch: Optional[float] = None
+    samples_trained: int = 0
     global_step: int = 0
     max_steps: int = 0
     logging_steps: int = 500
@@ -167,7 +170,7 @@ class TrainerState:
                     num_steps = math.ceil(max_steps * num_steps)
                 setattr(self, f"{step_kind}_steps", num_steps)
 
-    def init_training_references(self, trainer, max_steps, num_train_epochs, trial):
+    def init_training_references(self, trainer, max_steps, num_train_epochs, num_train_samples, trial):
         """
         Stores the initial training references needed in `self`
         """
@@ -184,6 +187,7 @@ class TrainerState:
 
         self.max_steps = max_steps
         self.num_train_epochs = num_train_epochs
+        self.num_train_samples = num_train_samples
         self.is_local_process_zero = trainer.is_local_process_zero()
         self.is_world_process_zero = trainer.is_world_process_zero()
 
@@ -600,7 +604,12 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_save = True
 
         # End training
-        if state.global_step >= state.max_steps:
+        if args.sample_based_train:
+            if state.samples_trained >= state.num_train_samples:
+                control.should_training_stop = True
+                if args.save_strategy == SaveStrategy.STEPS:
+                    control.should_save = True
+        elif state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
             if args.save_strategy == SaveStrategy.STEPS:
@@ -645,13 +654,21 @@ class ProgressCallback(TrainerCallback):
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
-            self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
+            if args.sample_based_train:
+                self.training_bar = tqdm(total=state.num_train_samples, dynamic_ncols=True)
+            else:
+                self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
         self.current_step = 0
+        self.current_trained_samples = 0
 
     def on_step_end(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
-            self.training_bar.update(state.global_step - self.current_step)
-            self.current_step = state.global_step
+            if args.sample_based_train:
+                self.training_bar.update(state.samples_trained - self.current_trained_samples)
+                self.current_trained_samples = state.samples_trained
+            else:
+                self.training_bar.update(state.global_step - self.current_step)
+                self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
         if state.is_world_process_zero and has_length(eval_dataloader):
