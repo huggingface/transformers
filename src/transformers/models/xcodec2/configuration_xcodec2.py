@@ -42,7 +42,7 @@ class Xcodec2Config(PretrainedConfig):
         encoder_hidden_size (`int`, *optional*, defaults to 1024):
             Hidden size for the audio encoder model.
         downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
-            Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
+            Ratios for downsampling in the encoder.
         decoder_hidden_size (`int`, *optional*, defaults to 1024):
             Hidden size for the audio decoder model.
         semantic_model_config (`Union[Dict, Wav2Vec2BertConfig]`, *optional*):
@@ -56,11 +56,15 @@ class Xcodec2Config(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of key value heads for the model.
         num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
+            Number of hidden layers in the Transformer decoder.
+        resnet_dropout (`float`, *optional*, defaults to 0.1):
+            Dropout rate for the ResNet blocks in the decoder.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate for the attention layer.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layer.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for RMS normalization.
         head_dim (`int`, *optional*, defaults to 64):
@@ -92,8 +96,10 @@ class Xcodec2Config(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=16,
         num_hidden_layers=12,
+        resnet_dropout=0.1,
         attention_dropout=0.0,
         attention_bias=False,
+        hidden_act="silu",
         rms_norm_eps=1e-6,
         head_dim=64,
         vq_dim=2048,
@@ -130,14 +136,16 @@ class Xcodec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.sampling_rate = sampling_rate
 
-        # decoder parameters, which uses transformer
+        # decoder parameters, which has hybrid ResNet-Transformer architecture
         self.decoder_hidden_size = decoder_hidden_size
         self.head_dim = head_dim
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
+        self.resnet_dropout = resnet_dropout
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
+        self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta

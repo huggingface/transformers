@@ -19,7 +19,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial, wraps
 from math import ceil
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -44,6 +44,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from .configuration_xcodec2 import Xcodec2Config
+from transformers.activations import ACT2FN
 
 
 # General docstring
@@ -113,12 +114,12 @@ class Xcodec2MLP(nn.Module):
         dim = config.hidden_size
 
         self.fc1 = nn.Linear(dim, 4 * dim, bias=False)
-        self.silu = nn.SiLU()  # TODO: Or ACT2FN[config.hidden_act] if using config activation
+        self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(4 * dim, dim, bias=False)
 
     def forward(self, x):
         x = self.fc1(x)
-        x = self.silu(x)
+        x = self.activation(x)
         x = self.fc2(x)
         return x
 
@@ -145,7 +146,7 @@ class Xcodec2SnakeBeta(nn.Module):
         >>> x = a1(x)
     """
 
-    def __init__(self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False):
+    def __init__(self, in_features, alpha=1.0, alpha_logscale=False):
         """
         Initialization.
         INPUT:
@@ -167,10 +168,6 @@ class Xcodec2SnakeBeta(nn.Module):
         else:  # linear scale alphas initialized to ones
             self.alpha = Parameter(torch.ones(in_features) * alpha)
             self.beta = Parameter(torch.ones(in_features) * alpha)
-
-        self.alpha.requires_grad = alpha_trainable
-        self.beta.requires_grad = alpha_trainable
-
         self.no_div_by_zero = 0.000000001
 
     def forward(self, x):
@@ -400,20 +397,16 @@ def get_maybe_sync_seed(device, max_size=10_000):
     return rand_int.item()
 
 
-def Normalize(in_channels, num_groups=32):
-    return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
-
-
-class ResnetBlock(nn.Module):
-    def __init__(self, *, in_channels, out_channels=None, dropout):
+class ResNetBlock(nn.Module):
+    def __init__(self, *, in_channels, out_channels=None, dropout=0.1):
         super().__init__()
         self.in_channels = in_channels
         out_channels = in_channels if out_channels is None else out_channels
         self.out_channels = out_channels
 
-        self.norm1 = Normalize(in_channels)
+        self.norm1 = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
         self.conv1 = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = Normalize(out_channels)
+        self.norm2 = torch.nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = torch.nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
@@ -463,12 +456,12 @@ class Xcodec2VocosBackbone(nn.Module):
 
         self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
         block_in = config.hidden_size
-        dropout = 0.1
+        dropout = config.resnet_dropout
 
         self.prior_blocks = nn.ModuleList(
             [
-                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
-                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
+                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
+                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
             ]
         )
 
@@ -484,12 +477,12 @@ class Xcodec2VocosBackbone(nn.Module):
 
         self.post_blocks = nn.ModuleList(
             [
-                ResnetBlock(
+                ResNetBlock(
                     in_channels=config.hidden_size,
                     out_channels=config.hidden_size,
                     dropout=dropout,
                 ),
-                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
+                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
             ]
         )
 
@@ -580,7 +573,8 @@ class ISTFT(nn.Module):
         else:
             raise ValueError("Padding must be 'center' or 'same'.")
 
-        assert spec.dim() == 3, "Expected a 3D tensor as input"
+        if spec.dim() != 3:
+            raise ValueError("Expected a 3D tensor as input")
         B, N, T = spec.shape
 
         # Inverse FFT
@@ -606,7 +600,8 @@ class ISTFT(nn.Module):
         ).squeeze()[pad:-pad]
 
         # Normalize
-        assert (window_envelope > 1e-11).all()
+        if not (window_envelope > 1e-11).all():
+            raise ValueError("Window envelope values are too small (<=1e-11)")
         y = y / window_envelope
 
         return y
@@ -679,6 +674,7 @@ def maybe(fn):
 class Xcodec2FSQ(Module):
     """
     Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
+    Simply changed asserts to raise ValueErrors.
     """
 
     def __init__(
@@ -717,7 +713,8 @@ class Xcodec2FSQ(Module):
         self.effective_codebook_dim = effective_codebook_dim
 
         keep_num_codebooks_dim = keep_num_codebooks_dim if keep_num_codebooks_dim is not None else num_codebooks > 1
-        assert not (num_codebooks > 1 and not keep_num_codebooks_dim)
+        if num_codebooks > 1 and not keep_num_codebooks_dim:
+            raise ValueError("When num_codebooks > 1, keep_num_codebooks_dim must be True")
         self.keep_num_codebooks_dim = keep_num_codebooks_dim
 
         self.dim = dim if dim is not None else len(_levels) * num_codebooks
@@ -793,7 +790,8 @@ class Xcodec2FSQ(Module):
 
     def codes_to_indices(self, zhat):
         """Converts a `code` to an index in the codebook."""
-        assert zhat.shape[-1] == self.codebook_dim
+        if zhat.shape[-1] != self.codebook_dim:
+            raise ValueError(f"Expected zhat to have shape [-1, {self.codebook_dim}], but got {zhat.shape}")
         zhat = self._scale_and_shift(zhat)
         return (zhat * self._basis).sum(dim=-1).to(int32)
 
@@ -805,7 +803,8 @@ class Xcodec2FSQ(Module):
 
     def indices_to_codes(self, indices):
         """Inverse of `codes_to_indices`."""
-        assert indices is not None
+        if indices is None:
+            raise ValueError("indices cannot be None")
 
         codes = self._indices_to_codes(indices)
 
@@ -825,7 +824,8 @@ class Xcodec2FSQ(Module):
         c - number of codebook dim
         """
 
-        assert z.shape[-1] == self.dim, f"expected dimension of {self.dim} but found dimension of {z.shape[-1]}"
+        if z.shape[-1] != self.dim:
+            raise ValueError(f"expected dimension of {self.dim} but found dimension of {z.shape[-1]}")
 
         z = self.project_in(z)
 
@@ -872,6 +872,7 @@ class Xcodec2FSQ(Module):
 class Xcodec2ResidualFSQ(Module):
     """
     Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
+    Simply changed asserts to raise ValueErrors.
     """
 
     def __init__(
@@ -920,7 +921,8 @@ class Xcodec2ResidualFSQ(Module):
 
         self.quantize_dropout = quantize_dropout and num_quantizers > 1
 
-        assert quantize_dropout_cutoff_index >= 0
+        if quantize_dropout_cutoff_index < 0:
+            raise ValueError("quantize_dropout_cutoff_index must be greater than or equal to 0")
 
         self.quantize_dropout_cutoff_index = quantize_dropout_cutoff_index
         self.quantize_dropout_multiple_of = quantize_dropout_multiple_of
@@ -938,9 +940,10 @@ class Xcodec2ResidualFSQ(Module):
         ps = (tuple(spatial_dims),)
 
         if quantize_dim < self.num_quantizers:
-            assert self.quantize_dropout > 0.0, (
-                "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
-            )
+            if not self.quantize_dropout > 0.0:
+                raise ValueError(
+                    "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
+                )
             indices_packed = F.pad(indices_packed, (0, self.num_quantizers - quantize_dim), value=-1)
 
         mask = indices_packed == -1
