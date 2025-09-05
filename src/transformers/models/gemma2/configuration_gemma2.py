@@ -88,6 +88,11 @@ class Gemma2Config(PretrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        use_post_attention_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post attention layer normalization layer.
+        use_post_feedforward_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post feedforward layer normalization layer.
+
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -142,6 +147,8 @@ class Gemma2Config(PretrainedConfig):
         layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
+        use_post_attention_norm=True,
+        use_post_feedforward_norm=True,
         **kwargs,
     ):
         super().__init__(
@@ -170,6 +177,8 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
+        self.use_post_attention_norm = use_post_attention_norm
+        self.use_post_feedforward_norm = use_post_feedforward_norm
         self.layer_types = layer_types
 
         if self.layer_types is None:
