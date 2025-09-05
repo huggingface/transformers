@@ -20,8 +20,8 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
-import requests
 
+from transformers.image_utils import load_image
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
     get_tests_dir,
@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -187,7 +187,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg"
+        url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg")
 
         processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
@@ -205,7 +205,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         # fmt: on
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_image(url)
         # To match the official (microsoft) Kosmos-2 demo from which the expected values here are grabbed
         image_path = os.path.join(self.tmpdirname, "image.jpg")
         image.save(image_path)
