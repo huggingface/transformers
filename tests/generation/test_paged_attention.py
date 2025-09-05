@@ -78,7 +78,9 @@ class TestBatchGeneration(unittest.TestCase):
         )
 
         for i, req_id in enumerate(batch_outputs):
-            generated = self.tokenizer.decode(batch_outputs[req_id].generated_tokens, skip_special_tokens=False).strip()
+            generated = self.tokenizer.decode(
+                batch_outputs[req_id].generated_tokens, skip_special_tokens=False
+            ).strip()
             expected = _EXPECTED_OUTPUTS[i].strip()
             self.assertTrue(
                 generated.startswith(expected),
@@ -101,6 +103,7 @@ class TestBatchGeneration(unittest.TestCase):
             max_new_tokens=30,
             do_sample=True,
             top_k=50,
+            top_p=0.9,
             temperature=0.8,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
@@ -128,9 +131,11 @@ class TestBatchGeneration(unittest.TestCase):
         # 2. Generated text is non-empty
         # 3. Generated text is different from greedy (demonstrating sampling is working)
         self.assertEqual(len(batch_outputs), len(batch_inputs), f"[{attn_impl}] Not all requests completed")
-        
+
         for i, req_id in enumerate(batch_outputs):
-            generated = self.tokenizer.decode(batch_outputs[req_id].generated_tokens, skip_special_tokens=False).strip()
+            generated = self.tokenizer.decode(
+                batch_outputs[req_id].generated_tokens, skip_special_tokens=False
+            ).strip()
             self.assertTrue(
                 len(generated) > 0,
                 msg=f"[{attn_impl}] Empty output for request {i}",
@@ -138,6 +143,7 @@ class TestBatchGeneration(unittest.TestCase):
             # Check that we got at least some tokens generated
             generated_tokens = batch_outputs[req_id].generated_tokens
             self.assertGreater(
-                len(generated_tokens), 0,
+                len(generated_tokens),
+                0,
                 msg=f"[{attn_impl}] No tokens generated for request {i}",
             )
