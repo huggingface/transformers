@@ -18,7 +18,7 @@ import os
 import textwrap
 from pathlib import Path
 from typing import Optional, Union, get_args
-
+import sys
 import regex as re
 
 from .doc import (
@@ -1811,8 +1811,8 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
     if name == [] and custom_intro is None and not is_dataclass:
         raise ValueError(
-            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
-            "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
+            f"`{cls.__name__}` is not registered in the . Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
+            "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the ."
         )
     if name != [] or custom_intro is not None or is_dataclass:
         name = name[0] if name else None
@@ -2035,6 +2035,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
           and docstring.
         - Return value documentation is automatically generated for methods that return ModelOutput subclasses.
     """
+    if sys.flags.optimize >= 2:
+        if obj is None:
+            return lambda x: x
+        return obj
 
     def auto_docstring_decorator(obj):
         if len(obj.__qualname__.split(".")) > 1:
