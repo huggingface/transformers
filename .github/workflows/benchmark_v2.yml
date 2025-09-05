@@ -97,8 +97,9 @@ jobs:
           echo "Benchmark arguments: $args"
 
       - name: Run benchmark v2
+        working-directory: benchmark_v2
         run: |
           echo "Running benchmark with args: ${{ steps.prepare-args.outputs.benchmark_args }}"
-          python3 benchmark_v2/run_benchmarks.py ${{ steps.prepare-args.outputs.benchmark_args }}
+          python3 run_benchmarks.py ${{ steps.prepare-args.outputs.benchmark_args }}
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
