@@ -1,0 +1,26 @@
+[1mdiff --git a/pyproject.toml b/pyproject.toml[m
+[1mindex 5d3a9436e..5e313c304 100644[m
+[1m--- a/pyproject.toml[m
+[1m+++ b/pyproject.toml[m
+[36m@@ -59,13 +59,19 @@[m [mline-ending = "auto"[m
+ [m
+ [tool.pytest.ini_options][m
+ addopts = "--doctest-glob='**/*.md'"[m
+[31m-doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"[m
+[32m+[m[32mdoctest_optionflags = "NUMBER NORMALIZE_WHITESPACE ELLIPSIS"[m
+ markers = [[m
+     "flash_attn_3_test: marks tests related to flash attention 3 (deselect with '-m \"not flash_attn_3_test\"')",[m
+     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",[m
+     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",[m
+[31m-    "generate: marks tests that use the GenerationTesterMixin"[m
+[32m+[m[32m    "generate: marks tests that use the GenerationTesterMixin",[m
+[32m+[m[32m    "slow: marks tests as slow (select with '-m slow')",[m
+[32m+[m[32m    "vision: marks tests that require vision libraries",[m
+[32m+[m[32m    "torch: marks tests that require PyTorch",[m
+[32m+[m[32m    "tf: marks tests that require TensorFlow",[m
+[32m+[m[32m    "jax: marks tests that require JAX"[m
+ ][m
+[32m+[m
+ log_cli = 1[m
+ log_cli_level = "WARNING"[m
+ asyncio_default_fixture_loop_scope = "function"[m

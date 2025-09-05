@@ -59,13 +59,19 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 addopts = "--doctest-glob='**/*.md'"
-doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
+doctest_optionflags = "NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
 markers = [
     "flash_attn_3_test: marks tests related to flash attention 3 (deselect with '-m \"not flash_attn_3_test\"')",
     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
-    "generate: marks tests that use the GenerationTesterMixin"
+    "generate: marks tests that use the GenerationTesterMixin",
+    "slow: marks tests as slow (select with '-m slow')",
+    "vision: marks tests that require vision libraries",
+    "torch: marks tests that require PyTorch",
+    "tf: marks tests that require TensorFlow",
+    "jax: marks tests that require JAX"
 ]
+
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
