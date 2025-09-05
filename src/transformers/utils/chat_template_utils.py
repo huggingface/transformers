@@ -544,7 +544,9 @@ def render_jinja_template(
                 **kwargs,
             )
         if continue_final_message:
-            if (final_message.strip() not in rendered_chat) or (continue_final_message_tag.strip() not in rendered_chat):
+            if (final_message.strip() not in rendered_chat) or (
+                continue_final_message_tag.strip() not in rendered_chat
+            ):
                 raise ValueError(
                     "continue_final_message is set but the final message does not appear in the chat after "
                     "applying the chat template! This can happen if the chat template deletes portions of "
