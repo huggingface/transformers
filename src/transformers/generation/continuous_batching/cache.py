@@ -260,8 +260,9 @@ class PagedAttentionCache:
             value_states_with_cache = v_cache[layer_read_index, :, :]
             value_states_with_cache[mask] = value_states
             # Write new KV values to the cache
-            k_cache[layer_write_index, :, :] = key_states
-            v_cache[layer_write_index, :, :] = value_states
+            to_write = layer_write_index.size(0)  # IMPORTANT: TODO: check if this is correct
+            k_cache[layer_write_index, :, :] = key_states[-to_write:, :, :]
+            v_cache[layer_write_index, :, :] = value_states[-to_write:, :, :]
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
