@@ -108,13 +108,13 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image():
+    def pad_image(self):
         raise NotImplementedError("No pad_image for SAM 2.")
 
-    def _get_preprocess_shape():
+    def _get_preprocess_shape(self):
         raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
 
-    def resize():
+    def resize(self):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
     def _preprocess(

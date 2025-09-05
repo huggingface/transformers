@@ -687,10 +687,6 @@ class ServeCommand(BaseTransformersCLICommand):
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-        else:
-            logger.warning_once(
-                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
-            )
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: dict):
