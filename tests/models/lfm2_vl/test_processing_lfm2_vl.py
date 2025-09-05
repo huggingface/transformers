@@ -239,16 +239,16 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             padding=True,
             padding_side="left",
             max_pixels_tolerance=2.0,
-            use_thumbnail=False,
+            use_thumbnail=True,
             do_image_splitting=True,
         )
 
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        small_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
-        large_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
-        high_res_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, False, 0)
+        small_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, True, 9)
+        large_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, True, 9)
+        high_res_image_tokens = self.get_split_image_expected_tokens(processor, 3, 3, True, 9)
 
         expected_input_ids_1 = small_image_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = tokenized_sentence_2["input_ids"] + large_image_tokens + high_res_image_tokens
@@ -262,9 +262,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)],
         )
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (27, 49, 12))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (27, 49))
-        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[7, 7]] * 27)
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (29, 49, 12))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (29, 49))
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[7, 7]] * 18 + [[6, 6]] + [[7, 7]] * 9 + [[6, 6]])
 
     def test_add_special_tokens_processor_image_splitting(self):
         processor = self.get_processor()

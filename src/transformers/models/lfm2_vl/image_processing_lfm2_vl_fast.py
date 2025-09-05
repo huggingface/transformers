@@ -155,15 +155,14 @@ def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.
     Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape
     (num_patches_height * num_patches_width, patch_size * patch_size * num_channels).
     """
-    batch_size, num_images, num_channels, image_height, image_width = images.shape
+    batch_size, num_channels, image_height, image_width = images.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    images = images.permute(0, 1, 3, 4, 2)  # move to channel-last dim
     patched_image = images.reshape(
-        batch_size * num_images, num_patches_height, patch_size, num_patches_width, patch_size, num_channels
+        batch_size, num_patches_height, patch_size, num_patches_width, patch_size, num_channels
     )
-    patched_image = patched_image.permute(0, 1, 3, 2, 4, 5)
-    patched_image = patched_image.reshape(batch_size * num_images, num_patches_height * num_patches_width, -1)
+    patched_image = patched_image.permute(0, 2, 4, 3, 5, 1)
+    patched_image = patched_image.reshape(batch_size, num_patches_height * num_patches_width, -1)
     return patched_image
 
 
@@ -301,18 +300,20 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             .contiguous()
             .view(batch_size, num_channels, -1, tile_size, tile_size)
             .permute(2, 0, 1, 3, 4)
-            .reshape(-1, 1, num_channels, tile_size, tile_size)
+            .reshape(batch_size, -1, num_channels, tile_size, tile_size)
         )
-        processed_images = list(processed_images)
-
-        if use_thumbnail and len(processed_images) != 1:
-            total_patches += 1
-            thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
-            processed_images.append(thumbnail_image)
 
         # Re-order processed images to a nested image structure, so it can be reordered back correctly
         # Note that the images can't be stacked because the thumbnail image is of bigger size than patches
-        processed_images = [processed_images[i * total_patches : (i + 1) * total_patches] for i in range(batch_size)]
+        # Each image in sublist will be of shape (1, C, H, W)
+        processed_images = list(processed_images)
+
+        if use_thumbnail and grid_width * grid_height != 1:
+            total_patches += 1
+            thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
+            for i in range(batch_size):
+                processed_images[i] = list(processed_images[i]) + list(thumbnail_image[i][None, ...])
+
         return processed_images, grid_width, grid_height
 
     # Adapted from Qwen-VL with minor differences
@@ -416,7 +417,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             num_rows = num_cols = 1
             images = F.resize(images, (new_height, new_width), interpolation=interpolation)
             # Make a list and treat it as single crop per image so it can be re-grouped back correctly
-            images = [[image.unsqueeze(0)] for image in images]
+            images = [[image] for image in images]
 
         num_rows = [num_rows] * batch_size
         num_cols = [num_cols] * batch_size
