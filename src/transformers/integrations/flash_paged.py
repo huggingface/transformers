@@ -24,7 +24,6 @@ def paged_attention_forward(
     cu_seq_lens_k=None,
     max_seqlen_q=None,
     max_seqlen_k=None,
-    block_tables=None,
     implementation=None,
     **kwargs,
 ) -> torch.Tensor:
@@ -50,6 +49,7 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
+    # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
     k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
     sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
@@ -58,8 +58,8 @@ def paged_attention_forward(
     custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
-        k.transpose(1, 2).squeeze(0).contiguous(),
-        v.transpose(1, 2).squeeze(0).contiguous(),
+        k.contiguous(),
+        v.contiguous(),
         cu_seq_lens_q.to(torch.int32),
         cu_seq_lens_k.to(torch.int32).clone(),
         max_seqlen_q,
@@ -67,7 +67,6 @@ def paged_attention_forward(
         softmax_scale=module.scaling,
         causal=True,  # kind of a must, it automatically aligns the mask for q < k
         window_size=sliding_window,  # -1 means infinite context window
-        # block_table=block_tables, -> torch.Tensor
         **custom_kwargs,
     )
     if isinstance(attn_output, tuple):

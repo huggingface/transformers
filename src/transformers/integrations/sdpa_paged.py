@@ -2,6 +2,8 @@ from typing import Optional
 
 import torch
 
+from ..generation.continuous_batching.cache import NO_SLIDING_WINDOW
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -28,12 +30,20 @@ def sdpa_attention_paged_forward(
 ) -> tuple[torch.Tensor, None]:
     cache = kwargs.pop("cache", None)
     if cache is not None:
+        # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key = key.transpose(0, 1).unsqueeze(0)
+        value = value.transpose(0, 1).unsqueeze(0)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = attention_mask
+    sliding_window = cache.sliding_windows[module.layer_idx]
+    if sliding_window == NO_SLIDING_WINDOW:
+        causal_mask = attention_mask[:1, :, :, : key.size(2)]
+    else:
+        causal_mask = attention_mask[1:, :, :, : key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
+
     query = query.contiguous()
     key = key.contiguous()
     value = value.contiguous()
