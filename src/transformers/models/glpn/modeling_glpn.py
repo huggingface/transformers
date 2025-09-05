@@ -255,13 +255,21 @@ class GLPNDWConv(nn.Module):
 class GLPNMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
-        out_features = out_features or in_features
+
+        # ✅ Explicitly handle None, avoid overriding falsy values like 0
+        if out_features is None:
+            out_features = in_features
+        if hidden_features is None:
+            hidden_features = in_features
+
         self.dense1 = nn.Linear(in_features, hidden_features)
         self.dwconv = GLPNDWConv(hidden_features)
+
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
+
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 

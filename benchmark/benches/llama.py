@@ -154,7 +154,7 @@ def run_benchmark(
         # First eager forward pass
         logger.info("running first eager forward pass")
         start = perf_counter()
-        outputs = model(**inputs)
+        model(**inputs)
         torch.cuda.synchronize()
         end = perf_counter()
         first_eager_fwd_pass_time = end - start
@@ -163,7 +163,7 @@ def run_benchmark(
         # Second eager forward pass (should be faster)
         logger.info("running second eager forward pass")
         start = perf_counter()
-        outputs = model(**inputs)
+        model(**inputs)
         torch.cuda.synchronize()
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
