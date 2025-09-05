@@ -1,0 +1,64 @@
+name: Benchmark v2 Scheduled Runner
+
+on:
+  schedule:
+    # Run daily at 2:30 AM UTC
+    - cron: "30 2 * * *"
+  push:
+    branches:
+      - run_nvidia_benchmark*
+  workflow_dispatch:
+    inputs:
+      model_id:
+        description: 'Model ID to benchmark (leave empty for default models)'
+        required: false
+        type: string
+        default: ''
+      warmup_iterations:
+        description: 'Number of warmup iterations'
+        required: false
+        type: number
+        default: 3
+      measurement_iterations:
+        description: 'Number of measurement iterations'
+        required: false
+        type: number
+        default: 5
+      num_tokens_to_generate:
+        description: 'Number of tokens to generate'
+        required: false
+        type: number
+        default: 100
+      include_benchmarks:
+        description: 'Benchmarks to include (comma-separated, e.g., "llama")'
+        required: false
+        type: string
+        default: ''
+      exclude_benchmarks:
+        description: 'Benchmarks to exclude (comma-separated)'
+        required: false
+        type: string
+        default: ''
+      enable_file_logging:
+        description: 'Enable file logging'
+        required: false
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [benchmark_v2_trigger]
+
+jobs:
+  benchmark-v2-default:
+    name: Benchmark v2 - Default Models
+    uses: ./.github/workflows/benchmark_v2.yml
+    with:
+      model_id: ${{ inputs.model_id || '' }}
+      warmup_iterations: ${{ inputs.warmup_iterations || 3 }}
+      measurement_iterations: ${{ inputs.measurement_iterations || 5 }}
+      num_tokens_to_generate: ${{ inputs.num_tokens_to_generate || 100 }}
+      include_benchmarks: ${{ inputs.include_benchmarks || '' }}
+      exclude_benchmarks: ${{ inputs.exclude_benchmarks || '' }}
+      enable_file_logging: ${{ inputs.enable_file_logging || false }}
+      slack_report_channel: '#transformers-ci-benchmark-v2'
+      commit_sha: ${{ github.sha }}
+    secrets: inherit

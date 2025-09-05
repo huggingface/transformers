@@ -1,0 +1,111 @@
+name: Benchmark v2 Framework
+
+on:
+  workflow_call:
+    inputs:
+      model_id:
+        description: 'Model ID to benchmark (e.g., meta-llama/Llama-2-7b-hf)'
+        required: false
+        type: string
+        default: ''
+      warmup_iterations:
+        description: 'Number of warmup iterations'
+        required: false
+        type: number
+        default: 3
+      measurement_iterations:
+        description: 'Number of measurement iterations'
+        required: false
+        type: number
+        default: 5
+      num_tokens_to_generate:
+        description: 'Number of tokens to generate'
+        required: false
+        type: number
+        default: 100
+      commit_sha:
+        description: 'Commit SHA to benchmark'
+        required: false
+        type: string
+        default: ''
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+
+jobs:
+  benchmark-v2:
+    name: Benchmark v2
+    strategy:
+      matrix:
+        # Use GPU-enabled runners for accurate benchmarking
+        group: [aws-g5-4xlarge-cache]
+    runs-on:
+      group: ${{ matrix.group }}
+    container:
+      image: huggingface/transformers-pytorch-gpu
+      options: --gpus all --privileged --ipc host --shm-size "16gb"
+    steps:
+      - name: Get repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha || github.sha }}
+
+      - name: Update clone
+        if: inputs.commit_sha
+        run: |
+          git fetch && git checkout ${{ inputs.commit_sha }}
+
+      - name: Install benchmark dependencies
+        working-directory: benchmark_v2
+        run: |
+          python3 -m pip install -r requirements.txt
+
+      - name: Reinstall transformers in edit mode
+        run: |
+          python3 -m pip uninstall -y transformers
+          python3 -m pip install -e ".[torch]"
+
+      - name: Show installed libraries and their versions
+        run: |
+          python3 -m pip list
+          python3 -c "import torch; print(f'PyTorch version: {torch.__version__}')"
+          python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+          python3 -c "import torch; print(f'CUDA device count: {torch.cuda.device_count()}')" || true
+          nvidia-smi || true
+
+      - name: Prepare benchmark arguments
+        id: prepare-args
+        run: |
+          args="--log-level INFO"
+          
+          # Add model ID if specified
+          if [ -n "${{ inputs.model_id }}" ]; then
+            args="$args --model-id '${{ inputs.model_id }}'"
+          fi
+          
+          # Add iterations
+          args="$args --warmup-iterations ${{ inputs.warmup_iterations }}"
+          args="$args --measurement-iterations ${{ inputs.measurement_iterations }}"
+          args="$args --num-tokens-to-generate ${{ inputs.num_tokens_to_generate }}"
+
+          # Add commit ID if available
+          if [ -n "${{ inputs.commit_sha }}" ]; then
+            args="$args --commit-id '${{ inputs.commit_sha }}'"
+          elif [ -n "${{ github.sha }}" ]; then
+            args="$args --commit-id '${{ github.sha }}'"
+          fi
+          
+          echo "benchmark_args=$args" >> $GITHUB_OUTPUT
+          echo "Benchmark arguments: $args"
+
+      - name: Run benchmark v2
+        working-directory: benchmark_v2
+        run: |
+          echo "Running benchmark with args: ${{ steps.prepare-args.outputs.benchmark_args }}"
+          python3 run_benchmarks.py ${{ steps.prepare-args.outputs.benchmark_args }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
