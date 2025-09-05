@@ -101,7 +101,7 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         streaming: bool = False,
         manual_eviction: bool = False,
-        slice_inputs: bool = True,  # TODO: remove this once parity is ensured
+        slice_inputs: bool = True,  # TODO: rework this to have a smart router that can pick it
     ):
         """Initialize the continuous batch processor.
 
@@ -163,9 +163,11 @@ class ContinuousBatchProcessor:
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.empty((2, T + 1), **tensor_metadata) # [full, sliding]
+        self.cumulative_seqlens_k = torch.empty((2, T + 1), **tensor_metadata)  # [full, sliding]
         self.write_index_tensor = torch.empty((num_groups, T), **tensor_metadata)
-        self.read_index_tensor = torch.empty((num_groups, num_pages + T), **tensor_metadata) # +T is because there are -1 for seqlen_q
+        self.read_index_tensor = torch.empty(
+            (num_groups, num_pages + T), **tensor_metadata
+        )  # +T is because there are -1 for seqlen_q
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -173,7 +175,9 @@ class ContinuousBatchProcessor:
         # Since attenention_mask is not always needed, we only allocate it if it is needed
         if self.return_attention_mask():
             size_0 = 1 if self.sliding_window == NO_SLIDING_WINDOW else 2
-            self.attention_mask = torch.empty((size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device)
+            self.attention_mask = torch.empty(
+                (size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
+            )
         else:
             logger.warning(f"Attention mask is not needed for {self.config._attn_implementation}")
             self.attention_mask = None
@@ -280,7 +284,7 @@ class ContinuousBatchProcessor:
             return False
 
         # Get the request objects for this batch
-        self.reset_static_tensors() # TOOD: with slice_inputs, this might be unnecessary
+        self.reset_static_tensors()  # TOOD: with slice_inputs, this might be unnecessary
         position_ids = []
         input_ids = []
         read_index = [[] for _ in range(self.cache.num_groups)]
@@ -298,12 +302,11 @@ class ContinuousBatchProcessor:
             past_length = state.position_offset
             query_length = len(next_input_ids)
             key_length = query_length + past_length
-            cache_index = list(range(key_length)) # TODO: remove this
 
             self.total_query_length += query_length
             self.total_key_length += key_length
 
-            positions_to_add = cache_index[past_length:]
+            positions_to_add = list(range(past_length, key_length))
             self.cache.get_read_indices(state.request_id, past_length, query_length, read_index)
             self.cache.get_write_indices(state.request_id, past_length, query_length, write_index)
 
@@ -311,7 +314,9 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
 
             cumulative_seqlens_k[0].append(cumulative_seqlens_k[0][-1] + query_length + past_length)
-            cumulative_seqlens_k[1].append(cumulative_seqlens_k[1][-1] + query_length + min(past_length, self.sliding_window - 1))
+            cumulative_seqlens_k[1].append(
+                cumulative_seqlens_k[1][-1] + query_length + min(past_length, self.sliding_window - 1)
+            )
 
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
@@ -357,8 +362,8 @@ class ContinuousBatchProcessor:
         self.write_index = []
         for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
             # Write in the actual tensors
-            self.read_index_tensor[i, :len(group_read_indices)] = to_tensor(group_read_indices)
-            self.write_index_tensor[i, :len(group_write_indices)] = to_tensor(group_write_indices)
+            self.read_index_tensor[i, : len(group_read_indices)] = to_tensor(group_read_indices)
+            self.write_index_tensor[i, : len(group_write_indices)] = to_tensor(group_write_indices)
             # Slice to the right size
             r = len(group_read_indices) if self.slice_inputs else self.write_index_tensor.size(-1)
             w = len(group_write_indices) if self.slice_inputs else self.read_index_tensor.size(-1)
@@ -373,7 +378,9 @@ class ContinuousBatchProcessor:
         if self.attention_mask is not None:
             build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0])
             if self.sliding_window != NO_SLIDING_WINDOW:
-                build_attention_mask(self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window)
+                build_attention_mask(
+                    self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window
+                )
 
     @traced
     def _sync(self):
@@ -746,7 +753,9 @@ class ContinuousBatchingManager:
             logger.info(f"batch_processor created at {time.time() - self.creation_time} seconds")
             while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
                 self._inner_generation_loop(batch_processor)
-                logger.debug(f"Inner generation loop {self.current_batch} ended at {time.time() - self.creation_time} seconds")
+                logger.debug(
+                    f"Inner generation loop {self.current_batch} ended at {time.time() - self.creation_time} seconds"
+                )
                 self.current_batch += 1
 
         except Exception as e:

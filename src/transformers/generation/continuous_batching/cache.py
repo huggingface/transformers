@@ -28,7 +28,6 @@ from .requests import get_device_and_memory_breakdown, logger
 NO_SLIDING_WINDOW = 1
 
 
-
 def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
@@ -221,13 +220,13 @@ class PagedAttentionCache:
     @traced
     def update(
         self,
-        key_states: torch.Tensor, # shape [1, num_kv_heads, seqlen_kv, head_dim]
-        value_states: torch.Tensor, # shape [1, num_kv_heads, seqlen_kv, head_dim]
+        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
+        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
         layer_idx: int,
-        read_index: list[torch.Tensor], # shape [num_layer_groups, seqlen_kv + past_length]
-        write_index: list[torch.Tensor], # shape [num_layer_groups, seqlen_q]
+        read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
+        write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
         **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]: # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """
         Write new KV values to the cache. Cache has shape [num_blocks, block_size, page_size] but because
         `num_blocks * block_size = num_pages` and `page_size = num_heads * num_layers_per_group * head_size`,
@@ -255,7 +254,7 @@ class PagedAttentionCache:
         # Case: sliding window
         else:
             # Add the cache to the key and value states
-            mask = (layer_read_index == -1) # TODO: check if this can be efficiently precomputed / if we can pass a cutoff for each group
+            mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?
             key_states_with_cache = k_cache[layer_read_index, :, :]
             key_states_with_cache[mask] = key_states
             value_states_with_cache = v_cache[layer_read_index, :, :]
@@ -455,7 +454,6 @@ class PagedAttentionMemoryHandler:
         else:
             static_memory_footprint = -1
         return activation_memory_footprint, cache_memory_footprint, static_memory_footprint
-
 
 
 # TODO: test the impact of this
