@@ -19,7 +19,7 @@ class CacheManager(ABC):
         pass
 
     def free_blocks(self, request_id: str, free_blocks: deque[int]) -> None:
-        """Free all blocks associated with a request_id."""
+        """Frees all blocks associated with a request_id."""
         if request_id in self._block_table:
             blocks_to_free = self._block_table.pop(request_id)
             free_blocks.extend(blocks_to_free)
@@ -79,8 +79,8 @@ class FullAttentionCacheManager(CacheManager):
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
-        """Get physical indices for writing to the cache. For a group of full attention layers, we write the new cache
-        as a continuation of the existing cache for the same request."""
+        """Returns the physical indices for writing to the cache. For a group of full attention layers, we write the new
+        cache as a continuation of the existing cache for the same request."""
         block_table = self._block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
