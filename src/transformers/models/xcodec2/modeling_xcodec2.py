@@ -36,7 +36,6 @@ from torch.nn import Module, Parameter
 
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -46,15 +45,11 @@ from ...utils import (
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoFeatureExtractor, AutoModel
 from .configuration_xcodec2 import Xcodec2Config
-
-
-logger = logging.get_logger(__name__)
 
 
 # General docstring
@@ -201,10 +196,10 @@ class Xcodec2Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -215,21 +210,14 @@ class Xcodec2Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -238,7 +226,6 @@ class Xcodec2Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
-            is_causal=self.is_causal,
             scaling=self.scaling,
             **kwargs,
         )
@@ -246,27 +233,6 @@ class Xcodec2Attention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class Xcodec2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Xcodec2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Xcodec2RotaryEmbedding(nn.Module):
@@ -310,15 +276,36 @@ class Xcodec2MLP(nn.Module):
         super().__init__()
         dim = config.hidden_size
 
-        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # No bias like original
+        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)
         self.silu = nn.SiLU()  # TODO: Or ACT2FN[config.hidden_act] if using config activation
-        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # No bias like original
+        self.fc2 = nn.Linear(4 * dim, dim, bias=False)
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.silu(x)
         x = self.fc2(x)
         return x
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Xcodec2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Xcodec2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Xcodec2DecoderLayer(GradientCheckpointingLayer):
@@ -336,78 +323,35 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,  # This is the mask PASSED TO the layer
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,  # Non-causal typically doesn't use KV cache
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,  # Catches potential FlashAttention kwargs etc.
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if use_cache:
-            logger.warning_once("KV Caching (`use_cache=True`) is typically not used with non-causal attention.")
-            # Depending on use case, you might want to force use_cache = False here
-            # or ensure the caching mechanism handles non-causal correctly (unlikely with standard KV cache).
-
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)  # Use potentially overridden norm
-
-        # --- Self Attention (using parent's LlamaAttention instance) ---
-        # We need to pass an attention_mask to self.self_attn that is *NOT* causal.
-        # If the original attention_mask only contains padding info (e.g., from tokenizer),
-        # it might be usable directly. If it's explicitly causal, we need to ignore/modify it.
-        # Simplest for non-causal (assuming no padding or padding handled by mask): pass None
-        # If padding needs to be handled, construct a non-causal padding mask here.
-
-        # Example: Assuming `attention_mask` might be causal or handle padding.
-        # We create a mask that only accounts for padding if present.
-        non_causal_attn_mask = None
-        if attention_mask is not None:
-            # Check if the input mask handles padding (e.g., has 0s).
-            # This is a basic check; robust padding handling might need more.
-            if (attention_mask == 0).any():
-                # Keep the original mask if it seems to handle padding.
-                # WARNING: If this mask ALSO encodes causality, this won't work as intended.
-                # A better approach might be to reconstruct the padding mask from input_ids
-                # if available higher up, or assume the passed mask is ONLY for padding.
-                non_causal_attn_mask = attention_mask
-            # If the mask exists but doesn't seem to have padding (all 1s),
-            # and we want non-causal, set it to None.
-            # else: non_causal_attn_mask = None # Already initialized to None
-
-        # Call the LlamaAttention forward method
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=non_causal_attn_mask,  # <<< Pass the non-causal mask
+            attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        # `LlamaAttention` internally uses `is_causal = True` by default IF the backend
-        # (like SDPA) takes an `is_causal` flag and the mask allows it (e.g., mask is None).
-        # By passing a non-causal mask (or None when appropriate), we prevent the causal path.
-
         hidden_states = residual + hidden_states
 
-        # --- Fully Connected ---
+        # Fully Connected
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)  # Use potentially overridden norm
-        hidden_states = self.mlp(hidden_states)  # Use potentially overridden MLP
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        # Note: past_key_value is returned unmodified if use_cache=False,
-        # or potentially updated by self.self_attn if use_cache=True (check compatibility)
-
-        return outputs
+        return hidden_states
 
 
 class Xcodec2SnakeBeta(nn.Module):
@@ -670,97 +614,75 @@ class Xcodec2CodecEncoder(nn.Module):
         return x
 
 
-class Backbone(nn.Module):
-    """Base class for the decoder's backbone. It preserves the same temporal resolution across all layers."""
-
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            x (Tensor): Input tensor of shape (B, C, L), where B is the batch size,
-                        C denotes output features, and L is the sequence length.
-
-        Returns:
-            Tensor: Output of shape (B, L, H), where B is the batch size, L is the sequence length,
-                    and H denotes the model dimension.
-        """
-        raise NotImplementedError("Subclasses must implement the forward method.")
-
-
 def Normalize(in_channels, num_groups=32):
     return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout, temb_channels=512):
+    def __init__(self, *, in_channels, out_channels=None, dropout):
         super().__init__()
         self.in_channels = in_channels
         out_channels = in_channels if out_channels is None else out_channels
         self.out_channels = out_channels
-        self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = Normalize(in_channels)
         self.conv1 = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if temb_channels > 0:
-            self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = torch.nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
-            if self.use_conv_shortcut:
-                self.conv_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-            else:
-                self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+            self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x, temb=None):
+    def forward(self, x):
         h = x
         h = self.norm1(h)
         h = h * torch.sigmoid(h)
         h = self.conv1(h)
-
-        if temb is not None:
-            h = h + self.temb_proj(temb * torch.sigmoid(temb))[:, :, None, None]
-
         h = self.norm2(h)
         h = h * torch.sigmoid(h)
         h = self.dropout(h)
         h = self.conv2(h)
 
         if self.in_channels != self.out_channels:
-            if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
-            else:
-                x = self.nin_shortcut(x)
+            x = self.nin_shortcut(x)
 
         return x + h
 
 
-class Xcodec2VocosBackbone(Backbone):
+class Xcodec2VocosBackbone(nn.Module):
     """
-    Vocos backbone module built with ConvNeXt blocks. Supports additional conditioning with Adaptive Layer Normalization
+    Hybrid ResNet–Transformer architecture.
 
-    Args:
-        input_channels (int): Number of input features channels.
-        dim (int): Hidden dimension of the model.
-        intermediate_dim (int): Intermediate dimension used in ConvNeXtBlock.
-        num_layers (int): Number of ConvNeXtBlock layers.
-        layer_scale_init_value (float, optional): Initial value for layer scaling. Defaults to `1 / num_layers`.
-        adanorm_num_embeddings (int, optional): Number of embeddings for AdaLayerNorm.
-                                                None means non-conditional model. Defaults to None.
+    Architecture overview:
+    - Input embedding: A 1D convolution (kernel size 7, padding 3) projects raw features
+      into the model's hidden dimension.
+    - Prior ResNet blocks: Two ResNet-style residual blocks operate on the hidden states
+      to provide early nonlinear feature processing.
+    - Rotary embeddings: Rotary positional embeddings (RoPE) are initialized to provide
+      position-dependent information to the Transformer layers.
+    - Transformer stack: A sequence of Xcodec2DecoderLayer modules applies self-attention
+      with rotary embeddings, interleaved with MLPs, to model long-range dependencies.
+    - Normalization: A final LayerNorm is applied to stabilize training and outputs.
+    - Post ResNet blocks: Two additional ResNet-style blocks refine the representation
+      after the Transformer stack.
+
+    This design combines convolutional inductive biases (via ResNet-style blocks and the
+    initial Conv1d embedding) with the global sequence modeling capabilities of
+    Transformers, making it suitable for sequence data such as audio or other temporal
+    signals.
     """
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
 
         self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
-
-        self.temb_ch = 0
         block_in = config.hidden_size
         dropout = 0.1
 
         self.prior_blocks = nn.ModuleList(
             [
-                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
-                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
             ]
         )
 
@@ -779,15 +701,18 @@ class Xcodec2VocosBackbone(Backbone):
                 ResnetBlock(
                     in_channels=config.hidden_size,
                     out_channels=config.hidden_size,
-                    temb_channels=self.temb_ch,
                     dropout=dropout,
                 ),
-                ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
+                ResnetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
             ]
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x shape: [batch, seq_len, hidden_dim]
+        """
+        Args:
+            x (Tensor): Input tensor of shape (B, L, H), where B is the batch size,
+                        L is the sequence length, and H denotes the model dimension.
+        """
 
         # Handle initial transformations
         x = x.transpose(1, 2)
@@ -809,7 +734,7 @@ class Xcodec2VocosBackbone(Backbone):
             x = layer(
                 x,
                 position_embeddings=position_embeddings,
-            )[0]  # Only take hidden states, ignore attention weights
+            )
 
         # Handle final transformations
         x = x.transpose(1, 2)
@@ -822,21 +747,6 @@ class Xcodec2VocosBackbone(Backbone):
         x = self.final_layer_norm(x)
 
         return x
-
-
-class FourierHead(nn.Module):
-    """Base class for inverse fourier modules."""
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x (Tensor): Input tensor of shape (B, L, H), where B is the batch size,
-                        L is the sequence length, and H denotes the model dimension.
-
-        Returns:
-            Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
-        """
-        raise NotImplementedError("Subclasses must implement the forward method.")
 
 
 class ISTFT(nn.Module):
@@ -916,7 +826,7 @@ class ISTFT(nn.Module):
         return y
 
 
-class ISTFTHead(FourierHead):
+class ISTFTHead(nn.Module):
     """
     ISTFT Head module for predicting STFT complex coefficients.
 
