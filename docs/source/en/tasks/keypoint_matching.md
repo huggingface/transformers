@@ -100,7 +100,7 @@ plot_images
 
 ![Matched Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/matched_bees.png)
 
-Optionally, you can use the keypoint matching pipeline. 
+Optionally, you can use the [`Pipeline`] API and set the task to `keypoint-matching`. 
 
 ```python
 from transformers import pipeline 
