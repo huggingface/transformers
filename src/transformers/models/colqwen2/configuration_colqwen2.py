@@ -85,7 +85,6 @@ class ColQwen2Config(PretrainedConfig):
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
 
-        self.use_qwen2_5 = use_qwen2_5
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
