@@ -21,14 +21,11 @@ import unittest
 import numpy as np
 import requests
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 from transformers.testing_utils import (
-    require_flash_attn,
+    is_flaky,
     require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -472,102 +469,15 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             text_config = Aimv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
-                )
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-                dummy_pixel_mask = inputs_dict["attention_mask"]
-
-                # right padding
-                dummy_pixel_mask[:] = 1
-                dummy_pixel_mask[:, -1:] = 0
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                logits_per_image_eager = outputs.logits_per_image[:, :-1]
-                logits_per_text_eager = outputs.logits_per_text[:, :-1]
-
-                logits_per_image_sdpa = outputs_fa.logits_per_image[:, :-1]
-                logits_per_text_sdpa = outputs_fa.logits_per_text[:, :-1]
-
-                self.assertTrue(
-                    torch.allclose(logits_per_image_eager, logits_per_image_sdpa, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(logits_per_image_eager - logits_per_image_sdpa))}",
-                )
-                self.assertTrue(
-                    torch.allclose(logits_per_text_eager, logits_per_text_sdpa, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(logits_per_text_eager - logits_per_text_sdpa))}",
-                )
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
+    @is_flaky(
+        max_attempts=2,
+        description="sdpa gets nan values in some places while eager is fine. Except those places, the values are close",
+    )
     def test_eager_matches_sdpa_inference(
         self,
         name,
-        torch_dtype,
+        dtype,
         padding_side,
         use_attention_mask,
         output_attentions,
@@ -589,7 +499,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ("cuda", True, torch.float16): 5e-3,
         }
         _test_eager_matches_sdpa_inference(
-            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
 
@@ -667,9 +577,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():

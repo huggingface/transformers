@@ -967,7 +967,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             pasts_or_spout_value = torch.split(pasts_or_spout_value, [1] * self.config.num_layers, dim=1)
             # make same shape as past_key_values
             pasts_or_spout_value = tuple(
-                tuple([b.squeeze(1) for b in torch.split(a.squeeze(1), [1, 1], dim=1)]) for a in pasts_or_spout_value
+                tuple(b.squeeze(1) for b in torch.split(a.squeeze(1), [1, 1], dim=1)) for a in pasts_or_spout_value
             )
         else:
             pasts_or_spout_value = [None] * self.config.num_layers

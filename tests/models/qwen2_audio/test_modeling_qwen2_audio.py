@@ -19,6 +19,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
+import pytest
 
 from transformers import (
     AutoProcessor,
@@ -29,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -148,6 +148,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         self.config_tester = ConfigTester(self, config_class=Qwen2AudioConfig, has_text_modality=False)
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -155,11 +156,6 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Qwen2 Audio does not support right padding.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -211,7 +207,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
-        url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
         messages = [
             {
                 "role": "user",
@@ -274,7 +270,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -285,7 +281,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "What can you hear?"},
                 ],
@@ -350,7 +346,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -361,7 +357,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "How about this one?"},
                 ],

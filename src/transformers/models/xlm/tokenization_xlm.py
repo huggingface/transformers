@@ -383,8 +383,8 @@ class XLMTokenizer(PreTrainedTokenizer):
                 git clone git@github.com:neubig/kytea.git && cd kytea autoreconf -i ./configure --prefix=$HOME/local
                 make && make install pip install kytea
 
-            - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
-            - Install with `pip install jieba`
+            - [rjieba](https://github.com/messense/rjieba-py): Chinese tokenizer (*)
+            - Install with `pip install rjieba`
 
         (*) The original XLM used [Stanford
         Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip). However, the wrapper
@@ -432,15 +432,17 @@ class XLMTokenizer(PreTrainedTokenizer):
             text = th_word_tokenize(text)
         elif lang == "zh":
             try:
-                if "jieba" not in sys.modules:
-                    import jieba
+                if "rjieba" not in sys.modules:
+                    import rjieba
                 else:
-                    jieba = sys.modules["jieba"]
+                    rjieba = sys.modules["rjieba"]
             except (AttributeError, ImportError):
-                logger.error("Make sure you install Jieba (https://github.com/fxsjy/jieba) with the following steps")
-                logger.error("1. pip install jieba")
+                logger.error(
+                    "Make sure you install rjieba (https://github.com/messense/rjieba-py) with the following steps"
+                )
+                logger.error("1. pip install rjieba")
                 raise
-            text = " ".join(jieba.cut(text))
+            text = " ".join(rjieba.cut(text))
             text = self.moses_pipeline(text, lang=lang)
             text = text.split()
         elif lang == "ja":

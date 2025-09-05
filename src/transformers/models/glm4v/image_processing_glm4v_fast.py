@@ -87,11 +87,30 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
         super().__init__(**kwargs)
+        if self.size is not None and (
+            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
+        ):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -121,6 +140,8 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
                 width=width,
                 temporal_factor=temporal_patch_size,
                 factor=patch_size * merge_size,
+                min_pixels=size.shortest_edge,
+                max_pixels=size.longest_edge,
             )
             all_target_sizes.append((resized_height, resized_width))
 

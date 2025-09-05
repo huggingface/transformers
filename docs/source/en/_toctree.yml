@@ -81,13 +81,13 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
   - sections:
     - local: serving
@@ -277,6 +277,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
+      - local: tasks/keypoint_matching
+        title: Keypoint matching
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -373,6 +375,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
       - local: model_doc/arcee
         title: Arcee
       - local: model_doc/bamba
@@ -529,6 +533,12 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
+      - local: model_doc/hunyuan_v1_dense
+        title: HunYuanDenseV1
+      - local: model_doc/hunyuan_v1_moe
+        title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -671,6 +681,8 @@
         title: RoFormer
       - local: model_doc/rwkv
         title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -765,6 +777,8 @@
         title: DINOV2
       - local: model_doc/dinov2_with_registers
         title: DINOv2 with Registers
+      - local: model_doc/dinov3
+        title: DINOv3
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -943,6 +957,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xcodec
+        title: X-Codec
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -1003,6 +1019,8 @@
         title: Evolla
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/florence2
+        title: Florence2
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n
@@ -1037,6 +1055,8 @@
         title: Janus
       - local: model_doc/kosmos-2
         title: KOSMOS-2
+      - local: model_doc/kosmos2_5
+        title: KOSMOS-2.5
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -1050,7 +1070,7 @@
       - local: model_doc/llama4
         title: Llama4
       - local: model_doc/llava
-        title: Llava
+        title: LLaVA
       - local: model_doc/llava_next
         title: LLaVA-NeXT
       - local: model_doc/llava_next_video
@@ -1061,6 +1081,8 @@
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
+      - local: model_doc/metaclip_2
+        title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/mistral3
@@ -1075,6 +1097,8 @@
         title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
+      - local: model_doc/ovis2
+        title: Ovis2
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/owlv2
@@ -1099,6 +1123,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/sam2
+        title: SAM2
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/sam_hq

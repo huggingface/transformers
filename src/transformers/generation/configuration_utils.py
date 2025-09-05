@@ -43,34 +43,22 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-NEED_SETUP_CACHE_CLASSES_MAPPING = {}
-QUANT_BACKEND_CLASSES_MAPPING = {}
-ALL_CACHE_IMPLEMENTATIONS = []
+STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
+# All the following are redundant and deprecated, but kept for BC
+DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
+    "sliding_window",
+    "hybrid",
+    "hybrid_chunked",
+    "offloaded_hybrid",
+    "offloaded_hybrid_chunked",
+)
+ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
+ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
+
 
 if is_torch_available():
-    from ..cache_utils import (
-        HQQQuantizedCache,
-        HybridCache,
-        HybridChunkedCache,
-        OffloadedHybridCache,
-        OffloadedStaticCache,
-        QuantoQuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
-    )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
-
-    NEED_SETUP_CACHE_CLASSES_MAPPING = {
-        "static": StaticCache,
-        "offloaded_static": OffloadedStaticCache,
-        "sliding_window": SlidingWindowCache,
-        "hybrid": HybridCache,
-        "hybrid_chunked": HybridChunkedCache,
-        "offloaded_hybrid": OffloadedHybridCache,
-        "offloaded_hybrid_chunked": OffloadedHybridCache,
-    }
-    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -98,14 +86,10 @@ class GenerationConfig(PushToHubMixin):
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
-        - *contrastive search* if `penalty_alpha>0.` and `top_k>1`
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
-        - *dola decoding* if `dola_layers` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
@@ -148,20 +132,6 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*, defaults to 1):
             Number of beams for beam search. 1 means no beam search.
-        num_beam_groups (`int`, *optional*, defaults to 1):
-            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            [this paper](https://huggingface.co/papers/1610.02424) for more details.
-        penalty_alpha (`float`, *optional*):
-            The values balance the model confidence and the degeneration penalty in contrastive search decoding.
-        dola_layers (`str` or `list[int]`, *optional*):
-            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
-            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
-            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
-            layers up to the last 20 layers.
-            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
-            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
-            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://huggingface.co/papers/2309.03883) for more details.
 
         > Parameters that control the cache
 
@@ -173,9 +143,8 @@ class GenerationConfig(PushToHubMixin):
 
             - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
-            - `"offloaded_static"`: [`OffloadedStaticCache`]
-            - `"sliding_window"`: [`SlidingWindowCache`]
-            - `"hybrid"`: [`HybridCache`]
+            - `"offloaded"`: [`DynamicCache(offloaded=True)`]
+            - `"offloaded_static"`: [`StaticCache(offloaded=True)`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
@@ -216,9 +185,6 @@ class GenerationConfig(PushToHubMixin):
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
             Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
-        diversity_penalty (`float`, *optional*, defaults to 0.0):
-            This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
-            particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://huggingface.co/papers/1909.05858) for more details.
@@ -235,18 +201,10 @@ class GenerationConfig(PushToHubMixin):
         bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        force_words_ids (`list[list[int]]` or `list[list[list[int]]]`, *optional*):
-            List of token ids that must be generated. If given a `list[list[int]]`, this is treated as a simple list of
-            words that must be included, the opposite to `bad_words_ids`. If given `list[list[list[int]]]`, this
-            triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
-            can allow different forms of each word.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors break the normalization.
-        constraints (`list[Constraint]`, *optional*):
-            Custom constraints that can be added to the generation to ensure that the output will contain the use of
-            certain tokens as defined by `Constraint` objects, in the most sensible way possible.
         forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
@@ -262,10 +220,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SuppressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SuppressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         sequence_bias (`dict[tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
@@ -278,9 +236,6 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
-        low_memory (`bool`, *optional*):
-            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
-            Used with beam search and contrastive search.
         watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
@@ -388,23 +343,11 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", False)
         self.num_beams = kwargs.pop("num_beams", 1)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
-        self.penalty_alpha = kwargs.pop("penalty_alpha", None)
-        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_config is not None and not isinstance(self.cache_config, dict):
-            warnings.warn(
-                (
-                    "Passing a CacheConfig object is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
-                ),
-                FutureWarning,
-                stacklevel=2,
-            )
-            self.cache_config = self.cache_config.to_dict()
 
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
@@ -417,15 +360,12 @@ class GenerationConfig(PushToHubMixin):
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.encoder_repetition_penalty = kwargs.pop("encoder_repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.force_words_ids = kwargs.pop("force_words_ids", None)
         self.renormalize_logits = kwargs.pop("renormalize_logits", False)
-        self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
@@ -435,7 +375,7 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
-        self.low_memory = kwargs.pop("low_memory", None)
+
         watermarking_config = kwargs.pop("watermarking_config", None)
         if watermarking_config is None:
             self.watermarking_config = None
@@ -476,6 +416,15 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
+
+        # Deprecated (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+        self.low_memory = kwargs.pop("low_memory", None)
+        self.penalty_alpha = kwargs.pop("penalty_alpha", None)
+        self.dola_layers = kwargs.pop("dola_layers", None)
+        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
+        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
+        self.constraints = kwargs.pop("constraints", None)
+        self.force_words_ids = kwargs.pop("force_words_ids", None)
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
@@ -564,6 +513,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # DoLa generation may extend some generation modes
+        # TODO joao, manuel: remove this in v4.62.0
         if self.dola_layers is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.DOLA_GENERATION
@@ -641,9 +591,7 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if (
-                self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
-            ):  # contrastive search uses top_k
+            if self.top_k is not None and self.top_k != 50:
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
@@ -664,64 +612,10 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                minor_issues["num_beam_groups"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="num_beam_groups", flag_value=self.num_beam_groups
-                )
-            if self.diversity_penalty is not None and self.diversity_penalty != 0.0:
-                minor_issues["diversity_penalty"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="diversity_penalty", flag_value=self.diversity_penalty
-                )
             if self.length_penalty is not None and self.length_penalty != 1.0:
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     flag_name="length_penalty", flag_value=self.length_penalty
                 )
-            if self.constraints is not None:
-                minor_issues["constraints"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="constraints", flag_value=self.constraints
-                )
-            # DoLa generation needs num_beams == 1
-            if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
-                minor_issues["repetition_penalty"] = (
-                    "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
-                    f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
-                    "DoLa decoding is `repetition_penalty>=1.2`.",
-                )
-
-        # 2.3. detect incorrect parameterization specific to advanced beam modes
-        else:
-            # constrained beam search
-            if self.constraints is not None or self.force_words_ids is not None:
-                constrained_wrong_parameter_msg = (
-                    "one of `constraints`, `force_words_ids` is not `None`, triggering constrained beam search. "
-                    "However, `{flag_name}` is set to `{flag_value}`, which is incompatible with this generation "
-                    "mode. Set `constraints` and `force_words_ids` to `None` or unset `{flag_name}` to continue."
-                )
-                if self.do_sample is True:
-                    raise ValueError(
-                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
-                    )
-                if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                    raise ValueError(
-                        constrained_wrong_parameter_msg.format(
-                            flag_name="num_beam_groups", flag_value=self.num_beam_groups
-                        )
-                    )
-            # group beam search
-            elif self.diversity_penalty != 0.0 or self.num_beam_groups != 1:
-                group_error_prefix = (
-                    "`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam search. In "
-                    "this generation mode, "
-                )
-                if self.do_sample is True:
-                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
-                if self.num_beams % self.num_beam_groups != 0:
-                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
-                if self.diversity_penalty == 0.0:
-                    raise ValueError(
-                        group_error_prefix
-                        + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
-                    )
 
         # 2.4. check `num_return_sequences`
         if self.num_return_sequences != 1:
@@ -801,8 +695,8 @@ class GenerationConfig(PushToHubMixin):
                 )
                 if logging.get_verbosity() >= logging.WARNING:
                     warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
-                logger.warning(warning_message)
-                logger.info(info_message)
+                logger.warning_once(warning_message)
+                logger.info_once(info_message)
 
     def save_pretrained(
         self,
@@ -1101,17 +995,17 @@ class GenerationConfig(PushToHubMixin):
         else:
             return config
 
-    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None and not isinstance(d["dtype"], str):
+            d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
+                self.dict_dtype_to_str(value)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -1133,7 +1027,7 @@ class GenerationConfig(PushToHubMixin):
             if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
-        self.dict_torch_dtype_to_str(serializable_config_dict)
+        self.dict_dtype_to_str(serializable_config_dict)
         return serializable_config_dict
 
     def to_dict(self) -> dict[str, Any]:
@@ -1156,7 +1050,7 @@ class GenerationConfig(PushToHubMixin):
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
 
-        self.dict_torch_dtype_to_str(output)
+        self.dict_dtype_to_str(output)
         return output
 
     def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
@@ -1545,8 +1439,10 @@ class CompileConfig:
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-        fullgraph (`bool`, *optional*, defaults to `True`):
-            If `True`, requires that the whole forward be capturable in a single graph.
+        fullgraph (`bool`, *optional*, defaults to `False`):
+            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            that the entire function be capturable into a single graph. If this is not possible (that is, if there are
+            graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
@@ -1575,7 +1471,7 @@ class CompileConfig:
     ```
     """
 
-    fullgraph: bool = True
+    fullgraph: bool = False
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"

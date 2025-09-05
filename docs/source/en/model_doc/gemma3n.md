@@ -14,6 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2025-06-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Gemma3n is a multimodal model with pretrained and instruction-tuned variants, available in E4B and E2B sizes. While
+[Gemma3n](https://developers.googleblog.com/en/introducing-gemma-3n/) is a multimodal model with pretrained and instruction-tuned variants, available in E4B and E2B sizes. While
 large portions of the language model architecture are shared with prior Gemma releases, there are many new additions in
 this model, including [Alternating Updates][altup] (AltUp), [Learned Augmented Residual Layer][laurel] (LAuReL),
 [MatFormer][matformer], Per-Layer Embeddings (PLE), [Activation Sparsity with Statistical Top-k][spark-transformer], and KV cache sharing. The language model uses
@@ -56,7 +57,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3n-e4b",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -73,7 +74,7 @@ from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
 model = Gemma3nForConditionalGeneration.from_pretrained(
     "google/gemma-3n-e4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -102,7 +103,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -199,7 +200,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [altup]: https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html
 [attention-mask-viz]: https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
-[laurel]: https://arxiv.org/abs/2411.07501
-[matformer]: https://arxiv.org/abs/2310.07707
-[spark-transformer]: https://arxiv.org/abs/2506.06644
-[usm]: https://arxiv.org/abs/2303.01037
+[laurel]: https://huggingface.co/papers/2411.07501
+[matformer]: https://huggingface.co/papers/2310.07707
+[spark-transformer]: https://huggingface.co/papers/2506.06644
+[usm]: https://huggingface.co/papers/2303.01037

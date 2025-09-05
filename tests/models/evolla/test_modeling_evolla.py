@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -324,7 +323,6 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(self):
         pass

@@ -338,12 +338,10 @@ class Zamba2MambaMixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.A_log._no_weight_decay = True
         self.norm = Zamba2RMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=1e-5
         )
         self.D = nn.Parameter(torch.ones(self.num_heads))
-        self.D._no_weight_decay = True
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
@@ -510,13 +508,13 @@ class Zamba2MambaMixer(nn.Module):
         dtype = input_states.dtype
         # Gated MLP's linear projection
         if cache_params is not None and cache_params.has_previous_state:
-            projected_states =  self.in_proj(input_states.squeeze(1))
+            projected_states = self.in_proj(input_states.squeeze(1))
         else:
             if attention_mask is not None and not torch.all(attention_mask==1):
-                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    input_states = (input_states * attention_mask[:, :, None]).to(dtype)
-            projected_states =  self.in_proj(input_states)
-        d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size -  2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
+            projected_states = self.in_proj(input_states)
+        d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )

@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     torch_device,
 )
 
@@ -202,6 +201,15 @@ class T5GemmaModelTester:
         # Remove BOS symbols from inputs.
         input_ids = torch.where(input_ids == self.bos_token_id, 42, input_ids)
         decoder_input_ids = torch.where(decoder_input_ids == self.bos_token_id, 42, decoder_input_ids)
+
+        # Avoid leading PAD tokens from inputs.
+        # `T5GemmaForTokenClassification` and `T5GemmaForSequenceClassification` specify `use_cache=False` when
+        # calling `self.model`. For `self.use_attention_mask=False` case below, the model goes through
+        # `make_default_2d_attention_mask`. When there are some pad tokens at the beginning of a sequence, it can't
+        # attend to any place, and the computed mask `[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38]`
+        # causes larger differences in some equivalence tests.
+        # Let's avoid such leading PAD tokens.
+        decoder_input_ids[:, 0] = self.pad_token_id + 1
 
         attention_mask = None
         decoder_attention_mask = None
@@ -829,7 +837,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
     # Add decoder_input_ids and adjust hidden states.
-    @require_torch_sdpa
+
     @require_torch_accelerator
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
@@ -1385,10 +1393,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
-
-    @unittest.skip("EncoderDecoderCache can't be gathered because it is not iterable.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 class T5GemmaEncoderOnlyModelTester:

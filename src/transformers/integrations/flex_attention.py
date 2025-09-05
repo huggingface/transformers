@@ -90,7 +90,7 @@ def compile_friendly_flex_attention(
     value: torch.Tensor,
     training=False,
     **kwargs,
-) -> torch.Tensor:
+) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
     # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
     # Do not use compiled version if already compiling forward (it raises issues)
     flex_attention_compiled = WrappedFlexAttention(training)() if not is_torchdynamo_compiling() else flex_attention
@@ -284,7 +284,7 @@ def flex_attention_forward(
     num_local_query_heads = query.shape[1]
 
     # When running TP this helps:
-    if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
+    if (num_local_query_heads & (num_local_query_heads - 1)) != 0:
         key = repeat_kv(key, query.shape[1] // key.shape[1])
         value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
@@ -292,6 +292,7 @@ def flex_attention_forward(
     kernel_options = kwargs.get("kernel_options")
     output_attentions = kwargs.get("output_attentions", False)
     attn_output, attention_weights = compile_friendly_flex_attention(
+
         query,
         key,
         value,
@@ -313,4 +314,6 @@ def flex_attention_forward(
         attn_output, attention_weights = flex_attn_output, None
     attn_output = attn_output.transpose(1, 2).contiguous()
 
-    return attn_output, attention_weights
+
+    attention_output = attention_output.transpose(1, 2).contiguous()
+    return attention_output, lse

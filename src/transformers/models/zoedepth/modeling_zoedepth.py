@@ -153,7 +153,7 @@ class ZoeDepthReassembleLayer(nn.Module):
 
 # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage with DPT->ZoeDepth
 class ZoeDepthFeatureFusionStage(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
@@ -250,7 +250,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
             The align_corner setting for bilinear upsample.
     """
 
-    def __init__(self, config, align_corners=True):
+    def __init__(self, config: ZoeDepthConfig, align_corners: bool = True):
         super().__init__()
 
         self.align_corners = align_corners
@@ -260,7 +260,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
         self.residual_layer1 = ZoeDepthPreActResidualLayer(config)
         self.residual_layer2 = ZoeDepthPreActResidualLayer(config)
 
-    def forward(self, hidden_state, residual=None):
+    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -290,7 +290,7 @@ class ZoeDepthNeck(nn.Module):
     """
 
     # Copied from transformers.models.dpt.modeling_dpt.DPTNeck.__init__ with DPT->ZoeDepth
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__()
         self.config = config
 

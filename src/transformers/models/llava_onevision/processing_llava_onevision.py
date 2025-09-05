@@ -18,7 +18,7 @@ Processor class for LLaVa-Onevision.
 
 import math
 from collections.abc import Iterable
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -112,10 +112,10 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -215,14 +215,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         max_num_vision_tokens = 0
         for sample in text:
             if special_token in sample:
-                is_multi_image = next(batch_num_images) != 1
+                num_images = next(batch_num_images)  # should consume iterable
+                is_multi_image = num_images != 1
             else:
                 is_multi_image = False
             while special_token in sample:
+                original_size = next(image_sizes)  # should consume iterable
                 if is_multi_image:
                     num_image_tokens = self.num_image_tokens + 1  # one for image_newline
                 else:
-                    original_size = next(image_sizes)
                     if not isinstance(original_size, (list, tuple)):
                         # cast to list to avoid numerical precision errors when calculating unpadding
                         original_size = original_size.tolist()
@@ -327,29 +328,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["LlavaOnevisionProcessor"]

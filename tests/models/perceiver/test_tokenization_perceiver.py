@@ -18,12 +18,11 @@ import re
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
@@ -50,8 +49,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PerceiverTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
