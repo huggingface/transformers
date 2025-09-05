@@ -1,0 +1,275 @@
+# coding=utf-8
+# Copyright 2025 Meituan and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import Optional
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
+from ...processing_utils import Unpack
+from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Attention,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+    DeepseekV3Model,
+    DeepseekV3MoE,
+    DeepseekV3PreTrainedModel,
+    DeepseekV3RMSNorm,
+    DeepseekV3RotaryEmbedding,
+    DeepseekV3TopkRouter,
+)
+
+
+logger = logging.get_logger(__name__)
+
+
+class LongcatFlashRMSNorm(DeepseekV3RMSNorm):
+    pass
+
+
+class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
+    pass
+
+
+# remap config key ffn_hidden_size -> intermediate_size
+class LongcatFlashMLP(DeepseekV3MLP):
+    def __init__(self, config, hidden_size=None, intermediate_size=None):
+        super().__init__()
+        self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
+
+
+# remap config key moe_topk -> num_experts_per_tok
+class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
+    def __init__(self, config):
+        super().__init__(config)
+        del self.n_group
+        del self.topk_group
+        self.top_k = config.moe_topk
+        if config.zero_expert_num is not None:
+            self.n_routed_experts = config.n_routed_experts + config.zero_expert_num
+            self.classifier = nn.Linear(
+                self.config.hidden_size,
+                self.n_routed_experts,
+                bias=getattr(self, "router_bias", False),
+            )
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return topk_indices
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
+        scores = router_logits.softmax(dim=-1)
+        topk_indices = self.get_topk_indices(scores)
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
+
+
+# remap config key expert_ffn_hidden_size -> moe_intermediate_size
+class LongcatFlashMoE(DeepseekV3MoE):
+    def __init__(self, config):
+        # ugly double getattr, will be solved when model and configs are converted
+
+        self.intermediate_size = getattr(config, "expert_ffn_hidden_size", getattr(config, "moe_intermediate_size"))
+        self.zero_expert_num = config.zero_expert_num
+        self.zero_expert_type = getattr(config, "zero_expert_type", "identity")
+        super().__init__(config)
+        del self.gate
+        del self.shared_experts
+        self.router = LongcatFlashTopkRouter(config)
+
+        self.experts = nn.ModuleList(
+            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
+        )
+
+        # Override total_experts to include zero experts
+        self.total_experts = len(self.experts) + (0 if self.zero_expert_num is None else self.zero_expert_num)
+
+    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
+
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
+        expert_mask = expert_mask.permute(2, 0, 1)
+
+        for expert_idx in range(self.total_experts):
+            mask = expert_mask[expert_idx]
+            token_indices, weight_indices = torch.where(mask)
+
+            if token_indices.numel() > 0:
+                expert_weights = topk_weights[token_indices, weight_indices]
+                expert_input = hidden_states[token_indices]
+
+                if expert_idx < len(self.experts):
+                    expert_output = self.experts[expert_idx](expert_input)
+                elif self.zero_expert_type == "identity":
+                    expert_output = expert_input
+                else:
+                    raise ValueError("Unknown zero expert type")
+
+                weighted_output = expert_output * expert_weights.unsqueeze(-1)
+                final_hidden_states.index_add_(0, token_indices, weighted_output)
+
+        return final_hidden_states.type(hidden_states.dtype)
+
+    def forward(self, hidden_states):
+        orig_shape = hidden_states.shape
+        topk_indices, topk_weights = self.router(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        return hidden_states
+
+
+class LongcatFlashMLA(DeepseekV3Attention):
+    def __init__(self, config, layer_idx: int):
+        # Force LongCat to always use interleaved RoPE (MLA)
+        config.rope_interleave = True
+        super().__init__(config, layer_idx)
+
+        if config.mla_scale_q_lora:  # TODO we can likely remove this check since it is always True
+            self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
+        if config.mla_scale_kv_lora:
+            self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
+
+    def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
+        """Apply LongCat LoRA scaling if configured."""
+        if hasattr(self, "mla_scale_q_lora"):
+            q_pass = q_pass * self.mla_scale_q_lora
+            q_rot = q_rot * self.mla_scale_q_lora
+        if hasattr(self, "mla_scale_kv_lora"):
+            k_pass = k_pass * self.mla_scale_kv_lora
+        return q_pass, q_rot, k_pass
+
+
+class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
+    """
+    LongCat decoder layer with dual-sublayer + shortcut MoE architecture.
+
+    Each logical layer contains:
+    - 2 attention sublayers (with layer indices: layer_idx*2, layer_idx*2+1)
+    - 2 MLP sublayers
+    - 1 shortcut MoE connection
+    """
+
+    def __init__(self, config, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.hidden_size = config.hidden_size
+
+        self.mlp = LongcatFlashMoE(config)
+
+        self_attn = []
+        mlps = []
+        input_layernorm = []
+        post_attention_layernorm = []
+
+        for i in range(2):
+            self_attn.append(LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i))
+            mlps.append(LongcatFlashMLP(config))
+            input_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
+            post_attention_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
+
+        self.self_attn = nn.ModuleList(self_attn)
+        self.mlps = nn.ModuleList(mlps)
+        self.input_layernorm = nn.ModuleList(input_layernorm)
+        self.post_attention_layernorm = nn.ModuleList(post_attention_layernorm)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> torch.Tensor:
+        # There are 2 sublayers in each layer, with a shortcut MoE connection between them
+        for i in range(2):
+            residual = hidden_states
+            hidden_states = self.input_layernorm[i](hidden_states)
+
+            hidden_states, _ = self.self_attn[i](
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+            hidden_states = residual + hidden_states
+
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm[i](hidden_states)
+
+            if i == 0:
+                shortcut_mlp_output = self.mlp(hidden_states)
+
+            hidden_states = self.mlps[i](hidden_states)
+            hidden_states = residual + hidden_states
+
+            # shortcut connection after second sublayer
+            if i == 1:
+                hidden_states = hidden_states + shortcut_mlp_output
+
+        return hidden_states
+
+
+class LongcatFlashPreTrainedModel(DeepseekV3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": LongcatFlashDecoderLayer,
+        "attentions": LongcatFlashMLA,
+    }
+
+
+class LongcatFlashModel(DeepseekV3Model):
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+
+class LongcatFlashForCausalLM(DeepseekV3ForCausalLM):
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = LongcatFlashModel(config)
+
+
+__all__ = ["LongcatFlashPreTrainedModel", "LongcatFlashModel", "LongcatFlashForCausalLM"]
