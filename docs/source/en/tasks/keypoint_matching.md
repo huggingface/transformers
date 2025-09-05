@@ -31,7 +31,7 @@ processor = AutoImageProcessor.from_pretrained("zju-community/matchanything_elof
 model = AutoModelForKeypointMatching.from_pretrained("zju-community/matchanything_eloftr"))
 ```
 
-Load two images that have same objects of interest, one photo is taken second apart, colors are edited, further cropped and rotated.
+Load two images that have the same object of interest. The second photo is taken a second apart, it's colors are edited, and it is further cropped and rotated.
 
 <div style="display: flex; align-items: center;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
