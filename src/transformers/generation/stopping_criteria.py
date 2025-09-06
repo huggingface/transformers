@@ -113,6 +113,13 @@ class StopStringCriteria(StoppingCriteria):
     This class can be used to stop generation whenever specific string sequences are generated. It preprocesses
     the strings together with the tokenizer vocab to find positions where tokens can validly complete the stop strings.
 
+    <Tip>
+
+    [`StopStringTextMatchCriteria`] and this class have equivalent functionality. This class is compatible with
+    `torch.compile`, but it's considerably slower than [`StopStringTextMatchCriteria`] when not compiled.
+
+    </Tip>
+
     Generation is stopped as soon as a token is generated that completes any of the stop strings.
     We want to catch any instance in which the stop string would be present in the decoded output, which means
     we must also catch cases with "overhangs" off one or both ends. To make this more concrete, for the stop string
@@ -139,15 +146,16 @@ class StopStringCriteria(StoppingCriteria):
     somewhere in the past input_ids.
 
     How is the match actually performed, though? We do it in quite a confusing way, because we want the entire match
-    process to be compilable with Torch or XLA, which means we cannot use standard string methods. However, it is possible,
-    with some work, to do string matching with pure tensor operations. We'll begin by describing the algorithm we use
-    with standard string operations, and then at the end we'll explain how this is converted to pure tensor operations.
+    process to be compilable with Torch or XLA, which means we cannot use standard string methods. However, it is
+    possible, with some work, to do string matching with pure tensor operations. We'll begin by describing the
+    algorithm we use with standard string operations, and then at the end we'll explain how this is converted to
+    pure tensor operations.
 
-    The key to the algorithm is an observation: Because the stop string must overlap with the end of the token sequence, we can start at
-    the end of the sequence and work backwards. Specifically, we check that there is an overlap between the start of
-    the final token and the end of the stop_string, or to put it another way, stop_string[-i:] == token[:i] for
-    some i > 0. If you look at the positive examples above, you'll see the last token in all of them fulfills this
-    property:
+    The key to the algorithm is an observation: Because the stop string must overlap with the end of the token
+    sequence, we can start at the end of the sequence and work backwards. Specifically, we check that there is
+    an overlap between the start of the final token and the end of the stop_string, or to put it another way,
+    stop_string[-i:] == token[:i] for some i > 0. If you look at the positive examples above, you'll see the last
+    token in all of them fulfills this property:
 
     - ["st", "op"] (overlap is "op", overlap length == 2)
     - ["stop"]  (overlap is "stop", overlap length == 4)
@@ -216,11 +224,15 @@ class StopStringCriteria(StoppingCriteria):
     Examples:
 
     ```python
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteriaList, StopStringCriteria
 
     >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
     >>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
     >>> inputs = tokenizer("The biggest states in the USA by land area:", return_tensors="pt")
+
+    >>> # Passing one or more stop strings will halt generation after those strings are emitted
+    >>> # Note that generating with stop strings requires you to pass the tokenizer too
+    >>> stopping_criteria = StoppingCriteriaList([StopStringCriteria(tokenizer, ["Texas"])])
 
     >>> gen_out = model.generate(**inputs)
     >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
@@ -229,9 +241,7 @@ class StopStringCriteria(StoppingCriteria):
     - Texas
     - California
 
-    >>> # Passing one or more stop strings will halt generation after those strings are emitted
-    >>> # Note that generating with stop strings requires you to pass the tokenizer too
-    >>> gen_out = model.generate(**inputs, stop_strings=["Texas"], tokenizer=tokenizer)
+    >>> gen_out = model.generate(**inputs, stopping_criteria=stopping_criteria)
     >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
     The biggest states in the USA by land area:
     - Alaska
@@ -242,6 +252,9 @@ class StopStringCriteria(StoppingCriteria):
     def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
+        if len(stop_strings) == 0 or any("" == stop_string for stop_string in stop_strings):
+            raise ValueError("`stop_strings` cannot be an empty list or contain empty strings")
+
         self.stop_strings: tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
@@ -449,6 +462,124 @@ class StopStringCriteria(StoppingCriteria):
         return torch.any(string_matches, dim=-1)
 
 
+class StopStringTextMatchCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever specific string sequences are generated. It decodes the
+    generated tokens into text and then compares it against the stop strings.
+
+    <Tip>
+
+    [`StopStringCriteria`] and this class have equivalent functionality. This class is faster than
+    [`StopStringCriteria`], but it isn't compatible with `torch.compile`.
+
+    </Tip>
+
+    Class suggested by @MaxBourdon.
+
+    Args:
+        tokenizer (`PreTrainedTokenizer`):
+            The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
+        stop_strings (`Union[str, list[str]]`):
+            A list of strings that should end generation. If a string is passed, it will be treated like a
+            list with a single element.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
+    >>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+    >>> inputs = tokenizer("The biggest states in the USA by land area:", return_tensors="pt")
+
+    >>> gen_out = model.generate(**inputs)
+    >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+    The biggest states in the USA by land area:
+    - Alaska
+    - Texas
+    - California
+
+    >>> # Passing one or more stop strings will halt generation after those strings are emitted
+    >>> # Note that generating with stop strings requires you to pass the tokenizer too
+    >>> gen_out = model.generate(**inputs, stop_strings=["Texas"], tokenizer=tokenizer)
+    >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+    The biggest states in the USA by land area:
+    - Alaska
+    - Texas
+    ```
+    """
+
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
+        if isinstance(stop_strings, str):
+            stop_strings = [stop_strings]
+        if len(stop_strings) == 0 or any("" == stop_string for stop_string in stop_strings):
+            raise ValueError("`stop_strings` cannot be an empty list or contain empty strings")
+
+        self.stop_strings = stop_strings
+        self.tokenizer = tokenizer
+        # We only need to compare the last `max_tail_len` chars of the generated text, `max_tail_len` being the length
+        # of the longest stop string.
+        self.max_tail_len = max(len(s) for s in self.stop_strings)
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
+        # Initalize the returned tensor with False (should NOT stop generation). If a stop string is found, the
+        # corresponding index will be set to True.
+        should_stop = torch.zeros_like(input_ids[:, -1], dtype=torch.bool, device=input_ids.device)
+
+        # Primary check: check if the last generated text contains any of the stop strings
+        # NOTE: Depending on the tokenizer, decoding individual tokens may contain prefix symbols like "Ġ" or "##",
+        # which could derail the naive string comparison. At each step, we'll decode the latest `max_tail_len` tokens
+        # **together** (guaranteed to have at least one char per token, and thus at least `self.max_tail_len` chars)
+        last_generated_text = self.tokenizer.batch_decode(input_ids[:, -self.max_tail_len :])
+
+        # Check if stop strings are found in the latest generated tokens
+        for batch_idx in range(len(last_generated_text)):
+            for stop_string in self.stop_strings:
+                if stop_string in last_generated_text[batch_idx]:
+                    # Secondary check: the last token MUST be part of the stop string, to prevent the case where the
+                    # prompt contains a stop string and triggers this criteria right at the start of generation. More
+                    # precisely, the stop string must end with the starting characters of the last token AND the stop
+                    # string can't be complete without the last token
+                    # Examples:
+                    # - input text=["st", "op"], stop_strings=["stop"] -> should stop, last token completes the
+                    #     stop string
+                    # - input text=["you", "stop"], stop_strings=["stop"] -> should stop, last token fully contains
+                    #     the stop string
+                    # - input text=["st", "opped"], stop_strings=["stop"] -> should stop, the start of the last token
+                    #     ("op") matches the end of the stop string.
+                    # - input text=["st", "op", "ped"], stop_strings=["stop"] -> should NOT stop, the last token does
+                    #     not contribute to the stop string (despite also starting with "p", which is the last char
+                    #     of the stop string)
+                    # NOTE: this secondary check is placed here because we're assuming that finding a stop string is
+                    # an uncommon occurrence.
+
+                    # the stop string can be complete without the last token -> we don't want to stop here, the
+                    # stop string is part of the prompt for this generation
+                    text_without_last_token = self.tokenizer.decode(input_ids[batch_idx, -self.max_tail_len : -1])
+                    if stop_string in text_without_last_token:
+                        continue
+
+                    # We are guaranteed to have at least 2 tokens in `input_ids` by this point (worst case: BOS +
+                    # 1st generated token). If we decode the last two tokens together and compare the resulting text
+                    # to the last token decoded separately, we can remove the unwanted prefix if it exists.
+                    last_two_tokens_text = self.tokenizer.decode(input_ids[batch_idx, -2:])
+                    last_tokens_with_prefix_text = self.tokenizer.decode(input_ids[batch_idx, -1:])
+                    last_token_text = ""
+                    for i in range(min(len(last_two_tokens_text), len(last_tokens_with_prefix_text))):
+                        if last_two_tokens_text[-i - 1] == last_tokens_with_prefix_text[-i - 1]:
+                            last_token_text += last_two_tokens_text[-i - 1]
+                        else:
+                            break
+                    last_token_text = last_token_text[::-1]  # `last_token_text` was built in reverse order
+                    last_fully_contains_stop_string = stop_string in last_token_text
+                    last_completes_stop_string = any(
+                        stop_string.endswith(last_token_text[: i + 1]) for i in range(len(last_token_text))
+                    )
+                    should_stop[batch_idx] = last_fully_contains_stop_string or last_completes_stop_string
+        return should_stop
+
+
 class EosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token is generated.
@@ -475,8 +606,9 @@ class EosTokenCriteria(StoppingCriteria):
 
 class ConfidenceCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever assistant model's confidence in its prediction for the current token is lower than the threshold
-        `model.generation_config.assistant_confidence_threshold` even if the number of speculative tokens (defined by `num_assistant_tokens`) is not yet reached.
+    This class can be used to stop generation whenever assistant model's confidence in its prediction for the current
+    token is lower than the threshold `model.generation_config.assistant_confidence_threshold` even if the number of
+    speculative tokens (defined by `num_assistant_tokens`) is not yet reached.
 
     Args:
         assistant_confidence_threshold (`float`):
