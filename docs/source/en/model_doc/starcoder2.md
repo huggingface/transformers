@@ -17,43 +17,118 @@ rendered properly in your Markdown viewer.
 
 # Starcoder2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+  </div>
 </div>
 
-## Overview
+[StarCoder2](https://huggingface.co/papers/2402.19173) is an open family of Large Language Models for code, trained on **The Stack v2** (600+ programming languages, 3.3–4.3T tokens). It comes in 3B, 7B, and 15B variants, with the 15B flagship model supporting a **16,384-token context window** and trained using **Fill-in-the-Middle (FIM)**. StarCoder2 is optimized for code generation and reasoning, and matches or outperforms much larger models on many benchmarks.
 
-StarCoder2 is a family of open LLMs for code and comes in 3 different sizes with 3B, 7B and 15B parameters. The flagship StarCoder2-15B model is trained on over 4 trillion tokens and 600+ programming languages from The Stack v2. All models use Grouped Query Attention, a context window of 16,384 tokens with a sliding window attention of 4,096 tokens, and were trained using the Fill-in-the-Middle objective. The models have been released with the paper [StarCoder 2 and The Stack v2: The Next Generation](https://huggingface.co/papers/2402.19173) by Anton Lozhkov, Raymond Li, Loubna Ben Allal, Federico Cassano, Joel Lamy-Poirier, Nouamane Tazi, Ao Tang, Dmytro Pykhtar, Jiawei Liu, Yuxiang Wei, Tianyang Liu, Max Tian, Denis Kocetkov, Arthur Zucker, Younes Belkada, Zijian Wang, Qian Liu, Dmitry Abulkhanov, Indraneil Paul, Zhuang Li, Wen-Ding Li, Megan Risdal, Jia Li, Jian Zhu, Terry Yue Zhuo, Evgenii Zheltonozhskii, Nii Osae Osae Dade, Wenhao Yu, Lucas Krauß, Naman Jain, Yixuan Su, Xuanli He, Manan Dey, Edoardo Abati, Yekun Chai, Niklas Muennighoff, Xiangru Tang, Muhtasham Oblokulov, Christopher Akiki, Marc Marone, Chenghao Mou, Mayank Mishra, Alex Gu, Binyuan Hui, Tri Dao, Armel Zebaze, Olivier Dehaene, Nicolas Patry, Canwen Xu, Julian McAuley, Han Hu, Torsten Scholak, Sebastien Paquet, Jennifer Robinson, Carolyn Jane Anderson, Nicolas Chapados, Mostofa Patwary, Nima Tajbakhsh, Yacine Jernite, Carlos Muñoz Ferrandis, Lingming Zhang, Sean Hughes, Thomas Wolf, Arjun Guha, Leandro von Werra, and Harm de Vries.
+You can find all original [StarCoder2 checkpoints](https://huggingface.co/collections/bigcode/starcoder2-65de6da6e87db3383572be1a) under the BigCode collection.
 
-The abstract of the paper is the following:
+> [!TIP]
+> This model was contributed by [BigCode](https://huggingface.co/bigcode).
+> Click on the StarCoder2 variants in the right sidebar for task-specific examples like text generation and code completion.
 
-> The BigCode project, an open-scientific collaboration focused on the responsible development of Large Language Models for Code (Code LLMs), introduces StarCoder2. In partnership with Software Heritage (SWH), we build The Stack v2 on top of the digital commons of their source code archive. Alongside the SWH repositories spanning 619 programming languages, we carefully select other high-quality data sources, such as GitHub pull requests, Kaggle notebooks, and code documentation. This results in a training set that is 4x larger than the first StarCoder dataset. We train StarCoder2 models with 3B, 7B, and 15B parameters on 3.3 to 4.3 trillion tokens and thoroughly evaluate them on a comprehensive set of Code LLM benchmarks. We find that our small model, StarCoder2-3B, outperforms other Code LLMs of similar size on most benchmarks, and also outperforms StarCoderBase-15B. Our large model, StarCoder2- 15B, significantly outperforms other models of comparable size. In addition, it matches or outperforms CodeLlama-34B, a model more than twice its size. Although DeepSeekCoder- 33B is the best-performing model at code completion for high-resource languages, we find that StarCoder2-15B outperforms it on math and code reasoning benchmarks, as well as several low-resource languages. We make the model weights available under an OpenRAIL license and ensure full transparency regarding the training data by releasing the SoftWare Heritage persistent IDentifiers (SWHIDs) of the source code data.
-## License
+The example below demonstrates how to generate Python code with [`pipeline`] or the [`AutoModel`] class.
 
-The models are licensed under the [BigCode OpenRAIL-M v1 license agreement](https://huggingface.co/spaces/bigcode/bigcode-model-license-agreement).
- 
-## Usage tips
-
-The StarCoder2 models can be found in the [HuggingFace hub](https://huggingface.co/collections/bigcode/starcoder2-65de6da6e87db3383572be1a). You can find some examples for inference and fine-tuning in StarCoder2's [GitHub repo](https://github.com/bigcode-project/starcoder2).
-
-These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hub:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import pipeline
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
+pipe = pipeline(
+    "text-generation",
+    model="bigcode/starcoder2-7b",
+    torch_dtype="auto",
+    device_map="auto",
+)
 
->>> prompt = "def print_hello_world():"
+prompt = "# Write a function to check if a number is prime\n"
+out = pipe(prompt, max_new_tokens=64, do_sample=True, temperature=0.2)
+print(out[0]["generated_text"])
+```
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+</hfoption>
+<hfoption id="AutoModel">
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
->>> tokenizer.batch_decode(generated_ids)[0]
-'def print_hello_world():\n    print("Hello World!")\n\ndef print'
+```python
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tok = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
+model = AutoModelForCausalLM.from_pretrained(
+    "bigcode/starcoder2-7b",
+    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else "auto",
+    device_map="auto",
+)
+
+prompt = "# Python function to reverse a string\n"
+inputs = tok(prompt, return_tensors="pt").to(model.device)
+gen = model.generate(**inputs, max_new_tokens=80, do_sample=True, temperature=0.3)
+print(tok.decode(gen[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+transformers chat bigcode/starcoder2-7b
+```
+
+</hfoption>
+</hfoptions>
+
+## Quantization
+
+You can load StarCoder2 in 8-bit or 4-bit precision using [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes), which reduces memory usage significantly with minimal performance loss.
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+quant_config = BitsAndBytesConfig(load_in_8bit=True)  # or load_in_4bit=True
+
+checkpoint = "bigcode/starcoder2-7b"
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(
+    checkpoint,
+    quantization_config=quant_config,
+    device_map="auto"
+)
+
+inputs = tokenizer("def print_hello_world():", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Limitations
+
+StarCoder2 has been trained on source code from 17 programming languages. While it can generate high-quality code snippets, the outputs are not guaranteed to be correct, safe, or efficient. Generated code may contain bugs, security vulnerabilities, or license-sensitive snippets. See the [paper](https://huggingface.co/papers/2402.19173) for a detailed analysis of limitations.
+
+## Attribution
+
+StarCoder2 may generate code seen during training. Users are responsible for checking if generated code requires attribution or license compliance. You can search the [training dataset](https://huggingface.co/spaces/bigcode/the-stack-dedup) to identify potential sources and apply the appropriate licenses.
+
+## License
+
+StarCoder2 models are released under the **BigCode OpenRAIL‑M v1 License Agreement**, which enables free and responsible use, modification, and redistribution. See the full terms [here](https://huggingface.co/spaces/bigcode/bigcode-model-license-agreement).
+
+## Citation
+
+```bibtex
+@misc{lozhkov2024starcoder,
+  title     = {StarCoder 2 and The Stack v2: The Next Generation},
+  author    = {Anton Lozhkov and Raymond Li and Loubna Ben Allal and Federico Cassano and Joel Lamy-Poirier and Nouamane Tazi and Ao Tang and Dmytro Pykhtar and Jiawei Liu and Yuxiang Wei and Tianyang Liu and Max Tian and Denis Kocetkov and Arthur Zucker and Younes Belkada and Zijian Wang and Qian Liu and Dmitry Abulkhanov and Indraneil Paul and Zhuang Li and Wen-Ding Li and Megan Risdal and Jia Li and Jian Zhu and Terry Yue Zhuo and Evgenii Zheltonozhskii and Nii Osae Osae Dade and Wenhao Yu and Lucas Krauß and Naman Jain and Yixuan Su and Xuanli He and Manan Dey and Edoardo Abati and Yekun Chai and Niklas Muennighoff and Xiangru Tang and Muhtasham Oblokulov and Christopher Akiki and Marc Marone and Chenghao Mou and Mayank Mishra and Alex Gu and Binyuan Hui and Tri Dao and Armel Zebaze and Olivier Dehaene and Nicolas Patry and Canwen Xu and Julian McAuley and Han Hu and Torsten Scholak and Sebastien Paquet and Jennifer Robinson and Carolyn Jane Anderson and Nicolas Chapados and Mostofa Patwary and Nima Tajbakhsh and Yacine Jernite and Carlos Muñoz Ferrandis and Lingming Zhang and Sean Hughes and Thomas Wolf and Arjun Guha and Leandro von Werra and Harm de Vries},
+  year      = {2024},
+  eprint    = {2402.19173},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE}
+}
 ```
 
 ## Starcoder2Config
@@ -79,3 +154,12 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 
 [[autodoc]] Starcoder2ForTokenClassification
     - forward
+
+## Training Details
+
+- **Architecture**: Transformer decoder with grouped-query attention, sliding window attention, and Fill-in-the-Middle (FIM) objective
+- **Pretraining Tokens**: 3.5T+
+- **Precision**: bfloat16
+- **Steps**: 1 million
+- **Compute**: 432 × H100 GPUs
+- **Framework**: nanotron (PyTorch backend)
