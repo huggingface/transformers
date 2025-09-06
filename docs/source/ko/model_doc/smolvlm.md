@@ -113,7 +113,7 @@ generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True
 print(generated_texts[0])
 ```
 
-### 배치 혼합 미디어 추론[[batch-mixed-media-inference]]
+### 배치 다중 미디어 추론[[batch-mixed-media-inference]]
 
 이 모델은 여러 이미지, 비디오, 텍스트로 구성된 입력을 한 번에 배치 형태로 처리할 수 있습니다. 관련 예시는 다음과 같습니다.
 
