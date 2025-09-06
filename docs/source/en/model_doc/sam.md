@@ -13,114 +13,167 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+
 *This model was released on 2023-04-05 and added to Hugging Face Transformers on 2023-04-19.*
 
-# SAM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# SAM
+[SAM (Segment Anything Model)](https://huggingface.co/papers/2304.02643) is a promptable segmentation model designed for interactive and flexible object segmentation. The model accepts various input prompts - points, bounding boxes, or masks - and generates high-quality segmentation masks in response. Its architecture combines a heavyweight image encoder with a lightweight mask decoder, enabling real-time interactive performance. When prompts are ambiguous, SAM can return multiple valid masks (for example, when clicking on a person, it might return masks for the whole person, their clothing, or specific body parts), allowing users to select the most appropriate one.
 
-SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+You can find all the original SAM checkpoints under the [Facebook](https://huggingface.co/facebook/models?search=sam-vit) organization.
 
-The model can be used to predict segmentation masks of any object of interest given an input image.
+> [!TIP]
+> This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
+>
+> Click on the SAM models in the right sidebar for more examples of how to apply SAM to different segmentation tasks.
 
-![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
+The example below demonstrates how to segment objects with [`Pipeline`] or the [`AutoModel`] class.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*We introduce the Segment Anything (SA) project: a new task, model, and dataset for image segmentation. Using our efficient model in a data collection loop, we built the largest segmentation dataset to date (by far), with over 1 billion masks on 11M licensed and privacy respecting images. The model is designed and trained to be promptable, so it can transfer zero-shot to new image distributions and tasks. We evaluate its capabilities on numerous tasks and find that its zero-shot performance is impressive -- often competitive with or even superior to prior fully supervised results. We are releasing the Segment Anything Model (SAM) and corresponding dataset (SA-1B) of 1B masks and 11M images at [https://segment-anything.com](https://segment-anything.com) to foster research into foundation models for computer vision.*
-
-Tips:
-
-- The model predicts binary masks that states the presence or not of the object of interest given an image.
-- The model predicts much better results if input 2D points and/or input bounding boxes are provided
-- You can prompt multiple points for the same image, and predict a single mask.
-- Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems not to be supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
-
-
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/facebookresearch/segment-anything).
-
-Below is an example on how to run mask generation given an image and a 2D point:
-
-```python
-import torch
+```py
+from transformers import pipeline
+import matplotlib.pyplot as plt
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor, infer_device
+import numpy as np
 
-device = infer_device()
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+generator =  pipeline(
+    task="mask-generation", 
+    model="facebook/sam-vit-base", 
+    device = 0, 
+    points_per_batch = 64)
+
+img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+
+# Segment with points
+outputs = generator(img_url, points_per_batch = 64)
+
+# Show results
+raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+
+def show_mask(mask, ax):
+    color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    ax.imshow(mask_image)
+    
+
+plt.imshow(np.array(raw_image))
+ax = plt.gca()
+for mask in outputs["masks"]:
+    show_mask(mask, ax=ax)
+plt.axis("off")
+plt.show()
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModel, AutoProcessor
+import matplotlib.pyplot as plt
+from PIL import Image
+import requests
+import numpy as np
+
+model = AutoModel.from_pretrained("facebook/sam-vit-base")
+processor = AutoProcessor.from_pretrained("facebook/sam-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
-with torch.no_grad():
-    outputs = model(**inputs)
+input_points = [[[400, 650]]]  # 2D location of rear window on the vehicle
 
-masks = processor.image_processor.post_process_masks(
-    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+outputs = model(**inputs)
+
+masks = processor.post_process_masks(
+    outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
 )
-scores = outputs.iou_scores
+
+# Choose the most probable mask
+iou_scores = outputs.iou_scores
+best_idx = iou_scores[0].argmax().item()
+best_mask = masks[0][0][best_idx].cpu().numpy()
+
+# Show results
+plt.imshow(np.array(raw_image))
+color = np.array([0, 1.0, 0, 0.6])
+overlay = best_mask[..., None] * color
+plt.imshow(overlay)
+plt.axis("off")
+plt.show()
 ```
 
-You can also process your own masks alongside the input images in the processor to be passed to the model.
+</hfoption>
+</hfoptions>
 
-```python
-import torch
-from PIL import Image
-import requests
-from transformers import SamModel, SamProcessor, infer_device
 
-device = infer_device()
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+## Notes
 
-img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
-input_points = [[[450, 600]]]  # 2D location of a window in the image
+- SAM predicts binary masks indicating the presence or absence of an object given an image.
+- The model produces better results when provided with 2D points and/or bounding boxes as prompts.
+- You can prompt multiple points for the same image and predict a single mask.
+- Fine-tuning the model is not supported yet.
+- According to the paper, the model supports textual input, but this capability was not released to the public, as it can be seen in [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
+- You can also process your own masks alongside the input images in the processor to be passed to the model.
+    ```py
+    import torch
+    from PIL import Image
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import requests
+    from transformers import SamModel, SamProcessor
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
-with torch.no_grad():
-    outputs = model(**inputs)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
+    processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 
-masks = processor.image_processor.post_process_masks(
-    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
-)
-scores = outputs.iou_scores
-```
+    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
+    input_points = [[[450, 600]]]  # 2D location of a window in the image
+
+    inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    masks = processor.image_processor.post_process_masks(
+        outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+    )
+    scores = outputs.iou_scores
+
+    # Choose the most probable mask
+    iou_scores = outputs.iou_scores
+    best_idx = iou_scores[0].argmax().item()
+    best_mask = masks[0][0][best_idx].cpu().numpy()
+
+    # Show results
+    plt.imshow(np.array(raw_image))
+    color = np.array([0, 1.0, 0, 0.6])
+    overlay = best_mask[..., None] * color
+    plt.imshow(overlay)
+    plt.axis("off")
+    plt.show()
+    ```
+
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
-
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything.ipynb) for using the model.
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/automatic_mask_generation.ipynb) for using the automatic mask generation pipeline.
-- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Run_inference_with_MedSAM_using_HuggingFace_Transformers.ipynb) for inference with MedSAM, a fine-tuned version of SAM on the medical domain. 🌎
-- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Fine_tune_SAM_(segment_anything)_on_a_custom_dataset.ipynb) for fine-tuning the model on custom data. 🌎
-
-## SlimSAM
-
-SlimSAM, a pruned version of SAM, was proposed in [0.1% Data Makes Segment Anything Slim](https://huggingface.co/papers/2312.05284) by Zigeng Chen et al. SlimSAM reduces the size of the SAM models considerably while maintaining the same performance.
-
-Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsam), and they can be used as a drop-in replacement of SAM.
-
-## Grounded SAM
-
-One can combine [Grounding DINO](grounding-dino) with SAM for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://huggingface.co/papers/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
-alt="drawing" width="900"/>
-
-<small> Grounded SAM overview. Taken from the <a href="https://github.com/IDEA-Research/Grounded-Segment-Anything">original repository</a>. </small>
+- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything.ipynb) for using the model
+- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/automatic_mask_generation.ipynb) for using the automatic mask generation pipeline
+- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Run_inference_with_MedSAM_using_HuggingFace_Transformers.ipynb) for inference with MedSAM, a fine-tuned version of SAM on the medical domain
+- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Fine_tune_SAM_(segment_anything)_on_a_custom_dataset.ipynb) for fine-tuning the model on custom data
+- [0.1% Data Makes Segment Anything Slim](https://huggingface.co/papers/2312.05284) - SlimSAM, a pruned version that reduces model size while maintaining performance
+- [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://huggingface.co/papers/2401.14159) - Combining Grounding DINO with SAM for text-based mask generation
+- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) for Grounded SAM
 
 ## SamConfig
 
