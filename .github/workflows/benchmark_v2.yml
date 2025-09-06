@@ -28,6 +28,21 @@ on:
         required: false
         type: string
         default: ''
+      upload_to_hf:
+        description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
+        required: false
+        type: string
+        default: ''
+      run_id:
+        description: 'Custom run ID for organizing results (auto-generated if not provided)'
+        required: false
+        type: string
+        default: ''
+      benchmark_repo_id:
+        description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
+        required: false
+        type: string
+        default: ''
 
 env:
   HF_HOME: /mnt/cache
@@ -91,6 +106,15 @@ jobs:
             args="$args --commit-id '${{ inputs.commit_sha }}'"
           elif [ -n "${{ github.sha }}" ]; then
             args="$args --commit-id '${{ github.sha }}'"
+          fi
+          
+          # Add HuggingFace upload parameters if specified
+          if [ -n "${{ inputs.upload_to_hf }}" ]; then
+            args="$args --upload-to-hf '${{ inputs.upload_to_hf }}'"
+          fi
+          
+          if [ -n "${{ inputs.run_id }}" ]; then
+            args="$args --run-id '${{ inputs.run_id }}'"
           fi
           
           echo "benchmark_args=$args" >> $GITHUB_OUTPUT
