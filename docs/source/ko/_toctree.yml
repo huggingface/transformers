@@ -369,16 +369,16 @@
     title: (번역중) Optimize inference using `torch.compile()`
   title: (번역중) 성능 및 확장성
 - sections:
-    - local: contributing
-      title: 🤗 Transformers에 기여하는 방법
-    - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
-    - local: add_new_pipeline
-      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
-    - local: testing
-      title: 테스트
-    - local: pr_checks
-      title: Pull Request에 대한 검사
+  - local: contributing
+    title: 🤗 Transformers에 기여하는 방법
+  - local: add_new_model
+    title: 🤗 Transformers에 새로운 모델을 추가하는 방법
+  - local: add_new_pipeline
+    title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
+  - local: testing
+    title: 테스트
+  - local: pr_checks
+    title: Pull Request에 대한 검사
   title: 리소스
 - isExpanded: false
   sections:
@@ -1244,3 +1244,8 @@
       title: (번역중)Environment Variables
     title: Reference
   title: API
+- title: 추론
+  isExpanded: false
+  sections:
+  - local: jan
+    title: 1월
