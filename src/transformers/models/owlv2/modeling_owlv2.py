@@ -603,7 +603,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
             if module.bias is not None:
                 module.bias.data.zero_()
 

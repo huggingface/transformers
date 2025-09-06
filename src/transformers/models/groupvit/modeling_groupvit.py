@@ -748,26 +748,22 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "groupvit"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-
         init_range = self.config.initializer_range
+        factor = self.config.initializer_factor
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=init_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-        factor = self.config.initializer_factor
-        if isinstance(module, GroupViTTextEmbeddings):
+        elif isinstance(module, GroupViTTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        elif isinstance(module, GroupViTVisionEmbeddings):
+            nn.init.trunc_normal_(module.position_embeddings, std=factor * 0.02)
         elif isinstance(module, GroupViTAttention):
-            factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.q_proj.weight, std=in_proj_std)
@@ -775,11 +771,22 @@ class GroupViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, GroupViTMLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, GroupViTStage):
+            if module.num_group_token > 0:
+                # only zero init group token if we have a projection
+                if module.group_projector is not None:
+                    module.group_token.data.zero_()
+                else:
+                    nn.init.trunc_normal_(module.group_token, std=factor * 0.02)
+        elif isinstance(module, GroupViTModel):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 class GroupViTVisionEncoder(nn.Module):

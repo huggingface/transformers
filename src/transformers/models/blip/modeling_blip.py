@@ -426,29 +426,21 @@ class BlipPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["past_key_values"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        factor = self.config.initializer_range
+        std = self.config.initializer_range
         if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=factor)
+            module.weight.data.normal_(mean=0.0, std=std)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
 
         if isinstance(module, BlipVisionEmbeddings):
             if hasattr(self.config, "vision_config"):
-                factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(
-                module.position_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-            nn.init.trunc_normal_(
-                module.class_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
+                std = self.config.vision_config.initializer_range
+            nn.init.trunc_normal_(module.position_embedding, std=std)
+            nn.init.trunc_normal_(module.class_embedding, std=std)
+        elif isinstance(module, BlipModel):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
