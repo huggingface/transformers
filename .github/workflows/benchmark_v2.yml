@@ -65,7 +65,7 @@ jobs:
     name: Benchmark v2
     runs-on:
       group: ${{ inputs.runner_group }}
-      labels: ${{ inputs.runner_labels }}
+      labels: none
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host --shm-size "16gb"
