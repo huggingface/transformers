@@ -177,12 +177,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @unittest.skip(
-        reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
-    )
-    def test_past_key_values_format(self):
-        pass
-
 
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):
