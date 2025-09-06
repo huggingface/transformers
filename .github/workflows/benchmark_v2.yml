@@ -3,15 +3,10 @@ name: Benchmark v2 Framework
 on:
   workflow_call:
     inputs:
-      runner_group:
+      runner:
         description: 'GH Actions runner group to use'
-        required: false
+        required: true
         type: string
-      runner_labels:
-        description: 'GH Actions runner label to use'
-        required: false
-        type: string
-        default: null
       model_id:
         description: 'Model ID to benchmark (e.g., meta-llama/Llama-2-7b-hf)'
         required: false
@@ -63,9 +58,7 @@ env:
 jobs:
   benchmark-v2:
     name: Benchmark v2
-    runs-on:
-      group: ${{ inputs.runner_group }}
-      labels: none
+    runs-on: ${{ inputs.runner }}
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host --shm-size "16gb"
