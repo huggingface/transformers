@@ -10,7 +10,6 @@ on:
       runner_labels:
         description: 'GH Actions runner label to use'
         required: false
-        type: string
         default: null
       model_id:
         description: 'Model ID to benchmark (e.g., meta-llama/Llama-2-7b-hf)'
