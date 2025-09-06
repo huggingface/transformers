@@ -43,7 +43,7 @@ rendered properly in your Markdown viewer.
 image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 512}, max_image_size=512)
 ```
 
-또한, `max_image_size` 파라미터는 이미지를 분할하는 정사각형 패치의 크기를 제어합니다. 이 값은 기본적으로 512로 설정되어 있으며 필요에 따라 조정 가능합니다. 이미지 프로세서는 리사이징을 마친 후, `max_image_size` 값을 기준으로 이미지를 여러 개의 정사각형 패치로 분할합니다.
+또한, `max_image_size` 매개변수는 이미지를 분할하는 정사각형 패치의 크기를 제어합니다. 이 값은 기본적으로 512로 설정되어 있으며 필요에 따라 조정 가능합니다. 이미지 처리기는 리사이징을 마친 후, `max_image_size` 값을 기준으로 이미지를 여러 개의 정사각형 패치로 분할합니다.
 
 이 모델의 기여자는 [orrzohar](https://huggingface.co/orrzohar) 입니다.
 
