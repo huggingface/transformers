@@ -1,0 +1,3 @@
+fastapi
+uvicorn[standard]
+transformers[torch]  # repo editable install for dev, pin for Docker
