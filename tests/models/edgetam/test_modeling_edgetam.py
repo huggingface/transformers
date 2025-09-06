@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SAM2 model."""
+"""Testing suite for the PyTorch EDGETAM model."""
 
 import gc
 import tempfile
@@ -21,17 +21,18 @@ import unittest
 import requests
 
 from transformers import (
-    Sam2Config,
-    Sam2HieraDetConfig,
-    Sam2MaskDecoderConfig,
+    EdgeTamConfig,
+    EdgeTamHieraDetConfig,
+    EdgeTamMaskDecoderConfig,
+    EdgeTamPromptEncoderConfig,
+    EdgeTamVisionConfig,
     Sam2Processor,
-    Sam2PromptEncoderConfig,
-    Sam2VisionConfig,
     pipeline,
 )
 from transformers.testing_utils import (
     backend_empty_cache,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -47,27 +48,26 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Sam2Model, Sam2Processor, Sam2VisionModel
+    from transformers import EdgeTamModel, EdgeTamVideoModel, EdgeTamVisionModel, Sam2Processor
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class Sam2VisionModelTester:
+class EdgeTamVisionModelTester:
     def __init__(
         self,
         parent,
         hidden_size=12,
-        embed_dim_per_stage=[12, 24, 48, 96],
-        num_attention_heads_per_stage=[1, 2, 4, 8],
         num_channels=3,
         image_size=128,
         patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
         batch_size=2,
-        blocks_per_stage=[1, 2, 7, 2],
+        dim_mul=2.0,
+        stages=[1, 2, 7, 2],
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
@@ -82,26 +82,23 @@ class Sam2VisionModelTester:
         self.patch_padding = patch_padding
         self.batch_size = batch_size
         self.is_training = is_training
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.num_attention_heads_per_stage = num_attention_heads_per_stage
+        self.stages = stages
+        self.dim_mul = dim_mul
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
 
     def get_config(self):
-        backbone_config = Sam2HieraDetConfig(
+        backbone_config = EdgeTamHieraDetConfig(
             hidden_size=self.hidden_size,
             num_channels=self.num_channels,
             image_size=self.image_size,
             patch_stride=self.patch_stride,
             patch_kernel_size=self.patch_kernel_size,
             patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
-            num_attention_heads_per_stage=self.num_attention_heads_per_stage,
+            stages=self.stages,
         )
-        return Sam2VisionConfig(
+        return EdgeTamVisionConfig(
             backbone_config=backbone_config,
             backbone_channel_list=self.backbone_channel_list,
             backbone_feature_sizes=self.backbone_feature_sizes,
@@ -115,13 +112,13 @@ class Sam2VisionModelTester:
         return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values):
-        model = Sam2VisionModel(config=config)
+        model = EdgeTamVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        output_size = self.image_size // self.patch_stride // (2 * len(self.blocks_per_stage))
-        output_channels = self.hidden_size * 2 * len(self.blocks_per_stage)
+        output_size = self.image_size // self.patch_stride // (self.dim_mul * len(self.stages))
+        output_channels = self.hidden_size * self.dim_mul * len(self.stages)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, output_size, output_size, output_channels)
         )
@@ -134,13 +131,13 @@ class Sam2VisionModelTester:
 
 
 @require_torch
-class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
+class EdgeTamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
+    all_model_classes = (EdgeTamVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -149,8 +146,8 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = Sam2VisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Sam2VisionConfig, has_text_modality=False)
+        self.model_tester = EdgeTamVisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EdgeTamVisionConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -193,13 +190,13 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
+            expected_num_attentions = sum(self.model_tester.stages)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size = config.backbone_config.window_size_per_stage[0]
+            window_size = config.backbone_config.window_spec[0]
             out_dim = config.backbone_config.hidden_size
             patch_stride = config.backbone_config.patch_stride
             num_windows = (
@@ -244,7 +241,7 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = sum(self.model_tester.blocks_per_stage) + 1
+            expected_num_layers = sum(self.model_tester.stages) + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             self.assertListEqual(
@@ -275,11 +272,12 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
+    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
 
-class Sam2PromptEncoderTester:
+class EdgeTamPromptEncoderTester:
     def __init__(
         self,
         hidden_size=32,
@@ -297,7 +295,7 @@ class Sam2PromptEncoderTester:
         self.hidden_act = hidden_act
 
     def get_config(self):
-        return Sam2PromptEncoderConfig(
+        return EdgeTamPromptEncoderConfig(
             image_size=self.input_image_size,
             patch_size=self.patch_size,
             mask_input_channels=self.mask_input_channels,
@@ -313,7 +311,7 @@ class Sam2PromptEncoderTester:
         return config, dummy_points
 
 
-class Sam2MaskDecoderTester:
+class EdgeTamMaskDecoderTester:
     def __init__(
         self,
         hidden_size=32,
@@ -337,7 +335,7 @@ class Sam2MaskDecoderTester:
         self.iou_head_hidden_dim = iou_head_hidden_dim
 
     def get_config(self):
-        return Sam2MaskDecoderConfig(
+        return EdgeTamMaskDecoderConfig(
             hidden_size=self.hidden_size,
             hidden_act=self.hidden_act,
             mlp_dim=self.mlp_dim,
@@ -359,7 +357,7 @@ class Sam2MaskDecoderTester:
         return config, dummy_inputs
 
 
-class Sam2ModelTester:
+class EdgeTamModelTester:
     def __init__(
         self,
         parent,
@@ -369,8 +367,8 @@ class Sam2ModelTester:
         patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
-        blocks_per_stage=[1, 2, 7, 2],
-        embed_dim_per_stage=[12, 24, 48, 96],
+        dim_mul=2.0,
+        stages=[1, 2, 7, 2],
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
@@ -384,8 +382,8 @@ class Sam2ModelTester:
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
+        self.dim_mul = dim_mul
+        self.stages = stages
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
@@ -394,8 +392,8 @@ class Sam2ModelTester:
         self.is_training = is_training
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
 
-        self.prompt_encoder_tester = Sam2PromptEncoderTester()
-        self.mask_decoder_tester = Sam2MaskDecoderTester()
+        self.prompt_encoder_tester = EdgeTamPromptEncoderTester()
+        self.mask_decoder_tester = EdgeTamMaskDecoderTester()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -404,17 +402,17 @@ class Sam2ModelTester:
         return config, pixel_values
 
     def get_config(self):
-        backbone_config = Sam2HieraDetConfig(
+        backbone_config = EdgeTamHieraDetConfig(
             hidden_size=self.hidden_size,
             num_channels=self.num_channels,
             image_size=self.image_size,
             patch_stride=self.patch_stride,
             patch_kernel_size=self.patch_kernel_size,
             patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
+            dim_mul=self.dim_mul,
+            stages=self.stages,
         )
-        vision_config = Sam2VisionConfig(
+        vision_config = EdgeTamVisionConfig(
             backbone_config=backbone_config,
             backbone_channel_list=self.backbone_channel_list,
             backbone_feature_sizes=self.backbone_feature_sizes,
@@ -425,7 +423,7 @@ class Sam2ModelTester:
 
         mask_decoder_config = self.mask_decoder_tester.get_config()
 
-        return Sam2Config(
+        return EdgeTamConfig(
             vision_config=vision_config,
             prompt_encoder_config=prompt_encoder_config,
             mask_decoder_config=mask_decoder_config,
@@ -439,13 +437,13 @@ class Sam2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = Sam2Model(config=config)
+        model = EdgeTamModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
-        self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
+        self.parent.assertEqual(result.low_res_masks.shape[:3], (self.batch_size, 1, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -455,16 +453,13 @@ class Sam2ModelTester:
 
 
 @require_torch
-class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Sam2Model,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
-    )
+    all_model_classes = (EdgeTamModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -473,10 +468,10 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Sam2ModelTester(self)
+        self.model_tester = EdgeTamModelTester(self)
         common_properties = ["initializer_range"]
         self.config_tester = ConfigTester(
-            self, config_class=Sam2Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=EdgeTamConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
@@ -515,7 +510,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.vision_attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
+            expected_num_attentions = sum(self.model_tester.stages)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
@@ -524,7 +519,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.vision_config.output_attentions = True
             config.output_attentions = True
             model = model_class._from_config(config, attn_implementation="eager")
-            window_size = config.vision_config.backbone_config.window_size_per_stage[0]
+            window_size = config.vision_config.backbone_config.window_spec[0]
             out_dim = self.model_tester.hidden_size
             patch_stride = self.model_tester.patch_stride
             num_windows = (
@@ -557,7 +552,8 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_windows, window_size, window_size, out_dim],
             )
 
-    # Override as Sam2Model has different sub-modules
+    # Override as EdgeTamModel has different sub-modules
+    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -606,11 +602,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    # Override as Sam2Model doesn't have hidden states
+    # Override as EdgeTamModel doesn't have hidden states
     def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `dtype=torch.bfloat16`.
+        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -627,11 +623,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -699,7 +695,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="Sam2Model does not support training")
+    @unittest.skip(reason="EdgeTamModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -709,22 +705,23 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/sam2.1-hiera-tiny"
-        model = Sam2Model.from_pretrained(model_name)
+        model_name = "yonigozlan/edgetam.1_hiera_tiny_hf"
+        model = EdgeTamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
+        self.skipTest(reason="EDGETAM model can't be compiled dynamic yet")
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/edgetam-fixtures/resolve/main/truck.jpg"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
 
 def prepare_groceries_image():
-    img_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/groceries.jpg"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/edgetam-fixtures/resolve/main/groceries.jpg"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -736,19 +733,27 @@ def prepare_dog_img():
 
 
 def prepare_video():
-    video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
+    video_url = "https://huggingface.co/datasets/hf-internal-testing/edgetam-fixtures/resolve/main/bedroom.mp4"
     raw_video, _ = load_video(video_url)
     return raw_video
 
 
 @slow
-class Sam2ModelIntegrationTest(unittest.TestCase):
+class EdgeTamModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-tiny")
+        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
+        self.model = EdgeTamModel.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0).to(
+            torch.float32
+        )
+        self.video_model = EdgeTamVideoModel.from_pretrained(
+            "yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0
+        ).to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
+        self.video_model.to(torch_device)
+        self.video_model.eval()
 
     def tearDown(self):
         super().tearDown()
@@ -768,17 +773,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 3))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 3, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 3, 256, 256))
         sorted_indices = torch.argsort(outputs.iou_scores.squeeze(), descending=True)
         scores = outputs.iou_scores.squeeze()[sorted_indices]
-        masks_logits = outputs.pred_masks.squeeze()[sorted_indices][0, :3, :3]
+        masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
+
         torch.testing.assert_close(
             scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-24.9288, -41.7466, -31.0128], [-34.5113, -31.1054, -36.5913], [-25.2597, -37.5912, -33.4030]]
+                [[-24.9289, -41.7473, -31.0161], [-34.5083, -31.1052, -36.5906], [-25.2572, -37.5877, -33.4020]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -796,14 +802,15 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+
         torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-7.0462, -13.3857, -9.6419], [-10.4565, -9.7174, -12.3528], [-7.3704, -12.4391, -10.5539]]
+                [[-7.0468, -13.3871, -9.6433], [-10.4570, -9.7181, -12.3540], [-7.3701, -12.4391, -10.5542]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -822,21 +829,22 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (2, 1, 3))
-        self.assertEqual(outputs.pred_masks.shape, (2, 1, 3, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 1, 3, 256, 256))
 
         sorted_indices = torch.argsort(outputs.iou_scores[0].squeeze(), descending=True)
         scores1 = outputs.iou_scores[0].squeeze()[sorted_indices]
-        masks_logits1 = outputs.pred_masks[0].squeeze()[sorted_indices][0, :3, :3]
+        masks_logits1 = outputs.low_res_masks[0].squeeze()[sorted_indices][0, :3, :3]
         sorted_indices = torch.argsort(outputs.iou_scores[1].squeeze(), descending=True)
         scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
-        masks_logits2 = outputs.pred_masks[1].squeeze()[sorted_indices][0, :3, :3]
+        masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
+
         torch.testing.assert_close(
-            scores1, torch.tensor([0.9586, 0.4913, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores1, torch.tensor([0.9586, 0.4914, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits1,
             torch.tensor(
-                [[-22.2555, -37.9250, -27.8928], [-30.8681, -27.9519, -32.8032], [-22.4133, -33.9966, -29.7111]]
+                [[-22.2558, -37.9267, -27.8955], [-30.8666, -27.9524, -32.8008], [-22.4173, -34.0016, -29.7156]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -848,7 +856,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             masks_logits2,
             torch.tensor(
-                [[-13.1182, -17.3217, -14.9651], [-16.2372, -12.7739, -17.6346], [-13.5013, -17.1549, -15.6614]]
+                [[-13.1202, -17.3222, -14.9687], [-16.2375, -12.7737, -17.6353], [-13.5025, -17.1528, -15.6627]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -865,7 +873,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
-        self.assertEqual(outputs.pred_masks.shape, (2, 2, 1, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 2, 1, 256, 256))
+
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
@@ -873,11 +882,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
         torch.testing.assert_close(
-            outputs.pred_masks[:, :, :, :2, :2],
+            outputs.low_res_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-5.8131, -11.3020], [-8.6487, -8.0690]]], [[[-4.7731, -8.7606], [-6.2399, -7.0738]]]],
-                    [[[[-13.8661, -19.1254], [-20.2477, -14.1636]]], [[[-8.8229, -10.2760], [-11.3797, -8.7189]]]],
+                    [[[[-5.8134, -11.3037], [-8.6494, -8.0695]]], [[[-4.7726, -8.7596], [-6.2399, -7.0727]]]],
+                    [[[[-13.8652, -19.1227], [-20.2452, -14.1595]]], [[[-8.8219, -10.2751], [-11.3793, -8.7168]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -897,7 +906,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
-        self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 4, 1, 256, 256))
+
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
@@ -907,20 +917,20 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
         torch.testing.assert_close(
-            outputs.pred_masks[:, :, :, :2, :2],
+            outputs.low_res_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
                     [
-                        [[[-7.6204, -11.9286], [-8.7747, -10.5662]]],
-                        [[[-17.1070, -23.4025], [-20.9608, -19.5600]]],
-                        [[[-20.5766, -29.4410], [-26.0739, -24.3225]]],
-                        [[[-19.7201, -29.0836], [-24.4915, -23.6377]]],
+                        [[[-7.6201, -11.9294], [-8.7753, -10.5658]]],
+                        [[[-17.1048, -23.4034], [-20.9588, -19.5580]]],
+                        [[[-20.5743, -29.4418], [-26.0712, -24.3209]]],
+                        [[[-19.7182, -29.0840], [-24.4883, -23.6355]]],
                     ],
                     [
-                        [[[-18.5259, -23.5202], [-25.1906, -17.2518]]],
-                        [[[-20.1214, -25.4215], [-25.7877, -19.1169]]],
-                        [[[-21.0878, -24.7938], [-27.5625, -19.2650]]],
-                        [[[-20.5210, -22.5343], [-26.0968, -17.7544]]],
+                        [[[-18.5227, -23.5157], [-25.1869, -17.2468]]],
+                        [[[-20.1201, -25.4221], [-25.7871, -19.1158]]],
+                        [[[-21.0869, -24.7938], [-27.5628, -19.2624]]],
+                        [[[-20.5171, -22.5326], [-26.0914, -17.7515]]],
                     ],
                 ]
             ).to(torch_device),
@@ -939,7 +949,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**original_inputs)
 
         # best mask to use as input for new points
-        mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores)]
+        mask_input = outputs.low_res_masks[:, :, torch.argmax(outputs.iou_scores)]
 
         new_input_points = [[[[500, 375], [1125, 625]]]]
         new_input_labels = [[[1, 1]]]
@@ -958,13 +968,14 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             )
 
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+
         torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
-            torch.tensor([[-5.3899, -9.7908, -8.4931], [-5.5144, -8.8731, -8.3000], [-5.5976, -9.9249, -9.0761]]).to(
+            torch.tensor([[-5.3898, -9.7907, -8.4924], [-5.5154, -8.8733, -8.2990], [-5.5979, -9.9265, -9.0773]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -988,21 +999,437 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                 multimask_output=False,
             )
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
         torch.testing.assert_close(scores, torch.tensor([0.9719]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-15.5081, -21.8641, -18.0479], [-17.4401, -17.4754, -23.6469], [-14.3975, -19.4346, -18.5884]]
+                [[-15.5049, -21.8613, -18.0476], [-17.4381, -17.4725, -23.6458], [-14.3967, -19.4371, -18.5897]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
 
+    def test_inference_mask_generation_video_one_point(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350]]]],
+            input_labels=[[[1]]],
+        )
+        outputs = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-21.4113, -21.4113, -22.9685], [-23.3089, -23.3089, -24.2602], [-27.5700, -27.5700, -27.1607]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
+                    [[[[-20.0948, -20.0948], [-21.2245, -21.2245]]]],
+                    [[[[-19.9573, -19.9573], [-21.3020, -21.3020]]]],
+                ],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_video_one_point_propagate_in_video_directly(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350]]]],
+            input_labels=[[[1]]],
+        )
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
+                    [[[[-20.0948, -20.0948], [-21.2245, -21.2245]]]],
+                    [[[[-19.9573, -19.9573], [-21.3020, -21.3020]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_video_multi_points(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350], [250, 220]]]],
+            input_labels=[[[1, 1]]],
+        )
+        outputs = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
+                    [[[[-15.3796, -15.3796], [-16.0307, -16.0307]]]],
+                    [[[[-15.4860, -15.4860], [-16.4231, -16.4231]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-2,
+            rtol=1e-2,
+        )
+
+    def test_inference_mask_generation_video_one_bb(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_boxes=[[[300, 0, 500, 400]]],
+        )
+        outputs = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-13.1423, -13.1423, -13.6417], [-13.7748, -13.7748, -14.1142], [-15.1950, -15.1950, -15.1751]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-13.1423, -13.1423], [-13.7748, -13.7748]]]],
+                    [[[[-14.9971, -14.9971], [-15.7066, -15.7066]]]],
+                    [[[[-15.4576, -15.4576], [-16.1667, -16.1667]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-2,
+            rtol=1e-2,
+        )
+
+    def test_inference_mask_generation_video_one_point_one_bb(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_boxes=[[[300, 0, 500, 400]]],
+            input_points=[[[[460, 60]]]],
+            input_labels=[[[1]]],
+        )
+        outputs = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-12.3523, -12.3523, -12.8905], [-13.0603, -13.0603, -13.4075], [-14.6503, -14.6503, -14.5686]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-12.3523, -12.3523], [-13.0603, -13.0603]]]],
+                    [[[[-15.8179, -15.8179], [-16.4159, -16.4159]]]],
+                    [[[[-15.8949, -15.8949], [-16.6002, -16.6002]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-2,
+            rtol=1e-2,
+        )
+
+    def test_inference_mask_generation_video_multi_objects_multi_points(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_ids,
+            input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
+            input_labels=[[[1, 1, 0], [1]]],
+        )
+        outputs = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
+        self.assertEqual(low_res_masks.shape, (2, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[:, 0, :2, :2],  # first object
+            torch.tensor(
+                [[[-12.6303, -12.6303], [-13.3667, -13.3667]], [[-20.3307, -20.3307], [-22.0473, -22.0473]]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-12.6303, -12.6303], [-13.3667, -13.3667]]], [[[-20.3307, -20.3307], [-22.0473, -22.0473]]]],
+                    [[[[-18.5245, -18.5245], [-19.5829, -19.5829]]], [[[-17.5492, -17.5492], [-19.2210, -19.2210]]]],
+                    [[[[-14.2722, -14.2722], [-15.4622, -15.4622]]], [[[-18.3148, -18.3148], [-20.0278, -20.0278]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_propagate_video_from_mask_input(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        # get input_mask
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350], [250, 220]]]],
+            input_labels=[[[1, 1]]],
+        )
+        edgetam_video_output = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=True,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+
+        # set mask as input
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_masks=edgetam_video_output.video_res_masks,
+        )
+        edgetam_video_output = self.video_model(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks = edgetam_video_output.consolidated_res_masks
+        video_res_masks = edgetam_video_output.video_res_masks
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-10.0000, -10.0000, -10.0000], [-10.0000, -10.0000, -10.0000], [-10.0000, -10.0000, -10.0000]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # test propagate in video frames
+        frames = []
+        for edgetam_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(edgetam_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-10.0000, -10.0000], [-10.0000, -10.0000]]]],
+                    [[[[-18.3645, -18.3645], [-19.2324, -19.2324]]]],
+                    [[[[-20.3382, -20.3382], [-21.1854, -21.1854]]]],
+                ],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_propagate_on_streamed_video(self):
+        raw_video = prepare_video()
+
+        inference_session = self.processor.init_video_session(inference_device=torch_device)
+        video_res_masks = []
+        max_frame_num_to_track = 3
+        for frame_idx, frame in enumerate(raw_video):
+            if frame_idx >= max_frame_num_to_track:
+                break
+            inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
+            if frame_idx == 0:
+                self.processor.add_inputs_to_inference_session(
+                    inference_session,
+                    frame_idx=0,
+                    obj_ids=1,
+                    input_points=[[[[210, 350], [250, 220]]]],
+                    input_labels=[[[1, 1]]],
+                    original_size=inputs.original_sizes[0],
+                )
+            edgetam_video_output = self.video_model(inference_session=inference_session, frame=inputs.pixel_values[0])
+            video_res_masks.append(edgetam_video_output.video_res_masks)
+
+        video_res_masks = torch.stack(video_res_masks, dim=0)
+        self.assertEqual(
+            video_res_masks.shape, (max_frame_num_to_track, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
+        )
+        # higher tolerance due to errors propagating from frame to frame
+        torch.testing.assert_close(
+            video_res_masks[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
+                    [[[[-15.3796, -15.3796], [-16.0307, -16.0307]]]],
+                    [[[[-15.4860, -15.4860], [-16.4231, -16.4231]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-2,
+            rtol=1e-2,
+        )
+
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-tiny", device=torch_device)
+        generator = pipeline("mask-generation", model="yonigozlan/edgetam.1_hiera_tiny_hf", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
