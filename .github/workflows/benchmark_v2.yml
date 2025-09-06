@@ -3,6 +3,15 @@ name: Benchmark v2 Framework
 on:
   workflow_call:
     inputs:
+      runner_group:
+        description: 'GH Actions runner group to use'
+        required: false
+        type: string
+      runner_labels:
+        description: 'GH Actions runner label to use'
+        required: false
+        type: string
+        default: null
       model_id:
         description: 'Model ID to benchmark (e.g., meta-llama/Llama-2-7b-hf)'
         required: false
@@ -54,12 +63,9 @@ env:
 jobs:
   benchmark-v2:
     name: Benchmark v2
-    strategy:
-      matrix:
-        # Use GPU-enabled runners for accurate benchmarking
-        group: [aws-g5-4xlarge-cache]
     runs-on:
-      group: ${{ matrix.group }}
+      group: ${{ inputs.runner_group }}
+      labels: ${{ inputs.runner_labels }}
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host --shm-size "16gb"

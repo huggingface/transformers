@@ -12,7 +12,6 @@ on:
       model_id:
         description: 'Model ID to benchmark (leave empty for default models)'
         required: false
-        type: string
         default: ''
       warmup_iterations:
         description: 'Number of warmup iterations'
@@ -47,6 +46,7 @@ jobs:
     name: Benchmark v2 - Default Models
     uses: ./.github/workflows/benchmark_v2.yml
     with:
+      runner_group: "aws-g5-4xlarge-cache"
       model_id: ${{ inputs.model_id || '' }}
       warmup_iterations: ${{ inputs.warmup_iterations || 3 }}
       measurement_iterations: ${{ inputs.measurement_iterations || 5 }}
