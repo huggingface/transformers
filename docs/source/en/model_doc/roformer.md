@@ -35,9 +35,11 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-# uncomment to install rjieba which is needed for the tokenizer
-# !pip install rjieba
+# To use RoFormerTokenizer, first install `rjieba`:
+
+```bash
+pip install rjieba
+
 import torch
 from transformers import pipeline
 
@@ -49,14 +51,11 @@ pipe = pipeline(
 )
 output = pipe("水在零度时会[MASK]")
 print(output)
-```
+</hfoption> <hfoption id="AutoModel">
+To use RoFormerTokenizer, first install rjieba:
 
-</hfoption>
-<hfoption id="AutoModel">
+pip install rjieba
 
-```py
-# uncomment to install rjieba which is needed for the tokenizer
-# !pip install rjieba
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
@@ -69,70 +68,51 @@ input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.
 outputs = model(**input_ids)
 decoded = tokenizer.batch_decode(outputs.logits.argmax(-1), skip_special_tokens=True)
 print(decoded)
-```
+</hfoption> <hfoption id="transformers CLI">
 
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
 echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
-```
+</hfoption> </hfoptions>
+Notes
+The current RoFormer implementation is an encoder-only model. The original code can be found in the ZhuiyiTechnology/roformer repository.
 
-</hfoption>
-</hfoptions>
-
-## Notes
-
-- The current RoFormer implementation is an encoder-only model. The original code can be found in the [ZhuiyiTechnology/roformer](https://github.com/ZhuiyiTechnology/roformer) repository.
-
-## RoFormerConfig
-
+RoFormerConfig
 [[autodoc]] RoFormerConfig
 
-## RoFormerTokenizer
-
+RoFormerTokenizer
 [[autodoc]] RoFormerTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+- build_inputs_with_special_tokens
+- get_special_tokens_mask
+- create_token_type_ids_from_sequences
+- save_vocabulary
 
-## RoFormerTokenizerFast
-
+RoFormerTokenizerFast
 [[autodoc]] RoFormerTokenizerFast
-    - build_inputs_with_special_tokens
+- build_inputs_with_special_tokens
 
-## RoFormerModel
-
+RoFormerModel
 [[autodoc]] RoFormerModel
-    - forward
+- forward
 
-## RoFormerForCausalLM
-
+RoFormerForCausalLM
 [[autodoc]] RoFormerForCausalLM
-    - forward
+- forward
 
-## RoFormerForMaskedLM
-
+RoFormerForMaskedLM
 [[autodoc]] RoFormerForMaskedLM
-    - forward
+- forward
 
-## RoFormerForSequenceClassification
-
+RoFormerForSequenceClassification
 [[autodoc]] RoFormerForSequenceClassification
-    - forward
+- forward
 
-## RoFormerForMultipleChoice
-
+RoFormerForMultipleChoice
 [[autodoc]] RoFormerForMultipleChoice
-    - forward
+- forward
 
-## RoFormerForTokenClassification
-
+RoFormerForTokenClassification
 [[autodoc]] RoFormerForTokenClassification
-    - forward
+- forward
 
-## RoFormerForQuestionAnswering
-
+RoFormerForQuestionAnswering
 [[autodoc]] RoFormerForQuestionAnswering
-    - forward
+- forward
