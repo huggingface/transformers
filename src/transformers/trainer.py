@@ -2600,6 +2600,7 @@ class Trainer:
             steps_skipped = 0
             if steps_trained_in_current_epoch > 0:
                 epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                epoch_dataloader.iteration = epochs_trained
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
