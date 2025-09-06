@@ -20,7 +20,6 @@ from benchmark_framework import ModelBenchmark
 
 import torch
 
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
 
