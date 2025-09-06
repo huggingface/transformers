@@ -32,6 +32,7 @@ from .utils import (
     is_g2p_en_available,
     is_librosa_available,
     is_mistral_common_available,
+    is_mlx_available,
     is_pretty_midi_available,
 )
 
@@ -239,6 +240,7 @@ _import_structure = {
         "is_flax_available",
         "is_keras_nlp_available",
         "is_matplotlib_available",
+        "is_mlx_available",
         "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
