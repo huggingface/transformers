@@ -739,7 +739,7 @@ class ISTFT(nn.Module):
 
         # Overlap and Add
         output_size = (T - 1) * self.hop_length + self.win_length
-        y = torch.nn.functional.fold(
+        y = F.fold(
             ifft,
             output_size=(1, output_size),
             kernel_size=(1, self.win_length),
@@ -748,7 +748,7 @@ class ISTFT(nn.Module):
 
         # Window envelope
         window_sq = self.window.square().expand(1, T, -1).transpose(1, 2)
-        window_envelope = torch.nn.functional.fold(
+        window_envelope = F.fold(
             window_sq,
             output_size=(1, output_size),
             kernel_size=(1, self.win_length),
@@ -1373,8 +1373,6 @@ XCODEC2_INPUTS_DOCSTRING = r"""
     args:
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`:
-            Discrete code indices computed using `model.encode`.
         return_dict (`bool`, *optional*):
             whether to return a `Xcodec2Output` or a plain tuple.
 """
@@ -1391,6 +1389,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)
 
+        self.hop_length = config.hop_length   # needed for padding
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
         self.semantic_feature_extractor = AutoFeatureExtractor.from_pretrained(config.semantic_model_id)
         self.semantic_encoder = Xcodec2SemanticEncoder(
@@ -1473,15 +1472,21 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        channels = input_values.shape[1]
+        _, channels, seq_len = input_values.shape
         if channels != 1:
             raise ValueError(f"Audio must be mono, but got {channels}")
+
+        # 0) Custom padding of theirs which they do even if input is multiple of hop_length
+        # without it, resulting audio codes differ from theirs
+        input_values = F.pad(input_values, (0, self.hop_length - (seq_len % self.hop_length)))
 
         # 1) Get semantic embedding
         # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
         input_features = (
             self.semantic_feature_extractor(
-                input_values.cpu().tolist(),  # need list to handle batch
+                # original version pads before and after, perhaps for alignment? 
+                # list needed to handle batch
+                F.pad(input_values, (self.hop_length // 2, self.hop_length // 2)).cpu().tolist(),
                 sampling_rate=self.semantic_feature_extractor.sampling_rate,
                 return_tensors="pt",
             )
@@ -1560,7 +1565,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
         r"""
@@ -1588,16 +1592,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> outputs = model(inputs["input_values"])
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
 
-        if audio_codes is None:
-            audio_codes, quantized_representation = self.encode(input_values, return_dict=False)
-
+        audio_codes, quantized_representation = self.encode(input_values, return_dict=False)
         audio_values = self.decode(audio_codes, return_dict=False)[0][..., :length]
 
         if not return_dict:
