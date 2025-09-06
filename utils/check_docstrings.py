@@ -386,6 +386,7 @@ OBJECTS_TO_IGNORE = {
     "Swinv2Model",
     "SwitchTransformersConfig",
     "T5Config",
+    "T5LaConfig",
     "T5Tokenizer",
     "T5TokenizerFast",
     "TableQuestionAnsweringPipeline",

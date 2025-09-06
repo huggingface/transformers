@@ -65,6 +65,7 @@ PRIVATE_MODELS = [
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
+    "T5LaStack",
     "MT5Stack",
     "UMT5Stack",
     "Pop2PianoStack",
