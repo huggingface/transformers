@@ -28,7 +28,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from .configuration_dinov3_convnext import DINOv3ConvNextConfig
+from .configuration_dinov3_convnext import Dinov3ConvNextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,8 +55,8 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->DINOv3ConvNext
-class DINOv3ConvNextDropPath(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Dinov3ConvNext
+class Dinov3ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -70,7 +70,7 @@ class DINOv3ConvNextDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class DINOv3ConvNextLayerNorm(nn.LayerNorm):
+class Dinov3ConvNextLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -96,7 +96,7 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
         return features
 
 
-class DINOv3ConvNextLayer(nn.Module):
+class Dinov3ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations:
@@ -106,7 +106,7 @@ class DINOv3ConvNextLayer(nn.Module):
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`DINOv3ConvNextConfig`]):
+        config ([`Dinov3ConvNextConfig`]):
             Model config.
         channels (`int`):
             Number of input (and output) channels.
@@ -114,15 +114,15 @@ class DINOv3ConvNextLayer(nn.Module):
             Drop path rate. Default: 0.0.
     """
 
-    def __init__(self, config: DINOv3ConvNextConfig, channels: int, drop_path: float = 0.0):
+    def __init__(self, config: Dinov3ConvNextConfig, channels: int, drop_path: float = 0.0):
         super().__init__()
         self.depthwise_conv = nn.Conv2d(channels, channels, kernel_size=7, padding=3, groups=channels)
-        self.layer_norm = DINOv3ConvNextLayerNorm(channels, eps=config.layer_norm_eps)
+        self.layer_norm = Dinov3ConvNextLayerNorm(channels, eps=config.layer_norm_eps)
         self.pointwise_conv1 = nn.Linear(channels, 4 * channels)  # can be seen as a 1x1 conv
         self.activation_fn = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Linear(4 * channels, channels)  # can be seen as a 1x1 conv
         self.gamma = nn.Parameter(torch.full((channels,), config.layer_scale_init_value), requires_grad=True)
-        self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
@@ -142,10 +142,10 @@ class DINOv3ConvNextLayer(nn.Module):
         return features
 
 
-class DINOv3ConvNextStage(nn.Module):
+class Dinov3ConvNextStage(nn.Module):
     """ """
 
-    def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
+    def __init__(self, config: Dinov3ConvNextConfig, stage_idx: int):
         super().__init__()
 
         in_channels = config.hidden_sizes[stage_idx - 1] if stage_idx > 0 else config.num_channels
@@ -155,13 +155,13 @@ class DINOv3ConvNextStage(nn.Module):
             self.downsample_layers = nn.ModuleList(
                 [
                     nn.Conv2d(config.num_channels, out_channels, kernel_size=4, stride=4),
-                    DINOv3ConvNextLayerNorm(out_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+                    Dinov3ConvNextLayerNorm(out_channels, eps=config.layer_norm_eps, data_format="channels_first"),
                 ]
             )
         else:
             self.downsample_layers = nn.ModuleList(
                 [
-                    DINOv3ConvNextLayerNorm(in_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+                    Dinov3ConvNextLayerNorm(in_channels, eps=config.layer_norm_eps, data_format="channels_first"),
                     nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2),
                 ]
             )
@@ -173,7 +173,7 @@ class DINOv3ConvNextStage(nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                DINOv3ConvNextLayer(config, channels=out_channels, drop_path=drop_path_rates[i])
+                Dinov3ConvNextLayer(config, channels=out_channels, drop_path=drop_path_rates[i])
                 for i in range(num_previous_layers, num_previous_layers + num_stage_layers)
             ]
         )
@@ -191,11 +191,11 @@ class DINOv3ConvNextStage(nn.Module):
 
 
 @auto_docstring
-class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
-    config: DINOv3ConvNextConfig
+class Dinov3ConvNextPreTrainedModel(PreTrainedModel):
+    config: Dinov3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
-    _no_split_modules = ["DINOv3ConvNextLayer"]
+    _no_split_modules = ["Dinov3ConvNextLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -205,20 +205,20 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, DINOv3ConvNextLayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, Dinov3ConvNextLayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, DINOv3ConvNextLayer):
+        elif isinstance(module, Dinov3ConvNextLayer):
             if module.gamma is not None:
                 module.gamma.data.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
-class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
-    def __init__(self, config: DINOv3ConvNextConfig):
+class Dinov3ConvNextModel(Dinov3ConvNextPreTrainedModel):
+    def __init__(self, config: Dinov3ConvNextConfig):
         super().__init__(config)
         self.config = config
-        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
+        self.stages = nn.ModuleList([Dinov3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
         self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.post_init()
@@ -258,4 +258,4 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel"]
+__all__ = ["Dinov3ConvNextModel", "Dinov3ConvNextPreTrainedModel"]

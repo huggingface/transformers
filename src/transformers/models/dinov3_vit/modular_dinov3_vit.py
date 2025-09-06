@@ -39,18 +39,18 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
-from .configuration_dinov3_vit import DINOv3ViTConfig
+from .configuration_dinov3_vit import Dinov3VitConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ViTEmbeddings(nn.Module):
+class Dinov3VitEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: DINOv3ViTConfig):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__()
         self.config = config
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
@@ -138,10 +138,10 @@ def augment_patches_center_coordinates(
     return coords
 
 
-class DINOv3ViTRopePositionEmbedding(nn.Module):
+class Dinov3VitRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    def __init__(self, config: DINOv3ViTConfig):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__()
 
         self.config = config
@@ -221,8 +221,8 @@ def apply_rotary_pos_emb(
     return q, k
 
 
-class DINOv3ViTAttention(PixtralAttention):
-    def __init__(self, config: DINOv3ViTConfig):
+class Dinov3VitAttention(PixtralAttention):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__(config)
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
@@ -273,40 +273,40 @@ class DINOv3ViTAttention(PixtralAttention):
         return attn_output, attn_weights
 
 
-class DINOv3ViTLayerScale(Dinov2LayerScale):
+class Dinov3VitLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTDropPath(Dinov2DropPath):
+class Dinov3VitDropPath(Dinov2DropPath):
     pass
 
 
-class DINOv3ViTMLP(ArceeMLP):
+class Dinov3VitMLP(ArceeMLP):
     pass
 
 
-class DINOv3ViTGatedMLP(LlamaMLP):
+class Dinov3VitGatedMLP(LlamaMLP):
     pass
 
 
-class DINOv3ViTLayer(GradientCheckpointingLayer):
+class Dinov3VitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: DINOv3ViTConfig):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = DINOv3ViTAttention(config)
-        self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.attention = Dinov3VitAttention(config)
+        self.layer_scale1 = Dinov3VitLayerScale(config)
+        self.drop_path = Dinov3VitDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
-            self.mlp = DINOv3ViTGatedMLP(config)
+            self.mlp = Dinov3VitGatedMLP(config)
         else:
-            self.mlp = DINOv3ViTMLP(config)
-        self.layer_scale2 = DINOv3ViTLayerScale(config)
+            self.mlp = Dinov3VitMLP(config)
+        self.layer_scale2 = Dinov3VitLayerScale(config)
 
     def forward(
         self,
@@ -336,10 +336,10 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
+class Dinov3VitPreTrainedModel(Dinov2PreTrainedModel):
     _can_record_outputs = {
-        "hidden_states": DINOv3ViTLayer,
-        "attentions": DINOv3ViTAttention,
+        "hidden_states": Dinov3VitLayer,
+        "attentions": Dinov3VitAttention,
     }
 
     def _init_weights(self, module):
@@ -357,7 +357,7 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, DINOv3ViTEmbeddings):
+        elif isinstance(module, Dinov3VitEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32),
                 mean=0.0,
@@ -370,18 +370,18 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-        elif isinstance(module, DINOv3ViTLayerScale):
+        elif isinstance(module, Dinov3VitLayerScale):
             module.lambda1.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
-class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
-    def __init__(self, config: DINOv3ViTConfig):
+class Dinov3VitModel(Dinov3VitPreTrainedModel):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = DINOv3ViTEmbeddings(config)
-        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
-        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.embeddings = Dinov3VitEmbeddings(config)
+        self.rope_embeddings = Dinov3VitRopePositionEmbedding(config)
+        self.layer = nn.ModuleList([Dinov3VitLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -426,4 +426,4 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
+__all__ = ["Dinov3VitModel", "Dinov3VitPreTrainedModel"]
