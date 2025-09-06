@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch BridgeTower model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import (
     BridgeTowerConfig,
@@ -23,7 +24,6 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (

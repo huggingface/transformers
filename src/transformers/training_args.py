@@ -20,6 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -37,7 +38,6 @@ from .trainer_utils import (
 from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
-    cached_property,
     is_accelerate_available,
     is_apex_available,
     is_ipex_available,

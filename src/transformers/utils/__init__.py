@@ -51,7 +51,6 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     TransformersKwargs,
-    cached_property,
     can_return_loss,
     can_return_tuple,
     expand_dims,
