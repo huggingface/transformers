@@ -52,7 +52,7 @@ jobs:
       measurement_iterations: ${{ inputs.measurement_iterations || 5 }}
       num_tokens_to_generate: ${{ inputs.num_tokens_to_generate || 100 }}
       commit_sha: ${{ github.sha }}
-      upload_to_hf: true
+      upload_to_hub: true
       run_id: ${{ github.run_id }}
       benchmark_repo_id: ahadnagy/transformers-benchmarks
     secrets: inherit

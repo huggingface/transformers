@@ -467,7 +467,7 @@ Examples:
         
         # Upload results to HuggingFace Dataset if requested
         upload_run_id = None
-        if args.upload_to_hf:
+        if args.upload_to_hub:
             logger.info("=" * 60)
             logger.info("UPLOADING TO HUGGINGFACE DATASET")
             logger.info("=" * 60)
@@ -476,7 +476,7 @@ Examples:
             upload_run_id = upload_results_to_hf_dataset(
                 output_dir=args.output_dir,
                 summary_file=summary_file,
-                dataset_name=args.upload_to_hf,
+                dataset_name=args.upload_to_hub,
                 run_id=effective_run_id,
                 logger=logger
             )
@@ -498,11 +498,11 @@ Examples:
         logger.info(f"Output directory: {args.output_dir}")
         logger.info(f"Summary report: {summary_file}")
         
-        if args.upload_to_hf:
+        if args.upload_to_hub:
             if upload_run_id:
-                logger.info(f"HuggingFace Dataset: {args.upload_to_hf}")
+                logger.info(f"HuggingFace Dataset: {args.upload_to_hub}")
                 logger.info(f"Run ID: {upload_run_id}")
-                logger.info(f"View results: https://huggingface.co/datasets/{args.upload_to_hf}/tree/main/{datetime.now().strftime('%Y-%m-%d')}/runs/{upload_run_id}")
+                logger.info(f"View results: https://huggingface.co/datasets/{args.upload_to_hub}/tree/main/{datetime.now().strftime('%Y-%m-%d')}/runs/{upload_run_id}")
             else:
                 logger.warning("Upload to HuggingFace Dataset failed")
         

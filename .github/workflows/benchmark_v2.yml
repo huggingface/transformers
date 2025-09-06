@@ -28,7 +28,7 @@ on:
         required: false
         type: string
         default: ''
-      upload_to_hf:
+      upload_to_hub:
         description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
         required: false
         type: string
@@ -109,8 +109,8 @@ jobs:
           fi
           
           # Add HuggingFace upload parameters if specified
-          if [ -n "${{ inputs.upload_to_hf }}" ]; then
-            args="$args --upload-to-hf '${{ inputs.upload_to_hf }}'"
+          if [ -n "${{ inputs.upload_to_hub }}" ]; then
+            args="$args --upload-to-hub '${{ inputs.upload_to_hub }}'"
           fi
           
           if [ -n "${{ inputs.run_id }}" ]; then
