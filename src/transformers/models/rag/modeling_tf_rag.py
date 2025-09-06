@@ -322,9 +322,9 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         }
 
         # remove question_encoder, generator kwargs from kwargs
-        for key in kwargs_question_encoder.keys():
+        for key in kwargs_question_encoder:
             del kwargs["question_encoder_" + key]
-        for key in kwargs_generator.keys():
+        for key in kwargs_generator:
             del kwargs["generator_" + key]
 
         # Load and initialize the question_encoder and generator
@@ -376,7 +376,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
             )
 
         # instantiate config with corresponding kwargs
-        config = kwargs.get("config", None)
+        config = kwargs.get("config")
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
                 question_encoder.config, generator.config, **kwargs
@@ -567,27 +567,31 @@ class TFRagModel(TFRagPreTrainedModel):
         **kwargs,
     ) -> TFRetrievAugLMOutput:
         r"""
-        Returns:
+                        Returns:
 
-        Example:
+                        Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, RagRetriever, TFRagModel
-        >>> import torch
+                        ```python
+                        >>> from transformers import AutoTokenizer, RagRetriever, TFRagModel
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-base")
-        >>> retriever = RagRetriever.from_pretrained(
-        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
-        ... )
-        >>> # initialize with RagRetriever to do everything in one forward call
-        >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
+                        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-base")
+                        >>> retriever = RagRetriever.from_pretrained(
+                        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+                        ... )
+                        >>> # initialize with RagRetriever to do everything in one forward call
+                        >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
 
-        >>> input_dict = tokenizer.prepare_seq2seq_batch(
-        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
-        ... )
-        >>> input_ids = input_dict["input_ids"]
-        >>> outputs = model(input_ids)
-        ```"""
+                        >>> input_dict = tokenizer.prepare_seq2seq_batch(
+                        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+                        ... )
+                        >>> input_ids = input_dict["input_ids"]
+                        >>> outputs = model(input_ids)
+                        ```"""
         assert "decoder_cached_states" not in kwargs, (
             "Please use past_key_values to cache intermediate outputs"
         )  # from modeling_tf_bart.py

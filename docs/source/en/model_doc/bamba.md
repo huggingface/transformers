@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -45,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="ibm-ai-platform/Bamba-9B-v2",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -60,8 +61,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
-model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -93,7 +94,7 @@ model = AutoModelForCausalLM.from_pretrained(
    attn_implementation="sdpa"
 )
 
-inputs = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+inputs = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 output = model.generate(**inputs)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```

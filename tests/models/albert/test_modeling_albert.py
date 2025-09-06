@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available
@@ -337,6 +338,7 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
+    @pytest.mark.torch_export_test
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

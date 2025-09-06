@@ -39,7 +39,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -53,7 +53,6 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -425,8 +424,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size", "metadata", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
@@ -473,16 +470,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.num_text = num_text
         self.num_labels = num_labels
 
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
-
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.to_dict
     def to_dict(self) -> dict[str, Any]:
         """
@@ -493,7 +480,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_processor_dict.pop("_max_size", None)
         return image_processor_dict
 
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size"])
     def resize(
         self,
@@ -585,7 +571,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -606,7 +592,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -685,7 +671,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -736,9 +722,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
@@ -962,7 +948,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self,
         pixel_values_list: list[ImageInput],
         task_inputs: list[str],
-        segmentation_maps: ImageInput = None,
+        segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,

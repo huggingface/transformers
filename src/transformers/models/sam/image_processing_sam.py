@@ -32,7 +32,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -267,7 +267,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_rescale: bool,
         do_normalize: bool,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         rescale_factor: Optional[float] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
@@ -295,7 +295,7 @@ class SamImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -494,7 +494,7 @@ class SamImageProcessor(BaseImageProcessor):
         mask_pad_size = get_size_dict(mask_pad_size, default_to_square=True)
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -503,7 +503,7 @@ class SamImageProcessor(BaseImageProcessor):
             )
 
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
             if not valid_images(segmentation_maps):
                 raise ValueError(
@@ -668,7 +668,7 @@ class SamImageProcessor(BaseImageProcessor):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
@@ -1119,7 +1119,7 @@ def _generate_crop_boxes(
     """
 
     if isinstance(image, list):
-        raise ValueError("Only one image is allowed for crop generation.")
+        raise TypeError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
     original_size = get_image_size(image, input_data_format)
 

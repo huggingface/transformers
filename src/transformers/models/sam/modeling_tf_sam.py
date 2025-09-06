@@ -465,7 +465,7 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
 
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 

@@ -323,6 +323,8 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
 )
 class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -339,24 +341,29 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
         r"""
-        Examples:
+                        Examples:
 
-        ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
-        >>> import torch
+                        ```python
+                        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+                        >>> config = RTDetrResNetConfig()
+                        >>> model = RTDetrResNetBackbone(config)
 
-        >>> pixel_values = torch.randn(1, 3, 224, 224)
+                        >>> pixel_values = torch.randn(1, 3, 224, 224)
 
-        >>> with torch.no_grad():
-        ...     outputs = model(pixel_values)
+                        >>> with torch.no_grad():
+                        ...     outputs = model(pixel_values)
 
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
-        ```"""
+                        >>> feature_maps = outputs.feature_maps
+                        >>> list(feature_maps[-1].shape)
+                        [1, 2048, 7, 7]
+                        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

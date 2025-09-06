@@ -96,7 +96,7 @@ def _sample_without_replacement(distribution, num_samples):
 
 def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
     """
-    Scatter function as in PyTorch with indices in format (batch_dim, indixes)
+    Scatter function as in PyTorch with indices in format (batch_dim, indices)
     """
     indices_shape = shape_list(batch_indices)
     # broadcast batch dim to indices_shape
@@ -1300,7 +1300,7 @@ class TFWav2Vec2MainLayer(keras.layers.Layer):
 
         hidden_states, extract_features = self.feature_projection(extract_features, training=training)
 
-        mask_time_indices = kwargs.get("mask_time_indices", None)
+        mask_time_indices = kwargs.get("mask_time_indices")
         if training:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 

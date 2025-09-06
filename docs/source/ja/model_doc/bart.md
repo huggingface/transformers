@@ -111,7 +111,7 @@ BART を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - [`TFBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)。
 - [`FlaxBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization) でサポートされています。
 - [要約](https://huggingface.co/course/chapter7/5?fw=pt#summarization) 🤗 ハグフェイスコースの章。
-- [要約タスクガイド](../tasks/summarization.md)
+- [要約タスクガイド](../tasks/summarization)
 
 <PipelineTag pipeline="fill-mask"/>
 

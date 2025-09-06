@@ -287,7 +287,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = "past_key_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -381,7 +381,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
@@ -591,12 +591,6 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

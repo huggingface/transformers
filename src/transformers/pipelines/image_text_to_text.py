@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import enum
-from collections.abc import Iterable  # pylint: disable=g-importing-member
+from collections.abc import Iterable
 from typing import Any, Optional, Union, overload
 
 from ..generation import GenerationConfig
@@ -203,22 +203,33 @@ class ImageTextToTextPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         stop_sequence=None,
         continue_final_message=None,
+        skip_special_tokens=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         forward_kwargs = {}
         preprocess_params = {}
         postprocess_params = {}
-        preprocess_params.update(kwargs)
 
+        # Preprocess params
+        preprocess_params.update(kwargs)
         if timeout is not None:
             preprocess_params["timeout"] = timeout
-
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
 
+        # Forward kwargs
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
-
+        if stop_sequence is not None:
+            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                logger.warning_once(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+        if generate_kwargs is not None:
+            forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
             if "generate_kwargs" not in forward_kwargs:
                 forward_kwargs["generate_kwargs"] = {}
@@ -229,6 +240,7 @@ class ImageTextToTextPipeline(Pipeline):
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
+        # Postprocess params
         if return_full_text is not None and return_type is None:
             if return_tensors is not None:
                 raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
@@ -241,14 +253,9 @@ class ImageTextToTextPipeline(Pipeline):
             postprocess_params["continue_final_message"] = continue_final_message
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
-        if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+        if skip_special_tokens is not None:
+            postprocess_params["skip_special_tokens"] = skip_special_tokens
+
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
@@ -409,7 +416,7 @@ class ImageTextToTextPipeline(Pipeline):
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
         model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
-            dtype=self.torch_dtype
+            dtype=self.dtype
         )
 
         model_inputs["text"] = inputs_text
@@ -432,7 +439,12 @@ class ImageTextToTextPipeline(Pipeline):
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
-        self, model_outputs, return_type=ReturnType.FULL_TEXT, continue_final_message=None, **postprocess_kwargs
+        self,
+        model_outputs,
+        return_type=ReturnType.FULL_TEXT,
+        continue_final_message=None,
+        skip_special_tokens=None,
+        **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
@@ -445,8 +457,13 @@ class ImageTextToTextPipeline(Pipeline):
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
-        generated_texts = self.processor.post_process_image_text_to_text(generated_sequence, **postprocess_kwargs)
-        decoded_inputs = self.processor.post_process_image_text_to_text(input_ids, **postprocess_kwargs)
+        skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
+        generated_texts = self.processor.post_process_image_text_to_text(
+            generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+        )
+        decoded_inputs = self.processor.post_process_image_text_to_text(
+            input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+        )
 
         # Force consistent behavior for including the input text in the output
         if return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:

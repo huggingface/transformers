@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-18.*
 
 # Voxtral
 
@@ -37,24 +38,21 @@ Voxtral builds on Ministral-3B by adding audio processing capabilities:
 
 ## Usage
 
-Let's first load the model!
-```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
-import torch
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-repo_id = "mistralai/Voxtral-Mini-3B-2507"
-
-processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, torch_dtype=torch.bfloat16, device_map=device)
-```
-
 ### Audio Instruct Mode
 
 The model supports audio-text instructions, including multi-turn and multi-audio interactions, all processed in batches.
 
 ➡️ audio + text instruction
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversation = [
     {
         "role": "user",
@@ -82,6 +80,15 @@ print("=" * 80)
 
 ➡️ multi-audio + text instruction 
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversation = [
     {
         "role": "user",
@@ -113,6 +120,15 @@ print("=" * 80)
 
 ➡️ multi-turn:
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversation = [
     {
         "role": "user",
@@ -158,6 +174,15 @@ print("=" * 80)
 
 ➡️ text only:
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversation = [
     {
         "role": "user",
@@ -184,6 +209,15 @@ print("=" * 80)
 
 ➡️ audio only:
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversation = [
     {
         "role": "user",
@@ -210,6 +244,15 @@ print("=" * 80)
 
 ➡️ batched inference!
 ```python
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
 conversations = [
     [
         {
@@ -262,7 +305,16 @@ for decoded_output in decoded_outputs:
 Use the model to transcribe audio (supports English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
 
 ```python
-inputs = processor.apply_transcrition_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3")
+import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
+repo_id = "mistralai/Voxtral-Mini-3B-2507"
+
+processor = AutoProcessor.from_pretrained(repo_id)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+
+inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
 inputs = inputs.to(device, dtype=torch.bfloat16)
 
 outputs = model.generate(**inputs, max_new_tokens=500)

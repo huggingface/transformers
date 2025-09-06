@@ -423,3 +423,5 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
             torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
         )
         self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
+        self.assertTrue(torch.all(outputs.matches[0, 1] < torch.sum(outputs.mask[0, 0])))
+        self.assertTrue(torch.all(outputs.matches[0, 0] < torch.sum(outputs.mask[0, 1])))

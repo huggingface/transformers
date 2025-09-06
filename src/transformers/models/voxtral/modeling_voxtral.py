@@ -229,14 +229,14 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     config: VoxtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["VoxtralAttention"]
+    _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_attention_backend = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         # important: this ported version of Voxtral isn't meant for training from scratch - only
@@ -479,7 +479,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         >>> repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
         >>> processor = AutoProcessor.from_pretrained(repo_id)
-        >>> model = VoxtralForConditionalGeneration.from_pretrained(repo_id, torch_dtype=torch.bfloat16, device_map=device)
+        >>> model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
 
         >>> conversation = [
             {
@@ -504,12 +504,14 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None:
+        if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_embeds(input_features)
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = input_ids == self.config.audio_token_id
-            inputs_embeds[audio_token_mask] = audio_embeds
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,

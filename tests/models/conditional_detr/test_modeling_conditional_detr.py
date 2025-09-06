@@ -622,7 +622,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.8330, 0.8315, 0.8039, 0.6829, 0.5354]).to(torch_device)
         expected_labels = [75, 17, 17, 75, 63]
-        expected_slice_boxes = torch.tensor([38.3109, 72.1002, 177.6301, 118.4511]).to(torch_device)
+        expected_slice_boxes = torch.tensor([38.3089, 72.1023, 177.6292, 118.4514]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)

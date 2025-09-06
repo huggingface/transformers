@@ -26,7 +26,7 @@ Try prompting a LLM to classify some text. When you create a prompt, it's import
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Classify the text into neutral, negative or positive.
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
@@ -86,7 +86,7 @@ Few-shot prompting improves accuracy and performance by including specific examp
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
 Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
@@ -111,7 +111,7 @@ Structure your prompt as a turn-based conversation and use the [`apply_chat_temp
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 
 messages = [
     {"role": "user", "content": "Text: The first human went into space and orbited the Earth on April 12, 1961."},
@@ -145,7 +145,7 @@ The example below provides the model with several prompts to work through interm
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Let's go through this step-by-step:
 1. You start with 15 muffins.
 2. You eat 2 muffins, leaving you with 13 muffins.
@@ -193,7 +193,7 @@ The examples below demonstrate prompting a LLM for different tasks.
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Return a list of named entities in the text.
 Text: The company was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf in New York City, originally as a company that developed a chatbot app targeted at teenagers.
 Named entities:
@@ -212,7 +212,7 @@ Result:  [Clément Delangue, Julien Chaumond, Thomas Wolf, company, New York Cit
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Translate the English text to French.
 Text: Sometimes, I've believed as many as six impossible things before breakfast.
 Translation:
@@ -231,7 +231,7 @@ Result: À l'occasion, j'ai croyu plus de six choses impossibles
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
 Write a summary of the above text.
 Summary:
@@ -250,7 +250,7 @@ Result: Permaculture is the design process that involves mimicking natural ecosy
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Answer the question using the context below.
 Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
 Question: What modern tool is used to make gazpacho?

@@ -36,7 +36,6 @@ if is_torch_available():
         ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
-        HammingDiversityLogitsProcessor,
         InfNanRemoveLogitsProcessor,
         LogitNormalization,
         LogitsProcessorList,
@@ -285,6 +284,39 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_continuous_batching(self):
+        vocab_size = 10
+
+        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], device=torch_device, dtype=torch.long)
+        scores = torch.ones((1, 6, vocab_size), device=torch_device, dtype=torch.float) / vocab_size
+
+        scores[0, 2, 1] = -2.0
+        scores[0, 2, 2] = 3.0
+        scores[0, 2, 3] = 4.0
+        scores[0, 5, 4] = -5.0
+        scores[0, 5, 5] = 6.0
+        scores[0, 5, 6] = 7.0
+
+        logits_indices = torch.tensor([2, 5], device=torch_device, dtype=torch.long)
+        cumulative_seqlens_q = torch.tensor([0, 3, 6], device=torch_device, dtype=torch.long)
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
+        rep_penalty_proc.set_continuous_batching_context(logits_indices, cumulative_seqlens_q)
+
+        original_scores = scores.clone()
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        self.assertAlmostEqual(processed_scores[0, 2, 1].item(), -2.0 * 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 2].item(), 3.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 3].item(), 4.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 4].item(), -5.0 * 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 5].item(), 6.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 5, 6].item(), 7.0 / 2.0)
+        self.assertAlmostEqual(processed_scores[0, 2, 0].item(), 1.0 / vocab_size)
+        self.assertAlmostEqual(processed_scores[0, 5, 0].item(), 1.0 / vocab_size)
+
+        self.assertFalse(torch.all(original_scores == processed_scores))
 
     def test_top_k_dist_warper(self):
         input_ids = None
@@ -762,36 +794,6 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores))
-
-    def test_hamming_diversity(self):
-        vocab_size = 4
-        num_beams = 2
-        num_beam_groups = 2
-
-        scores = self._get_uniform_logits(num_beams, vocab_size)
-        # batch_idx = 0 -> index batch_idx * num_beam_groups -> idx = 0 * 2 = 0 -> penalises tokens 1
-        # batch_idx = 1 -> index batch_idx * num_beam_groups -> idx = 1 * 2 = 2 -> penalises tokens 1
-        current_tokens = torch.tensor([0, 3, 1, 2], device=torch_device, dtype=torch.long)
-
-        diversity_logits_processor = HammingDiversityLogitsProcessor(
-            diversity_penalty=1.0, num_beams=num_beams, num_beam_groups=num_beam_groups
-        )
-
-        processed_scores = diversity_logits_processor(None, scores, current_tokens, 1)
-
-        self.assertTrue(
-            torch.allclose(
-                processed_scores[0], torch.tensor([-0.7500, 0.2500, 0.2500, 0.2500], device=torch_device), atol=1e-3
-            )
-        )
-        self.assertTrue(
-            torch.allclose(
-                processed_scores[1], torch.tensor([0.2500, -0.7500, 0.2500, 0.2500], device=torch_device), atol=1e-3
-            )
-        )
-
-        # processor should not change logits in-place
-        self.assertFalse(torch.all(scores == processed_scores))
 
     def test_forced_bos_token_logits_processor(self):
         vocab_size = 20

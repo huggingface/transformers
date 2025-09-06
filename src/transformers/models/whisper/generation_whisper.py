@@ -140,7 +140,7 @@ def _pad_to_max_length(
     timestamp_begin=None,
 ):
     """
-    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    skip_ending_double_timestamps: when the segment ended with two timestamp tokens, whether to ignore the last timestamp token
     see https://github.com/huggingface/transformers/pull/35750
 
     _pad_to_max_length is used in different contexts:
@@ -372,7 +372,7 @@ class WhisperGenerationMixin(GenerationMixin):
             jump_times = time_indices[jumps] * time_precision
 
             # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
-            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # (indeed contrary to OAI that re-run a full forward to retrieve cross attentions for each token and therefore also the last one predicted, we retrieve
             # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
             # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
@@ -410,6 +410,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_segments: bool = False,
         return_dict_in_generate: Optional[bool] = None,
         force_unique_generate_call: Optional[bool] = None,
+        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
         **kwargs,
     ):
         """
@@ -461,6 +462,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+                For audios longer than 30 seconds, it is necessary to set `return_timestamps=True`.
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe".
             language (`str` or list of `str`, *optional*):
@@ -533,6 +535,11 @@ class WhisperGenerationMixin(GenerationMixin):
             force_unique_generate_call (`bool`, *optional*):
                 Whether to force a unique call to the underlying GenerationMixin's [`~generation.GenerationMixin.generate`] method. This is useful for assisted decoding and testing purposes to ensure
                 that only one call to [`~generation.GenerationMixin.generate`] is made and therefore decoder input token ids and eos token ids are returned.
+            monitor_progress (`Callable[[torch.Tensor], None]`, *optional*):
+                If provided, this function can be called to report the progress of the audio transcription. The function
+                takes a tensor argument `p` of shape `(n, 2)`, where `n` is the batch size. `p[i, 0]`  contains the
+                index of the audio frame that is currently being transcribed for batch item `i`. `p[i, 1]` contains
+                the total number of frames for batch item `i`. No return value is expected.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -540,7 +547,7 @@ class WhisperGenerationMixin(GenerationMixin):
         Return:
             [`~utils.ModelOutput`] or `dict[str, Any]` or `torch.LongTensor`:
 
-                A:
+                One of the following:
                 - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and (`return_timestamps=False` or `force_unique_generate_call=True`), including the decoder input ids and end of sequence id.
                 - `dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
                 - `torch.LongTensor` in all other cases, excluding the decoder input ids and end of sequence id.
@@ -586,10 +593,34 @@ class WhisperGenerationMixin(GenerationMixin):
         >>> inputs = inputs.to("cuda", torch.float32)
 
         >>> # transcribe audio to ids
-        >>> generated_ids = model.generate(**inputs)
+        >>> generated_ids = model.generate(**inputs, return_timestamps=True)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
         >>> transcription[0]
+        " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
+        ```
+
+        The `monitor_progress` callback can be used to monitor the progress of the transcription:
+        ```python
+        >>> from tqdm import tqdm
+
+        >>> # prepare inputs like above
+
+        >>> # define a callback to monitor the progress of the transcription.
+        >>> with tqdm(desc="Progress") as pbar:
+        >>>     def monitor_progress(p_batch):
+        >>>         i = torch.argmax(p_batch[:, 1])
+        >>>         p = p_batch[i].detach().cpu()
+        >>>         pbar.total = int(p[1])
+        >>>         pbar.n = int(p[0])
+        >>>         pbar.update()
+
+        >>>     # transcribe audio to ids
+        >>>     generated_ids = model.generate(**inputs, return_timestamps=True, monitor_progress=monitor_progress)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        >>> transcription[0]
+        Progress:  95%|█████████████████████████████████████████████████████████████████████████████████████████████████▎    | 8497/8901 [00:04<00:00, 2052.79it/s]
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
@@ -763,6 +794,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
+            if monitor_progress is not None:
+                monitor_progress(torch.stack((seek, max_frames), dim=1))
+
             # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
@@ -1149,8 +1183,8 @@ class WhisperGenerationMixin(GenerationMixin):
                     for layer_idx in range(self.config.decoder_layers):
                         layer_past_key_values = []
                         for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
-                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
+                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
+                                layer_past_key_values.append(v[batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
                 else:
@@ -1181,7 +1215,7 @@ class WhisperGenerationMixin(GenerationMixin):
     def _stack_split_outputs(self, seek_outputs, model_output_type, device, kwargs):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
-        for key in seek_outputs[0].keys():
+        for key in seek_outputs[0]:
             if key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
@@ -1212,7 +1246,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 else:
                     outputs[key] = None
 
-        token_timestamps = outputs.get("token_timestamps", None)
+        token_timestamps = outputs.get("token_timestamps")
         if token_timestamps is not None:
             model_output_type = dict
 
@@ -1442,9 +1476,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def language_to_id(language: str) -> int:
             language = language.lower()
-            if language in generation_config.lang_to_id.keys():
+            if language in generation_config.lang_to_id:
                 language_token = language
-            elif language in TO_LANGUAGE_CODE.keys():
+            elif language in TO_LANGUAGE_CODE:
                 language_token = f"<|{TO_LANGUAGE_CODE[language]}|>"
             elif language in TO_LANGUAGE_CODE.values():
                 language_token = f"<|{language}|>"

@@ -145,7 +145,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values_videos"]
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
     def __init__(
         self,
@@ -460,7 +460,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -527,7 +527,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -603,7 +603,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         image_grid_pinpoints: Optional[list] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -682,6 +682,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
+            images = [x for x in images if x]  # handle text-only case
             batch_num_images = [len(x) for x in images]
         elif isinstance(images, (tuple, list)):
             # treat this as a single-image case for backward compatibility
@@ -691,6 +692,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         # only single image patching is supported
         need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -732,7 +734,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             else (size["shortest_edge"], size["shortest_edge"])
         )
 
-        new_images = []
+        processed_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for i, image in enumerate(images):
             if need_patching[i]:
@@ -770,10 +772,10 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values = np.array(pixel_values)
-            new_images.append(pixel_values)
+            processed_images.append(pixel_values)
 
         if do_pad:
-            processed_images = self._pad_for_batching(new_images)
+            processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},

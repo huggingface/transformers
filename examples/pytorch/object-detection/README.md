@@ -217,7 +217,7 @@ dataset = load_dataset("imagefolder", data_dir="custom_dataset/")
 # ...     })
 # ... })
 
-# Push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+# Push to hub (assumes you have ran the hf auth login command in a terminal/notebook)
 dataset.push_to_hub("name of repo on the hub")
 
 # optionally, you can push to a private repo on the hub

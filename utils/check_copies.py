@@ -54,12 +54,6 @@ MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {
-    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-}
-
 
 LOCALIZED_READMES = {
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
@@ -731,8 +725,8 @@ def is_copy_consistent(
 
         # Below, we change some names in `theoretical_code_blocks` and `observed_code_blocks`. These mappings map the
         # original names to the modified names: this is used to restore the original order of the code blocks.
-        name_mappings_1 = {k: k for k in theoretical_code_blocks.keys()}
-        name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
+        name_mappings_1 = {k: k for k in theoretical_code_blocks}
+        name_mappings_2 = {k: k for k in observed_code_blocks}
 
         # Update code blocks' name and content:
         #   If `"# Ignore copy"` is found in a block of the observed code:
@@ -857,37 +851,6 @@ def check_copies(overwrite: bool = False, file: Optional[str] = None):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite, buffer)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
-
-
-def check_full_copies(overwrite: bool = False):
-    """
-    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
@@ -1078,4 +1041,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)
-    check_full_copies(args.fix_and_overwrite)

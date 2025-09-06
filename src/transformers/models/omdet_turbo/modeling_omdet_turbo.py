@@ -59,7 +59,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
-    extracted_states: tuple[torch.FloatTensor] = None
+    extracted_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -92,7 +92,7 @@ class OmDetTurboDecoderOutput(ModelOutput):
     decoder_coords: Optional[torch.FloatTensor] = None
     decoder_classes: Optional[torch.FloatTensor] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
@@ -147,7 +147,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
@@ -1012,11 +1012,11 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             nn.init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 

@@ -636,14 +636,14 @@ class CpmAntModel(CpmAntPreTrainedModel):
         position = torch.arange(seq_length, dtype=dtype, device=device).repeat(batch, 1)
         span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -686,9 +686,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
                 for hidden_state in all_hidden_states:
                     new_hidden_states += (hidden_state[:, self.prompt_length :, :],)
                 all_hidden_states = new_hidden_states
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -800,11 +797,12 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+    def _reorder_cache(self, past_key_values, beam_idx):
+        past_key_values = [list(each) if each is not None else each for each in past_key_values]
+        for key_value_layer in past_key_values:
+            key_value_layer[0] = key_value_layer[0][beam_idx]
+            key_value_layer[1] = key_value_layer[1][beam_idx]
+        return past_key_values
 
 
 __all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

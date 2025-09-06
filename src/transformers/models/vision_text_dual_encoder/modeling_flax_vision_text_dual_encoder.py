@@ -480,9 +480,9 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         }
 
         # remove text, vision kwargs from kwargs
-        for key in kwargs_vision.keys():
+        for key in kwargs_vision:
             del kwargs["vision_" + key]
-        for key in kwargs_text.keys():
+        for key in kwargs_text:
             del kwargs["text_" + key]
 
         # Load and initialize the text and vision model
@@ -556,7 +556,7 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     ... )
 
     >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-    >>> image_processor = AutoImageProcesor.from_pretrained("google/vit-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
     >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
     ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"

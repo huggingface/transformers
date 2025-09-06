@@ -150,7 +150,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args = (prefix + args[0],)
             padding = False
         else:
-            raise ValueError(
+            raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
         inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)

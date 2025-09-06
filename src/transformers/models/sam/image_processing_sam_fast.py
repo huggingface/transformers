@@ -36,9 +36,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    make_list_of_images,
     pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -52,14 +50,14 @@ from ...utils import (
 
 if is_torch_available():
     import torch
-    from torch.nn import functional as F_t
+    from torch.nn import functional as F
 
-if is_torchvision_available() and is_torchvision_v2_available():
+if is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
-    from torchvision.transforms.v2 import functional as F
+    from torchvision.transforms.v2 import functional as F_t
 elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
-    from torchvision.transforms import functional as F
+    from torchvision.transforms import functional as F_t
 
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -111,7 +109,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         pad_width = output_width - input_width
         pad_height = output_height - input_height
         padding = (0, 0, pad_width, pad_height)
-        return F.pad(images, padding)
+        return F_t.pad(images, padding)
 
     def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
         """
@@ -125,7 +123,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return (newh, neww)
 
     def resize(
-        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["F.InterpolationMode"], **kwargs
+        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["F_t.InterpolationMode"], **kwargs
     ) -> "torch.Tensor":
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -138,7 +136,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
             interpolation:
-                `F.InterpolationMode` filter to use when resizing the image e.g. `F.InterpolationMode.BICUBIC`.
+                `F_t.InterpolationMode` filter to use when resizing the image e.g. `F_t.InterpolationMode.BICUBIC`.
 
         Returns:
             `torch.Tensor`: The resized image.
@@ -150,78 +148,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return super().resize(
             image, size=SizeDict(height=output_height, width=output_width), interpolation=interpolation, **kwargs
         )
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: bool,
-        pad_size: SizeDict,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> BatchFeature:
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            if do_pad:
-                stacked_images = self.pad_image(stacked_images, pad_size)
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
-        return processed_images
-
-    def _preprocess_segmentation_maps(
-        self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_rescale"] = False
-        kwargs["do_normalize"] = False
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-        kwargs["size"] = kwargs.pop("mask_size")
-        kwargs["pad_size"] = kwargs.pop("mask_pad_size")
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)  # Remove channel dimension
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
 
     def _further_process_kwargs(
         self,
@@ -260,10 +186,18 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         kwargs["pad_size"] = pad_size
         kwargs["mask_size"] = mask_size
         kwargs["mask_pad_size"] = mask_pad_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -278,73 +212,103 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to preprocess.
         """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[SamFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
         original_sizes = [image.shape[-2:] for image in images]
-
-        images = self._preprocess(
-            images=images,
-            **kwargs,
-        )
+        images_kwargs = kwargs.copy()
+        pixel_values = self._preprocess(images, **images_kwargs)
         reshaped_input_sizes = [image.shape[-2:] for image in images]
+        data = {
+            "pixel_values": pixel_values,
+            "original_sizes": original_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
+        }
 
         if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_segmentation_maps(
-                segmentation_maps=segmentation_maps,
-                **kwargs,
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
             )
 
-            return BatchFeature(
-                data={
-                    "pixel_values": images,
-                    "labels": segmentation_maps,
-                    "original_sizes": original_sizes,
-                    "reshaped_input_sizes": reshaped_input_sizes,
-                },
-                tensor_type=kwargs["return_tensors"],
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT
+                    if is_torchvision_v2_available()
+                    else F_t.InterpolationMode.NEAREST,
+                    "size": segmentation_maps_kwargs.pop("mask_size"),
+                    "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
+                }
             )
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+            data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
-        return BatchFeature(
-            data={
-                "pixel_values": images,
-                "original_sizes": original_sizes,
-                "reshaped_input_sizes": reshaped_input_sizes,
-            },
-            tensor_type=kwargs["return_tensors"],
-        )
+        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F_t.InterpolationMode"],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        do_pad: bool,
+        pad_size: SizeDict,
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> Union["torch.Tensor", list["torch.Tensor"]]:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            if do_pad:
+                stacked_images = self.pad_image(stacked_images, pad_size)
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+
+        return processed_images
 
     def generate_crop_boxes(
         self,
@@ -522,9 +486,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            interpolated_mask = F_t.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F_t.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)

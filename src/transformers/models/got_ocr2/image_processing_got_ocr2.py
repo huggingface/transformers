@@ -259,7 +259,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -339,6 +339,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -420,7 +422,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: Optional[Union[tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        data_format: Optional[ChannelDimension] = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -505,17 +507,18 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs.get("min_patches", None) or self.min_patches
-        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        patch_size = images_kwargs.get("size", None) or self.size
-        crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:
             num_columns, num_rows = get_optimal_tiled_canvas(
                 (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
             )
-            num_patches += num_columns * num_rows
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
 
         return num_patches
 

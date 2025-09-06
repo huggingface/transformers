@@ -149,10 +149,10 @@ def expand_inputs_for_generation(
 ):
     expanded_return_idx = tf.reshape(tf.repeat(tf.range(tf.shape(input_ids)[0]), expand_size), [-1])
     input_ids = tf.gather(input_ids, expanded_return_idx)
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
-    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
-    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
-    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values")
+    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings")
+    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings")
+    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask")
 
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
@@ -208,15 +208,15 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
 
 
 def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
-    token_type_ids = kwargs.get("token_type_ids", None)
+    token_type_ids = kwargs.get("token_type_ids")
     # only last token for inputs_ids if past is defined in kwargs
     if past_key_values is not None:
         input_ids = input_ids[:, -1:]
         if token_type_ids is not None:
             token_type_ids = token_type_ids[:, -1:]
 
-    attention_mask = kwargs.get("attention_mask", None)
-    position_ids = kwargs.get("position_ids", None)
+    attention_mask = kwargs.get("attention_mask")
+    position_ids = kwargs.get("position_ids")
 
     if attention_mask is not None and position_ids is None:
         # create position_ids on the fly for batch generation
@@ -225,10 +225,10 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
         if past_key_values is not None:
             position_ids = position_ids[:, -1:]
 
-    pixel_values = kwargs.get("pixel_values", None)
-    image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
-    perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
-    image_attention_mask = kwargs.get("image_attention_mask", None)
+    pixel_values = kwargs.get("pixel_values")
+    image_encoder_embeddings = kwargs.get("image_encoder_embeddings")
+    perceiver_embeddings = kwargs.get("perceiver_embeddings")
+    image_attention_mask = kwargs.get("image_attention_mask")
     interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
 
     return {
@@ -1223,12 +1223,6 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1612,24 +1606,6 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
             partially_freeze=config.freeze_lm_head,
             name="lm_head",
         )
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     def tie_weights(self):
         """

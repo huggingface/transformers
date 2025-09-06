@@ -16,6 +16,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
@@ -78,6 +80,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     test_torchscript = False
+    test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
     rotary_embedding_layer = DeepseekV2RotaryEmbedding
     model_split_percents = [0.5, 0.7, 0.8]
@@ -168,32 +171,12 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         expected_value_shape = expected_common_shape + (config.v_head_dim,)
 
         if isinstance(decoder_past_key_values, Cache):
-            self.assertListEqual(
-                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-                [expected_key_shape] * len(decoder_past_key_values.key_cache),
-            )
-            self.assertListEqual(
-                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
-                [expected_value_shape] * len(decoder_past_key_values.value_cache),
-            )
-
-    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    def test_generate_with_static_cache(self):
-        pass
+            for layer in decoder_past_key_values.layers:
+                self.assertEqual(layer.keys.shape, expected_key_shape)
+                self.assertEqual(layer.values.shape, expected_value_shape)
 
     @unittest.skip("Dynamic control flow in MoE")
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         pass
 
@@ -209,7 +192,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
@@ -228,7 +211,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
@@ -259,7 +242,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)

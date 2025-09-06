@@ -83,7 +83,7 @@ class TestTrainerExt(TestCasePlus):
         if not do_eval:
             self.skipTest(reason="do_eval is False")
 
-        eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
+        eval_metrics = [log for log in logs if "eval_loss" in log]
 
         first_step_stats = eval_metrics[0]
         if predict_with_generate:
@@ -168,7 +168,7 @@ class TestTrainerExt(TestCasePlus):
 
         # Check metrics
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
-        eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
+        eval_metrics = [log for log in logs if "eval_loss" in log]
         first_step_stats = eval_metrics[0]
         last_step_stats = eval_metrics[-1]
 
@@ -315,9 +315,7 @@ class TestTrainerExt(TestCasePlus):
             --eval_steps {str(eval_steps)}
         """.split()
 
-        args_predict = """
-            --do_predict
-        """.split()
+        args_predict = ["--do_predict"]
 
         args = []
         if do_train:
@@ -330,11 +328,11 @@ class TestTrainerExt(TestCasePlus):
             args += args_predict
 
         if predict_with_generate:
-            args += "--predict_with_generate".split()
+            args += ["--predict_with_generate"]
 
         if do_train:
             if optim == "adafactor":
-                args += "--adafactor".split()
+                args += ["--adafactor"]
             else:
                 args += f"--optim {optim}".split()
 

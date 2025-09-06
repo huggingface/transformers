@@ -304,7 +304,7 @@ class Blip2Config(PretrainedConfig):
 
         self.vision_config = Blip2VisionConfig(**vision_config)
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
+        text_model_type = text_config.get("model_type", "opt")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.num_query_tokens = num_query_tokens
@@ -312,6 +312,7 @@ class Blip2Config(PretrainedConfig):
         self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 

@@ -318,9 +318,9 @@ class RagPreTrainedModel(PreTrainedModel):
         }
 
         # remove question_encoder, generator kwargs from kwargs
-        for key in kwargs_question_encoder.keys():
+        for key in kwargs_question_encoder:
             del kwargs["question_encoder_" + key]
-        for key in kwargs_generator.keys():
+        for key in kwargs_generator:
             del kwargs["generator_" + key]
 
         # Load and initialize the question_encoder and generator
@@ -370,7 +370,7 @@ class RagPreTrainedModel(PreTrainedModel):
             )
 
         # instantiate config with corresponding kwargs
-        config = kwargs.get("config", None)
+        config = kwargs.get("config")
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
                 question_encoder.config, generator.config, **kwargs
@@ -1204,8 +1204,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         if isinstance(past_key_values, EncoderDecoderCache):
             reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
-        if isinstance(past_key_values, EncoderDecoderCache):
-            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
         return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
@@ -1568,10 +1566,9 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         self._prepare_cache_for_generation(
             generation_config,
             model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=input_ids.shape[0],
             max_cache_length=generation_config.max_length - 1,
-            device=input_ids.device,
         )
 
         if generation_config.num_beams == 1:
@@ -1593,13 +1590,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
             return self._beam_search(
                 input_ids,
                 logits_processor=pre_processor,

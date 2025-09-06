@@ -34,7 +34,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -86,7 +86,7 @@ def _scale_boxes(boxes, target_sizes):
     elif isinstance(target_sizes, torch.Tensor):
         image_height, image_width = target_sizes.unbind(1)
     else:
-        raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
+        raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
 
     # for owlv2 image is padded to max size unlike owlvit, that's why we have to scale boxes to max size
     max_size = torch.max(image_height, image_width)
@@ -434,7 +434,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size)  # for BC
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

@@ -290,7 +290,7 @@ class BloomModelTester:
     def create_and_check_bloom_weight_initialization(self, config, *args):
         model = BloomModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -534,8 +534,8 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")
+        # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -739,7 +739,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
-            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -747,7 +747,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             output_dict["max"][idx] = embeddings.max(dim=-1).values[0][i].item()
             output_dict["mean"][idx] = embeddings.mean(dim=-1)[0][i].item()
 
-        for key in TEST_EMBEDDINGS[str(model.dtype)].keys():
+        for key in TEST_EMBEDDINGS[str(model.dtype)]:
             self.assertDictEqual(TEST_EMBEDDINGS[str(model.dtype)][key], output_dict[key])
 
         output_dict_norm = {"min": {}, "max": {}, "mean": {}}
@@ -763,9 +763,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
-            torch_device
-        )
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(torch_device)
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -790,7 +788,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
             torch_device
         )  # load in bf16
         model.eval()
