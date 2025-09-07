@@ -181,7 +181,7 @@ class DINOv3ViTConfig(BackboneConfigMixin, PretrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
 
         # Initialize backbone stage names
-        stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 2)]
+        stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 1)]
         self.stage_names = stage_names
 
         # Initialize backbone features/indices
