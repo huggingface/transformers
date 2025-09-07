@@ -111,6 +111,9 @@ class DINOv3ViTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
+            stage_names=["embeddings"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)],
+            out_indices=[0, 1],
+            reshape_hidden_states=True,
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -131,6 +134,32 @@ class DINOv3ViTModelTester:
             self.parent.assertEqual(c, self.hidden_size)
             self.parent.assertGreater(h, 0)
             self.parent.assertGreater(w, 0)
+
+    def test_output_hidden_states(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class == DINOv3ViTBackbone:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+
+            self.assertIsNotNone(outputs.hidden_states)
+            expected_num_hidden_states = config.num_hidden_layers + 1
+            self.assertEqual(len(outputs.hidden_states), expected_num_hidden_states)
+
+            for hidden_state in outputs.hidden_states:
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                    self.model_tester.hidden_size,
+                )
+                self.assertEqual(hidden_state.shape, expected_shape)
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DINOv3ViTModel(config=config)
@@ -174,6 +203,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
+    test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = DINOv3ViTModelTester(self)

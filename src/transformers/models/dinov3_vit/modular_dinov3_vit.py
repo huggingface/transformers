@@ -15,7 +15,7 @@
 """PyTorch DINOv3 model."""
 
 import math
-from typing import Callable, Optional , List, Union
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -33,15 +33,14 @@ from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
-from ...utils.backbone_utils import BackboneMixin
-from ...modeling_outputs import BackboneOutput
 
 
 logger = logging.get_logger(__name__)
@@ -399,6 +398,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -407,9 +407,20 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             pre-training.
         """
 
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
+
+        collected_hidden_states: Optional[list[torch.Tensor]] = None
+
+        if output_hidden_states:
+            collected_hidden_states = [hidden_states]
 
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -418,6 +429,8 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
                 attention_mask=layer_head_mask,
                 position_embeddings=position_embeddings,
             )
+            if output_hidden_states:
+                collected_hidden_states.append(hidden_states)
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
@@ -425,123 +438,69 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=tuple(collected_hidden_states) if output_hidden_states else None,
         )
 
-    def get_intermediate_layers(
-        self, 
-        pixel_values: torch.Tensor, 
-        n: Union[int, List[int]] = 1,
-        reshape: bool = False,
-        norm: bool = True,
-    ) -> List[torch.Tensor]:
-        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        batch_size, _, height, width = pixel_values.shape
-        
-        hidden_states = self.embeddings(pixel_values, bool_masked_pos=None)
-        position_embeddings = self.rope_embeddings(pixel_values)
-        
-        all_intermediate_states = [hidden_states]
-        
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask=None,
-                position_embeddings=position_embeddings,
-            )
-            all_intermediate_states.append(hidden_states)
-        
-        final_normalized = self.norm(hidden_states)
-        all_intermediate_states.append(final_normalized)
-        
-        if isinstance(n, int):
-            num_transformer_layers = len(self.layer)
-            start_stage = max(1, num_transformer_layers - n + 1)
-            selected_stage_indices = list(range(start_stage, num_transformer_layers + 1))
-        else:
-            max_index = max(n) if n else 0
-            num_stages = len(all_intermediate_states)
-            
-            if max_index >= num_stages:
-                selected_stage_indices = [idx + 1 for idx in n if idx + 1 < num_stages]
-            else:
-                selected_stage_indices = [idx for idx in n if idx < num_stages]
-        
-        intermediate_outputs = []
-        
-        for stage_idx in selected_stage_indices:
-            if stage_idx >= len(all_intermediate_states):
-                continue
-                
-            output = all_intermediate_states[stage_idx]
-            
-            is_final_stage = (stage_idx == len(all_intermediate_states) - 1)
-            if norm and not is_final_stage:
-                output = self.norm(output)
-            
-            if reshape:
-                num_prefix_tokens = 1 + self.config.num_register_tokens
-                patch_tokens = output[:, num_prefix_tokens:]
-                
-                patch_size = self.config.patch_size
-                num_patches_h = height // patch_size
-                num_patches_w = width // patch_size
-                
-                expected_patches = num_patches_h * num_patches_w
-                actual_patches = patch_tokens.shape[1]
-                
-                if actual_patches != expected_patches:
-                    raise ValueError(
-                        f"Patch token count mismatch. Expected {expected_patches} "
-                        f"({num_patches_h}x{num_patches_w}), got {actual_patches}. "
-                        f"Input size: {height}x{width}, patch size: {patch_size}"
-                    )
-                
-                spatial_output = patch_tokens.reshape(
-                    batch_size, 
-                    num_patches_h, 
-                    num_patches_w, 
-                    self.config.hidden_size
-                ).permute(0, 3, 1, 2).contiguous()
-                
-                intermediate_outputs.append(spatial_output)
-            else:
-                intermediate_outputs.append(output)
-        
-        return intermediate_outputs
 
-
-
-@auto_docstring  
+@auto_docstring
 class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
-        
-        # Use the full model
+
         self.dinov3 = DINOv3ViTModel(config)
+
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
-    
+
     def get_input_embeddings(self):
         return self.dinov3.get_input_embeddings()
-    
-    def forward(self, pixel_values: torch.Tensor, return_dict: Optional[bool] = None) -> BackboneOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        # Use Facebook's pattern: get_intermediate_layers with reshape=True
-        layer_outputs = self.dinov3.get_intermediate_layers(
-            pixel_values,
-            n=self._out_indices,
-            reshape=self.config.reshape_hidden_states,
-            norm=self.config.apply_layernorm
+
+    def _tokens_to_bchw(self, tokens: torch.Tensor, H: int, W: int) -> torch.Tensor:
+        # tokens: [B, N, C] -> [B, C, H, W], where N == H*W
+        B, N, C = tokens.shape
+        return tokens.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
+
+    def forward(
+        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+    ) -> BackboneOutput:
+        return_dict = kwargs.get("return_dict", getattr(self.config, "use_return_dict", True))
+
+        outputs = self.dinov3(pixel_values, output_hidden_states=True)
+        hidden_states = outputs.hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        
-        feature_maps = tuple(layer_outputs)
-        
+
+        B, C_in, H_img, W_img = pixel_values.shape
+        patch = self.config.patch_size
+        H = H_img // patch
+        W = W_img // patch
+
+        num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+
+        feature_maps = []
+        for stage_name, hidden_state in zip(self.stage_names, hidden_states):
+            if stage_name in self.out_features:
+                if self.config.apply_layernorm:
+                    hidden_state = self.layernorm(hidden_state)
+
+                patch_tokens = hidden_state[:, num_prefix:, :]
+                if self.config.reshape_hidden_states:
+                    fmap = self._tokens_to_bchw(patch_tokens, H, W)  # [B, C, H, W]
+                else:
+                    fmap = patch_tokens
+
+                feature_maps.append(fmap)
+
         if not return_dict:
-            return (feature_maps,)
-        
-        return BackboneOutput(feature_maps=feature_maps)
+            return (tuple(feature_maps),)
+
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states if output_hidden_states else None,
+        )
 
 
 __all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]
