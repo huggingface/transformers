@@ -1088,11 +1088,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+        # for CTC-style duplicate token removal
+        group_tokens = kwargs.pop("group_tokens", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         # If given is a single id, prevents splitting the string in upcoming loop
         if isinstance(filtered_tokens, str):
             filtered_tokens = [filtered_tokens]
+        if group_tokens:
+            filtered_tokens = [token_group[0] for token_group in itertools.groupby(filtered_tokens)]
 
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
