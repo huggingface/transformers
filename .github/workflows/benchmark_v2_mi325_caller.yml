@@ -1,4 +1,4 @@
-name: Benchmark v2 Scheduled Runner
+name: Benchmark v2 Scheduled Runner - MI325 Single-GPU
 
 on:
   schedule:
