@@ -199,6 +199,12 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester = InternVLVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=InternVLConfig, has_text_modality=False)
 
+    @unittest.skip(
+        reason="Failing with `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+    )
+    def test_flex_attention_with_grads(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -223,10 +229,6 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip("Qwen2 flash attention does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
 
@@ -360,7 +362,12 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device, dtype=torch.float16
@@ -734,7 +741,12 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device, dtype=torch.float16

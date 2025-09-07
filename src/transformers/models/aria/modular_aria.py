@@ -539,7 +539,7 @@ class AriaImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1292,7 +1292,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 
@@ -1392,9 +1392,9 @@ class AriaModel(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1463,9 +1463,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

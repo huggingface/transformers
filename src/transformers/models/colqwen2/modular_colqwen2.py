@@ -16,15 +16,14 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 
-from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
-from transformers.models.colpali.processing_colpali import ColPaliProcessor
-
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
+from ..colpali.processing_colpali import ColPaliProcessor
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -79,7 +78,7 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        ColPaliProcessor().__init__(image_processor, tokenizer, chat_template=chat_template)
+        ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
@@ -93,7 +92,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,

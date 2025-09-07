@@ -15,9 +15,9 @@
 
 import os
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from io import BytesIO
 from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
@@ -66,7 +66,7 @@ VideoInput = Union[
     list["np.ndarray"],
     list["torch.Tensor"],
     list[list["PIL.Image.Image"]],
-    list[list["np.ndarrray"]],
+    list[list[np.ndarray]],
     list[list["torch.Tensor"]],
     URL,
     list[URL],
@@ -78,14 +78,20 @@ VideoInput = Union[
 
 
 @dataclass
-class VideoMetadata:
+class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: float = None
-    width: int = None
-    height: int = None
-    duration: float = None
-    video_backend: str = None
-    frames_indices: list[int] = None
+    fps: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+    video_backend: Optional[str] = None
+    frames_indices: Optional[list[int]] = None
+
+    def __iter__(self):
+        return (f.name for f in fields(self))
+
+    def __len__(self):
+        return len(fields(self))
 
     def __getitem__(self, item):
         return getattr(self, item)
@@ -96,8 +102,8 @@ class VideoMetadata:
     @property
     def timestamps(self) -> float:
         "Timestamps of the sampled frames in seconds."
-        if self.fps is None:
-            raise ValueError("Cannot infer video `timestamps` when `fps` is None.")
+        if self.fps is None or self.frames_indices is None:
+            raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
     def update(self, dictionary):
@@ -115,7 +121,7 @@ def is_valid_video_frame(frame):
 def is_valid_video(video):
     if not isinstance(video, (list, tuple)):
         return (is_numpy_array(video) or is_torch_tensor(video)) and video.ndim == 4
-    return all(is_valid_video_frame(frame) for frame in video)
+    return video and all(is_valid_video_frame(frame) for frame in video)
 
 
 def valid_videos(videos):
@@ -181,7 +187,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
     """
     # Early exit for deeply nested list of image frame paths. We shouldn't flatten them
     try:
-        if isinstance(videos[0][0][0], str):
+        if isinstance(videos[0][0], list) and isinstance(videos[0][0][0], str):
             return [image_paths for sublist in videos for image_paths in sublist]
     except (IndexError, TypeError):
         pass
@@ -202,7 +208,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
     for item in videos:
         if isinstance(item, str) or is_valid_video(item):
             flat_videos_list.append(item)
-        elif isinstance(item, list):
+        elif isinstance(item, list) and item:
             flat_videos_list.extend(make_batched_videos(item))
 
     flat_videos_list = convert_pil_frames_to_video(flat_videos_list)
@@ -239,7 +245,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadat
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 

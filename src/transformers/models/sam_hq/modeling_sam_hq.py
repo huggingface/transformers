@@ -418,6 +418,26 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamHQVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                module.pos_embed.data.zero_()
+
+
 class SamHQPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -471,26 +491,6 @@ class SamHQVisionNeck(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
-
-
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config: SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamHQVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
-        if isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
-        elif isinstance(module, SamHQVisionEncoder):
-            if self.config.use_abs_pos:
-                module.pos_embed.data.zero_()
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
@@ -674,7 +674,7 @@ class SamHQAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,

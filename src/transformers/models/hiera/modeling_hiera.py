@@ -87,7 +87,7 @@ class HieraModelOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
-    bool_masked_pos: torch.BoolTensor = None
+    bool_masked_pos: Optional[torch.BoolTensor] = None
     ids_restore: Optional[torch.LongTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -156,7 +156,7 @@ class HieraForPreTrainingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    bool_masked_pos: torch.BoolTensor = None
+    bool_masked_pos: Optional[torch.BoolTensor] = None
     ids_restore: Optional[torch.LongTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None

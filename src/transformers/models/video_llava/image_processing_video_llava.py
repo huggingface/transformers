@@ -33,7 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -175,7 +175,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         videos: Optional[list[VideoInput]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -258,7 +258,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
         if images is not None:
             images = self.fetch_images(images)
-            images = make_list_of_images(images)
+            images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
             raise ValueError(
@@ -326,10 +326,10 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def _preprocess_image(
         self,
-        image: ImageInput = None,
+        image: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

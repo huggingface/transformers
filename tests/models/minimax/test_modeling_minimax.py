@@ -21,10 +21,8 @@ from transformers import MiniMaxConfig, is_torch_available
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -100,13 +98,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="MiniMax flash attention does not support right padding")
 
     def test_load_balancing_loss(self):
         r"""
@@ -219,10 +210,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_sample(self):
         pass
 
@@ -234,12 +221,16 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
     @unittest.skip("Model needs refactor")
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("MiniMax is special")
