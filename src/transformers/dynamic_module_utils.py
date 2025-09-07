@@ -61,6 +61,8 @@ def _sanitize_module_name(name: str) -> str:
         `str`: The sanitized module name.
     """
     return name.replace(".", "_dot_")
+
+
 _HF_REMOTE_CODE_LOCK = threading.Lock()
 
 
