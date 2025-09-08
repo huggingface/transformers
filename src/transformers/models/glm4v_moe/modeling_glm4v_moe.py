@@ -307,6 +307,7 @@ class Glm4vMoeTextMoE(nn.Module):
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        self.total_experts = len(self.experts)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         r"""
@@ -314,10 +315,10 @@ class Glm4vMoeTextMoE(nn.Module):
         to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
         expert_mask = expert_mask.permute(2, 0, 1)
 
-        for expert_idx in range(len(self.experts)):
+        for expert_idx in range(self.total_experts):
             expert = self.experts[expert_idx]
             mask = expert_mask[expert_idx]
             token_indices, weight_indices = torch.where(mask)

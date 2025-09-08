@@ -19,11 +19,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
@@ -61,15 +63,15 @@ class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
         super().__init__(config)
         del self.n_group
         del self.topk_group
+        del self.weight  # Remove inherited weight parameter
         self.top_k = config.moe_topk
-        if config.zero_expert_num is not None:
-            self.n_routed_experts = config.n_routed_experts + config.zero_expert_num
-            self.classifier = nn.Linear(
-                self.config.hidden_size,
-                self.n_routed_experts,
-                bias=getattr(self, "router_bias", False),
-            )
+        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.norm_topk_prob = config.norm_topk_prob
+
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.router_bias = getattr(config, "router_bias", False)
+        self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
@@ -101,7 +103,6 @@ class LongcatFlashMoE(DeepseekV3MoE):
         super().__init__(config)
         del self.gate
         del self.shared_experts
-        self.router = LongcatFlashTopkRouter(config)
 
         self.experts = nn.ModuleList(
             [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
@@ -109,6 +110,7 @@ class LongcatFlashMoE(DeepseekV3MoE):
 
         # Override total_experts to include zero experts
         self.total_experts = len(self.experts) + (0 if self.zero_expert_num is None else self.zero_expert_num)
+        self.router = LongcatFlashTopkRouter(config)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
@@ -255,13 +257,77 @@ class LongcatFlashModel(DeepseekV3Model):
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
+        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
+        #
+        self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+            hidden_states=None,
+            attentions=None,
+        )
 
 
 class LongcatFlashForCausalLM(DeepseekV3ForCausalLM):

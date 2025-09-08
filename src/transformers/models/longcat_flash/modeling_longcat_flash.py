@@ -125,7 +125,6 @@ class LongcatFlashTopkRouter(nn.Module):
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
-
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
@@ -313,6 +312,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
     b, h, s, d = k.shape
     k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -579,12 +579,12 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
-        #
-        self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
+        #
+        self.config.num_hidden_layers = 2 * config.num_layers
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -647,6 +647,8 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            hidden_states=None,
+            attentions=None,
         )
 
 
