@@ -31,8 +31,8 @@ def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]]
         - Layers in each group need to have the same type of attention
         - All groups have the same number of layers
 
-    For a model with the following layer types: ["sliding", "full", "full", "sliding"]
-    We would get two groups: [0, 3] and [1, 2].
+    For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
+    We would get two groups: [0, 3] and [1, 2], [4,5], [6,7].
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)

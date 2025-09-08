@@ -50,7 +50,7 @@ def generate_simple(
 
     decoded_outputs = {}
     for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
-        key = ";".join(map(str, input_ids))
+        key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
         # attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
@@ -118,7 +118,8 @@ def batch_generate(
     data = []
     for i, request in enumerate(batch_outputs):
         input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=True)
-        key = ";".join(map(str, batch_outputs[request].prompt_ids))
+        # The key is used to tie back to the output of unbatched generation
+        key = " ".join(map(str, batch_outputs[request].prompt_ids))
         data.append({"input": input_text, "key": key})
 
         # Try to decode the output
