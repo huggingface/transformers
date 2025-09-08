@@ -112,33 +112,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -175,6 +148,34 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+# Default `unsqueeze_dim=2`
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 2):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 class Xcodec2Attention(nn.Module):
@@ -802,7 +803,7 @@ class ResNetBlock(nn.Module):
 
 class Xcodec2VocosBackbone(nn.Module):
     """
-    Hybrid ResNet–Transformer architecture.
+    Hybrid ResNet-Transformer architecture.
 
     Architecture overview:
     - Input embedding: A 1D convolution (kernel size 7, padding 3) projects raw features
@@ -838,6 +839,7 @@ class Xcodec2VocosBackbone(nn.Module):
         )
 
         # Initialize rotary embeddings
+        self.position_ids = torch.arange(config.num_attention_heads).unsqueeze(0)
         self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
 
         # Create transformer layers
@@ -887,10 +889,8 @@ class Xcodec2VocosBackbone(nn.Module):
 
         x = x.transpose(1, 2)  # [batch, seq_len, hidden_dim]
 
-        # Generate position IDs and rotary embeddings
-        batch_size, seq_length = x.shape[:2]
-        position_ids = torch.arange(seq_length, device=x.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(x, position_ids)
+        # Generate rotary embeddings
+        position_embeddings = self.rotary_emb(x, self.position_ids.to(x.device))
 
         # Apply transformer layers with position embeddings
         for layer in self.transformers:
@@ -962,7 +962,7 @@ class ISTFT(nn.Module):
         B, N, T = spec.shape
 
         # Inverse FFT
-        ifft = torch.fft.irfft(spec.to(torch.complex64), self.n_fft, dim=1, norm="backward")
+        ifft = torch.fft.irfft(spec, self.n_fft, dim=1, norm="backward")
         ifft = ifft * self.window[None, :, None]
 
         # Overlap and Add
@@ -1030,7 +1030,7 @@ class ISTFTHead(nn.Module):
         x = torch.cos(p)
         y = torch.sin(p)
         S = mag * (x + 1j * y)
-        audio = self.istft(S).to(x_pred.dtype)
+        audio = self.istft(S)
         return audio.unsqueeze(1), x_pred
 
 
@@ -1452,15 +1452,15 @@ class Xcodec2CodecDecoderVocos(nn.Module):
         q = q.permute(0, 2, 1)
         return x, q
 
-    def forward(self, audio_codes):
+    def forward(self, x):
         """
-        audio_codes (torch.Tensor):
-            Audio codes (or codebook indices) with shape (B, L, Q).
+        x (torch.Tensor):
+            Projected audio codes to reconstruct as audio.
 
         Returns:
             audio_waveform: The reconstructed audio waveform with shape (B, 1, T).
         """
-        x = self.backbone(audio_codes)
+        x = self.backbone(x)
         x = self.head(x)[0]
         return x
 
@@ -1749,14 +1749,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        vq_post_emb = self.decoder.quantizer.get_output_from_indices(
-            audio_codes.transpose(1, 2)
-            if isinstance(audio_codes, torch.Tensor)
-            else audio_codes.audio_codes.transpose(1, 2)
-        )
-        vq_post_emb = vq_post_emb.transpose(1, 2)
-        vq_post_emb = self.fc_post_a(vq_post_emb.transpose(1, 2)).transpose(1, 2)
-        recon_audio = self.decoder(vq_post_emb.transpose(1, 2))
+        vq_post_emb = self.decoder.quantizer.get_output_from_indices(audio_codes.transpose(1, 2))
+        vq_post_emb = self.fc_post_a(vq_post_emb)
+        recon_audio = self.decoder(vq_post_emb)
 
         if not return_dict:
             return recon_audio
@@ -1805,7 +1800,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         length = input_values.shape[-1]
 
         audio_codes, quantized_representation = self.encode(input_values, return_dict=False)
-        audio_values = self.decode(audio_codes, return_dict=False)[0][..., :length]
+        audio_values = self.decode(audio_codes, return_dict=False)[..., :length]
 
         if not return_dict:
             return (audio_values, audio_codes, quantized_representation)

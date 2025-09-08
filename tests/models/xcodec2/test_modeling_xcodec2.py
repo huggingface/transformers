@@ -14,17 +14,18 @@
 """Testing suite for the PyTorch Xcodec2 model."""
 
 import inspect
-import math
+import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 from datasets import Audio, load_dataset
 from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from transformers import AutoFeatureExtractor, Xcodec2Config
 from transformers.testing_utils import (
     is_flaky,
@@ -401,21 +402,14 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-
-
-
-
 """
 Integration tests for Xcodec2
 
 Code for reproducing expected outputs can be found here:
-
+https://gist.github.com/ebezzam/909243aa00934cab1c1aad3d6a161580
 
 """
 
-import json
-from pathlib import Path
-from parameterized import parameterized
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
@@ -440,7 +434,6 @@ def compute_rmse(arr1, arr2):
 @require_torch
 class Xcodec2IntegrationTest(unittest.TestCase):
     def test_integration(self):
-        
         # load expected results
         results_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_single.json"
         with open(results_path, "r") as f:
@@ -465,312 +458,36 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         with torch.no_grad():
-            # compare discrete code
-            # TODO The values for attribute 'dtype' do not match: torch.int32 != torch.int64.
-            # -- maybe reason for recon mismatch??
+            # compare discrete codes
+            enc_tol = 0  # exact match
             audio_codes = model.encode(inputs["input_values"], return_dict=False)[0]
             torch.testing.assert_close(
                 audio_codes.squeeze().cpu().to(exp_code.dtype),
                 exp_code,
-                rtol=0,
-                atol=0,
+                rtol=enc_tol,
+                atol=enc_tol,
             )
 
-            # # compare recon
+            # compare recon
+            # NOTE different transform implementation, in particular ROPE leads to numerical differences
+            # their ROPE implementation is interleaved: `torchtune.modules.RotaryPositionalEmbeddings`
+            dec_tol = 1e-3
             dec = model.decode(audio_codes, return_dict=False)
-            # torch.testing.assert_close(
-            #     dec.squeeze().cpu(),
-            #     exp_recon,
-            #     rtol=1e-6,
-            #     atol=1e-6,
-            # )
+            torch.testing.assert_close(
+                dec.squeeze().cpu(),
+                exp_recon,
+                rtol=dec_tol,
+                atol=dec_tol,
+            )
 
             # compare codec error
+            err_tol = 1e-6
             codec_error = compute_rmse(inputs["input_values"], dec).item()
-            torch.testing.assert_close(codec_error, exp_codec_error, rtol=1e-6, atol=1e-6)
+            torch.testing.assert_close(codec_error, exp_codec_error, rtol=err_tol, atol=err_tol)
 
-
-            # compare enc-dec and forward
-            # outputs = model(inputs["input_values"])
-
-
-
-
-
-
-
-# # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-# def normalize(arr):
-#     norm = np.linalg.norm(arr)
-#     normalized_arr = arr / norm
-#     return normalized_arr
-
-
-# # Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
-# def compute_rmse(arr1, arr2):
-#     arr1_normalized = normalize(arr1)
-#     arr2_normalized = normalize(arr2)
-#     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
-
-
-# # @slow
-# @require_torch
-# class Xcodec2IntegrationTest(unittest.TestCase):
-#     def test_integration(self):
-#         expected_rmse = 0.07212554663419724
-#         expected_codes = [
-#             23060,
-#             39948,
-#             47126,
-#             60684,
-#             63493,
-#             23094,
-#             7188,
-#             48137,
-#             40247,
-#             32029,
-#             26934,
-#             64776,
-#             36662,
-#             48482,
-#             43026,
-#             44407,
-#             48533,
-#             59698,
-#             44402,
-#             44582,
-#             48758,
-#             60983,
-#             48721,
-#             44594,
-#             32421,
-#             61110,
-#             60695,
-#             59682,
-#             50697,
-#             61486,
-#             58159,
-#             20799,
-#             20511,
-#             4943,
-#             37853,
-#             44425,
-#             25045,
-#             27974,
-#             16597,
-#             38606,
-#             57455,
-#             62431,
-#             41275,
-#             38862,
-#             16586,
-#             24227,
-#             53819,
-#             32553,
-#             5735,
-#             41797,
-#             24338,
-#             49829,
-#             61057,
-#             53234,
-#             49366,
-#             53734,
-#             55891,
-#             53170,
-#             41938,
-#             9735,
-#             44557,
-#             40202,
-#             8133,
-#             42662,
-#             60915,
-#             48627,
-#             61294,
-#             37758,
-#             28207,
-#             48758,
-#             11221,
-#             9165,
-#             36689,
-#             19266,
-#             31489,
-#             50650,
-#             49335,
-#             27868,
-#             32481,
-#             8528,
-#             5977,
-#             11934,
-#             6299,
-#             56591,
-#             35035,
-#             55311,
-#             14363,
-#             64869,
-#             36154,
-#             20111,
-#             49807,
-#             452,
-#             6850,
-#             17940,
-#             1411,
-#             53789,
-#             19487,
-#             7567,
-#             3031,
-#             6996,
-#             43797,
-#             50230,
-#             54258,
-#             51481,
-#             41382,
-#             37716,
-#             7113,
-#             8132,
-#             44238,
-#             60443,
-#             18051,
-#             44934,
-#             55580,
-#             41639,
-#             54809,
-#             57375,
-#             8783,
-#             52557,
-#             8361,
-#             37477,
-#             24015,
-#             40394,
-#             52683,
-#             52931,
-#             8070,
-#             58906,
-#             52202,
-#             39603,
-#             55701,
-#             41099,
-#             53526,
-#             39831,
-#             49345,
-#             57991,
-#             54352,
-#             41425,
-#             41372,
-#             45380,
-#             12876,
-#             29589,
-#             62014,
-#             48686,
-#             22822,
-#             30341,
-#             6668,
-#             9512,
-#             12572,
-#             32052,
-#             64885,
-#             60773,
-#             48823,
-#             65078,
-#             44325,
-#             47991,
-#             60422,
-#             64869,
-#             28197,
-#             44662,
-#             47398,
-#             45028,
-#             44722,
-#             64827,
-#             23415,
-#             14793,
-#             64585,
-#             46247,
-#             14021,
-#             25045,
-#             61807,
-#             53165,
-#             29092,
-#             41856,
-#             59434,
-#             58079,
-#             63851,
-#             36958,
-#             5081,
-#             39232,
-#             25314,
-#             51550,
-#             45675,
-#             9160,
-#             56024,
-#             26769,
-#             33688,
-#             25554,
-#             54125,
-#             34395,
-#             25999,
-#             17348,
-#             977,
-#             45396,
-#             63034,
-#             48446,
-#             2993,
-#             34692,
-#             54249,
-#             52306,
-#             33474,
-#             51282,
-#             51922,
-#             49377,
-#             52883,
-#             50898,
-#             49286,
-#             51814,
-#             52894,
-#             52722,
-#             26776,
-#             41696,
-#             59582,
-#             45695,
-#             23143,
-#             12992,
-#             36120,
-#             47144,
-#             39944,
-#             64818,
-#             60708,
-#             44729,
-#             44851,
-#             64853,
-#             27954,
-#             23923,
-#             65277,
-#         ]
-
-#         librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         model_id = "bezzam/xcodec2"
-#         model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
-#         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
-#         librispeech = librispeech.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-#         audio = librispeech[-1]["audio"]["array"]
-
-#         inputs = feature_extractor(
-#             raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
-#         ).to(torch_device)
-
-#         with torch.no_grad():
-#             audio_codes = model.encode(inputs["input_values"], return_dict=False)
-#             codes = audio_codes.squeeze(0).squeeze(0).tolist()
-
-#             self.assertEqual(codes, expected_codes)
-
-#             input_values_dec = model.decode(audio_codes, return_dict=False)
-#             input_values_enc_dec = model(inputs["input_values"])[1]
-
-#         self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-6))
-
-#         arr = inputs["input_values"][0].cpu().numpy()
-#         arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
-#         arr_enc_dec_truncated = arr_enc_dec[:, : arr.shape[1]]
-#         rmse = np.sqrt(((arr - arr_enc_dec_truncated) ** 2).mean())
-#         self.assertTrue(np.abs(rmse - expected_rmse) < 1e-6)
+            # make sure forward and decode gives same result
+            round_trip_tol = 0
+            enc_dec = model(inputs["input_values"]).audio_values
+            torch.testing.assert_close(
+                dec[..., : enc_dec.shape[-1]], enc_dec, rtol=round_trip_tol, atol=round_trip_tol
+            )
