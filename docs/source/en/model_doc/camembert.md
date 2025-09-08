@@ -47,7 +47,7 @@ The examples below demonstrate how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("fill-mask", model="camembert-base", torch_dtype=torch.float16, device=0)
+pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
 </hfoption>
@@ -59,8 +59,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-model = AutoModelForMaskedLM.from_pretrained("camembert-base", torch_dtype="auto", device_map="auto", attn_implementation="sdpa")
-inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to("cuda")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base", dtype="auto", device_map="auto", attn_implementation="sdpa")
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -101,7 +101,7 @@ model = AutoModelForMaskedLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-large")
 
-inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

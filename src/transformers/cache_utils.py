@@ -99,7 +99,7 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -182,7 +182,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -303,7 +303,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -378,7 +378,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -457,7 +457,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -566,7 +566,7 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -932,6 +932,8 @@ class Cache:
         """
         if layer_idx < len(self.layers):
             return self.layers[layer_idx].keys, self.layers[layer_idx].values
+        # elif len(self.layers) == 0:
+        #     return None, None
         else:
             raise KeyError(
                 f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"
@@ -994,7 +996,6 @@ class DynamicCache(Cache):
     >>> past_key_values = DynamicCache(config=model.config)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation
-    DynamicCache()
     ```
     """
 
@@ -1016,6 +1017,9 @@ class DynamicCache(Cache):
                     "sliding_attention" if sliding_window is not None else "full_attention"
                     for _ in range(config.num_hidden_layers)
                 ]
+            # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+            if hasattr(config, "num_kv_shared_layers"):
+                layer_types = layer_types[: -config.num_kv_shared_layers]
 
             for layer_type in layer_types:
                 if layer_type in ("sliding_attention", "chunked_attention"):
@@ -1127,6 +1131,9 @@ class StaticCache(Cache):
                 layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
             else:
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+        if hasattr(config, "num_kv_shared_layers"):
+            layer_types = layer_types[: -config.num_kv_shared_layers]
 
         layers = []
         for layer_type in layer_types:
@@ -1144,7 +1151,7 @@ class StaticCache(Cache):
 class QuantizedCache(Cache):
     """
     A quantizer cache similar to what is described in the
-    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for keys and values
     by applying quantization.
     The cache has two types of storage, one for original precision and one for the
@@ -1221,8 +1228,8 @@ class EncoderDecoderCache(Cache):
     >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
 
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
-    >>> self_attention_cache = DynamicCache()
-    >>> cross_attention_cache = DynamicCache()
+    >>> self_attention_cache = DynamicCache(config=self.config)
+    >>> cross_attention_cache = DynamicCache(config=self.config)
     >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation
@@ -1356,7 +1363,7 @@ class EncoderDecoderCache(Cache):
     def crop(self, maximum_length: int):
         """
         Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search.
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search (on the Hub).
         """
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
@@ -1376,13 +1383,13 @@ class EncoderDecoderCache(Cache):
         return out
 
     def batch_repeat_interleave(self, repeats: int):
-        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""
         self.check_dynamic_cache(self.batch_repeat_interleave.__name__)
         self.self_attention_cache.batch_repeat_interleave(repeats)
         self.cross_attention_cache.batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
-        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search (on the Hub)."""
         self.check_dynamic_cache(self.batch_select_indices.__name__)
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)

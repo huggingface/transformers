@@ -254,7 +254,7 @@ def get_slices(lines, clean_lines):
     - The slice is less than 200 characters long.
     - The slice is more than 3 characters long.
     - The slice does not start with "[MISSING_PAGE".
-    - The slice is either the same as the next slice or the ratio of the two in terms of Levensthein distance is
+    - The slice is either the same as the next slice or the ratio of the two in terms of Levenshtein distance is
       greater than 0.9.
 
     Args:

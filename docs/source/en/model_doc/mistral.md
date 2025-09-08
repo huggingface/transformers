@@ -49,7 +49,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", torch_dtype=torch.bfloat16, device=0)
+>>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, device=0)
 >>> chatbot(messages)
 ```
 
@@ -60,7 +60,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> messages = [
@@ -69,7 +69,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -80,7 +80,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 <hfoption id="transformers CLI">
 
 ```python
-echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
+echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3 --dtype auto --device 0 --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -102,7 +102,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, dtype=torch.bfloat16, device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> prompt = "My favourite condiment is"
@@ -113,7 +113,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]

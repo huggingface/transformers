@@ -40,7 +40,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="allenai/longformer-base-4096",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("""San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.

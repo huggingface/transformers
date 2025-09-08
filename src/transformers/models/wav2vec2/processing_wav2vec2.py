@@ -74,7 +74,7 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: AudioInput = None,
+        audio: Optional[AudioInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,
@@ -165,19 +165,11 @@ class Wav2Vec2Processor(ProcessorMixin):
             input_features["labels"] = labels["input_ids"]
             return input_features
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        # The processor doesn't return text ids and the model seems to not need them
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
 
     @contextmanager
     def as_target_processor(self):

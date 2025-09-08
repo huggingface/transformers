@@ -50,7 +50,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba2-7B")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="auto", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="auto", dtype=torch.bfloat16)
 
 input_text = "What factors contributed to the fall of the Roman Empire?"
 input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)

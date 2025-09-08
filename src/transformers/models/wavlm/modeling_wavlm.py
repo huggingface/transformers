@@ -191,7 +191,7 @@ class WavLMAttention(nn.Module):
         attention_mask: Union[torch.LongTensor, torch.BoolTensor],
         gated_position_bias: torch.FloatTensor,
         output_attentions: bool,
-    ) -> (torch.FloatTensor, torch.FloatTensor):
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)

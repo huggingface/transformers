@@ -18,10 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
@@ -72,7 +72,7 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -128,7 +128,6 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
 
         # process images if pixel_values are provided
         if images is not None:
-            images = make_flat_list_of_images(images)
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             data["pixel_values"] = inputs["pixel_values"]
             data["high_res_pixel_values"] = inputs["high_res_pixel_values"]

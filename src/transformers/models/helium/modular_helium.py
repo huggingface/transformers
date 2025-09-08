@@ -104,7 +104,7 @@ class HeliumAttention(GraniteAttention):
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

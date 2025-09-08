@@ -16,7 +16,7 @@
 Text/audio processor class for MusicGen
 """
 
-from typing import Optional
+from typing import Any
 
 import numpy as np
 
@@ -106,14 +106,7 @@ class MusicgenProcessor(ProcessorMixin):
         else:
             return self.tokenizer.batch_decode(*args, **kwargs)
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def _decode_audio(self, audio_values, padding_mask: Optional = None) -> list[np.ndarray]:
+    def _decode_audio(self, audio_values, padding_mask: Any = None) -> list[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """

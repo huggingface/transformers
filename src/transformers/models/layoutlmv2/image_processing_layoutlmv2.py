@@ -25,7 +25,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -202,7 +202,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         apply_ocr: Optional[bool] = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
@@ -251,7 +251,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

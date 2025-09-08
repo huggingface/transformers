@@ -50,7 +50,7 @@ class EfficientLoFTRModelTester:
         image_width=80,
         image_height=60,
         stage_num_blocks: list[int] = [1, 1, 1],
-        out_features: list[int] = [32, 32, 64],
+        out_features: list[int] = [32, 32, 128],
         stage_stride: list[int] = [2, 1, 2],
         q_aggregation_kernel_size: int = 1,
         kv_aggregation_kernel_size: int = 1,
@@ -58,7 +58,7 @@ class EfficientLoFTRModelTester:
         kv_aggregation_stride: int = 1,
         num_attention_layers: int = 2,
         num_attention_heads: int = 8,
-        hidden_size: int = 64,
+        hidden_size: int = 128,
         coarse_matching_threshold: float = 0.0,
         fine_kernel_size: int = 2,
         coarse_matching_border_removal: int = 0,
@@ -211,7 +211,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_hidden_states = len(self.model_tester.stage_num_blocks)
+            expected_num_hidden_states = len(self.model_tester.stage_num_blocks) + 1
             self.assertEqual(len(hidden_states), expected_num_hidden_states)
 
             self.assertListEqual(

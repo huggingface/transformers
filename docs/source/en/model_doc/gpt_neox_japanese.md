@@ -47,7 +47,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 pipeline = pipeline(task="text-generation", 
-                    model="abeja/gpt-neox-japanese-2.7b", torch_dtype=torch.float16, device=0)
+                    model="abeja/gpt-neox-japanese-2.7b", dtype=torch.float16, device=0)
 pipeline("人とAIが協調するためには、")
 ```
 
@@ -58,7 +58,7 @@ pipeline("人とAIが協調するためには、")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("abeja/gpt-neox-japanese-2.7b", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("abeja/gpt-neox-japanese-2.7b", dtype=torch.float16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
 input_ids = tokenizer("人とAIが協調するためには、", return_tensors="pt").input_ids.to(model.device)
 outputs = model.generate(input_ids)

@@ -537,9 +537,9 @@ class MaskFormerSwinLayer(nn.Module):
 
     def maybe_pad(self, hidden_states, height, width):
         pad_left = pad_top = 0
-        pad_rigth = (self.window_size - width % self.window_size) % self.window_size
+        pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = (0, 0, pad_left, pad_rigth, pad_top, pad_bottom)
+        pad_values = (0, 0, pad_left, pad_right, pad_top, pad_bottom)
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 

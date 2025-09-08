@@ -205,7 +205,7 @@ def write_model(
         _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
 
     print("Loading the checkpoint in a OLMo2 model.")
-    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32)
+    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, dtype=torch.float32)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")

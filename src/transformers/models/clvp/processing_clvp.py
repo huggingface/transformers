@@ -73,21 +73,5 @@ class ClvpProcessor(ProcessorMixin):
             inputs["attention_mask"] = encodings["attention_mask"]
             return inputs
 
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode with Whisper->Clvp
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
 
 __all__ = ["ClvpProcessor"]

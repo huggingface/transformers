@@ -46,7 +46,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-7B-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
 
@@ -67,7 +67,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-7B-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -105,7 +105,7 @@ quantization_config = BitsAndBytesConfig(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-7B-hf",
     attn_implementation="sdpa",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     quantization_config=quantization_config
 )

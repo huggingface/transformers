@@ -368,16 +368,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
-        pass
-
-    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
-    def test_contrastive_generate_low_memory(self, assistant_type):
-        pass
-
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
@@ -392,6 +382,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
@@ -669,7 +667,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -726,7 +729,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {

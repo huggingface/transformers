@@ -459,8 +459,16 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("KOSMOS-2 doesn't support padding")

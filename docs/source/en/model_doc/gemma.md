@@ -49,7 +49,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="google/gemma-2b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -66,7 +66,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -144,13 +144,13 @@ visualizer("LLMs generate text through a process known as")
    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
    model = AutoModelForCausalLM.from_pretrained(
        "google/gemma-2b",
-       torch_dtype=torch.bfloat16,
+       dtype=torch.bfloat16,
        device_map="auto",
        attn_implementation="sdpa"
    )
    input_text = "LLMs generate text through a process known as"
    input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-   past_key_values = DynamicCache()
+   past_key_values = DynamicCache(config=model.config)
    outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
    ```

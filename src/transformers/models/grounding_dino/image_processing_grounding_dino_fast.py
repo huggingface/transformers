@@ -407,7 +407,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -463,7 +463,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resizes an annotation to a target size.

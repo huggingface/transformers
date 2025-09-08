@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-09-23 and added to Hugging Face Transformers on 2025-08-19.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -46,16 +46,16 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
-repo = "ydshieh/kosmos-2.5"
+repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
@@ -85,16 +85,16 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
-repo = "ydshieh/kosmos-2.5"
+repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
@@ -160,12 +160,52 @@ image.save("output.png")
 </hfoptions>
 
 
-## Example
-**Markdown Task:** For usage instructions, please refer to [md.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/md.py).
+## Chat version
 
-**OCR Task:** For usage instructions, please refer to [ocr.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/ocr.py).
+The authors also released Kosmos-2.5 Chat, which is a chat version optimized for document understanding. You can use it like so:
 
+```python
+import re
+import torch
+import requests
+from PIL import Image, ImageDraw
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
+repo = "microsoft/kosmos-2.5-chat"
+device = "cuda:0"
+dtype = torch.bfloat16
+
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo,
+                                                          device_map=device,
+                                                          torch_dtype=dtype,
+                                                          attn_implementation="flash_attention_2")
+processor = AutoProcessor.from_pretrained(repo)
+
+# sample image
+url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+
+image = Image.open(requests.get(url, stream=True).raw)
+
+question = "What is the sub total of the receipt?"
+template = "<md>A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: {} ASSISTANT:"
+prompt = template.format(question)
+inputs = processor(text=prompt, images=image, return_tensors="pt")
+
+height, width = inputs.pop("height"), inputs.pop("width")
+raw_width, raw_height = image.size
+scale_height = raw_height / height
+scale_width = raw_width / width
+
+inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=1024,
+)
+
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+print(generated_text[0])
+```
 
 ## Kosmos2_5Config
 

@@ -86,7 +86,7 @@ class FlashAttentionParityTest(unittest.TestCase):
         # 1. Load FA2 model and tokenizer
         model_2 = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
         ).to("cuda")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -95,7 +95,7 @@ class FlashAttentionParityTest(unittest.TestCase):
         try:
             model_3 = AutoModelForCausalLM.from_pretrained(
                 model_id,
-                torch_dtype=torch.bfloat16,
+                dtype=torch.bfloat16,
                 attn_implementation="flash_attention_3",
             ).to("cuda")
         except (ValueError, ImportError) as e:

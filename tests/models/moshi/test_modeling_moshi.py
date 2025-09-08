@@ -194,9 +194,9 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+        if use_attention_mask or (not use_attention_mask and dtype == "fp32" and not output_attentions):
             self.skipTest("Test is failing, fix me :) ")
         parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
         parent_parameterized_test(self)
@@ -603,18 +603,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(
         "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
@@ -630,7 +618,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         pass
 
@@ -720,14 +708,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                 ).to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
 
@@ -908,7 +896,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshika_conditional_greedy(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshika", dtype=torch.float16, device_map="auto"
         )
         inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(
             device=torch_device, dtype=torch.float16
@@ -953,7 +941,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float16, device_map="auto"
         )
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
@@ -967,7 +955,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float32, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float32, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -989,7 +977,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -1011,7 +999,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @require_torch_fp16
     def test_moshika_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshika", dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72932

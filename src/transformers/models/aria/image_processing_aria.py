@@ -153,7 +153,7 @@ class AriaImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -228,6 +228,7 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

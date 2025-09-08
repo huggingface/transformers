@@ -34,9 +34,9 @@ The library was designed with two strong goals in mind:
     loads the related class instance and associated data (configurations' hyperparameters, tokenizers' vocabulary,
     and models' weights) from a pretrained checkpoint provided on [Hugging Face Hub](https://huggingface.co/models) or your own saved checkpoint.
   - On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
-    using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model (all TensorFlow models are compatible with `Keras.fit`).
+    using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model.
   - As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
-    extend or build upon the library, just use regular Python, PyTorch, TensorFlow, Keras modules and inherit from the base
+    extend or build upon the library, just use regular Python or PyTorch and inherit from the base
     classes of the library to reuse functionalities like model loading and saving. If you'd like to learn more about our coding philosophy for models, check out our [Repeat Yourself](https://huggingface.co/blog/transformers-design-philosophy) blog post.
 
 2. Provide state-of-the-art models with performances as close as possible to the original models:
@@ -44,7 +44,7 @@ The library was designed with two strong goals in mind:
   - We provide at least one example for each architecture which reproduces a result provided by the official authors
     of said architecture.
   - The code is usually as close to the original code base as possible which means some PyTorch code may be not as
-    *pytorchic* as it could be as a result of being converted TensorFlow code and vice versa.
+    *pytorchic* as it could be as a result of being converted from other Deep Learning frameworks.
 
 A few other goals:
 
@@ -58,13 +58,11 @@ A few other goals:
   - A simple and consistent way to add new tokens to the vocabulary and embeddings for fine-tuning.
   - Simple ways to mask and prune Transformer heads.
 
-- Easily switch between PyTorch, TensorFlow 2.0 and Flax, allowing training with one framework and inference with another.
-
 ## Main concepts
 
 The library is built around three types of classes for each model:
 
-- **Model classes** can be PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)), Keras models ([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)) or JAX/Flax models ([flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html)) that work with the pretrained weights provided in the library.
+- **Model classes** are be PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)).
 - **Configuration classes** store the hyperparameters required to build a model (such as the number of layers and hidden size). You don't always need to instantiate these yourself. In particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model).
 - **Preprocessing classes** convert the raw data into a format accepted by the model. A [tokenizer](main_classes/tokenizer) stores the vocabulary for each model and provide methods for encoding and decoding strings in a list of token embedding indices to be fed to a model. [Image processors](main_classes/image_processor) preprocess vision inputs, [feature extractors](main_classes/feature_extractor) preprocess audio inputs, and a [processor](main_classes/processors) handles multimodal inputs.
 
@@ -76,4 +74,3 @@ All these classes can be instantiated from pretrained instances, saved locally, 
 - `save_pretrained()` lets you save a model, configuration, and preprocessing class locally so that it can be reloaded using
   `from_pretrained()`.
 - `push_to_hub()` lets you share a model, configuration, and a preprocessing class to the Hub, so it is easily accessible to everyone.
-
