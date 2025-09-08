@@ -170,7 +170,6 @@ class LongcatFlashConfig(PretrainedConfig):
         "layers.*.mlps.*.gate_proj.weight": "local_colwise",
         "layers.*.mlps.*.up_proj.weight": "local_colwise",
         "layers.*.mlps.*.down_proj.weight": "local_rowwise",
-
         "layers.*.mlp.experts.*.gate_proj.weight": "local_colwise",
         "layers.*.mlp.experts.*.up_proj.weight": "local_colwise",
         "layers.*.mlp.experts.*.down_proj.weight": "local_rowwise",
