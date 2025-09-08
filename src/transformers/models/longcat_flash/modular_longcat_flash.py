@@ -50,14 +50,14 @@ class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-# remap config key ffn_hidden_size -> intermediate_size
+# TODO remap config key ffn_hidden_size -> intermediate_size
 class LongcatFlashMLP(DeepseekV3MLP):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
 
 
-# remap config key moe_topk -> num_experts_per_tok
+# TODO remap config key moe_topk -> num_experts_per_tok
 class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
         super().__init__(config)
@@ -152,10 +152,8 @@ class LongcatFlashMLA(DeepseekV3Attention):
         config.rope_interleave = True
         super().__init__(config, layer_idx)
 
-        if config.mla_scale_q_lora:  # TODO we can likely remove this check since it is always True
-            self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
-        if config.mla_scale_kv_lora:
-            self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
+        self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
+        self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
     def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
         """Apply LongCat LoRA scaling if configured."""
