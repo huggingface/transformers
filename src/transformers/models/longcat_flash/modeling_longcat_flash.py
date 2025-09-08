@@ -378,10 +378,8 @@ class LongcatFlashMLA(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
-        if config.mla_scale_q_lora:  # TODO we can likely remove this check since it is always True
-            self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
-        if config.mla_scale_kv_lora:
-            self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
+        self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
+        self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
     def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
         """Apply LongCat LoRA scaling if configured."""
@@ -467,37 +465,18 @@ class LongcatFlashMLA(nn.Module):
 
 
 class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
-    """
-    LongCat decoder layer with dual-sublayer + shortcut MoE architecture.
-
-    Each logical layer contains:
-    - 2 attention sublayers (with layer indices: layer_idx*2, layer_idx*2+1)
-    - 2 MLP sublayers
-    - 1 shortcut MoE connection
-    """
-
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
 
-        self.mlp = LongcatFlashMoE(config)
+        self.input_layernorm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = LongcatFlashMLA(config=config, layer_idx=layer_idx)
+        self.post_attention_layernorm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = LongcatFlashMLP(config)
 
-        self_attn = []
-        mlps = []
-        input_layernorm = []
-        post_attention_layernorm = []
-
-        for i in range(2):
-            self_attn.append(LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i))
-            mlps.append(LongcatFlashMLP(config))
-            input_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
-            post_attention_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
-
-        self.self_attn = nn.ModuleList(self_attn)
-        self.mlps = nn.ModuleList(mlps)
-        self.input_layernorm = nn.ModuleList(input_layernorm)
-        self.post_attention_layernorm = nn.ModuleList(post_attention_layernorm)
+        if layer_idx % 2 == 0:
+            self.moe_shortcut = LongcatFlashMoE(config)
 
     def forward(
         self,
@@ -510,35 +489,26 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
-        # There are 2 sublayers in each layer, with a shortcut MoE connection between them
-        for i in range(2):
-            residual = hidden_states
-            hidden_states = self.input_layernorm[i](hidden_states)
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
 
-            hidden_states, _ = self.self_attn[i](
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-            hidden_states = residual + hidden_states
+        hidden_states, _, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
 
-            residual = hidden_states
-            hidden_states = self.post_attention_layernorm[i](hidden_states)
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
 
-            if i == 0:
-                shortcut_mlp_output = self.mlp(hidden_states)
-
-            hidden_states = self.mlps[i](hidden_states)
-            hidden_states = residual + hidden_states
-
-            # shortcut connection after second sublayer
-            if i == 1:
-                hidden_states = hidden_states + shortcut_mlp_output
+        mlp_output = self.mlp(hidden_states)
+        hidden_states = residual + mlp_output
 
         return hidden_states
 
@@ -568,7 +538,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LongcatFlashModel(LongcatFlashPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -577,14 +547,11 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
-        #
-        self.config.num_hidden_layers = 2 * config.num_layers
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -632,7 +599,8 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_layers]:
+        shortcut_output = None
+        for layer_index, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -642,6 +610,11 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
+
+            if layer_index % 2 == 0 and hasattr(decoder_layer, "moe_shortcut"):
+                shortcut_output = decoder_layer.moe_shortcut(hidden_states)
+            elif layer_index % 2 == 1 and shortcut_output is not None:
+                hidden_states = hidden_states + shortcut_output
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
@@ -657,7 +630,6 @@ class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
     def __init__(self, config):
         super().__init__(config)

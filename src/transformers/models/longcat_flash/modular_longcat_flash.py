@@ -175,7 +175,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = LongcatFlashMLA(config=config, layer_idx=layer_idx)
         self.post_attention_layernorm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = LongcatFlashMLP(config)
-        
+
         if layer_idx % 2 == 0:
             self.moe_shortcut = LongcatFlashMoE(config)
 
@@ -192,7 +192,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        
+
         hidden_states, _, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -207,7 +207,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        
+
         mlp_output = self.mlp(hidden_states)
         hidden_states = residual + mlp_output
 
@@ -222,8 +222,6 @@ class LongcatFlashPreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class LongcatFlashModel(DeepseekV3Model):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
-
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -286,8 +284,8 @@ class LongcatFlashModel(DeepseekV3Model):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            
-            if layer_index % 2 == 0 and hasattr(decoder_layer, 'moe_shortcut'):
+
+            if layer_index % 2 == 0 and hasattr(decoder_layer, "moe_shortcut"):
                 shortcut_output = decoder_layer.moe_shortcut(hidden_states)
             elif layer_index % 2 == 1 and shortcut_output is not None:
                 hidden_states = hidden_states + shortcut_output
@@ -302,8 +300,6 @@ class LongcatFlashModel(DeepseekV3Model):
 
 
 class LongcatFlashForCausalLM(DeepseekV3ForCausalLM):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
-
     def __init__(self, config):
         super().__init__(config)
         self.model = LongcatFlashModel(config)
