@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..generation.continuous_batching import PagedAttentionCache
+from ..generation.continuous_batching import NO_SLIDING_WINDOW, PagedAttentionCache
 from ..utils import is_flash_attn_2_available
 
 
@@ -51,6 +51,16 @@ def paged_attention_forward(
     """
     # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
     k, v = cache.update(k, v, module.layer_idx, **kwargs)
+
+    # Check if we are in a sliding window context
+    if cache is not None:
+        is_full_attention = cache.sliding_windows[module.layer_idx] == NO_SLIDING_WINDOW
+        cu_seq_lens_k = cu_seq_lens_k[0].clone() if is_full_attention else cu_seq_lens_k[1].clone()
+        max_seqlen_k = max_seqlen_k[0] if is_full_attention else max_seqlen_k[1]
+    # If there is no cache, we assume this is full attention, and we check if cu_seq_lens_k is a 2D tensor or not
+    elif cu_seq_lens_k.dim() == 2:
+        cu_seq_lens_k = cu_seq_lens_k[0].clone()
+        max_seqlen_k = max_seqlen_k[0]
 
     sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):

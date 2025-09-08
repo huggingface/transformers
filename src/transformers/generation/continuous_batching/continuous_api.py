@@ -149,6 +149,7 @@ class ContinuousBatchProcessor:
         # Setup static tensors
         self.total_query_length = 0
         self.total_key_length = 0
+        self.total_batch_size = 0
         self.setup_static_tensors(cache.num_groups)
 
     def return_attention_mask(self) -> bool:
@@ -171,7 +172,7 @@ class ContinuousBatchProcessor:
         )  # +T is because there are -1 for seqlen_q when model uses a sliding window
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = 0
+        self.max_seqlen_k = [0, 0]
         self.output_ids = torch.empty((1, T), **tensor_metadata)
         # Since attenention_mask is not always needed, we only allocate it if it is
         if self.return_attention_mask():
@@ -193,16 +194,17 @@ class ContinuousBatchProcessor:
         # Compute the slice to reset
         t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_tensor.size(-1)
         c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_tensor.size(-1)
+        b = self.total_batch_size if self.slice_inputs and not full_reset else self.write_index_tensor.size(0)
         # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
-        self.cumulative_seqlens_q[: t + 1].zero_()
-        self.cumulative_seqlens_k[: t + 1].zero_()
+        self.cumulative_seqlens_q[: b + 1].zero_()
+        self.cumulative_seqlens_k[: b + 1].zero_()
         self.write_index_tensor[:, :t].fill_(-1)
         self.read_index_tensor[:, :t+c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = 0
+        self.max_seqlen_k = [0, 0]
         self.output_ids[:, :t].fill_(-1)
         if self.attention_mask is not None:
             self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
@@ -212,13 +214,14 @@ class ContinuousBatchProcessor:
         # Compute the slice to return
         t = self.total_query_length if self.slice_inputs else self.write_index.size(-1)
         c = self.total_key_length if self.slice_inputs else self.read_index.size(-1)
+        b = self.total_batch_size
         # Prepare the kwargs
         kwargs = {
             "input_ids": self.input_ids[:, :t],
             "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[: t + 1],
-            "cu_seq_lens_k": self.cumulative_seqlens_k[: t + 1],
+            "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
+            "cu_seq_lens_k": self.cumulative_seqlens_k[:, : b + 1],
             "read_index": self.read_index,  # slicing is done during building
             "write_index": self.write_index,  # slicing is done during building
             "logits_indices": self.logits_indices[:t],
@@ -300,6 +303,8 @@ class ContinuousBatchProcessor:
 
         self.total_query_length = 0
         self.total_key_length = 0
+        self.total_batch_size = 0
+
         for state in self.requests_in_batch:
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
@@ -309,6 +314,7 @@ class ContinuousBatchProcessor:
 
             self.total_query_length += query_length
             self.total_key_length += key_length
+            self.total_batch_size += 1
 
             positions_to_add = list(range(past_length, key_length))
             self.cache.get_read_indices(state.request_id, past_length, query_length, read_index)
@@ -325,7 +331,10 @@ class ContinuousBatchProcessor:
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
-            self.max_seqlen_k = max(self.max_seqlen_k, key_length)
+            self.max_seqlen_k = [
+                max(self.max_seqlen_k[0], query_length + past_length),
+                max(self.max_seqlen_k[1], query_length + min(past_length, self.sliding_window - 1)),
+            ]
             state.position_offset += query_length
 
         logger.debug(
