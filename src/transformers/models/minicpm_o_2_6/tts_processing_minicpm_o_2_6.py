@@ -19,13 +19,20 @@ from typing import Literal
 
 import librosa
 import numpy as np
-import torch
-import torchaudio
+
+from ...utils.import_utils import is_torch_available, is_torchaudio_available
 
 
 from ...utils import logging
 
+if is_torch_available():
+    import torch
+
+if is_torchaudio_available():
+    import torchaudio
+
 logger = logging.get_logger(__name__)
+
 
 class MelSpectrogramFeatures(torch.nn.Module):
     def __init__(
@@ -70,7 +77,9 @@ class ChatTTSProcessor:
         self.text_tokenizer = text_tokenizer
 
     def __call__(self, text_list, audio_list):
-        assert len(text_list) == len(audio_list)
+        if len(text_list) != len(audio_list):
+            raise ValueError(f"Length mismatch: text_list has {len(text_list)} items, audio_list has {len(audio_list)} items")
+
         input_ids_varlen = []
         for text in text_list:
             input_ids_ = self.text_tokenizer.encode(
@@ -81,7 +90,8 @@ class ChatTTSProcessor:
 
         audio_features_varlen = []
         for audio in audio_list:
-            assert audio.shape.__len__() == 1  # [seq_len]
+            if audio.shape.__len__() != 1:
+                raise ValueError(f"Audio tensor must be 1-dimensional, got shape {audio.shape}")
             try:
                 # [100(num_mel_bins), seq_len_mel]
                 mel = self.audio_processor(audio)

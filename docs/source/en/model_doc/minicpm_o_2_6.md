@@ -76,6 +76,29 @@ We provide two inference modes: normal generate and streaming
 #### Normal generate inference
 
 ```python
+image = Image.open('/assets/single.png').convert('RGB')
+question = "Imitate the timbre and intonation of the input voice, describe this picture."
+audio_input, _ = librosa.load('assets/female_example.wav', sr=16000, mono=True)
+msgs = [{'role': 'user', 'content': [question, audio_input, image]}]
+msgs = [msgs, msgs]
+inputs = processor.apply_chat_template(msgs=msgs).to(model.device)
+res = model.generate(
+    **inputs,
+    processor=processor,
+    sampling=True,
+    max_new_tokens=4096,
+    use_tts_template=True,
+    temperature=0.3,
+    generate_audio=True,
+    output_audio_path="./tts_desc.wav",
+)
+res = processor.decode(res.outputs.sequences)[0]
+print(res)
+```
+
+#### Streaming inference
+
+```python
 import math
 import numpy as np
 from PIL import Image
@@ -107,38 +130,6 @@ def get_video_chunk_content(video_path, flatten=True):
 
     return contents
 
-video_path="assets/Skiing.mp4"
-# if use voice clone prompt, please set ref_audio
-ref_audio_path = 'assets/demo.wav'
-ref_audio, _ = librosa.load(ref_audio_path, sr=16000, mono=True)
-sys_msg = processor.get_sys_prompt(ref_audio=ref_audio, mode='omni', language='en')
-# or use default prompt
-# sys_msg = model.get_sys_prompt(mode='omni', language='en')
-contents = get_video_chunk_content(video_path)
-msg = {"role":"user", "content": contents}
-msgs = [sys_msg, msg]
-inputs = processor.apply_chat_template(msgs=msgs).to(model.device)
-
-# please set generate_audio=True and output_audio_path to save the tts result
-generate_audio = True
-output_audio_path = 'output.wav'
-res = model.generate(
-    **inputs,
-    processor=processor,
-    sampling=True,
-    temperature=0.5,
-    max_new_tokens=4096,
-    use_tts_template=True,
-    generate_audio=generate_audio,
-    output_audio_path=output_audio_path,
-    repetition_penalty=1.2,
-)
-print(res)
-```
-
-#### Streaming inference
-
-```python
 # a new conversation need reset session first, it will reset the kv-cache
 model.reset_session()
 contents = get_video_chunk_content(video_path, flatten=False)
@@ -189,6 +180,8 @@ else:
 
 <hr/>
 
+### Audio mode
+
 #### Mimick
 
 `Mimick` task reflects a model's end-to-end speech modeling capability. The model takes audio input, and outputs an ASR transcription and subsequently reconstructs the original audio with high similarity.
@@ -209,64 +202,12 @@ res = model.generate(
     generate_audio=True,
     output_audio_path='output_mimick.wav',
 )
+res = processor.decode(res.outputs.sequences)[0]
 print(res)
 ```
 
 <hr/>
 
-#### Speech Conversation with Configurable Voices
-
-`MiniCPM-o-2.6` can role-play specific characters based on audio prompts, mimicking their voice and language style.
-
-```python
-ref_audio, _ = librosa.load('./assets/input_examples/icl_20.wav', sr=16000, mono=True)
-sys_prompt = processor.get_sys_prompt(ref_audio=ref_audio, mode='audio_roleplay', language='en')
-user_audio, _ = librosa.load('user_question.wav', sr=16000, mono=True)
-user_question = {'role': 'user', 'content': [user_audio]}
-msgs = [sys_prompt, user_question]
-inputs = processor.apply_chat_template(msgs=msgs).to(model.device)
-
-res = model.generate(
-    **inputs,
-    processor=processor,
-    sampling=True,
-    max_new_tokens=128,
-    use_tts_template=True,
-    generate_audio=True,
-    temperature=0.3,
-    output_audio_path='result_roleplay.wav',
-)
-print(res)
-```
-
-<hr/>
-
-#### AI Assistant Mode
-
-`MiniCPM-o-2.6` can act as an AI assistant with predefined stable voices. Recommended voices: `assistant_female_voice`, `assistant_male_voice`.
-
-```python
-ref_audio, _ = librosa.load('./assets/input_examples/assistant_female_voice.wav', sr=16000, mono=True)
-sys_prompt = processor.get_sys_prompt(ref_audio=ref_audio, mode='audio_assistant', language='en')
-user_audio, _ = librosa.load('user_question.wav', sr=16000, mono=True)
-user_question = {'role': 'user', 'content': [user_audio]}
-msgs = [sys_prompt, user_question]
-inputs = processor.apply_chat_template(msgs=msgs).to(model.device)
-
-res = model.generate(
-    **inputs,
-    processor=processor,
-    sampling=True,
-    max_new_tokens=128,
-    use_tts_template=True,
-    generate_audio=True,
-    temperature=0.3,
-    output_audio_path='result_assistant.wav',
-)
-print(res)
-```
-
-<hr/>
 
 #### Instruction-to-Speech (Voice Creation)
 
@@ -287,33 +228,7 @@ res = model.generate(
     temperature=0.3,
     output_audio_path='result_voice_creation.wav',
 )
-print(res)
-```
-
-<hr/>
-
-#### Voice Cloning
-
-Zero-shot text-to-speech functionality using reference audio.
-
-```python
-ref_audio, _ = librosa.load('./assets/input_examples/icl_20.wav', sr=16000, mono=True)
-sys_prompt = processor.get_sys_prompt(ref_audio=ref_audio, mode='voice_cloning', language='en')
-text_prompt = "Please read the text below."
-user_question = {'role': 'user', 'content': [text_prompt, "content that you want to read"]}
-msgs = [sys_prompt, user_question]
-inputs = processor.apply_chat_template(msgs=msgs).to(model.device)
-
-res = model.generate(
-    **inputs,
-    processor=processor,
-    sampling=True,
-    max_new_tokens=128,
-    use_tts_template=True,
-    generate_audio=True,
-    temperature=0.3,
-    output_audio_path='result_voice_cloning.wav',
-)
+res = processor.decode(res.outputs.sequences)[0]
 print(res)
 ```
 
@@ -347,6 +262,7 @@ res = model.generate(
     temperature=0.3,
     output_audio_path='result_audio_understanding.wav',
 )
+res = processor.decode(res.outputs.sequences)[0]
 print(res)
 ```
 
@@ -368,6 +284,7 @@ res = model.generate(
     sampling=True,
     max_new_tokens=1024,
 )
+res = processor.decode(res.sequences)[0]
 print(res)
 
 ## for streaming generation
@@ -399,6 +316,7 @@ res = model.generate(
     sampling=True,
     max_new_tokens=1024,
 )
+res = processor.decode(res.sequences)[0]
 print(res)
 ```
 
@@ -424,6 +342,7 @@ res = model.generate(
     sampling=True,
     max_new_tokens=1024,
 )
+res = processor.decode(res.sequences)[0]
 print(res)
 ```
 
@@ -464,12 +383,104 @@ res = model.generate(
     use_image_id=False,
     max_slice_nums=2,  # use 1 if cuda OOM and video resolution > 448*448
 )
+res = processor.decode(res.sequences)[0]
 print(res)
 ```
 
 Please look at [GitHub](https://github.com/OpenBMB/MiniCPM-o) for more detail about usage.
 
 ## Usage Tips
+
+### system prompts
+
+We provide some system prompts for different tasks, you can use it as this:
+
+```python
+def get_sys_prompt(ref_audio=None, mode="default", language="zh"):
+    """
+    Choose different system prompts according to different tasks
+    Args:
+        ref_audio: if ref_audio is not None, will use the voice cloning prompts, and the voice
+                   generated by the model will refer to the timbre of ref audio
+        mode:
+            "default": default system prompt and not refer to any task
+            "omni": input video and audio simultaneously
+            "audio_assistant": Default voice-only mode, the model will use the ref_audio's voice to reply user's question as a helpful assistant.
+            "audio_roleplay": Roleplay voice-only mode, the model will use the ref_audio's voice to reply, and also role-play the character based on the audio prompt.
+            "voice_cloning": TTS mode, the model will clone the voice of ref_audio.
+        language: prompts language, the model has the ability to automatically select the response language based on the question language
+    """
+    if ref_audio is not None:
+        if not isinstance(ref_audio, np.ndarray):
+            raise TypeError("ref_audio error, should be np.ndarray, but got {}".format(type(ref_audio)))
+    if mode == "omni":
+        if language == "zh":
+            sys_prompt = "你是一个AI助手。你能接受视频，音频和文本输入并输出语音和文本。"
+            vc_prompt_prefix = sys_prompt + "模仿输入音频中的声音特征。"
+            vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
+        else:
+            sys_prompt = "You are a helpful assistant. You can accept video, audio and text input and output voice and text. "
+            vc_prompt_prefix = sys_prompt + "Clone the voice in the provided audio prompt."
+            vc_prompt_suffix = "As an assistant, you will speak using this voice style."
+
+        if ref_audio is not None:
+            sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+
+        else:
+            sys_msgs = {"role": "user", "content": [sys_prompt]}
+
+        return sys_msgs
+    elif mode == "audio_assistant":
+        if language == "zh":
+            vc_prompt_prefix = "模仿输入音频中的声音特征。"
+            vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
+        else:
+            vc_prompt_prefix = "Clone the voice in the provided audio prompt."
+            vc_prompt_suffix = "As an assistant, you will speak using this voice style."
+
+        if ref_audio is not None:
+            sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+
+        else:
+            logger.warning(
+                "Warning: ref_audio is None, speech generation will be performed based on the default voice."
+            )
+            sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
+
+        return sys_msgs
+    elif mode == "audio_roleplay":
+        if language == "zh":
+            vc_prompt_prefix = "模仿输入音频中的声音特征。"
+            vc_prompt_suffix = "假装你是上述音频中的人物，与我进行对话。"
+        else:
+            vc_prompt_prefix = "Clone the voice in the provided audio prompt."
+            vc_prompt_suffix = "Try to role-play the character based on the audio prompt above."
+
+        if ref_audio is not None:
+            sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+        else:
+            print("Warning: ref_audio is None, speech generation will be performed based on the default voice.")
+            sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
+
+        return sys_msgs
+    elif mode == "voice_cloning":
+        if language == "zh":
+            vc_prompt_prefix = "模仿输入音频中的声音特征。"
+        else:
+            vc_prompt_prefix = "Clone the voice in the provided audio prompt."
+
+        if ref_audio is not None:
+            sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio]}
+        else:
+            raise ValueError("ref_audio con't be None in voice_cloning mode.")
+
+        return sys_msgs
+    else:
+        sys_prompt = "You are a helpful assistant. You can accept audio and text input and output voice and text."
+        sys_msgs = {"role": "user", "content": [sys_prompt]}
+
+        return sys_msgs
+```
 
 ### Inference with llama.cpp<a id="llamacpp"></a>
 
@@ -490,27 +501,6 @@ Download the int4 quantized version for lower GPU memory (7GB) usage: [MiniCPM-o
 #### Statement
 
 - As an LMM, MiniCPM-o 2.6 generates contents by learning a large mount of multimodal corpora, but it cannot comprehend, express personal opinions or make value judgement. Anything generated by MiniCPM-o 2.6 does not represent the views and positions of the model developers
-- We will not be liable for any problems arising from the use of the MinCPM-V models, including but not limited to data security issues, risk of public opinion, or any risks and problems arising from the misdirection, misuse, dissemination or misuse of the model.
-
-## Key Techniques and Other Multimodal Projects
-
-👏 Welcome to explore key techniques of MiniCPM-o 2.6 and other multimodal projects of our team:
-
-[VisCPM](https://github.com/OpenBMB/VisCPM/tree/main) | [RLHF-V](https://github.com/RLHF-V/RLHF-V) | [LLaVA-UHD](https://github.com/thunlp/LLaVA-UHD) | [RLAIF-V](https://github.com/RLHF-V/RLAIF-V)
-
-## Citation
-
-If you find our work helpful, please consider citing our papers 📝 and liking this project ❤️！
-
-```bib
-@article{yao2024minicpm,
-  title={MiniCPM-V: A GPT-4V Level MLLM on Your Phone},
-  author={Yao, Yuan and Yu, Tianyu and Zhang, Ao and Wang, Chongyi and Cui, Junbo and Zhu, Hongji and Cai, Tianchi and Li, Haoyu and Zhao, Weilin and He, Zhihui and others},
-  journal={arXiv preprint arXiv:2408.01800},
-  year={2024}
-}
-```
-
 - We will not be liable for any problems arising from the use of the MinCPM-V models, including but not limited to data security issues, risk of public opinion, or any risks and problems arising from the misdirection, misuse, dissemination or misuse of the model.
 
 ## Key Techniques and Other Multimodal Projects

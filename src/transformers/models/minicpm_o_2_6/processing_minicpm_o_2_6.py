@@ -151,39 +151,47 @@ class MiniCPM_o_2_6ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-PARSE_TEMPLATE = "{%- for i, msg in enumerate(msgs) -%}{%- set role = msg[\"role\"] -%}{%- set content = msg[\"content\"] -%}{%- if role not in [\"system\", \"user\", \"assistant\"] -%}{{ raise_error(\"Invalid role: \" + role) }}{%- endif -%}{%- if i == 0 and role not in [\"user\", \"system\"] -%}{{ raise_error(\"The role of first msg should be user or system\") }}{%- endif -%}{%- if content is string -%}{%- set content = [content] -%}{%- endif -%}{%- set cur_msgs = [] -%}{%- for c in content -%}{%- if isinstance(c, Image.Image) -%}{{ collect_image(c, cur_msgs) }}{%- elif c.__class__.__name__ == \"ndarray\" -%}{{ collect_audio(c, i, cur_msgs) }}{%- elif c is string -%}{{ collect_text(c, cur_msgs) }}{%- endif -%}{%- endfor -%}{%- set _ = msg.update({\"content\": join_content(cur_msgs, omni_input)}) -%}{%- endfor -%}"
-
-
-@lru_cache(maxsize=1)
-def get_precompiled_template():
-    env = Environment(
-        cache_size=100,
-        auto_reload=False,
-        optimized=True
-    )
-
-    env.globals.update({
-        'enumerate': enumerate,
-        'isinstance': isinstance,
-        'Image': Image,
-        'np': np
-    })
-
-    return env.from_string(PARSE_TEMPLATE)
-
-
 class MiniCPM_o_2_6Processor(ProcessorMixin):
     r"""
-    Constructs a MiniCPMV processor which wraps a MiniCPMV image processor and a MiniCPMV tokenizer into a single processor.
+    Constructs a MiniCPM-o-2.6 processor which wraps a MiniCPMV image processor, feature extractor, and tokenizer into a single processor.
 
-    [`MiniCPMVProcessor`] offers all the functionalities of [`MiniCPMVImageProcessor`] and [`LlamaTokenizerWrapper`]. See the
-    [`~MiniCPMVProcessor.__call__`] and [`~MiniCPMVProcessor.decode`] for more information.
+    [`MiniCPM_o_2_6Processor`] offers all the functionalities of [`MiniCPMVImageProcessor`], [`MiniCPM_o_2_6FeatureExtractor`] and tokenizer. 
+    See the [`~MiniCPM_o_2_6Processor.__call__`] and [`~MiniCPM_o_2_6Processor.decode`] for more information.
+
+    This processor supports multimodal inputs including text, images, and audio. It can handle various tasks such as:
+    - Visual question answering with images
+    - Audio understanding and generation
+    - Omni-modal processing (simultaneous video, audio, and text)
+    - Voice cloning and text-to-speech generation
 
     Args:
-        image_processor ([`MiniCPMVImageProcessor`], *optional*):
-            The image processor is a required input.
         tokenizer ([`LlamaTokenizerWrapper`], *optional*):
-            The tokenizer is a required input.
+            The tokenizer is a required input. Used for encoding text inputs and decoding model outputs.
+        image_processor ([`MiniCPMVImageProcessor`], *optional*):
+            The image processor is a required input. Handles image preprocessing including resizing, slicing, and normalization.
+        feature_extractor ([`MiniCPM_o_2_6FeatureExtractor`], *optional*):
+            The feature extractor for processing audio inputs. Converts audio waveforms to features compatible with the model.
+        chat_template (`str`, *optional*):
+            The Jinja template string used for formatting chat conversations. If not provided, uses the tokenizer's default template.
+        tts_chat_template (`str`, *optional*):
+            Special chat template for text-to-speech scenarios when audio generation is required.
+        parse_template (`str`, *optional*):
+            Jinja template for parsing multimodal messages containing text, images, and audio components.
+
+    Examples:
+        ```python
+        >>> from transformers import AutoProcessor
+        >>> from PIL import Image
+
+        >>> processor = AutoProcessor.from_pretrained('openbmb/MiniCPM-o-2_6')
+
+        >>> # Apply chat template for conversation
+        >>> image = Image.open("path/to/image.jpg")
+        >>> messages = [
+        ...     {"role": "user", "content": ["What's in this image?", image]}
+        ... ]
+        >>> inputs = processor.apply_chat_template(messages)
+        ```
     """
 
     attributes = ["tokenizer", "image_processor", "feature_extractor"]
@@ -191,10 +199,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "MiniCPMVImageProcessorFast"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
 
-    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=None):
+    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=None, parse_template=None):
         super().__init__(tokenizer, image_processor, feature_extractor, chat_template=chat_template)
 
         self.tts_chat_template = tts_chat_template
+        self.parse_template = parse_template
 
         self.image_tag = getattr(tokenizer, 'image_tag', "(<image>./</image>)")
         self.image_pattern = getattr(tokenizer, 'image_pattern', "\(<image>./</image>\)")
@@ -204,7 +213,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
         self.terminators = [tokenizer.eos_token, tokenizer.pad_token, tokenizer.tts_end]
         self.terminator_ids = [tokenizer.convert_tokens_to_ids(t) for t in self.terminators]
-        
 
     def __call__(
         self,
@@ -255,9 +263,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         for i, msg in enumerate(msgs):
             role = msg["role"]
             content = msg["content"]
-            assert role in ["system", "user", "assistant"]
+            if role not in ["system", "user", "assistant"]:
+                raise ValueError(f"Role must be one of ['system', 'user', 'assistant'], got {role}")
             if i == 0:
-                assert role in ["user", "system"], "The role of first msg should be user"
+                if role not in ["user", "system"]:
+                    raise ValueError("The role of first msg should be user or system")
             if isinstance(content, str):
                 content = [content]
             cur_msgs = []
@@ -288,7 +298,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         }
 
         # 获取预编译的模板
-        template = get_precompiled_template()
+        template = self.get_precompiled_template(self.parse_template)
 
         # 添加自定义函数
         def collect_image(img, msg_list):
@@ -314,7 +324,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 return "\n".join(msg_list)
 
         def raise_error(msg):
-            raise AssertionError(msg)
+            raise ValueError(msg)
 
         # 渲染模板
         template.render(
@@ -334,6 +344,23 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             results['audio_parts'],
             results['use_tts_template']
         )
+
+    @lru_cache(maxsize=1)
+    def get_precompiled_template(self, template):
+        env = Environment(
+            cache_size=100,
+            auto_reload=False,
+            optimized=True
+        )
+
+        env.globals.update({
+            'enumerate': enumerate,
+            'isinstance': isinstance,
+            'Image': Image,
+            'np': np
+        })
+
+        return env.from_string(template)
 
     def apply_chat_template(
         self,
@@ -371,7 +398,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         for msgs in msgs_list:
             if isinstance(msgs, str):
                 msgs = json.loads(msgs)
-            assert len(msgs) > 0, "msgs is empty"
+            if len(msgs) == 0:
+                raise ValueError("input messagees is empty")
 
             parsed_msgs, images, audios, audio_parts, use_tts_template = self.parse_msgs_jinja(deepcopy(msgs), omni_input, use_tts_template)
             prompts = self.tokenizer.apply_chat_template(
@@ -418,93 +446,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             result_text.append(self.tokenizer.decode(result, skip_special_tokens=skeip_special_tokens))
         return result_text
 
-    def get_sys_prompt(self, ref_audio=None, mode="default", language="zh"):
-        """
-        Choose different system prompts according to different tasks
-        Args:
-            ref_audio: if ref_audio is not None, will use the voice cloning prompts, and the voice
-                       generated by the model will refer to the timbre of ref audio
-            mode:
-                "default": default system prompt and not refer to any task
-                "omni": input video and audio simultaneously
-                "audio_assistant": Default voice-only mode, the model will use the ref_audio's voice to reply user's question as a helpful assistant.
-                "audio_roleplay": Roleplay voice-only mode, the model will use the ref_audio's voice to reply, and also role-play the character based on the audio prompt.
-                "voice_cloning": TTS mode, the model will clone the voice of ref_audio.
-            language: prompts language, the model has the ability to automatically select the response language
-                    based on the question language
-        Returns:
-
-        """
-        if ref_audio is not None:
-            assert isinstance(ref_audio, np.ndarray), "ref_audio error"
-        if mode == "omni":
-            if language == "zh":
-                sys_prompt = "你是一个AI助手。你能接受视频，音频和文本输入并输出语音和文本。"
-                vc_prompt_prefix = sys_prompt + "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                sys_prompt = "You are a helpful assistant. You can accept video, audio and text input and output voice and text. "
-                vc_prompt_prefix = sys_prompt + "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
-        elif mode == "audio_assistant":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                logger.warning(
-                    "Warning: ref_audio is None, speech generation will be performed based on the default voice."
-                )
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "audio_roleplay":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "假装你是上述音频中的人物，与我进行对话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "Try to role-play the character based on the audio prompt above."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-            else:
-                print("Warning: ref_audio is None, speech generation will be performed based on the default voice.")
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "voice_cloning":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio]}
-            else:
-                raise ValueError("ref_audio con't be None in voice_cloning mode.")
-
-            return sys_msgs
-        else:
-            sys_prompt = "You are a helpful assistant. You can accept audio and text input and output voice and text."
-            sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
-
     def _convert(self, input_str, max_inp_length: Optional[int] = None, **kwargs):
         input_ids = self.tokenizer.encode(input_str, **kwargs)
         if max_inp_length is not None:
@@ -531,12 +472,14 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         # audio bound
         audio_start_idx = torch.where(input_ids == self.tokenizer.audio_start_id)[0]
         audio_end_idx = torch.where(input_ids == self.tokenizer.audio_end_id)[0]
-        assert len(audio_start_idx) == len(audio_end_idx)
+        if len(audio_start_idx) != len(audio_end_idx):
+            raise ValueError(f"Mismatched audio start and end tokens: {len(audio_start_idx)} start tokens vs {len(audio_end_idx)} end tokens")
         audio_bounds = torch.hstack([(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
 
         spk_start_idx = torch.where(input_ids == self.tokenizer.spk_start_id)[0]
         spk_end_idx = torch.where(input_ids == self.tokenizer.spk_end_id)[0]
-        assert len(spk_start_idx) == len(spk_end_idx)
+        if len(spk_start_idx) != len(spk_end_idx):
+            raise ValueError(f"Mismatched speaker start and end tokens: {len(spk_start_idx)} start tokens vs {len(spk_end_idx)} end tokens")
         spk_bounds = torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
 
         return input_ids, image_bounds, audio_bounds, spk_bounds
@@ -581,11 +524,15 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             audio_tags = re.findall(self.audio_pattern, text)
 
             if image_tags:
-                assert images is not None
-                assert len(image_tags) == len(image_sizes[index])
+                if images is None:
+                    raise ValueError("Found image tags but no images provided")
+                if len(image_tags) != len(image_sizes[index]):
+                    raise ValueError(f"Number of image tags ({len(image_tags)}) doesn't match number of image sizes ({len(image_sizes[index])})")
             if audio_tags:
-                assert audio_phs is not None
-                assert len(audio_tags) == len(audio_phs[index])
+                if audio_phs is None:
+                    raise ValueError("Found audio tags but no audio placeholders provided")
+                if len(audio_tags) != len(audio_phs[index]):
+                    raise ValueError(f"Number of audio tags ({len(audio_tags)}) doesn't match number of audio placeholders ({len(audio_phs[index])})")
 
             image_id = 0
             audio_id = 0
@@ -644,7 +591,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
     def get_slice_image_placeholder(self, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
         max_slice_nums = self.image_processor.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
-        assert max_slice_nums > 0
+        if max_slice_nums <= 0:
+            raise ValueError(f"max_slice_nums must be greater than 0, got {max_slice_nums}")
         grid = self.image_processor.get_sliced_grid(image_size=image_size, max_slice_nums=max_slice_nums)
 
         image_placeholder = (

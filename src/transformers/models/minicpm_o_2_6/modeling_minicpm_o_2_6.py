@@ -71,7 +71,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..bert.tokenization_bert_fast import BertTokenizerFast
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import _is_package_available, is_flash_attn_2_available
 from .configuration_minicpm_o_2_6 import (
@@ -400,6 +399,7 @@ class MiniCPM_o_2_6TextModel(MiniCPM_o_2_6PreTrainedModel):
         self.post_init()
 
     @check_model_inputs
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -582,7 +582,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         self.audio_encoder_layer = -1
 
         # init tts module
-        assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
+        if not _tts_deps:
+            raise ValueError("please make sure vector_quantize_pytorch and vocos are installed.")
         self.tts = self.init_tts_module()
 
         self.force_no_stop = False
@@ -613,6 +614,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             # try from hf model_id
             tts_text_tokenizer_path = "openbmb/chattts_tokenizer"
 
+        from ..bert.tokenization_bert_fast import BertTokenizerFast
+
         tts_text_tokenizer = BertTokenizerFast.from_pretrained(tts_text_tokenizer_path)
         self.tts_processor = ChatTTSProcessor(text_tokenizer=tts_text_tokenizer)
 
@@ -621,7 +624,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         if not os.path.exists(vocos_ckpt_path):
             vocos_ckpt_path = hf_hub_download(repo_id="openbmb/MiniCPM-o-2_6", subfolder="assets", filename="Vocos.pt")
 
-        assert os.path.exists(vocos_ckpt_path)
+        if not os.path.exists(vocos_ckpt_path):
+            raise ValueError(f"Vocos checkpoint path does not exist: {vocos_ckpt_path}")
         self.vocos = self.initialize_vocos(vocos_ckpt_path)
 
     def initialize_vocos(self, ckpt_path):
@@ -774,26 +778,10 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         for i in range(B):
             patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
 
-        vision_batch_size = self.omni_config.vision_batch_size
         all_pixel_values = all_pixel_values.type(dtype)
-        # edge-side model, senstive to gpu memory size in use
-        # without batching, it will occur cuda oom
-        if B > vision_batch_size:
-            hs = []
-            for i in range(0, B, vision_batch_size):
-                start_idx = i
-                end_idx = i + vision_batch_size
-                tmp_hs = self.vpm(
-                    all_pixel_values[start_idx:end_idx],
-                    patch_attention_mask=patch_attn_mask[start_idx:end_idx],
-                    tgt_sizes=tgt_sizes[start_idx:end_idx],
-                ).last_hidden_state
-                hs.append(tmp_hs)
-            vision_embedding = torch.cat(hs, dim=0)
-        else:
-            vision_embedding = self.vpm(
-                all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
-            ).last_hidden_state
+        vision_embedding = self.vpm(
+            all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
+        ).last_hidden_state
 
         vision_embedding = self.resampler(vision_embedding, tgt_sizes)
 
@@ -882,7 +870,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         if len(audio_features) > 0:
             audio_feature_lens = torch.hstack(audio_feature_lens_raw)
             batch_size, _, max_mel_seq_len = audio_features.shape
-            assert batch_size == 1
+            if batch_size != 1:
+                raise ValueError(f"Expected batch_size to be 1, but got {batch_size}")
             max_seq_len = (max_mel_seq_len - 1) // 2 + 1
 
             if self.audio_past_key_values is not None:
@@ -1027,7 +1016,10 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
         bs = len(input_embeddings)
         if len(audio_features) > 0:
-            assert len(audio_embeddings) == len(input_embeddings)
+            if len(audio_embeddings) != len(input_embeddings):
+                raise ValueError(
+                    f"Length mismatch: audio_embeddings length {len(audio_embeddings)} != input_embeddings length {len(input_embeddings)}"
+                )
 
             if self.omni_config.chunk_input:
                 for i in range(bs):
@@ -1174,9 +1166,14 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         force_no_stop=False,
         **kwargs,
     ):
-        assert input_ids is not None
-        assert len(input_ids) == len(pixel_values)
-        assert sampling or not stream, "if use stream mode, make sure sampling=True"
+        if input_ids is None:
+            raise ValueError("input_ids cannot be None")
+        if len(input_ids) != len(pixel_values):
+            raise ValueError(
+                f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
+            )
+        if not sampling and stream:
+            raise ValueError("if use stream mode, make sure sampling=True")
 
         kwargs.pop("image_sizes")
         if sampling:
@@ -1286,7 +1283,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         Args:
             session_id: Note: new connection should use a new session_id
         """
-        assert session_id is not None
+        if session_id is None:
+            raise ValueError("session_id cannot be None")
         if self.session_id is None or session_id != self.session_id:  # new session
             self.is_first = True
         else:
@@ -1295,11 +1293,13 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         images = []
         audios = []
 
-        assert len(msgs) == 1
+        if len(msgs) != 1:
+            raise ValueError(f"Expected exactly 1 message, but got {len(msgs)}")
         copy_msgs = deepcopy(msgs)
         msg = copy_msgs[0]
 
-        assert msg["role"] in ["system", "user", "assistant"]
+        if msg["role"] not in ["system", "user", "assistant"]:
+            raise ValueError(f"Invalid role: {msg['role']}, expected one of ['system', 'user', 'assistant']")
 
         content = msg["content"]
         cur_msgs = []
@@ -1805,7 +1805,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         Merge two audio waveforms with smooth in streaming audio generation.
         Borrowed some codes from `https://github.com/huggingface/transformers/blob/main/src/transformers/models/encodec/modeling_encodec.py`
         """
-        assert len(frames) == 2
+        if len(frames) != 2:
+            raise ValueError(f"Expected exactly 2 frames, but got {len(frames)}")
         device = frames[0].device
         dtype = frames[0].dtype
         # shape = frames[0].shape[:-1]
@@ -1827,7 +1828,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         out[offset : offset + frame1_length] += weight[:frame1_length] * frames[1]
         sum_weight[offset : offset + frame1_length] += weight[:frame1_length]
 
-        assert sum_weight.min() > 0
+        if sum_weight.min() <= 0:
+            raise ValueError(f"Sum weight must be positive, but got min value {sum_weight.min()}")
         out = out / sum_weight
         return out[:frame0_length], out[frame0_length:]
 
@@ -1956,7 +1958,8 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
                 end_c = sentence_end(txt)
                 if end_c:
                     end_c_idx = gen_text.rfind(end_c)
-                    assert end_c_idx != -1
+                    if end_c_idx == -1:
+                        raise ValueError(f"End character '{end_c}' not found in generated text")
                     text_left = gen_text[end_c_idx + 1 :]
                     gen_text = gen_text[: end_c_idx + 1]
                     tts_text, tts_token_lens = self.prepare_tts_text(gen_text)
@@ -2692,9 +2695,10 @@ class MiniCPMWhisperEncoder(MiniCPM_o_2_6PreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -3468,7 +3472,10 @@ def apply_spk_emb(
         spk_emb_ = spk_emb[idx]  # [num_spk_emb]
         mask_ = input_ids_ == spk_emb_token_id  # [batch_size, seq_len_max]
         nonzero_position_idx = mask_.nonzero(as_tuple=False)  # [num_spk_emb, 1]
-        assert nonzero_position_idx.shape[0] == num_spk_embs
+        if nonzero_position_idx.shape[0] != num_spk_embs:
+            raise ValueError(
+                f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
+            )
         begin_idx = nonzero_position_idx.min()
         end_idx = nonzero_position_idx.max()
         input_embeds[idx, begin_idx : end_idx + 1, :] = spk_emb_
@@ -3504,9 +3511,10 @@ def make_streaming_chunk_mask_generation(
         torch.Tensor: Causal mask for streaming TTS generation, shape is [batch_size=1, 1, seq_len=1, past_seen_tokens+1]
 
     Raises:
-        AssertionError: If the batch size is not 1 (only supports batch size of 1 for inference).
+        ValueError: If the batch size is not 1 (only supports batch size of 1 for inference).
     """
-    assert inputs_embeds.shape[0] == 1
+    if inputs_embeds.shape[0] != 1:
+        raise ValueError(f"Expected batch size of 1, but got {inputs_embeds.shape[0]}")
 
     dtype = inputs_embeds.dtype
     device = inputs_embeds.device
@@ -3698,7 +3706,8 @@ class ConditionalChatTTS(PreTrainedModel):
         Returns:
             torch.Tensor: Prepared input embeddings for the model.
         """
-        assert input_ids.shape[0] == 1
+        if input_ids.shape[0] != 1:
+            raise ValueError(f"Expected batch size of 1, but got {input_ids.shape[0]}")
 
         # Embed input_ids to input_embeds
         inputs_embeds = self.emb_text(input_ids)
@@ -3707,7 +3716,8 @@ class ConditionalChatTTS(PreTrainedModel):
         if self.use_speaker_embedding:
             spk_emb_mask = input_ids == self.spk_emb_token_id
             if spk_emb_mask.any():
-                assert lm_spk_emb_last_hidden_states is not None
+                if lm_spk_emb_last_hidden_states is None:
+                    raise ValueError("lm_spk_emb_last_hidden_states cannot be None when speaker embedding is used")
                 # Project spk emb to tts hidden size first, [batch_size, num_spk_emb, llm_dim] -> [batch_size, num_spk_emb, self.hidden_size]
                 lm_spk_emb_last_hidden_states = lm_spk_emb_last_hidden_states.to(self.projector.linear1.weight.dtype)
                 projected_spk_emb = self.projector(lm_spk_emb_last_hidden_states)
@@ -3744,8 +3754,10 @@ class ConditionalChatTTS(PreTrainedModel):
 
         Note that all `batch_size` should be `1`.
         """
-        assert input_ids.shape[0] == 1
-        assert past_key_values is not None
+        if input_ids.shape[0] != 1:
+            raise ValueError(f"Expected batch size of 1, but got {input_ids.shape[0]}")
+        if past_key_values is None:
+            raise ValueError("past_key_values cannot be None")
 
         # Merge text and LLM embeddings
         inputs_embeds = self.merge_inputs_embeds(
@@ -3814,8 +3826,10 @@ class ConditionalChatTTS(PreTrainedModel):
             input_ids (torch.Tensor): (1, seq_len, num_vq) Audio input token ids.
             past_key_values (List[tuple[torch.Tensor, torch.Tensor]]): Past key values for attention mechanism.
         """
-        assert input_ids.shape[0] == 1
-        assert past_key_values is not None
+        if input_ids.shape[0] != 1:
+            raise ValueError(f"Expected batch size of 1, but got {input_ids.shape[0]}")
+        if past_key_values is None:
+            raise ValueError("past_key_values cannot be None")
 
         code_emb = [self.emb_code[i](input_ids[:, :, i]) for i in range(self.num_vq)]
         inputs_embeds = torch.stack(code_emb, 3).sum(3)  # [1,seq_len,768]
@@ -3892,8 +3906,10 @@ class ConditionalChatTTS(PreTrainedModel):
         """
 
         # We only support batch size `1` for now
-        assert input_ids.shape[0] == 1
-        assert past_key_values is not None
+        if input_ids.shape[0] != 1:
+            raise ValueError(f"Expected batch size of 1, but got {input_ids.shape[0]}")
+        if past_key_values is None:
+            raise ValueError("past_key_values cannot be None")
 
         # fix: this should not be `input_ids.shape[1]`
         # start_idx = input_ids.shape[1]
@@ -3938,9 +3954,11 @@ class ConditionalChatTTS(PreTrainedModel):
             if progress == condition_length:
                 audio_bos = True
 
-            assert progress == (
-                past_key_values[0][0].shape[2] + 1
-            )  # If you are using according to the guidelines, this should be passed.
+            # If you are using according to the guidelines, this should be passed.
+            if progress != (past_key_values[0][0].shape[2] + 1):
+                raise ValueError(
+                    f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
+                )
 
             if audio_bos:
                 # Generate the first token, activate the model with `self.audio_bos_token_id`, the model will predict a new audio token. This is a special case because without the `audio bos token`, it is impossible to generate the first audio token in our streaming setting.
@@ -4150,7 +4168,8 @@ def get_2d_sincos_pos_embed(embed_dim, image_size):
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError(f"embed_dim must be even, but got {embed_dim}")
 
     # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid_new(embed_dim // 2, grid[0])  # (H, W, D/2)
@@ -4166,7 +4185,8 @@ def get_1d_sincos_pos_embed_from_grid_new(embed_dim, pos):
     pos: a list of positions to be encoded: size (H, W)
     out: (H, W, D)
     """
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError(f"embed_dim must be even, but got {embed_dim}")
     omega = np.arange(embed_dim // 2, dtype=np.float32)
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
@@ -4235,7 +4255,10 @@ class Resampler(nn.Module):
             self._set_2d_pos_cache(self.max_size, device)
 
     def forward(self, x, tgt_sizes=None):
-        assert x.shape[0] == tgt_sizes.shape[0]
+        if x.shape[0] != tgt_sizes.shape[0]:
+            raise ValueError(
+                f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
+            )
         bs = x.shape[0]
 
         device = x.device
@@ -4305,7 +4328,8 @@ class MultiheadAttention(nn.Module):
         self.dropout = dropout
         self.batch_first = batch_first
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError("embed_dim must be divisible by num_heads")
 
         factory_kwargs = {"device": device, "dtype": dtype}
 
@@ -4784,13 +4808,14 @@ class MiniCPMVisionEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.self_attn = (
-            MiniCPMVisionAttention(config) if not self._use_flash_attention_2 else MiniCPMVisionFlashAttention2(config)
+            MiniCPMVisionAttention(config)
+            if not config._attn_implementation == "flash_attention_2"
+            else MiniCPMVisionFlashAttention2(config)
         )
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = MiniCPMVisionMLP(config)
-
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -5190,4 +5215,4 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         )
 
 
-__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6TextModel", "MiniCPM_o_2_6PreTrainedModel"]
+__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6PreTrainedModel"]

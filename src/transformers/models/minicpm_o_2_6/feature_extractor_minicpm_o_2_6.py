@@ -17,9 +17,12 @@ import math
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
+from ...utils.import_utils import is_torch_available
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
+
+if is_torch_available():
+    import torch
 
 
 class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
@@ -54,9 +57,11 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         audios_list = self.format_audios(audios)
 
         if audio_parts is not None:
-            assert len(audio_parts) == len(audios_list)
+            if len(audio_parts) != len(audios_list):
+                raise ValueError(f"Length of audio_parts ({len(audio_parts)}) must equal length of audios_list ({len(audios_list)})")
             for parts, audios in zip(audio_parts, audios_list):
-                assert len(parts) == len(audios)
+                if len(parts) != len(audios):
+                    raise ValueError(f"Length of parts ({len(parts)}) must equal length of audios ({len(audios)})")
 
         audio_feature_lens_list = []
         audio_features_all = []

@@ -148,7 +148,8 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
 
         max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(
             max_slice_nums)
-        assert max_slice_nums > 0
+        if max_slice_nums <= 0:
+            raise ValueError(f"max_slice_nums must be greater than 0, got {max_slice_nums}")
         source_image, patches, sliced_grid = self.slice_image(
             # default: 9  # default: 448  # default: 14
             image,
