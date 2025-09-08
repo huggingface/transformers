@@ -79,7 +79,7 @@ Index the images offline, and during inference, return the query text embeddings
 Store the image and image embeddings by writing them to the dataset with [`~datasets.Dataset.map`] as shown below. Add an `embeddings` column that contains the indexed embeddings. ColPali embeddings take up a lot of storage, so remove them from the accelerator and store them in the CPU as NumPy vectors.
 
 ```python
-ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to(devide), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
+ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to(device), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
 ```
 
 For online inference, create a function to search the image embeddings in batches and retrieve the k-most relevant images. The function below returns the indices in the dataset and their scores for a given indexed dataset, text embeddings, number of top results, and the batch size.
