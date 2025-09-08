@@ -1448,6 +1448,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
+    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     @deprecate_kwarg(
         "video_load_backend",
         version="4.59",
