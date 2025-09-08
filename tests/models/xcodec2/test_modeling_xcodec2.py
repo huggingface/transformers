@@ -358,6 +358,14 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
 
+    @unittest.skip(reason="The Xcodec2Model does not Flash attention")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="The Xcodec2Model does not Flash attention")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     @unittest.skip(reason="The Xcodec2Model does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
