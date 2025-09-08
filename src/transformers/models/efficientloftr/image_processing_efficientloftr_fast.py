@@ -26,8 +26,13 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import (
+    ImageInput,
+    ImageType,
     PILImageResampling,
     SizeDict,
+    get_image_type,
+    is_pil_image,
+    is_valid_image,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -53,6 +58,37 @@ elif is_torchvision_available():
 
 if is_vision_available():
     from PIL import Image, ImageDraw
+
+
+def _is_valid_image(image):
+    return is_pil_image(image) or (
+        is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+    )
+
+
+def flatten_pair_images(images):
+    # Handle the pair validation and flattening similar to slow processor
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images):
+            # Single pair of images - keep as is, they'll be processed by the base class
+            pass
+        elif all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) or isinstance(image, torch.Tensor) for image in image_pair)
+            for image_pair in images
+        ):
+            # Multiple pairs - flatten them
+            images = [image for image_pair in images for image in image_pair]
+    else:
+        raise ValueError(
+            "Input images must be a one of the following :",
+            " - A pair of PIL images.",
+            " - A pair of 3D arrays.",
+            " - A list of pairs of PIL images.",
+            " - A list of pairs of 3D arrays.",
+        )
+    return images
 
 
 def is_grayscale(
@@ -108,6 +144,18 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _prepare_images_structure(
+        self,
+        images: ImageInput,
+        **kwargs,
+    ) -> ImageInput:
+        # we need to handle image pairs validation and flattening
+        return flatten_pair_images(images)
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -121,43 +169,22 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Union[str, TensorType],
         **kwargs,
     ) -> BatchFeature:
-        # Note: images here are already converted to torch tensors by BaseImageProcessorFast
-        # But we need to handle image pairs validation and flattening
-
-        # First convert any non-torch images and validate pairs
-        from ...image_utils import ImageType, get_image_type, is_pil_image, is_valid_image
-
-        def _is_valid_image(image):
-            return is_pil_image(image) or (
-                is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
-            )
-
-        # Handle the pair validation and flattening similar to slow processor
-        if isinstance(images, list):
-            if len(images) == 2 and all(
-                (_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images
-            ):
-                # Single pair of images - keep as is, they'll be processed by the base class
-                pass
-            elif all(
-                isinstance(image_pair, list)
-                and len(image_pair) == 2
-                and all(_is_valid_image(image) or isinstance(image, torch.Tensor) for image in image_pair)
-                for image_pair in images
-            ):
-                # Multiple pairs - flatten them
-                images = [image for image_pair in images for image in image_pair]
-
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
-            if do_grayscale:
-                stacked_images = convert_to_grayscale(stacked_images)
             if do_resize:
                 stacked_images = self.resize(stacked_images, size=size, interpolation=interpolation)
+            processed_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_grayscale:
+                stacked_images = convert_to_grayscale(stacked_images)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
@@ -166,21 +193,10 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         image_pairs = [processed_images[i : i + 2] for i in range(0, len(processed_images), 2)]
 
         # Stack each pair into a single tensor to match slow processor format
-        stacked_pairs = []
-        for pair in image_pairs:
-            stacked_pair = torch.stack(pair, dim=0)
-            stacked_pairs.append(stacked_pair)
+        stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
         # Return in same format as slow processor
-        if return_tensors:
-            if len(stacked_pairs) == 1:
-                # Single pair: add batch dimension to match slow processor format
-                image_pairs = stacked_pairs[0].unsqueeze(0)  # Shape: [1, 2, 3, H, W]
-            else:
-                # Multiple pairs: stack to get [batch_size, 2, 3, H, W]
-                image_pairs = torch.stack(stacked_pairs, dim=0)
-        else:
-            image_pairs = stacked_pairs
+        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
         return BatchFeature(data={"pixel_values": image_pairs})
 
