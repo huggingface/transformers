@@ -472,12 +472,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     ) -> list[torch.Tensor]:
         sounds = torch.stack(sounds, dim=0).to(self.llm.device)
         masks = torch.stack(masks, dim=0).to(self.llm.device)
-        feats = self.encode_sound(sounds, masks)  # (B, S, D)
+        feats = self.get_audio_features(sounds, masks)  # (B, S, D)
 
         end_emb = self.llm.model.embed_tokens(torch.tensor([self.end_newline_token_id], device=self.llm.device))
         return [torch.cat([f.to(self.llm.device), end_emb], dim=0) for f in feats]
 
-    def encode_sound(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get_audio_features(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
         proj_dtype = next(self.sound_mm_projector.parameters()).dtype
         sounds = sounds.to(device=device, dtype=proj_dtype)
