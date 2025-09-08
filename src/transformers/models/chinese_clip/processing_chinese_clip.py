@@ -55,7 +55,6 @@ class ChineseCLIPProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-
     @property
     def feature_extractor_class(self):
         warnings.warn(
