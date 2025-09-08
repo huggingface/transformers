@@ -23,8 +23,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2DecoderLayer,
     Gemma2ForCausalLM,
-    Gemma2ForSequenceClassification,
-    Gemma2ForTokenClassification,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
@@ -112,19 +110,10 @@ class VaultGemmaForCausalLM(Gemma2ForCausalLM):
     pass
 
 
-class VaultGemmaForSequenceClassification(Gemma2ForSequenceClassification):
-    pass
-
-
-class VaultGemmaForTokenClassification(Gemma2ForTokenClassification):
-    pass
-
 
 __all__ = [
     "VaultGemmaConfig",
     "VaultGemmaForCausalLM",
     "VaultGemmaModel",
     "VaultGemmaPreTrainedModel",
-    "VaultGemmaForSequenceClassification",
-    "VaultGemmaForTokenClassification",
 ]

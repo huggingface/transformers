@@ -29,11 +29,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -572,18 +568,4 @@ class VaultGemmaForCausalLM(VaultGemmaPreTrainedModel, GenerationMixin):
         )
 
 
-class VaultGemmaForSequenceClassification(GenericForSequenceClassification, VaultGemmaPreTrainedModel):
-    pass
-
-
-class VaultGemmaForTokenClassification(GenericForTokenClassification, VaultGemmaPreTrainedModel):
-    pass
-
-
-__all__ = [
-    "VaultGemmaForCausalLM",
-    "VaultGemmaModel",
-    "VaultGemmaPreTrainedModel",
-    "VaultGemmaForSequenceClassification",
-    "VaultGemmaForTokenClassification",
-]
+__all__ = ["VaultGemmaForCausalLM", "VaultGemmaModel", "VaultGemmaPreTrainedModel"]
