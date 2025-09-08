@@ -57,7 +57,7 @@ if is_torchvision_available():
     else:
         from torchvision.transforms import functional as F
 
-
+# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     """Constrain a value to be a multiple of another value."""
     x = round(val / multiple) * multiple
@@ -70,7 +70,7 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
     return x
 
-
+# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _get_resize_output_image_size(
     input_image: "torch.Tensor",
     output_size: Union[int, tuple[int, int]],
@@ -105,6 +105,7 @@ def _get_resize_output_image_size(
 class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     Extended kwargs for PromptDepthAnything fast image processor.
+    We need to add these kwargs to take into account the PromptDepthAnything-specific parameters.
 
     Args:
         keep_aspect_ratio (`bool`, *optional*):
@@ -165,7 +166,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     model_input_names = ["pixel_values", "prompt_depth"]
 
-    # Default values checked against the "slow" image processor
+    # Default values - match the classical processor
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -190,7 +191,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
     ) -> BatchFeature:
         """
-        Thin wrapper to expose custom kwargs in the signature for documentation and typing.
+        This wrapper exposes custom kwargs in the signature for documentation and typing.
         Delegates to BaseImageProcessorFast.preprocess.
         """
         return super().preprocess(images, **kwargs)
@@ -206,7 +207,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
-        # Set default interpolation to BICUBIC to match the slow processor
+        # Set default interpolation to BICUBIC to match the slow processor (causes slight numerical differences otherwise)
         if interpolation is None:
             interpolation = F.InterpolationMode.BICUBIC
 
@@ -222,7 +223,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             multiple=ensure_multiple_of,
         )
 
-        # Use the resize method with calculated output size
+        # Standard resize method with calculated output size
         return self.resize(
             image=image,
             size=SizeDict(height=output_size[0], width=output_size[1]),
@@ -265,7 +266,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> dict:
         """
-        Process custom kwargs for PromptDepthAnything.
+        Override the base method to handle custom PromptDepthAnything parameters.
+        No significant processing is needed here, but we just need to store parameters for later use in _preprocess.
         """
         kwargs = super()._further_process_kwargs(**kwargs)
 
@@ -288,6 +290,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ):
         """
+        Overrides the base method to add custom validation.
         Validate the kwargs for the preprocess method, including PromptDepthAnything-specific parameters.
         """
         # Call parent validation
@@ -338,51 +341,41 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             prompt_scale_to_meter if prompt_scale_to_meter is not None else self.prompt_scale_to_meter
         )
 
-        # Default values for required parameters
+        # Set default
         if disable_grouping is None:
             disable_grouping = False
-
-        # Ensure image_mean and image_std are not None
         if image_mean is None:
             image_mean = self.image_mean
         if image_std is None:
             image_std = self.image_std
 
-        # Process prompt depth if provided
+        # Process prompt depth
         processed_prompt_depths = None
         if prompt_depth is not None:
             # Convert prompt depth to tensor format similar to images
             prompt_depths = self._prepare_image_like_inputs(
                 images=prompt_depth,
                 do_convert_rgb=False,  # Depth maps should not be converted to RGB
-                input_data_format=None,  # Let it infer
+                input_data_format=None,
                 device=images[0].device if images else None,
-                expected_ndims=2,  # Depth maps are typically 2D
+                expected_ndims=2,
             )
-
-            # Validate prompt_depths has same length as images
-            if len(prompt_depths) != len(images):
-                raise ValueError(
-                    f"Number of prompt depth images ({len(prompt_depths)}) does not match number of input images ({len(images)})"
-                )
 
             processed_prompt_depths = []
             for depth in prompt_depths:
-                # Scale to meters
+                # Scale
                 depth = depth * prompt_scale_to_meter
 
-                # Handle case where depth is constant (min == max)
+                # When depth is constant, we need to add a small variation to avoid numerical issues
                 if depth.min() == depth.max():
-                    # Add small variation to avoid numerical issues
                     depth[0, 0] = depth[0, 0] + 1e-6
 
-                # Add channel dimension if needed (depth maps are typically 2D)
+                # Add channel dimension if needed
                 if depth.ndim == 2:
                     depth = depth.unsqueeze(0)
 
                 processed_prompt_depths.append(depth)
 
-        # Group images by size for batched processing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
 
@@ -405,15 +398,12 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
-                # Convert SizeDict to regular dict for center_crop
                 crop_dict = {"height": crop_size["height"], "width": crop_size["width"]}
                 stacked_images = self.center_crop(stacked_images, crop_dict)
 
-            # Apply padding if requested
             if do_pad and size_divisor is not None:
-                stacked_images = self.pad_image(stacked_images, size_divisor)
+                stacked_images = self.pad_image(stacked_images, size_divisor) # Apply padding if requested
 
-            # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
@@ -482,7 +472,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         We drop fast-only runtime knobs (e.g. device, return_tensors, grouping/conversion flags,
         and transient inputs like prompt_depth) so the saved config mirrors the slow processor,
-        stays portable across environments and passes all tests.
+        stays portable across environments and passes all tests. Necessary to pass tests.
         """
         encoder_dict = super().to_dict()
         for k in (
