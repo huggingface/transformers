@@ -610,7 +610,7 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
 
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
-        RTDetrV2PreTrainedModel.__init__(config)
+        RTDetrV2PreTrainedModel.__init__(self, config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
 

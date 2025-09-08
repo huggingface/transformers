@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -152,7 +152,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -275,7 +275,6 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:
@@ -336,29 +335,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["PaliGemmaProcessor"]

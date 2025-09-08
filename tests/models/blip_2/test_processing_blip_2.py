@@ -118,18 +118,3 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        processor_kwargs = self.prepare_processor_dict()
-
-        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])

@@ -270,6 +270,7 @@ class InformerProbSparseAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -299,7 +300,7 @@ class InformerProbSparseAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
@@ -650,9 +651,9 @@ class InformerDecoder(TimeSeriesTransformerDecoder):
         self.post_init()
 
 
-class InformerModel(TimeSeriesTransformerModel, nn.Module):
+class InformerModel(TimeSeriesTransformerModel):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(config)
@@ -800,9 +801,9 @@ class InformerModel(TimeSeriesTransformerModel, nn.Module):
         super().forward(**super_kwargs)
 
 
-class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
+class InformerForPrediction(TimeSeriesTransformerForPrediction):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.model = InformerModel(config)
         if config.distribution_output == "student_t":

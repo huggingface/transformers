@@ -326,8 +326,8 @@ class DetaObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional = None
-    enc_outputs_coord_logits: Optional = None
+    enc_outputs_class = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     output_proposals: Optional[torch.FloatTensor] = None
 
 
@@ -1489,9 +1489,6 @@ class DetaModel(DetaPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.model.named_parameters():

@@ -18,7 +18,7 @@ Processor class for TrOCR.
 
 import warnings
 from contextlib import contextmanager
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -71,7 +71,7 @@ class TrOCRProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -109,19 +109,10 @@ class TrOCRProcessor(ProcessorMixin):
             inputs["labels"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return image_processor_input_names + ["labels"]
 
     @contextmanager
     def as_target_processor(self):

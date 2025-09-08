@@ -157,10 +157,12 @@ class TextGenerationPipeline(Pipeline):
         truncation=None,
         max_length=None,
         continue_final_message=None,
+        skip_special_tokens=None,
+        tokenizer_encode_kwargs=None,
         **generate_kwargs,
     ):
+        # preprocess kwargs
         preprocess_params = {}
-
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
             add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
@@ -194,9 +196,23 @@ class TextGenerationPipeline(Pipeline):
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
 
-        preprocess_params.update(generate_kwargs)
-        forward_params = generate_kwargs
+        if tokenizer_encode_kwargs is not None:
+            preprocess_params["tokenizer_encode_kwargs"] = tokenizer_encode_kwargs
 
+        preprocess_params.update(generate_kwargs)
+
+        # forward kwargs
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            generate_kwargs["eos_token_id"] = stop_sequence_ids
+        forward_params = generate_kwargs
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        # postprocess kwargs
         postprocess_params = {}
         if return_full_text is not None and return_type is None:
             if return_text is not None:
@@ -214,16 +230,8 @@ class TextGenerationPipeline(Pipeline):
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
         if continue_final_message is not None:
             postprocess_params["continue_final_message"] = continue_final_message
-
-        if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            generate_kwargs["eos_token_id"] = stop_sequence_ids
-
-        if self.assistant_model is not None:
-            forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
-            forward_params["tokenizer"] = self.tokenizer
-            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+        if skip_special_tokens is not None:
+            postprocess_params["skip_special_tokens"] = skip_special_tokens
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -285,6 +293,9 @@ class TextGenerationPipeline(Pipeline):
                 - `None` : default strategy where nothing in particular happens
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
+            tokenizer_encode_kwargs (`dict`, *optional*):
+                Additional keyword arguments to pass along to the encoding step of the tokenizer. If the text input is
+                a chat, it is passed to `apply_chat_template`. Otherwise, it is passed to `__call__`.
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./text_generation)).
@@ -330,6 +341,7 @@ class TextGenerationPipeline(Pipeline):
         padding=None,
         max_length=None,
         continue_final_message=None,
+        tokenizer_encode_kwargs=None,
         **generate_kwargs,
     ):
         # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
@@ -337,9 +349,10 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
+            "max_length": max_length,  # NOTE: `max_length` is also a `generate` arg. Use `tokenizer_encode_kwargs` to avoid a name clash
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
+        tokenizer_kwargs.update(tokenizer_encode_kwargs or {})
 
         if isinstance(prompt_text, Chat):
             tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
@@ -462,6 +475,7 @@ class TextGenerationPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         clean_up_tokenization_spaces=True,
         continue_final_message=None,
+        skip_special_tokens=None,
     ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
@@ -480,6 +494,7 @@ class TextGenerationPipeline(Pipeline):
                     if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
                         splitted_keys[k] = v.numpy().tolist()
 
+        skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
@@ -487,7 +502,7 @@ class TextGenerationPipeline(Pipeline):
                 # Decode text
                 text = self.tokenizer.decode(
                     sequence,
-                    skip_special_tokens=True,
+                    skip_special_tokens=skip_special_tokens,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
@@ -498,7 +513,7 @@ class TextGenerationPipeline(Pipeline):
                     prompt_length = len(
                         self.tokenizer.decode(
                             input_ids[0],
-                            skip_special_tokens=True,
+                            skip_special_tokens=skip_special_tokens,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )

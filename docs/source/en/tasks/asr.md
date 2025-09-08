@@ -219,9 +219,9 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ...     pred_str = processor.batch_decode(pred_ids)
 ...     label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-...     wer = wer.compute(predictions=pred_str, references=label_str)
+...     wer_score = wer.compute(predictions=pred_str, references=label_str)
 
-...     return {"wer": wer}
+...     return {"wer": wer_score}
 ```
 
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.

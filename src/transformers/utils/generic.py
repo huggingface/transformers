@@ -29,11 +29,9 @@ from functools import partial, wraps
 from typing import Any, Callable, Optional, TypedDict
 
 import numpy as np
-from packaging import version
 
 from ..utils import logging
 from .import_utils import (
-    get_torch_version,
     is_flax_available,
     is_mlx_available,
     is_tf_available,
@@ -351,23 +349,14 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            if version.parse(get_torch_version()) >= version.parse("2.2"):
-                from torch.utils._pytree import register_pytree_node
+            from torch.utils._pytree import register_pytree_node
 
-                register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                    serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-                )
-            else:
-                from torch.utils._pytree import _register_pytree_node
-
-                _register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                )
+            register_pytree_node(
+                cls,
+                _model_output_flatten,
+                partial(_model_output_unflatten, output_type=cls),
+                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+            )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -494,19 +483,12 @@ if is_torch_available():
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 
-    if version.parse(get_torch_version()) >= version.parse("2.2"):
-        _torch_pytree.register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-            serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-        )
-    else:
-        _torch_pytree._register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-        )
+    _torch_pytree.register_pytree_node(
+        ModelOutput,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=ModelOutput),
+        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
+    )
 
 
 class ExplicitEnum(str, Enum):
@@ -866,9 +848,9 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
-        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -880,8 +862,8 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: Optional[bool]
     output_attentions: Optional[bool]
     output_router_logits: Optional[bool]
-    cumulative_seqlens_q: Optional["torch.LongTensor"]
-    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    cu_seq_lens_q: Optional["torch.LongTensor"]
+    cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
 
@@ -992,21 +974,21 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache")
-        if use_cache is None:
-            use_cache = getattr(self.config, "use_cache", False)
+        use_cache = (
+            kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
+        )
+        if use_cache is not None:
+            if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                )
+                use_cache = False
+
+            kwargs["use_cache"] = use_cache
 
         return_dict = kwargs.pop("return_dict", None)
         if return_dict is None:
             return_dict = getattr(self.config, "return_dict", True)
-
-        if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        kwargs["use_cache"] = use_cache
 
         all_args = kwargs.copy()
         if "kwargs" in all_args:
@@ -1025,8 +1007,29 @@ def check_model_inputs(func):
             )
             for k in capture_flags
         }
+
+        # We let cross attentions to be saved separately because some models add `cross-attn` layer
+        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        if "output_attentions" in recordable_keys:
+            recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
+
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
+
+        # Check attention implementation is properly set for capturing attention outputs
+        if recordable_keys.get("output_attentions", False):
+            supported_attn = ["eager", "eager_paged", "flex_attention"]
+            config_attn = getattr(self.config, "_attn_implementation", None)
+            sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
+            sub_configs_attn = [
+                getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
+            ]
+            if config_attn not in supported_attn or any(attn not in supported_attn for attn in sub_configs_attn):
+                warnings.warn(
+                    f"`output_attentions=True` is not supported with `attn_implementation` other than {supported_attn}. "
+                    "Please use `model.set_attn_implementation('eager')` to enable capturing attention outputs.",
+                    UserWarning,
+                )
 
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
@@ -1087,10 +1090,11 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.last_hidden_state,)
 
                 outputs[key] = collected_outputs[key]

@@ -114,23 +114,5 @@ class GitProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        return ["input_ids", "attention_mask", "pixel_values"]
-
 
 __all__ = ["GitProcessor"]

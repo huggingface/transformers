@@ -46,9 +46,9 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> import requests
 >>> from PIL import Image
 >>> import torch
->>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
+>>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation, infer_device
 
->>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+>>> device = infer_device()
 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -56,7 +56,7 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> image_processor = DepthProImageProcessorFast.from_pretrained("apple/DepthPro-hf")
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
 
->>> inputs = image_processor(images=image, return_tensors="pt").to(device)
+>>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -134,7 +134,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```py
 from transformers import DepthProForDepthEstimation
-model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", dtype=torch.float16)
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).

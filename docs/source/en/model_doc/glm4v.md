@@ -59,7 +59,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="THUDM/GLM-4.1V-9B-Thinking",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -84,7 +84,7 @@ from transformers import Glm4vForConditionalGeneration, AutoProcessor
 
 model = Glm4vForConditionalGeneration.from_pretrained(
     "THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -112,7 +112,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to("cuda")
+).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids_trimmed = [
@@ -130,14 +130,16 @@ Using GLM-4.1V with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python
-from transformers import AutoProcessor, Glm4vForConditionalGeneration
+from transformers import AutoProcessor, Glm4vForConditionalGeneration, infer_device
 import torch
+
+device = f"{infer_device()}:0"
 
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.bfloat16,
-    device_map="cuda:0"
+    dtype=torch.bfloat16,
+    device_map=device
 )
 
 messages = [
@@ -155,7 +157,7 @@ messages = [
         ],
     }
 ]
-inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True).to("cuda:0")
+inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True).to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=1.0)
 output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 print(output_text)

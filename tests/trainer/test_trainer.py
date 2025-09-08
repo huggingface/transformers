@@ -516,11 +516,15 @@ if is_torch_available():
             self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
             self.fc = nn.Linear(hidden_size, vocab_size)
 
-        def forward(self, input_ids, **kwargs):
+        def forward(self, input_ids, labels=None, **kwargs):
             embedded = self.embedding(input_ids)
             lstm_out, _ = self.lstm(embedded)
             logits = self.fc(lstm_out)
-            return logits
+            if labels is None:
+                return logits
+
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+            return loss, logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
         import numpy as np
@@ -2571,6 +2575,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_optimi
     @require_torch_accelerator
+    def test_stable_adamw_trainer_adamw_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            weight_decay=0.001,
+            adam_beta1=0.89,
+            adam_beta2=0.98,
+            adam_epsilon=1e-8,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # check StableAdamW optimizer is created with the correct parameters
+        self.assertEqual(trainer.optimizer.defaults["beta1"], args.adam_beta1)
+        self.assertEqual(trainer.optimizer.defaults["beta2"], args.adam_beta2)
+        self.assertEqual(trainer.optimizer.defaults["eps"], args.adam_epsilon)
+        self.assertEqual(trainer.optimizer.defaults["weight_decay"], args.weight_decay)
+
+    @require_torch_optimi
+    @require_torch_accelerator
     def test_stable_adamw_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -4526,10 +4562,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4549,11 +4585,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
@@ -4988,6 +5024,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_trainer_works_without_model_config(self):
+        """
+        Tests that models without a `config` parameter can still be trained.
+        This is useful for preserving compatibility with third parties that train different models using the
+        transformers Trainer.
+
+        If this test fails, it doesn't imply that there's issues with transformers, but perhaps with third
+        parties.
+        """
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
+        # Note that this class does not have a config attribute
+
+        train_dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in train_dataset.examples:
+            example["labels"] = example["input_ids"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir,
+                report_to="none",
+                max_steps=5,
+                per_device_train_batch_size=1,
+                remove_unused_columns=False,
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=train_dataset,
+            )
+            trainer.train()
 
 
 @require_torch

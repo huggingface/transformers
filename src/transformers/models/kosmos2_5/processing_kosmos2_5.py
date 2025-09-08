@@ -79,7 +79,7 @@ class Kosmos2_5Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
         audio=None,
         videos=None,
