@@ -595,6 +595,14 @@ class ContinuousBatchingManager:
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
 
+    @staticmethod
+    def supported_attention_implementations() -> set[str]:
+        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
+
+    @staticmethod
+    def default_attention_implementation() -> str:
+        return "sdpa_paged"
+
     @traced
     def warmup(self, batch_processor):
         stream = torch.cuda.Stream(device=self.model.device)
