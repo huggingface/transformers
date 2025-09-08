@@ -21,7 +21,7 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 > [!TIP]
 > Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
 
-You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency—well-suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM remains our recommendation for large-scale production, `serve` avoids the extra runtime and ops overhead, and is on track to gain more production-oriented features.
+You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM remains our recommendation for large-scale production, `serve` avoids the extra runtime and ops overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
 - [Jan (text and MCP user interface)](./jan.md)
@@ -370,29 +370,36 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of waiting for fixed batches, serve adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
 
-While we still recommend vLLM for large-scale production (very high QPS, multi-GPU sharding, advanced scheduling/memory), CB narrows the gap for many practical needs. In particular, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by transformers serve without introducing an extra runtime to operate.
+While we still recommend vLLM for large-scale production (very high QPS, advanced scheduling/memory), CB narrows the gap for many practical needs. In particular, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
 
-### How it works (briefly)
+### Enable CB in serve
 
-1. Prefill phase: Requests with new tokens (e.g., prompts) can be grouped so the model encodes them together.
+CB is opt-in and currently applies to chat completions.
 
-2. Decode phase: As sequences generate token-by-token, serve maintains a live batch where finished sequences drop out and new ones can join.
+```sh
+transformers serve \
+  --continuous-batching
+```
 
-3. Scheduling & fairness: The scheduler balances throughput with latency by mixing short and long requests and honoring per-request limits.
 
-### Using CB with transformers serve
+### Performance tips
 
-CB is available out of the box when serving causal language models. Typical knobs you’ll tune (names may vary by version—check transformers serve --help):
+- Use an efficient attention backend when available:
 
-- Batch size / concurrency: Upper bound on how many requests decode together.
+```sh
+transformers serve \
+  --continuous_batching \
+  --attn_implementation paged_attention
+```
 
-- Max input / total tokens: Caps to prevent a single very long prompt or generation from dominating the batch.
+> [!TIP]
+> If you choose `paged_attention`, you must install `flash-attn` separately: `pip install flash-attn --no-build-isolation`
 
-- Queue length / timeout: Controls how many requests can wait and how long they wait to join the batch.
+- `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
 
-- KV cache / memory budget: Limits for attention cache, which directly affect how many concurrent sequences fit on your GPU.
+- `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
 
-A simple mental model: increase batch/concurrency until you approach your GPU memory limit, then tune token caps to keep throughput high and tail latency reasonable.
+- `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs
 
 
 
