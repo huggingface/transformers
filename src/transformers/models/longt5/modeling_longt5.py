@@ -1270,6 +1270,36 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    def _try_load_missing_tied_module(self, key):
+        module = self
+        if key.endswith(".weight"):
+            key = key[: -len(".weight")]
+        for sub_key in key.split("."):
+            if not hasattr(module, sub_key):
+                return
+            module = getattr(module, sub_key)
+
+        self._tie_or_clone_weights(module, self.shared)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requested_loading_info = kwargs.get("output_loading_info", False)
+        kwargs["output_loading_info"] = True
+        model, loading_info = super().from_pretrained(*args, **kwargs)
+        missing_keys = loading_info.get("missing_keys", [])
+
+        if hasattr(model, "shared") and hasattr(model, "_tied_weights_keys"):
+            for missing_key in missing_keys:
+                logger.warning(
+                    f"Recovering a missing tied weight {missing_key} from a legacy LongT5 checkpoint. "
+                    f"Consider saving {missing_key} in your checkpoint or updating the config (tie_word_embeddings=true)."
+                )
+                model._try_load_missing_tied_module(missing_key)
+
+        if requested_loading_info:
+            return model, loading_info
+        return model
+
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -1345,19 +1375,6 @@ class LongT5PreTrainedModel(PreTrainedModel):
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         return shifted_input_ids
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        model = super().from_pretrained(*args, **kwargs)
-        if hasattr(model, "shared"):
-            logger.warning(
-                "Loading a legacy LongT5 checkpoint. Setting embed_tokens weights to shared weights in the decoder and encoder."
-            )
-            if hasattr(model, "encoder") and hasattr(model.encoder, "embed_tokens"):
-                model.encoder.embed_tokens.weight = model.shared.weight
-            if hasattr(model, "decoder") and hasattr(model.decoder, "embed_tokens"):
-                model.decoder.embed_tokens.weight = model.shared.weight
-        return model
 
 
 class LongT5Stack(LongT5PreTrainedModel):
