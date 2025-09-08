@@ -21,7 +21,7 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 > [!TIP]
 > Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
 
-Apart from that you can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
+You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency—well-suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM remains our recommendation for large-scale production, `serve` avoids the extra runtime and ops overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
 - [Jan (text and MCP user interface)](./jan.md)
@@ -58,7 +58,7 @@ or by sending an HTTP request, like we'll see below.
 
 ## Chat Completions - text-based
 
-See below for examples for text-based requests. Both LLMs and VLMs should handle 
+See below for examples for text-based requests. Both LLMs and VLMs should handle
 
 <hfoptions id="chat-completion-http">
 <hfoption id="curl">
@@ -366,6 +366,33 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 <!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
 
+## Continuous Batching
+
+Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of waiting for fixed batches, serve adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
+
+While we still recommend vLLM for large-scale production (very high QPS, multi-GPU sharding, advanced scheduling/memory), CB narrows the gap for many practical needs. In particular, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by transformers serve without introducing an extra runtime to operate.
+
+### How it works (briefly)
+
+1. Prefill phase: Requests with new tokens (e.g., prompts) can be grouped so the model encodes them together.
+
+2. Decode phase: As sequences generate token-by-token, serve maintains a live batch where finished sequences drop out and new ones can join.
+
+3. Scheduling & fairness: The scheduler balances throughput with latency by mixing short and long requests and honoring per-request limits.
+
+### Using CB with transformers serve
+
+CB is available out of the box when serving causal language models. Typical knobs you’ll tune (names may vary by version—check transformers serve --help):
+
+- Batch size / concurrency: Upper bound on how many requests decode together.
+
+- Max input / total tokens: Caps to prevent a single very long prompt or generation from dominating the batch.
+
+- Queue length / timeout: Controls how many requests can wait and how long they wait to join the batch.
+
+- KV cache / memory budget: Limits for attention cache, which directly affect how many concurrent sequences fit on your GPU.
+
+A simple mental model: increase batch/concurrency until you approach your GPU memory limit, then tune token caps to keep throughput high and tail latency reasonable.
 
 
 
