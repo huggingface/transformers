@@ -13,9 +13,16 @@
 # limitations under the License.
 
 
+from typing import List, Tuple, TYPE_CHECKING
+from collections import defaultdict
+import torch
+
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+
+if TYPE_CHECKING:
+    from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -58,8 +65,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if not is_torch_available():
             # torch already should be installed as part of compressed tensors
             raise ImportError("torch is required for using compressed-tensors quantization")
+        
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
+            dtype = torch.float16
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
+        return dtype
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
         from compressed_tensors.transform import apply_transform_config
 
@@ -80,13 +95,45 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ):
             self.compressor.compress_model(model=model)
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        """Decompress loaded model if necessary - need for qat"""
+        # update tied weights to include added transforms (_dynamic_tied_weights_keys)
+        self.patch_tie_weights_fn(model)
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        """Decompress loaded model if necessary - need for qat"""
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            self.compressor.decompress_model(model=model)
+            self.dequantize(model)
+
+    def patch_tie_weights_fn(self, model: "PreTrainedModel"):
+        # record shared tensors before weight loading
+        shared_weights: defaultdict[int, List[Tuple[torch.nn.Module, str]]] = defaultdict(list)
+        for module in model.modules():
+            shared_keys = getattr(module, "_dynamic_tied_weights_keys", set())
+            for key in shared_keys:
+                weight = getattr(module, key)
+                shared_weights[id(weight)].append((module, key))
+
+        original_fn = model.tie_weights.__func__
+
+        # this function is called after weight loading but before dispatch
+        def tie_weights(self: "PreTrainedModel"):
+            # broadcast loaded weight to other shared weights
+            for modules_keys in shared_weights.values():
+                weights = [getattr(module, key) for module, key in modules_keys]
+                loaded_weights = [weight for weight in weights if weight.device.type != "meta"]
+                if len(loaded_weights) <= 0:
+                    raise ValueError("Failed to load shared weight")
+                if len(loaded_weights) >= 2:
+                    raise ValueError("Loaded too many shared weights")
+
+                loaded_weight = loaded_weights[0]
+                for module, key in modules_keys:
+                    module.load_state_dict({key: loaded_weight}, strict=False, assign=True)
+
+            original_fn(self)
+
+        model.tie_weights = tie_weights.__get__(model)
 
     def update_tp_plan(self, config):
         additional_plan = {
@@ -113,3 +160,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def dequantize(self, model: "PreTrainedModel"):
+        """Decompress model"""
+        self.compressor.decompress_model(model=model)
