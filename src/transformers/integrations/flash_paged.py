@@ -50,13 +50,14 @@ def paged_attention_forward(
         softcap: float. Anything > 0 activates softcapping attention.
     """
     # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-    k, v = cache.update(k, v, module.layer_idx, **kwargs)
-
-    # Check if we are in a sliding window context
     if cache is not None:
+        k, v = cache.update(k, v, module.layer_idx, **kwargs)
+
+        # Check if we are in a sliding window context
         is_full_attention = cache.sliding_windows[module.layer_idx] == NO_SLIDING_WINDOW
         cu_seq_lens_k = cu_seq_lens_k[0].clone() if is_full_attention else cu_seq_lens_k[1].clone()
         max_seqlen_k = max_seqlen_k[0] if is_full_attention else max_seqlen_k[1]
+
     # If there is no cache, we assume this is full attention, and we check if cu_seq_lens_k is a 2D tensor or not
     elif cu_seq_lens_k.dim() == 2:
         cu_seq_lens_k = cu_seq_lens_k[0].clone()
