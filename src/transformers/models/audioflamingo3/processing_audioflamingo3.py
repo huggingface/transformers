@@ -247,9 +247,40 @@ class AudioFlamingo3Processor(ProcessorMixin):
             }
         )
 
-    def decode(self, token_ids: torch.Tensor) -> Union[str, list[str]]:
-        out = [self.tokenizer.decode(ids, skip_special_tokens=True).strip() for ids in token_ids]
-        return out[0] if len(out) == 1 else out
+    def batch_decode(
+        self,
+        token_ids: torch.Tensor,
+        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+    ) -> list[str]:
+        """
+        Batch text decoding that mirrors HF processors (see Dia).
+        Returns a list[str] of decoded strings, one per sequence.
+        """
+        output_kwargs = self._merge_kwargs(
+            AudioFlamingo3ProcessorKwargs,
+            **kwargs,
+        )
+        text_kwargs = dict(output_kwargs.get("text_kwargs", {}))
+        text_kwargs.setdefault("skip_special_tokens", True)
+
+        decoded = self.tokenizer.batch_decode(token_ids, **text_kwargs)
+        return [s.strip() for s in decoded]
+
+    def decode(
+        self,
+        token_ids: torch.Tensor,
+        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+    ) -> str:
+        """
+        Single-sample text decoding.
+        Enforces a batch size of 1 and delegates to `batch_decode`.
+        """
+        if token_ids.ndim == 1:
+            token_ids = token_ids.unsqueeze(0)
+        elif token_ids.shape[0] != 1:
+            raise ValueError(f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. " "Use `batch_decode` for multi-sample outputs.")
+
+        return self.batch_decode(token_ids, **kwargs)[0]
 
 
 __all__ = ["AudioFlamingo3Processor"]
