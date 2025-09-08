@@ -163,6 +163,7 @@ class SlidingAttentionCacheManager(CacheManager):
         # Apply sliding window
         start_index = past_length % self.sliding_window
         cache_length = min(query_length, self.sliding_window)
+        padding_length = query_length - cache_length
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
@@ -171,6 +172,8 @@ class SlidingAttentionCacheManager(CacheManager):
             block_offset = i % self.block_size
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
+        if padding_length > 0:
+            physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
 
 

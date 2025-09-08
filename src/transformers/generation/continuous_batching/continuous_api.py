@@ -78,8 +78,8 @@ class PagedAttentionArgs:
     cumulative_seqlens_k: torch.Tensor
     max_seqlen_q: int
     max_seqlen_k: int
-    write_index: torch.Tensor
-    read_index: torch.Tensor
+    write_index: list[torch.Tensor]
+    read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     use_cache: bool = False
