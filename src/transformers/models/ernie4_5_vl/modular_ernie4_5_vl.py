@@ -725,6 +725,32 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         image_embeds = self.resampler_model(image_embeds, grid_thw)
         return image_embeds
 
+    def get_tokentype_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+    ):
+        """Return the mask indicating a multimodal token (including the start/end tokens of an image/video)"""
+        def get_mask_for_token_id(token_id):
+            if input_ids is not None:
+                return (input_ids == token_id).bool()
+
+            mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            return mask.all(-1).bool()
+
+        total_mask = get_mask_for_token_id(self.config.image_token_id)
+        for token_id in [
+            self.config.image_start_token_id,
+            self.config.image_end_token_id,
+            self.config.video_token_id,
+            self.config.video_start_token_id,
+            self.config.video_end_token_id,
+        ]:
+            total_mask = torch.logical_or(total_mask, get_mask_for_token_id(token_id))
+        return total_mask
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -749,6 +775,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        token_type_ids = self.get_tokentype_mask(input_ids, inputs_embeds)
+
         # TODO: remove after refactoring all
         if pixel_values is None and images is not None:
             pixel_values = images
@@ -772,11 +800,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-        # TODO
-        if token_type_ids is None:
-            token_type_ids = image_mask.to(torch.int64)
-        token_type_ids[token_type_ids == TokenType.video] = TokenType.image
 
         # TODO: rope delta approach by qwen 2.5 vl?
 

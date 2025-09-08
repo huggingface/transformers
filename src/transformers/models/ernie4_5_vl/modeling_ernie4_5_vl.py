@@ -1347,6 +1347,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        token_type_ids = self.get_tokentype_mask(input_ids, inputs_embeds)
+
         # TODO: remove after refactoring all
         if pixel_values is None and images is not None:
             pixel_values = images
@@ -1371,11 +1373,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        # TODO
-        if token_type_ids is None:
-            token_type_ids = image_mask.to(torch.int64)
-        token_type_ids[token_type_ids == TokenType.video] = TokenType.image
-
         # TODO: rope delta approach by qwen 2.5 vl?
 
         outputs = self.language_model(
@@ -1398,6 +1395,33 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def get_tokentype_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+    ):
+        """Return the mask indicating a multimodal token (including the start/end tokens of an image/video)"""
+
+        def get_mask_for_token_id(token_id):
+            if input_ids is not None:
+                return (input_ids == token_id).bool()
+
+            mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            return mask.all(-1).bool()
+
+        total_mask = get_mask_for_token_id(self.config.image_token_id)
+        for token_id in [
+            self.config.image_start_token_id,
+            self.config.image_end_token_id,
+            self.config.video_token_id,
+            self.config.video_start_token_id,
+            self.config.video_end_token_id,
+        ]:
+            total_mask = torch.logical_or(total_mask, get_mask_for_token_id(token_id))
+        return total_mask
 
 
 class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, GenerationMixin):
