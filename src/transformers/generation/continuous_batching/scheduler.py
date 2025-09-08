@@ -24,7 +24,7 @@ from .requests import RequestState, RequestStatus
 class Scheduler(ABC):
     """
     Abstract base class for scheduling requests in the continuous batch processor. Schedulers manage the lifecycle of
-    requests from when they are added to the waiting queue to when they are scheduled for processing. Different 
+    requests from when they are added to the waiting queue to when they are scheduled for processing. Different
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
@@ -107,7 +107,7 @@ class Scheduler(ABC):
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
-        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheManager 
+        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheManager
         objects. Returns a boolean indicating if the allocation was successful or not.
         """
         # 1. we check that the occupancy is less than the requested length
@@ -153,13 +153,13 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
-    """This scheduler processes requests in the order they arrive, with decoding requests having priority over prefill 
-    requests. It includes an optional safety margin mechanism to prevent cache exhaustion by limiting new prefill 
+    """This scheduler processes requests in the order they arrive, with decoding requests having priority over prefill
+    requests. It includes an optional safety margin mechanism to prevent cache exhaustion by limiting new prefill
     requests when the remaining proportion of free blocks is low."""
 
     def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.0):
-        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop 
-        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks, 
+        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
+        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
         or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
         """
         super().__init__(cache, retain_cache_on_finish)

@@ -33,6 +33,9 @@ def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]]
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
         - All groups have the same number of layers
+
+    For a model with the following layer types: ["sliding", "full", "full", "sliding"]
+    We would get two groups: [0, 3] and [1, 2].
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -259,7 +262,7 @@ class PagedAttentionCache:
         self, request_id: str, past_length: int, query_length: int, write_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for writing new KV states to the cache across all layer groups. This method
-        coordinates with all cache managers to build the complete set of write indices needed to store computed KV 
+        coordinates with all cache managers to build the complete set of write indices needed to store computed KV
         states."""
         for cm, write_indices in zip(self.group_cache_managers, write_index):
             indices = cm.get_write_indices(request_id, past_length, query_length)
