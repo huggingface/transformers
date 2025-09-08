@@ -74,7 +74,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/tr
 transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
-class ANY:  # noqa: PLW1641
+class ANY:
     def __init__(self, *_types):
         self._types = _types
 

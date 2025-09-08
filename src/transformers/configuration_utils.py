@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
 
 
-class PretrainedConfig(PushToHubMixin):  # noqa: PLW1641
+class PretrainedConfig(PushToHubMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
