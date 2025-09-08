@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .cache import NO_SLIDING_WINDOW, PagedAttentionCache
+from .cache import PagedAttentionCache
 from .continuous_api import ContinuousBatchingManager, ContinuousMixin
 from .requests import RequestState, RequestStatus
 
 
 __all__ = [
     "PagedAttentionCache",
-    "NO_SLIDING_WINDOW",
     "RequestState",
     "RequestStatus",
     "ContinuousMixin",

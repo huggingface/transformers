@@ -29,7 +29,7 @@ from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-from .cache import NO_SLIDING_WINDOW, PagedAttentionCache
+from .cache import PagedAttentionCache
 from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
@@ -38,7 +38,7 @@ def build_attention_mask(
     attention_mask: torch.Tensor,
     cumulative_seqlens_q: torch.Tensor,
     cumulative_seqlens_k: torch.Tensor,
-    sliding_window: int = NO_SLIDING_WINDOW,
+    sliding_window: int = 1,
 ) -> None:
     """Builds an attention mask inplace using the cumulative seqlens of the query and key. If given a sliding window, it
     will also apply a sliding window mask on top. The attention mask is not boolean, it uses zeroes and -inf (or its
@@ -62,7 +62,7 @@ def build_attention_mask(
         )
         masked = torch.triu(minus_inf, diagonal=causal_diagonal)
         # Apply sliding window mask if needed
-        if sliding_window > NO_SLIDING_WINDOW:
+        if sliding_window > 1:
             sliding_diagonal = seqlen_k - seqlen_q + sliding_window
             masked = torch.tril(masked, diagonal=sliding_diagonal)
         # Replace in attention mask
@@ -133,12 +133,7 @@ class ContinuousBatchProcessor:
         self.slice_inputs = slice_inputs
 
         # Retrieve the size of the sliding window if there is one
-        sliding_windows = set(cache.sliding_windows.values())
-        if NO_SLIDING_WINDOW in sliding_windows:
-            sliding_windows.remove(NO_SLIDING_WINDOW)
-        if len(sliding_windows) > 1:
-            raise ValueError("Only one sliding window is supported for now, but got: " + str(sliding_windows))
-        self.sliding_window = sliding_windows.pop() if len(sliding_windows) >= 1 else NO_SLIDING_WINDOW
+        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
 
         self.requests_in_batch: list[RequestState] = []
 
@@ -182,7 +177,7 @@ class ContinuousBatchProcessor:
         # Since attenention_mask is not always needed, we only allocate it if it is
         if self.return_attention_mask():
             # TODO: this could be 2 iff model is hybrid, and then we can also change memory handler to account for it
-            size_0 = 1 if self.sliding_window == NO_SLIDING_WINDOW else 2
+            size_0 = 1 if self.sliding_window == 1 else 2
             self.attention_mask = torch.empty(
                 (size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
             )
@@ -397,8 +392,8 @@ class ContinuousBatchProcessor:
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         if self.attention_mask is not None:
-            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0])
-            if self.sliding_window != NO_SLIDING_WINDOW:
+            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0], 1)
+            if self.sliding_window != 1:
                 build_attention_mask(
                     self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window
                 )

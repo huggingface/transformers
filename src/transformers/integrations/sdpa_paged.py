@@ -2,8 +2,6 @@ from typing import Optional
 
 import torch
 
-from ..generation.continuous_batching.cache import NO_SLIDING_WINDOW
-
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -44,7 +42,7 @@ def sdpa_attention_paged_forward(
     # Get the right causal mask for the current layer
     if cache is not None:
         sliding_window = cache.sliding_windows[module.layer_idx]
-        if sliding_window == NO_SLIDING_WINDOW:
+        if sliding_window == 1:
             causal_mask = attention_mask[:1, :, :, : key.size(2)]
         else:
             causal_mask = attention_mask[

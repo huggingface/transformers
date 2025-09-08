@@ -25,9 +25,6 @@ from .cache_manager import CacheManager, FullAttentionCacheManager, SlidingAtten
 from .requests import get_device_and_memory_breakdown, logger
 
 
-NO_SLIDING_WINDOW = 1
-
-
 def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
@@ -151,7 +148,7 @@ class PagedAttentionCache:
         self.sliding_windows = {}
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
-            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else NO_SLIDING_WINDOW
+            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else 1
             for j, layer in enumerate(group):
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
@@ -300,7 +297,7 @@ class PagedAttentionCache:
 
         # Case: full attention
         sliding_window = self.sliding_windows[layer_idx]
-        if sliding_window == NO_SLIDING_WINDOW:
+        if sliding_window == 1:
             k_cache[layer_write_index, :, :] = key_states
             v_cache[layer_write_index, :, :] = value_states
             key_states_with_cache = k_cache[layer_read_index, :, :]

@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..generation.continuous_batching import NO_SLIDING_WINDOW, PagedAttentionCache
+from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_flash_attn_2_available
 
 
@@ -54,7 +54,7 @@ def paged_attention_forward(
         k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
         # Check if we are in a sliding window context
-        is_full_attention = cache.sliding_windows[module.layer_idx] == NO_SLIDING_WINDOW
+        is_full_attention = cache.sliding_windows[module.layer_idx] == 1
         cu_seq_lens_k = cu_seq_lens_k[0].clone() if is_full_attention else cu_seq_lens_k[1].clone()
         max_seqlen_k = max_seqlen_k[0] if is_full_attention else max_seqlen_k[1]
 
