@@ -71,7 +71,7 @@ def flatten_pair_images(images):
     if isinstance(images, list):
         if len(images) == 2 and all((_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images):
             # Single pair of images - keep as is, they'll be processed by the base class
-            pass
+            return images
         elif all(
             isinstance(image_pair, list)
             and len(image_pair) == 2
@@ -80,15 +80,14 @@ def flatten_pair_images(images):
         ):
             # Multiple pairs - flatten them
             images = [image for image_pair in images for image in image_pair]
-    else:
-        raise ValueError(
-            "Input images must be a one of the following :",
-            " - A pair of PIL images.",
-            " - A pair of 3D arrays.",
-            " - A list of pairs of PIL images.",
-            " - A list of pairs of 3D arrays.",
-        )
-    return images
+            return images
+    raise ValueError(
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+    )
 
 
 def is_grayscale(

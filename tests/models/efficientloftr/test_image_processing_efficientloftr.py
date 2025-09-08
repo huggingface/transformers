@@ -11,18 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import time
 import unittest
+
+import numpy as np
+import pytest
+from packaging import version
 
 from tests.models.superglue.test_image_processing_superglue import (
     SuperGlueImageProcessingTest,
     SuperGlueImageProcessingTester,
 )
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 if is_torch_available():
-    import numpy as np
     import torch
 
     from transformers.models.efficientloftr.modeling_efficientloftr import KeypointMatchingOutput
@@ -146,8 +156,6 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        import time
-
         # Time slow processor
         start_time = time.time()
         for _ in range(10):
@@ -163,4 +171,26 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
         # Fast should be faster (or at least not significantly slower)
         self.assertLessEqual(
             fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor"
+        )
+
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
+    def test_can_compile_fast_image_processor(self):
+        """Override the generic test since EfficientLoFTR requires image pairs."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=False)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
