@@ -18,7 +18,7 @@ import inspect
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, get_type_hints
 
 import torch
 import torch.distributed as dist
@@ -46,6 +46,7 @@ from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
+    TransformersKwargs,
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
@@ -1563,7 +1564,7 @@ class GenerationMixin(ContinuousMixin):
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
         for key, value in model_kwargs.items():
-            if value is not None and key not in model_args:
+            if value is not None and key not in model_args and key not in get_type_hints(TransformersKwargs):
                 unused_model_args.append(key)
 
         if unused_model_args:
