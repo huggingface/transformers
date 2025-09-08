@@ -521,7 +521,7 @@ def render_jinja_template(
                         break
                 else:
                     raise ValueError(
-                        "continue_final_message is set but we could not find any text to continuein the final message!"
+                        "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
                 chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
