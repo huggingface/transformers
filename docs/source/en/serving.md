@@ -21,7 +21,7 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 > [!TIP]
 > Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
 
-You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM remains our recommendation for large-scale production, `serve` avoids the extra runtime and ops overhead, and is on track to gain more production-oriented features.
+You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
 - [Jan (text and MCP user interface)](./jan.md)
@@ -368,9 +368,9 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 ## Continuous Batching
 
-Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of waiting for fixed batches, serve adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
+Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of processing each request sequentially, `serve` adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
 
-While we still recommend vLLM for large-scale production (very high QPS, advanced scheduling/memory), CB narrows the gap for many practical needs. In particular, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
+Thanks to this, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
 
 ### Enable CB in serve
 
@@ -379,6 +379,7 @@ CB is opt-in and currently applies to chat completions.
 ```sh
 transformers serve \
   --continuous-batching
+  --attn_implementation sdpa_paged
 ```
 
 
@@ -400,6 +401,5 @@ transformers serve \
 - `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
 
 - `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs
-
 
 
