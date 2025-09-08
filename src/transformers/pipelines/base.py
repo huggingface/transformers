@@ -951,7 +951,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
-        device: Union[int, "torch.device"] = None,
+        device: Optional[Union[int, "torch.device"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):

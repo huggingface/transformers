@@ -359,7 +359,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 

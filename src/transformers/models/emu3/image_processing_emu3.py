@@ -482,7 +482,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def unnormalize(
         self,
-        image: np.array,
+        image: np.ndarray,
         image_mean: Union[float, Iterable[float]],
         image_std: Union[float, Iterable[float]],
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
