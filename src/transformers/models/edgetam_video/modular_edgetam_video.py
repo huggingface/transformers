@@ -508,41 +508,57 @@ def apply_rotary_pos_emb_2d(
         k: Key tensor of shape (..., seq_len, head_dim)
         cos: Cosine position embedding of shape (seq_len, head_dim)
         sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
+        num_k_exclude_rope: Number of tokens at end of k to exclude from RoPE (e.g., object pointer tokens)
+        repeat_freqs_k: Frequency repetition for keys in cross-attention (e.g., for spatial memory tokens)
 
     Returns:
         Rotated (q, k) tensors
     """
+    # Split keys into RoPE-enabled and non-RoPE tokens (e.g., object pointers at the end)
     k_rot, k_pass = k[..., : k.shape[-2] - num_k_exclude_rope, :], k[..., k.shape[-2] - num_k_exclude_rope :, :]
     batch_size, num_heads, num_tokens, channels_per_head = k_rot.shape
+
+    # Handle cross-attention case where key sequence length differs from position embedding length
     if num_tokens != cos_k.shape[-2]:
         rope_tokens = cos_k.shape[-2]
         no_rope_tokens = num_tokens // repeat_freqs_k - rope_tokens
+
+        # Reshape to separate repeated frequency groups (spatial memory structure)
         k_rot = k_rot.view(batch_size, num_heads, repeat_freqs_k, num_tokens // repeat_freqs_k, channels_per_head)
+        # Spatial features that need RoPE
         k_rot_rope = k_rot[..., no_rope_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
+        # Temporal encoding tokens that skip RoPE
         k_pass_pre = k_rot[..., :no_rope_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
         k_rot = k_rot_rope
     else:
+        # Standard self-attention case - all tokens get RoPE
         k_pass_pre = None
+
     q_embed = q.float()  # force upscale to float32 as in the original implementation
     q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
+
+    # Early return if no keys to process (can happen due to sequence structure)
     if k_rot.shape[-2] == 0:
-        # Handle case where keys might be empty due to dropout
         return q_embed.type_as(q), torch.cat([k_rot, k_pass], dim=-2)
 
-    # Handle key tensor - may need to repeat frequencies if different sequence length
+    # Repeat position embeddings for cross-attention with spatial memory tokens
+    # Each memory frame has the same spatial grid, so we replicate RoPE frequencies N times (N = available memory frames)
     if repeat_freqs_k > 1:
         cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
         sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
 
-    # Apply rotary embedding to keys
+    # Apply RoPE to keys
     k_embed = k_rot.float()  # force upscale to float32 as in the original implementation
     k_embed = (k_embed * cos_k) + (rotate_pairwise(k_embed) * sin_k)
-    # Concatenate back to full shape
+
+    # Reconstruct full key tensor by concatenating non-RoPE and RoPE-processed tokens
     if k_pass_pre is not None:
+        # Reshape back to frequency groups and concatenate temporal (non-RoPE) with spatial (RoPE) tokens
         k_embed = k_embed.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
         k_pass_pre = k_pass_pre.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
         k_embed = torch.cat((k_pass_pre, k_embed), dim=3).view(batch_size, num_heads, num_tokens, channels_per_head)
+
+    # Add back the excluded tokens (e.g., object pointers) at the end
     k_embed = torch.cat([k_embed.type_as(k), k_pass], dim=-2)
     return q_embed.type_as(q), k_embed
 
@@ -708,14 +724,13 @@ class EdgeTamVideoPerceiverCrossAttention(nn.Module):
         normalized_latents = self.layer_norm_latents(latents)
         normalized_input = self.layer_norm_input(input_features)
 
-        batch_size, seq_len_q = normalized_latents.shape[:2]
-
         # Project queries from latents
         query = self.q_proj(normalized_latents)
         key_value = self.kv_proj(normalized_input)
         key, value = key_value.chunk(2, dim=-1)
 
         # Reshape for multi-head attention
+        batch_size, seq_len_q = normalized_latents.shape[:2]
         query = query.view(batch_size, seq_len_q, self.num_attention_heads, self.head_dim).transpose(1, 2)
         seq_len_kv = normalized_input.shape[1]
         key = key.view(batch_size, seq_len_kv, self.num_attention_heads, self.head_dim).transpose(1, 2)
@@ -773,14 +788,13 @@ class EdgeTamVideoPerceiverSelfAttention(nn.Module):
     def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         normalized_states = self.layer_norm(hidden_states)
 
-        batch_size, seq_len = normalized_states.shape[:2]
-
         # Project queries, keys, and values
         query = self.q_proj(normalized_states)
         key_value = self.kv_proj(normalized_states)
         key, value = key_value.chunk(2, dim=-1)
 
         # Reshape for multi-head attention
+        batch_size, seq_len = normalized_states.shape[:2]
         query = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         key = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         value = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
