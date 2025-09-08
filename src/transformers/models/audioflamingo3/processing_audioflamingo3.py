@@ -176,14 +176,13 @@ class AudioFlamingo3Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Batched processing:
-          - `text`: str or list[str]
-          - `audio`: np.ndarray or list[np.ndarray] (one audio per text sample)
+        - `text`: str or list[str]
+        - `audio`: np.ndarray or list[np.ndarray] (one audio per text sample)
         Returns a BatchFeature with:
-          - input_ids          : (B, L)
-          - attention_mask     : (B, L)
-          - audio_features     : List[Tensor (M, T_mel)], flattened across the whole batch (row-major)
-          - audio_feature_masks: List[Tensor (T_mel,)]
-          - audio_embed_masks  : List[Tensor (750,)]
+        - input_ids, attention_mask : (B, L)
+        - audio_features            : (N, M, T_mel)   or None
+        - audio_feature_masks       : (N, T_mel)      or None
+        - audio_embed_masks         : (N, 750)        or None
         """
         # normalize inputs to lists
         if isinstance(text, str):
@@ -203,9 +202,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         # Build per-sample prompts and flatten windowed audio across the batch
         final_texts: list[str] = []
-        audio_features_all: list[torch.Tensor] = []
-        audio_feat_masks_all: list[torch.Tensor] = []
-        audio_embed_masks_all: list[torch.Tensor] = []
+        feats_all: list[torch.Tensor] = []
+        feat_masks_all: list[torch.Tensor] = []
+        embed_masks_all: list[torch.Tensor] = []
 
         for t, a in zip(text, audio):
             loaded = self._load_sound_mask(a)
@@ -215,7 +214,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 continue
 
             feats_per_win, feat_masks, embed_masks = loaded
-            # IMPORTANT: one <sound> **per window**. They will be merged in the model using embed_masks.
             num_windows = len(feats_per_win)
 
             # If user inserted <sound> manually, drop it and prepend the correct count
@@ -223,9 +221,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
             final_texts.append(("<sound>" * num_windows) + clean_t)
 
             # Flatten (row-major order): all windows of sample_0, then sample_1, ...
-            audio_features_all.extend(list(feats_per_win))  # each f: (M, T_mel)
-            audio_feat_masks_all.extend(list(feat_masks))  # each m: (T_mel,)
-            audio_embed_masks_all.extend(list(embed_masks))  # each m: (750,)
+            feats_all.extend(feats_per_win)  # each: (M, T_mel)
+            feat_masks_all.extend(feat_masks)  # each: (T_mel,)
+            embed_masks_all.extend(embed_masks)  # each: (750,)
+
+        # Stack to tensors once (fast path expected by the model)
+        if len(feats_all) > 0:
+            audio_features = torch.stack(feats_all, dim=0)  # (N, M, T_mel)
+            audio_feature_masks = torch.stack(feat_masks_all, 0)  # (N, T_mel)
+            audio_embed_masks = torch.stack(embed_masks_all, 0)  # (N, 750)
+        else:
+            audio_features = None
+            audio_feature_masks = None
+            audio_embed_masks = None
 
         # Tokenize all prompts as a batch using the chat template
         convs = [[{"role": "user", "content": txt}] for txt in final_texts]
@@ -241,9 +249,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
             data={
                 "input_ids": enc["input_ids"],
                 "attention_mask": enc["attention_mask"],
-                "audio_features": audio_features_all,
-                "audio_feature_masks": audio_feat_masks_all,
-                "audio_embed_masks": audio_embed_masks_all,
+                "audio_features": audio_features,
+                "audio_feature_masks": audio_feature_masks,
+                "audio_embed_masks": audio_embed_masks,
             }
         )
 

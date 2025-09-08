@@ -467,15 +467,26 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
     def _sound_features(
         self,
-        sounds: list[torch.Tensor],
-        masks: list[torch.Tensor],
-    ) -> list[torch.Tensor]:
-        sounds = torch.stack(sounds, dim=0).to(self.llm.device)
-        masks = torch.stack(masks, dim=0).to(self.llm.device)
-        feats = self.get_audio_features(sounds, masks)  # (B, S, D)
+        sounds: torch.Tensor,  # (N, M, T_mel)
+        masks: Optional[torch.Tensor],  # (N, T_mel) or None
+    ) -> torch.Tensor:
+        """
+        Runs the audio tower + projector and appends a newline embedding per window.
 
-        end_emb = self.llm.model.embed_tokens(torch.tensor([self.end_newline_token_id], device=self.llm.device))
-        return [torch.cat([f.to(self.llm.device), end_emb], dim=0) for f in feats]
+        Returns:
+            Tensor of shape (N, S_plus, D), where S_plus = S_feat + 1 (newline token).
+        """
+        device = self.llm.device
+        feats = self.get_audio_features(
+            sounds.to(device),
+            masks.to(device) if masks is not None else None,
+        )  # (N, S_feat, D)
+
+        # append a single newline embedding per window on the time dimension
+        end = self.llm.model.embed_tokens(torch.tensor([self.end_newline_token_id], device=device)).to(feats.dtype)  # (1, D)
+        end = end.unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
+
+        return torch.cat([feats, end], dim=1)  # (N, S_feat+1, D)
 
     def get_audio_features(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
@@ -494,35 +505,47 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def _embed(
         self,
         input_ids: torch.Tensor,
-        audio_features: list[torch.Tensor],
+        audio_features: Optional[torch.Tensor],
         labels: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        audio_feature_masks: list[torch.Tensor],
-        audio_embed_masks: list[torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        audio_feature_masks: Optional[torch.Tensor],
+        audio_embed_masks: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
+        # defaults
         labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
 
-        # Extract text and audio_features embeddings
-        text_embeds = self.llm.model.embed_tokens(input_ids)
-
-        media_embeds = deque(self._sound_features(audio_features, audio_feature_masks))
+        # text embeddings
+        text_embeds = self.llm.model.embed_tokens(input_ids)  # (B, L, D)
+        target_device = text_embeds.device
 
         batch_size = labels.shape[0]
 
-        num_audio_tokens = torch.stack(audio_embed_masks, dim=0).sum(-1)
-        num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])
-        num_audios = len(media_embeds)  # number of total audios
-        max_audio_tokens, embed_dim = media_embeds[0].shape
+        # audio window embeddings (tensor path)
+        if audio_features is None:
+            raise ValueError("audio_features must be a tensor. The processor should provide tensors, not lists.")
 
-        audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(num_audio_tokens.device) < num_audio_tokens.unsqueeze(1)
+        audio_features = audio_features.to(target_device)
+        audio_feature_masks = audio_feature_masks.to(target_device) if audio_feature_masks is not None else None
+        audio_embeds = self._sound_features(audio_features, audio_feature_masks)  # (N, S_plus, D)
 
-        audio_embeds = []
-        while media_embeds:
-            audio_embeds.append(media_embeds.popleft())
-        audio_embeds = torch.stack(audio_embeds, dim=0)
+        # number of used tokens per audio window from embed mask (rounded to /10 like before)
+        if audio_embed_masks is None:
+            raise ValueError("audio_embed_masks must be provided as a tensor.")
+        num_audio_tokens = audio_embed_masks.to(target_device).sum(-1)  # (N,)
+        num_audio_tokens = ((num_audio_tokens.to(torch.long) + 5) // 10) * 10  # nearest 10 as before
 
+        num_audios = audio_embeds.size(0)
+        max_audio_tokens = audio_embeds.size(1)
+        embed_dim = audio_embeds.size(2)
+
+        # build mask per window (N, max_audio_tokens)
+        token_range = torch.arange(max_audio_tokens, device=target_device).unsqueeze(0).expand(num_audios, max_audio_tokens)
+        audio_features_mask = token_range < num_audio_tokens.unsqueeze(1)  # (N, S_used)
+
+        # flatten variable-length audio into (sum_used, D)
         masked_audio_features = audio_embeds[audio_features_mask].view(-1, embed_dim)
+
         batch_size, sequence_length = input_ids.shape
         _left_padding = torch.any(attention_mask[:, 0] == 0)
         _right_padding = torch.any(attention_mask[:, -1] == 0)
@@ -538,18 +561,17 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             else:
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
-        # 1. Mask of special audio tokens (uses media_tokens["sound"])
+        # 1) locate <sound> placeholders
         special_audio_token_mask = input_ids == self.sound_token_id
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
-        # devices
-        target_device = text_embeds.device
         attention_mask = attention_mask.to(target_device)
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
+
         batch_indices, non_audio_indices = torch.where((input_ids != self.sound_token_id) & (attention_mask == 1))
 
-        # 2. positions where text should be written
+        # 2) compute positions for text after expanding placeholders
         token_placeholder_num = torch.zeros_like(input_ids)
         token_placeholder_num[special_audio_token_mask] = num_audio_tokens.long() - 1
         token_placeholder_num = token_placeholder_num + 1
@@ -565,33 +587,31 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             text_to_overwrite.to(target_device),
         )
 
-        # 3. final padded embedding containers
-        final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=text_embeds.device)
-        final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=text_embeds.device)
-        final_input_ids = torch.full((batch_size, max_token_num), self.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device)
+        # 3) allocate
+        final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=target_device)
+        final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=target_device)
+        final_input_ids = torch.full((batch_size, max_token_num), self.pad_token_id, dtype=input_ids.dtype, device=target_device)
 
-        # 4. scatter text
+        # 4) scatter text
         final_embedding[batch_indices, text_to_overwrite] = text_embeds[batch_indices, non_audio_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_audio_indices]
         final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_audio_indices]
+
         final_labels = None
         if labels is not None:
             labels = labels.to(target_device)
             final_labels = torch.full_like(final_attention_mask, self.config.ignore_index, dtype=torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_audio_indices]
 
-        # 5. scatter audio features
-        audio_to_overwrite = torch.full((batch_size, max_token_num), True, dtype=torch.bool, device=text_embeds.device)
+        # 5) scatter audio
+        audio_to_overwrite = torch.full((batch_size, max_token_num), True, dtype=torch.bool, device=target_device)
         audio_to_overwrite[batch_indices, text_to_overwrite] = False
-        seq_indices = torch.arange(max_token_num).unsqueeze(0).to(target_device)
-        seq_indices = seq_indices.expand(batch_size, max_token_num)
 
+        seq_indices = torch.arange(max_token_num, device=target_device).unsqueeze(0).expand(batch_size, max_token_num)
         if left_padding:
-            max_token_num = max_token_num.to(target_device)
             val = (max_token_num - seq_indices) <= (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
         else:
             val = seq_indices < (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
-
         audio_to_overwrite &= val
 
         if audio_to_overwrite.sum() != num_audio_tokens.sum():
@@ -600,16 +620,10 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         final_embedding[audio_to_overwrite] = masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= audio_to_overwrite
 
-        # Truncate sequences if training and they exceed model_max_length
-        if self.training and any(len(input) > self.model_max_length for input in final_embedding):
-            warnings.warn(f"Truncating sequences to `model_max_length` ({self.model_max_length}).")
-            final_embedding = [input[: self.model_max_length] for input in final_embedding]
-            final_labels = [label[: self.model_max_length] for label in final_labels]
-        else:
-            final_embedding = list(final_embedding)
-            final_labels = list(final_labels)
+        # (unchanged) pad to batch
+        final_embedding = list(final_embedding)
+        final_labels = list(final_labels) if final_labels is not None else None
 
-        # Batchify sequences with padding
         batch_size = len(final_embedding)
         device = final_embedding[0].device
         hidden_size = final_embedding[0].shape[1]
@@ -621,36 +635,39 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         for k in range(batch_size):
             size_pk = max_length - final_embedding[k].shape[0]
             inputs_pk = torch.zeros((size_pk, hidden_size), dtype=final_embedding[k].dtype, device=device)
-            labels_pk = torch.full((size_pk,), self.config.ignore_index, dtype=final_labels[k].dtype, device=device)
+            labels_pk = torch.full((size_pk,), self.config.ignore_index, dtype=final_labels[k].dtype, device=device) if final_labels is not None else None
 
             if self.padding_side == "right":
                 attention_mask[k, final_embedding[k].shape[0] :] = False
                 inputs_pk = torch.cat([final_embedding[k], inputs_pk], dim=0)
-                labels_pk = torch.cat([final_labels[k], labels_pk], dim=0)
+                if labels_pk is not None:
+                    labels_pk = torch.cat([final_labels[k], labels_pk], dim=0)
             else:
                 attention_mask[k, : -final_embedding[k].shape[0]] = False
                 inputs_pk = torch.cat([inputs_pk, final_embedding[k]], dim=0)
-                labels_pk = torch.cat([labels_pk, final_labels[k]], dim=0)
+                if labels_pk is not None:
+                    labels_pk = torch.cat([labels_pk, final_labels[k]], dim=0)
 
             inputs_batched.append(inputs_pk)
-            labels_batched.append(labels_pk)
+            if labels_pk is not None:
+                labels_batched.append(labels_pk)
 
         inputs_embeds = torch.stack(inputs_batched, dim=0)
-        labels = torch.stack(labels_batched, dim=0)
+        labels = torch.stack(labels_batched, dim=0) if labels_batched else None
         return inputs_embeds, labels, attention_mask
 
     @torch.inference_mode()
     def generate(
         self,
         input_ids: Optional[torch.FloatTensor] = None,
-        audio_features: Optional[list[torch.Tensor]] = None,
+        audio_features: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        audio_feature_masks: Optional[list[torch.Tensor]] = None,
-        audio_embed_masks: Optional[list[torch.Tensor]] = None,
+        audio_feature_masks: Optional[torch.Tensor] = None,
+        audio_embed_masks: Optional[torch.Tensor] = None,
         **generation_kwargs,
     ) -> torch.LongTensor:
-        inputs_embeds, _, attention_mask = self._embed(input_ids, audio_features, None, attention_mask, audio_feature_masks, audio_embed_masks)
-        return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
+        inputs_embeds, _, attn = self._embed(input_ids, audio_features, None, attention_mask, audio_feature_masks, audio_embed_masks)
+        return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attn, **generation_kwargs)
 
     @property
     def default_generation_config(self) -> GenerationConfig:
