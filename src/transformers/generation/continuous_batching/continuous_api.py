@@ -132,6 +132,7 @@ class ContinuousBatchProcessor:
         self.manual_eviction = manual_eviction
         self.slice_inputs = slice_inputs
 
+        # Retrieve the size of the sliding window if there is one
         sliding_windows = set(cache.sliding_windows.values())
         if NO_SLIDING_WINDOW in sliding_windows:
             sliding_windows.remove(NO_SLIDING_WINDOW)
@@ -167,12 +168,12 @@ class ContinuousBatchProcessor:
         self.write_index_tensor = torch.empty((num_groups, T), **tensor_metadata)
         self.read_index_tensor = torch.empty(
             (num_groups, num_pages + T), **tensor_metadata
-        )  # +T is because there are -1 for seqlen_q
+        )  # +T is because there are -1 for seqlen_q when model uses a sliding window
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.empty((1, T), **tensor_metadata)
-        # Since attenention_mask is not always needed, we only allocate it if it is needed
+        # Since attenention_mask is not always needed, we only allocate it if it is
         if self.return_attention_mask():
             # TODO: this could be 2 iff model is hybrid, and then we can also change memory handler to account for it
             size_0 = 1 if self.sliding_window == NO_SLIDING_WINDOW else 2
@@ -187,7 +188,8 @@ class ContinuousBatchProcessor:
     @traced
     @torch.no_grad()
     def reset_static_tensors(self, full_reset: bool = False):
-        """Reset static tensors for the next batch."""
+        """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
+        batch, but for initialisation, we can reset everything using the (full_reset) flag."""
         # Compute the slice to reset
         t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_tensor.size(-1)
         c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_tensor.size(-1)
@@ -197,7 +199,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: t + 1].zero_()
         self.cumulative_seqlens_k[: t + 1].zero_()
         self.write_index_tensor[:, :t].fill_(-1)
-        self.read_index_tensor[:, :c].fill_(-1)
+        self.read_index_tensor[:, :t+c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -232,7 +234,8 @@ class ContinuousBatchProcessor:
 
     def __repr__(self):
         return (
-            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, "
+            f"active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
             + self.get_model_kwargs().__repr__()
         )
 

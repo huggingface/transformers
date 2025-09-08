@@ -156,7 +156,7 @@ class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, with decoding requests having priority over prefill 
     requests. It includes an optional safety margin mechanism to prevent cache exhaustion by limiting new prefill 
     requests when the remaining proportion of free blocks is low."""
-    
+
     def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.0):
         """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop 
         scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks, 
