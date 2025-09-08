@@ -2,11 +2,11 @@ name: Benchmark v2 Scheduled Runner - A10 Single-GPU
 
 on:
   schedule:
-    # Run daily at 2:30 AM UTC
-    - cron: "30 2 * * *"
+    # Run daily at 16:30 UTC
+    - cron: "30 16 * * *"
   push:
     branches:
-      - benchmarking-gh-actions*
+      - run-benchmarking-gh-actions*
   workflow_dispatch:
     inputs:
       model_id:
@@ -53,5 +53,5 @@ jobs:
       commit_sha: ${{ github.sha }}
       upload_to_hub: true
       run_id: ${{ github.run_id }}
-      benchmark_repo_id: ahadnagy/transformers-benchmarks
+      benchmark_repo_id: hf-internal-testing/transformers-daily-benchmarks
     secrets: inherit
