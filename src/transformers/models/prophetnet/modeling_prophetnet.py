@@ -2010,13 +2010,23 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
-        return {
+        model_inputs = {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
             "head_mask": head_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
+
+        # Prophetnet does not support cache_position
+        kwargs.pop("cache_position", None)
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):

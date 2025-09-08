@@ -2345,14 +2345,19 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        inputs_dict = {
+        model_inputs = {
             "input_ids": input_ids,
             "past_buckets_states": past_key_values,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
 
-        return inputs_dict
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []

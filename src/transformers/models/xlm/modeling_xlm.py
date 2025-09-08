@@ -72,7 +72,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         attn_mask = mask
 
     # sanity check
-    assert mask.size() == (bs, slen)
+    assert mask.size() == (bs, slen), f"mask.size(): {mask.size()}, should be: {(bs, slen)}"
     assert causal is False or attn_mask.size() == (bs, slen, slen)
 
     return mask, attn_mask
@@ -994,7 +994,18 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             langs = torch.full_like(input_ids, lang_id)
         else:
             langs = None
-        return {"input_ids": input_ids, "langs": langs}
+        model_inputs = {"input_ids": input_ids, "langs": langs}
+
+        # They are calculated on the fly on XLMModel.forward()
+        kwargs.pop("token_type_ids", None)
+        kwargs.pop("attention_mask", None)
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
     @auto_docstring
     def forward(
