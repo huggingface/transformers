@@ -161,20 +161,15 @@ class LongcatFlashConfig(PretrainedConfig):
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        # "layers.*.self_attn.*.q_proj.weight": "local_colwise",
-        # "layers.*.self_attn.*.q_a_proj.weight": "local_colwise", # not needed
-        "layers.*.self_attn.*.q_b_proj.weight": "local_colwise",
-        # "layers.*.self_attn.*.kv_a_proj_with_mqa.weight": "local_colwise", # might not be needed
-        "layers.*.self_attn.*.kv_b_proj.weight": "local_colwise",
-        "layers.*.self_attn.*.o_proj.weight": "local_rowwise",
-        "layers.*.mlps.*.gate_proj.weight": "local_colwise",
-        "layers.*.mlps.*.up_proj.weight": "local_colwise",
-        "layers.*.mlps.*.down_proj.weight": "local_rowwise",
-        "layers.*.mlp.experts.*.gate_proj.weight": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj.weight": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj.weight": "local_rowwise",
-        # only gather
-        "layers.*.mlp": "gather",
+        "layers.*.self_attn.*.q_b_proj": "colwise",
+        "layers.*.self_attn.*.kv_b_proj": "colwise",
+        "layers.*.self_attn.*.o_proj": "rowwise",
+        "layers.*.mlps.*.gate_proj": "colwise",
+        "layers.*.mlps.*.up_proj": "colwise",
+        "layers.*.mlps.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "colwise",
+        "layers.*.mlp.experts.*.up_proj": "colwise",
+        "layers.*.mlp.experts.*.down_proj": "rowwise",
     }
 
     base_model_pp_plan = {
