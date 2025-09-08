@@ -229,15 +229,15 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         )
 
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def moe_forward(self, x, num_tokens_per_expert):
         import os
 
-        if os.environ.get("USE_NEW_MOE", "false") != "false":
+        if not hasattr(self, "gate_proj") and os.environ.get("USE_NEW_MOE", "false") != "false":
             setattr(self, "gate_proj", nn.Parameter(torch.stack([expert.gate_proj.weight for expert in self.experts])))
             setattr(self, "up_proj", nn.Parameter(torch.stack([expert.up_proj.weight for expert in self.experts])))
             setattr(self, "down_proj", nn.Parameter(torch.stack([expert.down_proj.weight for expert in self.experts])))
             del self.experts
-
-    def moe_forward(self, x, num_tokens_per_expert):
         offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
         g = self.act_fn(torch._grouped_mm(x.bfloat16(), self.gate_proj.bfloat16().transpose(-2, -1), offs=offsets))
 
