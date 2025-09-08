@@ -44,11 +44,7 @@ class VaultGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (VaultGemmaModel, VaultGemmaForCausalLM)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (VaultGemmaModel, VaultGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": VaultGemmaModel,

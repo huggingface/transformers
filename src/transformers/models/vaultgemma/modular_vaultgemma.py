@@ -19,36 +19,14 @@ import torch
 
 from ...cache_utils import Cache
 from ..gemma2.configuration_gemma2 import Gemma2Config
-from ..gemma2.modeling_gemma2 import (
-    Gemma2Attention,
-    Gemma2DecoderLayer,
-    Gemma2ForCausalLM,
-    Gemma2MLP,
-    Gemma2Model,
-    Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
-)
+from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer, Gemma2ForCausalLM
 
 
 class VaultGemmaConfig(Gemma2Config):
     pass
 
 
-class VaultGemmaRMSNorm(Gemma2RMSNorm):
-    pass
-
-
-class VaultGemmaMLP(Gemma2MLP):
-    pass
-
-
-class VaultGemmaAttention(Gemma2Attention):
-    pass
-
-
 class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
-
     def __init__(self, **super_kwargs):
         super().__init__(**super_kwargs)
         del self.post_attention_layernorm
@@ -94,26 +72,13 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         return outputs
 
 
-class VaultGemmaRotaryEmbedding(Gemma2RotaryEmbedding):
-    pass
-
-
-class VaultGemmaPreTrainedModel(Gemma2PreTrainedModel):
-    pass
-
-
-class VaultGemmaModel(Gemma2Model):
-    pass
-
-
 class VaultGemmaForCausalLM(Gemma2ForCausalLM):
     pass
-
 
 
 __all__ = [
     "VaultGemmaConfig",
     "VaultGemmaForCausalLM",
-    "VaultGemmaModel",
-    "VaultGemmaPreTrainedModel",
+    "VaultGemmaModel",  # noqa: F822
+    "VaultGemmaPreTrainedModel",  # noqa: F822
 ]
