@@ -29,13 +29,12 @@ from parameterized import parameterized
 
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     require_torchaudio,
     slow,
@@ -400,18 +399,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def _get_beam_kwargs(self, num_return_sequences=1):
         # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
         beam_kwargs = super()._get_beam_kwargs(num_return_sequences=num_return_sequences)
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-        return beam_kwargs
-
-    def _get_diverse_beam_kwargs(self, num_return_sequences=1):
-        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
-        beam_kwargs = super()._get_diverse_beam_kwargs(num_return_sequences=num_return_sequences)
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-        return beam_kwargs
-
-    def _get_constrained_beam_kwargs(self, num_return_sequences=1):
-        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
-        beam_kwargs = super()._get_constrained_beam_kwargs(num_return_sequences=num_return_sequences)
         beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
         return beam_kwargs
 
@@ -858,108 +845,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip(reason="Whisper encoder-decoder requires the features directly and can not work on ids only.")
     def test_generate_without_input_ids(self):
         pass
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        import torch
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(reason="Model does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.bfloat16,
-                )
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-
-                logits = outputs.decoder_hidden_states[-1]
-                logits_fa = outputs_fa.decoder_hidden_states[-1]
-
-                # whisper FA2 needs very high tolerance
-                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(dummy_input, decoder_input_ids=decoder_input_ids)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        import torch
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(reason="Model does not support flash_attention_2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                dummy_input = dummy_input.to(torch.float16)
-
-                decoder_input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=dummy_input.device, dtype=torch.long)
-                decoder_attention_mask = torch.tensor(
-                    [[0, 0, 0, 1, 1, 1]], device=dummy_input.device, dtype=torch.long
-                )
-
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-
-                logits = outputs.decoder_hidden_states[-1]
-                logits_fa = outputs_fa.decoder_hidden_states[-1]
-
-                # whisper FA2 needs very high tolerance
-                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
-
-                other_inputs = {
-                    "decoder_input_ids": decoder_input_ids,
-                    "decoder_attention_mask": decoder_attention_mask,
-                    "output_hidden_states": True,
-                }
-
-                outputs = model(dummy_input, **other_inputs)
-                outputs_fa = model_fa(dummy_input, **other_inputs)
-
-                logits = outputs.decoder_hidden_states[-1]
-                logits_fa = outputs_fa.decoder_hidden_states[-1]
-
-                # whisper FA2 needs very high tolerance
-                torch.testing.assert_close(logits_fa[:, -2:], logits[:, -2:], rtol=4e-1, atol=4e-1)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -1420,7 +1305,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     # TODO (joao, eustache): fix me :)
@@ -1710,7 +1596,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        token = os.getenv("HF_HUB_READ_TOKEN", None)
+        if token is None:
+            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
@@ -1947,8 +1835,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_features = input_features.to(torch_device)
         generated_ids = model.generate(input_features, return_timestamps=True, return_segments=True)
-
-        EXPECTED_TRANSCRIPT = [
+        # fmt: off
+        EXPECTED_CUDA = [
             {
                 "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
                 "timestamp": (0.0, 6.38),
@@ -1998,9 +1886,64 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 "timestamp": (77.16, 78.16),
             },
         ]
+        EXPECTED_ROCM = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.38),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.38, 11.32),
+            },
+            {
+                "text": " He tells us that at this festive season of the year,",
+                "timestamp": (11.32, 15.0),
+            },
+            {
+                "text": " With Christmas and roast beef looming before us, similes drawn from eating and its results",
+                "timestamp": (30.0, 36.76),
+            },
+            {
+                "text": " occur most readily to the mind.",
+                "timestamp": (36.76, 39.8),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
+                "timestamp": (39.8, 45.38),
+            },
+            {
+                "text": " can discover in it but little of rocky Ithaca.",
+                "timestamp": (45.38, 49.0),
+            },
+            {
+                "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
+                "timestamp": (49.0, 56.28),
+            },
+            {
+                "text": " are as national as a jingo poem. Mr. Burkett fosters landscape's smile at one much in",
+                "timestamp": (56.28, 64.12),
+            },
+            {
+                "text": " the same way that Mr. Karker used to flash his teeth. And Mr. John Collier gives his",
+                "timestamp": (64.12, 70.76),
+            },
+            {
+                "text": " sitter a cheerful slap on the back before he says, like a shampoo or in a Turkish bath,",
+                "timestamp": (70.76, 77.16),
+            },
+            {
+                "text": " Next Man",
+                "timestamp": (77.16, 78.16),
+            },
+        ]
+        # fmt: on
+
+        expected_output = Expectations(
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+        ).get_expectation()
 
         transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
-        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
+        self.assertEqual(transcript[0]["offsets"], expected_output)
 
         transcript_segments = [
             {
@@ -2009,7 +1952,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             }
             for seg in generated_ids["segments"][0]
         ]
-        self.assertEqual(transcript_segments, EXPECTED_TRANSCRIPT)
+        self.assertEqual(transcript_segments, expected_output)
 
     @slow
     def test_large_timestamp_generation(self):
@@ -2424,19 +2367,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_speculative_decoding_distil(self):
-        torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
+        dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "distil-whisper/distil-large-v2"
-        assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        assistant_model = WhisperForCausalLM.from_pretrained(assistant_model_id, dtype=dtype, use_safetensors=True)
         assistant_model.to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -2474,18 +2413,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_speculative_decoding_non_distil(self):
-        torch_dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
+        dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
+            assistant_model_id, dtype=dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -2644,9 +2581,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_shortform_single_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
-        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
+        cuda_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
+        cuda_expectation2 = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school bus and slap myself a wig."]
+        rocm_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
         # fmt: on
+        expected_output = Expectations(
+            {("cuda", None): cuda_expectation, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
+        expected_output2 = Expectations(
+            {("cuda", None): cuda_expectation2, ("rocm", (9, 4)): rocm_expectation}
+        ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -2672,7 +2616,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
-        self.assertEqual(decoded, EXPECTED_TEXT)
+        self.assertEqual(decoded, expected_output)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2686,8 +2630,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         result = model.generate(input_features, **gen_kwargs)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
-
-        self.assertEqual(decoded, EXPECTED_TEXT1)
+        self.assertEqual(decoded, expected_output2)
 
     @slow
     def test_whisper_longform_single_batch_beam(self):
@@ -2825,7 +2768,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_longform_multi_batch_hard(self):
         # fmt: off
-        EXPECTED_TEXT = [
+        EXPECTED_CUDA = [
             " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile.",
             " Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school and slap myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen moon, render a gas tank out of an empty big gulp, fill with white claw and denatured alcohol, then light a match and let her rip and the demented one man soapbox derby of news that is my segment. Me, Guadalupe! No!",
             " Ladies and gentlemen, you know, I spent a lot of time right over there Raising the finest Holstein news cattle firmly yet tenderly milking the latest headlines from their jokes swollen teats Churning the daily stories into the decadent proven-style style triple cream breed that is my nightly monologue But sometimes sometimes folks I stagger home hungry after being released by the police and Root around in the neighbor's trash can for an old milk carton scrape out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-donned street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire then hunker down and hallucinate while eating the listeria laden demon custard of news that is my segment. You mean one of them.",
@@ -2835,7 +2778,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's Newsiest most topical flower eggs milk and butter and Stranding into a fine batter to make delicate and informative comedy pancakes Then I glaze them in the juice and zest of the most relevant midnight Valencia oranges and douse it all and a fine Dela main de voyage cognac Before prom baying and basting them tables. I deserve for you the James Beard award worthy crepe suzzette That is my nightly monologue, but sometimes just sometimes folks. I wake up in the baggage hold of Greyhound bus. It's being hoisted by the scrap yard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps and busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strain, pair of sweatpants and as oven mitts to extract and serve the demented transience poundcake of news that is my segment. Me, Guadalupe!",
             " Folks, if you watched the show and I hope you do, I spent a lot of time right over there. Tiredlessly studying the lineage of the days most important thoroughbred stories and whole-stiner headlines, working with the best trainers, money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen. That is my nightly monologue, but sometimes, sometimes, folks, I break into an unincorporated veterinary genetics lab and grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pilfered DNA of a horse and whatever was in a tube labeled Keith Colan extra. Slurrying the concoction with caffeine pills and a microwave red bull, I screamed, sang a prayer to Janice, initiator of human life and God of transformation as a half horse, half man, freak. Seizes to life before me and the hideous collection of loose animal parts and corrupted man tissue that is my segment. Meanwhile!"
         ]
+        EXPECTED_ROCM = [
+            " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting of classics, Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lipnitsky attack that culminates in the elegant lethal slow-played It's an all-passant checkmate that is my nightly monologue, but sometimes sometimes folks, I... APPLAUSE Sometimes I... Startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs, rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the wharf and challenged toothless drifters to the godless, bug-house blitz of tournament that is my segment. Meanwhile!",
+            " Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake with a crusty floor mat. Before using a mouse-bitten timing belt to strap some old plywood to a couple of discarded oil drums, then by the light of a heathen moon, render a gas tank out of an empty big gulp, fill with white claw and denatured alcohol, then light a match and let her rip and the demented one man soapboxed her be of news that is my segment. We need one!",
+            " Ladies and gentlemen, you know, I spent a lot of time right over there Raising the finest Holstein news cattle firmly yet tenderly milking the latest headlines from their jokes swollen teats Churning the daily stories into the decadent proven-style style triple cream breed that is my nightly monologue But sometimes sometimes folks I stagger home hungry after being released by the police and Root around in the neighbor's trash can for an old milk carton scrape out the blooming dairy residue into the remains of a wet cheese rod I won from a rat in a pre-donned street fight. Put it in a discarded paint can to leave it to ferment next to a trash fire then hunker down and hallucinate while eating the listeria laden demon custard of news that is my segment. You mean one of them.",
+            " Folks, if you watch this show, you know I spend most of my time right over there carefully sorting through the day's biggest stories and selecting only the most subtle and unblemished ostrich and crocodile news leather, which I then entrust to artisan graduates of the Ichol Gregoire Ferrandi, who carefully dye them in a palette of bright zesty shades and adorn them in the finest and most topical inlay work using hand tools and double magnifying glasses, then assemble them according to now classic and elegant geometry using our signature saddles stitching. In line it with bees, wax coated linen, finely attached a mallet hammer strap, pearl hardware, and close shed to create for you the one of a kind hoke couture, Erme's Birkin bag that is my monologue, but sometimes, sometimes folks, sometimes. Sometimes I wake up in the last car of an abandoned roller coaster at Coney Island where I'm I'm hiding from the triads. I have some engine lubricants out of a safe way bag and stagger down the shore to tear the sail off a beach schooner. Then I rip the coaxial cable out of an RV and elderly couple from Utah, Hank, and Mabel lovely folks. And use it to stitch the sail into a loose pouch like a rock sack. And I stow away in the back of a garbage truck to the junkyard where I pick through to the debris for only the broken toys that make me the saddest until I have loaded for you. The Hobo Fugitives bug out, bindle of news that is my segment. Me one!",
+            " You know, folks, I spent a lot of time crafting for you a bespoke playlist of the day's biggest stories right over there. Meticulously selecting the most topical chakra affirming scented candles, and using Feng Shui to perfectly align the joke energy in the exclusive boutique yoga retreat that is my monologue. But sometimes just sometimes I go to the dumpster behind the waffle house at three in the morning, take off my shirt, cover myself, and used fry oil, wrap my hands with some double-duct tape by stole from the broken car window. Pound a six-pack of blueberry hard-seltzer and a sack of pills I stole from a parked ambulance. Then arm wrestle a raccoon in the back alley vision quest of news that is my segment. Meanwhile!",
+            " You know, folks, I spend most of my time right over there. Mining the day's biggest, most important stories, collecting the finest, most topical iron or hand hammering it into joke panels. Then I craft sheets of bronze and blazing with patterns that tell an epic tale of conquest and glory. Then, using the Germanic tradition press black process, I place thin sheets of foil against the scenes and by hammering or otherwise applying pressure from the back, I project these scenes into a pair of cheat cards in a faceplate and finally using fluted strips of white alloyed molding, I divide the designs into framed panels and hold it all together using bronze rivets to create the beautiful and intimidating, Anglo-Saxon battle helm that is my nightly monologue. Sometimes, sometimes folks. Sometimes, just sometimes, I come into my sense as fully naked on the deck of a pirate-be-seag'd, melee container ship that picked me up floating on the detached door of a portapotty in the Indian Ocean. Then after a sun stroke-induced realization of the crew of this ship plans to sell me an exchange for a bag of oranges to fight off scurvy, I lead a mutiny using only a PVC pipe at a pool chain that accepting my new role as Captain and declaring myself king of the windarc seas. I grab a dirty mop bucket covered in barnacles and adorn it with the teeth of the vanquished to create the sopping wet pirate crown of news that is my segment. Meanwhile!",
+            " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's Newsiest most topical flower eggs milk and butter and Stranding into a fine batter to make delicate and informative comedy pancakes Then I glaze them in the juice and zest of the most relevant midnight Valencia oranges and douse it all and a fine Dela main de voyage cognac Before from bang and basting them tables. I deserve for you the James Beard award worthy crepe suzzette That is my nightly monologue, but sometimes just sometimes folks. I wake up in the baggage hold of Greyhound bus. It's being hoisted by the scrap yard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps and busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strain, pair of sweatpants and as oven mitts to extract and serve the demented transience poundcake of news that is my segment. Me, Guadalupe!",
+            " Folks, if you watched the show and I hope you do, I spent a lot of time right over there. Tiredlessly studying the lineage of the days most important thoroughbred stories and wholesome or headlines, working with the best trainers, money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen. That is my nightly monologue, but sometimes, sometimes, folks, I break into an unincorporated veterinary genetics lab, and grab whatever test tubes I can find, and then under a grow light I got from a discarded chia pet. I mixed the pilfer DNA of a horse and whatever was in a tube labeled Keith Colan extra. Slurrying the concoction with caffeine pills and a microwave red bull, I screamed, sing a prayer to Janice, initiator of human life and God of transformation as a half horse, half man, freak. Seasons to life before me and the hideous collection of loose animal parts and corrupted man tissue that is my segment. Meanwhile!",
+        ]
         # fmt: on
+
+        expected_output = Expectations(
+            {("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+        ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -2880,7 +2837,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         self.assertListEqual(decoded_all, decoded_single)
-        self.assertListEqual(decoded_all, EXPECTED_TEXT)
+        self.assertListEqual(decoded_all, expected_output)
 
     @slow
     def test_whisper_longform_multi_batch_hard_prev_cond(self):

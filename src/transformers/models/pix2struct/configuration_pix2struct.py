@@ -293,6 +293,7 @@ class Pix2StructConfig(PretrainedConfig):
     ```"""
 
     model_type = "pix2struct"
+    sub_configs = {"text_config": Pix2StructTextConfig, "vision_config": Pix2StructVisionConfig}
 
     def __init__(
         self,

@@ -1784,9 +1784,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 pathlib_repo_file = Path(path)
                 file_name = pathlib_repo_file.name
                 suffix = "".join(pathlib_repo_file.suffixes)
-                if file_name == "tekken.json":
-                    valid_tokenizer_files.append(file_name)
-                elif suffix in sentencepiece_suffixes:
+                if file_name == "tekken.json" or suffix in sentencepiece_suffixes:
                     valid_tokenizer_files.append(file_name)
 
             if len(valid_tokenizer_files) == 0:

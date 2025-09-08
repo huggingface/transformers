@@ -14,14 +14,13 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import BatchEncoding, LEDTokenizer, LEDTokenizerFast
 from transformers.models.led.tokenization_led import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
@@ -69,16 +68,12 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname

@@ -578,7 +578,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]],
-                ("cuda", 8): [[3.0590, -1.1903, -5.1119], [3.3919, -3.3547, -5.1469], [2.6041, -4.3592, -4.1406]],
+                ("cuda", 8): [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]],
             }
         )
         expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -606,7 +606,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]],
-                ("cuda", 8): [[3.1687, 4.1893, 4.1742], [2.8768, 3.5380, 3.6257], [2.5121, 3.0552, 3.5822]],
+                ("cuda", 8): [[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -621,7 +621,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]],
-                ("cuda", 8): [[3.0590, -1.1903, -5.1119], [3.3919, -3.3547, -5.1469], [2.6041, -4.3592, -4.1406]],
+                ("cuda", 8): [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

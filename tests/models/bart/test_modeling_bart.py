@@ -1205,6 +1205,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         generated_summaries = tok.batch_decode(hypotheses_batch.tolist())
         assert generated_summaries == EXPECTED
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_bart(self):
         article = (
@@ -1238,7 +1239,15 @@ class BartModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1)
+        outputs = bart_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            num_beams=1,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

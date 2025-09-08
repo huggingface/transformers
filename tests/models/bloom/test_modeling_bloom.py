@@ -534,8 +534,8 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")
+        # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -739,7 +739,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
-            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -763,9 +763,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
-            torch_device
-        )
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(torch_device)
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -790,7 +788,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
             torch_device
         )  # load in bf16
         model.eval()

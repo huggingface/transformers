@@ -31,13 +31,10 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_blip import BlipTextConfig
 
 
@@ -138,6 +135,7 @@ class BlipTextSelfAttention(nn.Module):
     def get_attention_map(self):
         return self.attention_map
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -145,7 +143,7 @@ class BlipTextSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
@@ -162,19 +160,20 @@ class BlipTextSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
+                    curr_past_key_value = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_value.self_attention_cache
+                    curr_past_key_value = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_value
+                curr_past_key_value = past_key_values
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
             key_layer = curr_past_key_value.layers[self.layer_idx].keys
             value_layer = curr_past_key_value.layers[self.layer_idx].values
@@ -190,15 +189,15 @@ class BlipTextSelfAttention(nn.Module):
                 .transpose(1, 2)
             )
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_layer, value_layer = curr_past_key_value.update(
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -285,13 +284,14 @@ class BlipTextAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
@@ -300,7 +300,7 @@ class BlipTextAttention(nn.Module):
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -355,6 +355,7 @@ class BlipTextLayer(GradientCheckpointingLayer):
         self.intermediate = BlipTextIntermediate(config)
         self.output = BlipTextOutput(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -362,7 +363,7 @@ class BlipTextLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
@@ -371,7 +372,7 @@ class BlipTextLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
@@ -383,7 +384,7 @@ class BlipTextLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -429,20 +430,22 @@ class BlipTextEncoder(nn.Module):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):
+            if isinstance(past_key_values, tuple):
                 logger.warning_once(
                     "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                     "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                     "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
                 )
-                return_legacy_cache = True
                 past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
             # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
             # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
             elif isinstance(past_key_values, DynamicCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
+            elif past_key_values is None:
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -474,9 +477,6 @@ class BlipTextEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -838,6 +838,8 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 

@@ -34,13 +34,14 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_vision_available, load_image
+from .image_utils import ChannelDimension, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, load_video
+from .video_utils import VideoMetadata
 
 
 if is_vision_available():
     from .image_utils import PILImageResampling
+
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -221,7 +222,7 @@ class VideosKwargs(TypedDict, total=False):
 
     Attributes:
         do_convert_rgb (`bool`):
-            Whether to convert the video to RGB fromat.
+            Whether to convert the video to RGB format.
         do_resize (`bool`):
             Whether to resize the video.
         size (`dict[str, int]`, *optional*):
@@ -248,7 +249,7 @@ class VideosKwargs(TypedDict, total=False):
             Whether to center crop the video.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
-        video_metadata (`VideoMetadata`, *optional*):
+        video_metadata (`Union[VideoMetadata, dict]`, *optional*):
             Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
@@ -260,6 +261,8 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
+        return_metadata (`ChannelDimension` or `str`, *optional*):
+            Whether to return video metadata or not.
     """
 
     do_convert_rgb: Optional[bool]
@@ -283,6 +286,7 @@ class VideosKwargs(TypedDict, total=False):
     video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[Union[int, float]]
     num_frames: Optional[int]
+    return_metadata: Optional[bool]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -328,7 +332,7 @@ class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
-class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False):
+class ProcessingKwargs(TypedDict, total=False):
     """
     Base class for kwargs passing to processors.
     A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
@@ -428,23 +432,11 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
 
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    video_load_backend (`str`, *optional*, defaults to `"pyav"`):
-        The backend to use when loading the video which will be used only when there are videos in the conversation.
-        Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
-        that supports all types of sources to load from.
-    sample_indices_fn (`Callable`, *optional*):
-            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
-            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
-            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
-            The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
-            indices at which the video should be sampled. For example:
-
-            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
-                # add you sampling logic here ...
-                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
+    load_audio_from_video (`bool`, *optional*):
+            Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
+            processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    video_load_backend: Optional[str] = "pyav"
     sampling_rate: Optional[int] = 16_000
     load_audio_from_video: Optional[bool] = False
 
@@ -463,18 +455,10 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
     return_dict: Optional[bool] = False
 
 
-class AllKwargsForChatTemplate(
-    TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, ProcessorChatTemplateKwargs
-):
-    processor_kwargs: ProcessingKwargs = {
-        **ProcessingKwargs.__annotations__,
-    }
-    mm_load_kwargs: ChatTemplateLoadKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    template_kwargs: ProcessorChatTemplateKwargs = {
-        **ProcessorChatTemplateKwargs.__annotations__,
-    }
+class AllKwargsForChatTemplate(TypedDict, total=False):
+    processor_kwargs: ProcessingKwargs
+    mm_load_kwargs: ChatTemplateLoadKwargs
+    template_kwargs: ProcessorChatTemplateKwargs
 
 
 @dataclass
@@ -489,10 +473,10 @@ class MultiModalData:
     and we might change its API in the future.
     """
 
-    num_image_tokens: list[int] = None
-    num_video_tokens: list[int] = None
-    num_audio_tokens: list[int] = None
-    num_image_patches: list[int] = None
+    num_image_tokens: Optional[list[int]] = None
+    num_video_tokens: Optional[list[int]] = None
+    num_audio_tokens: Optional[list[int]] = None
+    num_image_patches: Optional[list[int]] = None
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None
@@ -576,7 +560,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return proper_class
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, legacy_serialization=True) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -588,50 +572,61 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = sig.parameters
-        # Don't save attributes like `tokenizer`, `image processor` etc.
-        attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
+        attrs_to_save = list(sig.parameters)
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        output = {k: v for k, v in output.items() if k in attrs_to_save}
-
-        output["processor_class"] = self.__class__.__name__
+        if legacy_serialization:
+            # Don't save attributes like `tokenizer`, `image processor` etc. in processor config if `legacy=True`
+            attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
 
         if "tokenizer" in output:
             del output["tokenizer"]
-        if "image_processor" in output:
-            del output["image_processor"]
-        if "video_processor" in output:
-            del output["video_processor"]
-        if "feature_extractor" in output:
-            del output["feature_extractor"]
+        if "qformer_tokenizer" in output:
+            del output["qformer_tokenizer"]
+        if "protein_tokenizer" in output:
+            del output["protein_tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
-        if "audio_tokenizer" in output:
-            del output["audio_tokenizer"]
 
-        # Some attributes have different names but containing objects that are not simple strings
+        # Serialize attributes as a dict
         output = {
-            k: v
+            k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
-            if not (isinstance(v, PushToHubMixin) or v.__class__.__name__ == "BeamSearchDecoderCTC")
+            if (
+                k in attrs_to_save  # keep all attributes that have to be serialized
+                and v.__class__.__name__ != "BeamSearchDecoderCTC"  # remove attributes with that are objects
+                and (
+                    (legacy_serialization and not isinstance(v, PushToHubMixin)) or not legacy_serialization
+                )  # remove `PushToHubMixin` objects
+            )
         }
+
+        # Special case, add `audio_tokenizer` dict which points to model weights and path
+        if not legacy_serialization and "audio_tokenizer" in output:
+            audio_tokenizer_dict = {
+                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
+            }
+            # Update or overwrite, what do audio tokenizers expect when loading?
+            output["audio_tokenizer"] = audio_tokenizer_dict
+
+        output["processor_class"] = self.__class__.__name__
 
         return output
 
-    def to_json_string(self) -> str:
+    def to_json_string(self, legacy_serialization=True) -> str:
         """
         Serializes this instance to a JSON string.
 
         Returns:
             `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
         """
-        dictionary = self.to_dict()
+        dictionary = self.to_dict(legacy_serialization=legacy_serialization)
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=True):
         """
         Save this instance to a JSON file.
 
@@ -640,14 +635,14 @@ class ProcessorMixin(PushToHubMixin):
                 Path to the JSON file in which this processor instance's parameters will be saved.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string())
+            writer.write(self.to_json_string(legacy_serialization=legacy_serialization))
 
     def __repr__(self):
         attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = True, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -668,6 +663,10 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
+            legacy_serialization (`bool`, *optional*, defaults to `True`):
+                Whether or not to save processor attributes in separate config files (legacy) or in processor's config
+                file as a nested dict. Saving all attributes in a single dict will become the default in future versions.
+                Set to `legacy_serialization=True` until then.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -702,15 +701,19 @@ class ProcessorMixin(PushToHubMixin):
         save_jinja_files = kwargs.get("save_jinja_files", True)
 
         for attribute_name in self.attributes:
-            attribute = getattr(self, attribute_name)
-            # Include the processor class in the attribute config so this processor can then be reloaded with the
-            # `AutoProcessor` API.
-            if hasattr(attribute, "_set_processor_class"):
-                attribute._set_processor_class(self.__class__.__name__)
+            # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
+                attribute = getattr(self, attribute_name)
+                if hasattr(attribute, "_set_processor_class"):
+                    attribute._set_processor_class(self.__class__.__name__)
+
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            else:
+            elif legacy_serialization:
+                attribute = getattr(self, attribute_name)
+                # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
+                if hasattr(attribute, "_set_processor_class"):
+                    attribute._set_processor_class(self.__class__.__name__)
                 attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
@@ -728,9 +731,7 @@ class ProcessorMixin(PushToHubMixin):
             save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
         )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
-        output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
 
-        processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
@@ -771,24 +772,39 @@ class ProcessorMixin(PushToHubMixin):
                     "separate files using the `save_jinja_files` argument."
                 )
 
-        if self.audio_tokenizer is not None:
-            audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
-            audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
+        if legacy_serialization:
+            output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
+            processor_dict = self.to_dict()
 
-            audio_tokenizer_dict = {
-                "audio_tokenizer_class": audio_tokenizer_class,
-                "audio_tokenizer_name_or_path": audio_tokenizer_name_or_path,
-            }
-            audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
+            # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+            # `auto_map` is not specified.
+            if set(processor_dict.keys()) != {"processor_class"}:
+                self.to_json_file(output_processor_file)
+                logger.info(f"processor saved in {output_processor_file}")
 
-            with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
-                writer.write(audio_tokenizer_json)
+            if set(processor_dict.keys()) == {"processor_class"}:
+                return_files = []
+            else:
+                return_files = [output_processor_file]
 
-        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
-        # `auto_map` is not specified.
-        if set(processor_dict.keys()) != {"processor_class"}:
-            self.to_json_file(output_processor_file)
+            if self.audio_tokenizer is not None:
+                audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
+                audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
+                audio_tokenizer_dict = {
+                    "audio_tokenizer_class": audio_tokenizer_class,
+                    "audio_tokenizer_name_or_path": audio_tokenizer_name_or_path,
+                }
+                audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
+                with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
+                    writer.write(audio_tokenizer_json)
+
+        # Create a unified `preprocessor_config.json` and save all attributes as a composite config, except for tokenizers
+        # NOTE: this will become the default way to save all processor attrbiutes in future versions. Toggled off for now to give
+        # us time for smoother transition
+        else:
+            self.to_json_file(output_processor_file, legacy_serialization=False)
             logger.info(f"processor saved in {output_processor_file}")
+            return_files = [output_processor_file]
 
         if push_to_hub:
             self._upload_modified_files(
@@ -799,9 +815,7 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        if set(processor_dict.keys()) == {"processor_class"}:
-            return []
-        return [output_processor_file]
+        return return_files
 
     @classmethod
     def get_processor_dict(
@@ -1006,22 +1020,6 @@ class ProcessorMixin(PushToHubMixin):
         if chat_templates:
             kwargs["chat_template"] = chat_templates
 
-        # Same as chat template, adding as kwarg after loading the model
-        audio_tokenizer = None
-        if resolved_audio_tokenizer_file is not None:
-            with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
-                # The json contains the references we need to init the correct model
-                audio_tokenizer_references = json.load(reader)
-                audio_tokenizer_class = cls.get_possibly_dynamic_module(
-                    audio_tokenizer_references["audio_tokenizer_class"]
-                )
-                audio_tokenizer_path = audio_tokenizer_references["audio_tokenizer_name_or_path"]
-
-            audio_tokenizer = audio_tokenizer_class.from_pretrained(audio_tokenizer_path, **audio_tokenizer_kwargs)
-
-        if audio_tokenizer is not None:
-            kwargs["audio_tokenizer"] = audio_tokenizer
-
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -1029,20 +1027,17 @@ class ProcessorMixin(PushToHubMixin):
         if resolved_processor_file is None:
             # In any case we need to pass `chat_template` if it is available
             processor_dict = {}
-            if "chat_template" in kwargs:
-                processor_dict["chat_template"] = kwargs.pop("chat_template")
-            if "audio_tokenizer" in kwargs:
-                processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
-            return processor_dict, kwargs
+        else:
+            try:
+                # Load processor dict
+                with open(resolved_processor_file, encoding="utf-8") as reader:
+                    text = reader.read()
+                processor_dict = json.loads(text)
 
-        try:
-            # Load processor dict
-            with open(resolved_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            processor_dict = json.loads(text)
-
-        except json.JSONDecodeError:
-            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+            except json.JSONDecodeError:
+                raise OSError(
+                    f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
+                )
 
         if is_local:
             logger.info(f"loading configuration file {resolved_processor_file}")
@@ -1057,8 +1052,26 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in kwargs:
             processor_dict["chat_template"] = kwargs.pop("chat_template")
-        if "audio_tokenizer" in kwargs:
-            processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
+
+        # Audio tokenizer needs to load the model checkpoint first, because the saved
+        # json file contains only references to the model path and repo id
+        if resolved_audio_tokenizer_file is not None or "audio_tokenizer" in processor_dict:
+            if resolved_audio_tokenizer_file is not None:
+                reader = open(resolved_audio_tokenizer_file, "r", encoding="utf-8")
+                audio_tokenizer_dict = reader.read()
+                audio_tokenizer_dict = json.loads(audio_tokenizer_dict)
+            else:
+                audio_tokenizer_dict = processor_dict["audio_tokenizer"]
+
+            audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_dict["audio_tokenizer_class"])
+            audio_tokenizer_path = audio_tokenizer_dict["audio_tokenizer_name_or_path"]
+            processor_dict["audio_tokenizer"] = audio_tokenizer_class.from_pretrained(
+                audio_tokenizer_path, **audio_tokenizer_kwargs
+            )
+
+        # Pop attributes if saved in a single processor dict, they are loaded in `_get_arguments_from_pretrained`
+        for attribute in cls.attributes:
+            processor_dict.pop(attribute, None)
 
         return processor_dict, kwargs
 
@@ -1389,17 +1402,38 @@ class ProcessorMixin(PushToHubMixin):
                             return custom_subclass
                 elif custom_class is not None and custom_class.__name__ == module_name:
                     return custom_class
-        else:
-            raise ValueError(
-                f"Could not find module {module_name} in `transformers`. If this is a custom class, "
-                f"it should be registered using the relevant `AutoClass.register()` function so that "
-                f"other functions can find it!"
-            )
+        raise ValueError(
+            f"Could not find module {module_name} in `transformers`. If this is a custom class, "
+            f"it should be registered using the relevant `AutoClass.register()` function so that "
+            f"other functions can find it!"
+        )
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
+        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):
-        first_attribute = getattr(self, self.attributes[0])
-        return getattr(first_attribute, "model_input_names", None)
+        model_input_names = []
+        for attribute_name in self.attributes:
+            attribute = getattr(self, attribute_name, None)
+            attr_input_names = getattr(attribute, "model_input_names")
+            model_input_names.extend(attr_input_names)
+        return model_input_names
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
@@ -1415,6 +1449,11 @@ class ProcessorMixin(PushToHubMixin):
         return unused_kwargs, valid_kwargs
 
     @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
+    @deprecate_kwarg(
+        "video_load_backend",
+        version="4.59",
+        additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
+    )
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
@@ -1467,7 +1506,7 @@ class ProcessorMixin(PushToHubMixin):
                 chat_template = self.chat_template[chat_template]
             else:
                 # It's a template string, render it directly
-                chat_template = chat_template
+                pass
 
         is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
 
@@ -1502,6 +1541,9 @@ class ProcessorMixin(PushToHubMixin):
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
 
+        # pop unused and deprecated kwarg
+        kwargs.pop("video_load_backend", None)
+
         # Pass unprocessed custom kwargs
         processed_kwargs["template_kwargs"].update(kwargs)
 
@@ -1521,10 +1563,8 @@ class ProcessorMixin(PushToHubMixin):
         if tokenize:
             batch_images, batch_videos = [], []
             batch_audios = []
-            batch_video_metadata = []
             for conversation in conversations:
                 images, videos = [], []
-                video_metadata = []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                     audio_fnames = [
@@ -1539,15 +1579,14 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["image", "url", "path", "base64"]
                         if key in vision_info and vision_info["type"] == "image"
                     ]
+                    images.extend(image_fnames)
                     video_fnames = [
                         vision_info[key]
                         for vision_info in visuals
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
-
-                    for fname in image_fnames:
-                        images.append(load_image(fname))
+                    videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not mm_load_kwargs["load_audio_from_video"]:
@@ -1557,31 +1596,10 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in video_fnames:
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
-                    for fname in video_fnames:
-                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
-                            video = [np.array(load_image(image_fname)) for image_fname in fname]
-                            # create a 4D video because `load_video` always returns a 4D array
-                            video = np.stack(video)
-                            metadata = None
-                            logger.warning(
-                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
-                            )
-                        else:
-                            video, metadata = load_video(
-                                fname,
-                                backend=mm_load_kwargs["video_load_backend"],
-                            )
-                        videos.append(video)
-                        video_metadata.append(metadata)
-
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
-                if images:
-                    batch_images.append(images)
-                if videos:
-                    batch_videos.append(videos)
-                    batch_video_metadata.append(video_metadata)
+                batch_images.append(images)
+                batch_videos.append(videos)
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -1606,15 +1624,18 @@ class ProcessorMixin(PushToHubMixin):
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
             # sampling should not done for BC.
-            if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
+            if "do_sample_frames" not in kwargs and (
+                kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
+            ):
                 kwargs["do_sample_frames"] = True
 
+            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
+            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
                 text=prompt,
-                images=batch_images if batch_images else None,
-                videos=batch_videos if batch_videos else None,
+                images=batch_images if images_exist else None,
+                videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
-                video_metadata=batch_video_metadata,
                 **kwargs,
             )
 

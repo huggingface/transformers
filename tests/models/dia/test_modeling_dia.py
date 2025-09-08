@@ -26,14 +26,13 @@ from transformers.testing_utils import (
     is_flaky,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
 from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -238,11 +237,8 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         skippable_tests = [
             "test_sample_generate_dict_output",  # return sequences > 1
             "test_beam",
-            "test_group_beam",
-            "test_constrained_beam",
             "test_contrastive",
             "test_assisted",
-            "test_dola",
             "test_prompt_lookup",
             "test_model_parallel_beam_search",
             "test_generate_without_input_ids",
@@ -415,7 +411,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Overwritten as it relies on hardcoded namings atm - checking for our case here specifically
@@ -512,7 +507,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self._check_similar_generate_outputs(outputs, outputs_cached)
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(

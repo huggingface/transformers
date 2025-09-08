@@ -14,6 +14,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3n model."""
 
+import copy
+import inspect
 import tempfile
 import unittest
 
@@ -26,25 +28,28 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    Cache,
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
     Gemma3nTextConfig,
     GenerationConfig,
+    StaticCache,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
     slow,
     torch_device,
 )
+from transformers.utils import is_flash_attn_2_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -358,8 +363,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
         # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
         # new token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
-        # elaborate checks
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input
             if use_cache and generated_length > 0:
@@ -374,11 +377,10 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self,
         name,
-        torch_dtype,
+        dtype,
         padding_side,
         use_attention_mask,
         output_attentions,
@@ -400,41 +402,289 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             ("cuda", True, torch.float16): 5e-3,
         }
         _test_eager_matches_sdpa_inference(
-            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with dola decoding"
-    )
-    def test_dola_decoding_sample(self):
-        pass
 
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
         pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @pytest.mark.generate
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        """
+        Test that StaticCache can generate from inputs_embeds and calculates max_cache_length
+        correctly in `generate()`. We force the model to not stop generation until max-length is reached
+        to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
+        """
+        for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
+            if not model_class._can_compile_fullgraph:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if config.get_text_config(decoder=True).is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
+                self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+
+            input_ids = inputs_dict.pop("input_ids")
+
+            model.config.use_cache = True
+            model.config.is_decoder = True
+            batch_size = input_ids.shape[0]
+            max_new_tokens = 10
+
+            # here we force to not stop at eos and go until max-length
+            model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
+            generation_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "cache_implementation": "static",
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            text_config = model.config.get_text_config()
+            head_dim = (
+                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+            )
+            num_key_value_heads = (
+                text_config.num_attention_heads
+                if getattr(text_config, "num_key_value_heads", None) is None
+                else text_config.num_key_value_heads
+            )
+            num_hidden_layers = text_config.num_hidden_layers
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
+
+            # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
+            # -1 because the last generated token isn't yet in the cache.
+            max_length = max_new_tokens + inputs_embeds.shape[1] - 1
+            cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
+            self.assertIsInstance(outputs.past_key_values, StaticCache)
+            self.assertEqual(len(outputs.past_key_values), num_hidden_layers - text_config.num_kv_shared_layers)
+            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+
+    @pytest.mark.generate
+    def test_generate_with_static_cache(self):
+        """
+        Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
+        has the expected shapes
+        """
+        for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
+            if not model_class._can_compile_fullgraph:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+            main_input = inputs_dict[model_class.main_input_name]
+
+            if config.get_text_config(decoder=True).is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            config.is_decoder = True
+            batch_size = main_input.shape[0]
+            seq_length = self.model_tester.seq_length
+            max_new_tokens = 20
+
+            for dtype in (torch.float32, torch.float16):
+                model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
+                inputs_dict = {
+                    k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
+                    for k, v in inputs_dict.items()
+                }
+                set_model_for_less_flaky_test(model)
+
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "output_scores": True,
+                    "use_cache": True,
+                }
+
+                static_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict, cache_implementation="static"
+                )
+
+                # Check 1: The cache shapes must match the expected shapes
+                max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
+                text_config = config.text_config if hasattr(config, "text_config") else config
+                head_dim = (
+                    getattr(text_config, "head_dim", None)
+                    or text_config.hidden_size // text_config.num_attention_heads
+                )
+                num_key_value_heads = (
+                    text_config.num_attention_heads
+                    if getattr(text_config, "num_key_value_heads", None) is None
+                    else text_config.num_key_value_heads
+                )
+                num_hidden_layers = text_config.num_hidden_layers
+                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
+                self.assertTrue(
+                    len(static_cache_generation.past_key_values)
+                    == num_hidden_layers - text_config.num_kv_shared_layers
+                )
+                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+
+                # Check 2: The outputs must be similar to the case with dynamic cache
+                dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
+                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
+
+    @pytest.mark.generate
+    def test_past_key_values_format(self, custom_all_cache_shapes=None):
+        """
+        Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test, or pass the
+        expected cache shapes.
+        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # 1. If it doesn't support cache, skip the test
+            if not hasattr(config.get_text_config(), "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
+
+            model = model_class(config).to(torch_device)
+            model = model.eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            if "past_key_values" not in outputs:
+                self.skipTest(reason="This model doesn't return `past_key_values`")
+
+            # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
+            past_kv = outputs["past_key_values"]
+            is_legacy_cache = not isinstance(past_kv, Cache)
+
+            text_config = config.get_text_config()
+            num_decoder_layers = (
+                getattr(text_config, "decoder_layers", None)
+                or getattr(text_config, "num_decoder_layers", None)
+                or text_config.num_hidden_layers
+            )
+
+            if custom_all_cache_shapes is None:
+                num_query_attention_heads = getattr(
+                    text_config, "decoder_attention_heads", text_config.num_attention_heads
+                )
+                embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
+                per_head_embed_dim = embed_dim // num_query_attention_heads
+                num_key_value_heads = (
+                    text_config.num_key_value_heads
+                    if getattr(text_config, "num_key_value_heads", None) is not None
+                    else num_query_attention_heads
+                )
+                if config.is_encoder_decoder:
+                    encoder_num_attention_heads = (
+                        text_config.encoder_attention_heads
+                        if hasattr(text_config, "encoder_attention_heads")
+                        else text_config.num_attention_heads
+                    )
+                    encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
+                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
+                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
+                    # autoregressive generation, we're keeping the test general and not checking the 3rd dim
+                    default_cross_attention_shape = (
+                        batch_size,
+                        encoder_num_attention_heads,
+                        encoder_per_head_embed_dim,
+                    )
+                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+                    all_cache_shapes = [
+                        [
+                            default_self_attention_shape,
+                            default_self_attention_shape,
+                            default_cross_attention_shape,
+                            default_cross_attention_shape,
+                        ]
+                        for _ in range(num_decoder_layers)
+                    ]
+                else:
+                    batch_size, seq_length = inputs["input_ids"].shape[:2]
+                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+                    all_cache_shapes = [
+                        [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
+                    ]
+
+            else:
+                all_cache_shapes = custom_all_cache_shapes
+
+            # 3. Check cache shapes
+            # 3.1. Encoder-Decoder checks
+            if config.is_encoder_decoder:
+                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
+                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
+
+                for i in range(num_decoder_layers):
+                    if is_legacy_cache:
+                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
+
+                    # Self attention
+                    self_attention_layer_keys = (
+                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
+                    )
+                    self_attention_layer_values = (
+                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
+                    )
+                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
+
+                    # Cross attention (ignore 3rd dim, see default shape preparation)
+                    cross_attention_layer_keys = (
+                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
+                    )
+                    cross_attention_layer_values = (
+                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
+                    )
+                    cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
+                    cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
+                    self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
+                    self.assertEqual(cross_attention_layer_values.shape, all_cache_shapes[i][3])
+
+            # 3.2. Decoder-only checks
+            else:
+                num_cache_decoder_layers = len(past_kv)
+                self.assertEqual(num_cache_decoder_layers, num_decoder_layers - text_config.num_kv_shared_layers)
+
+                for i in range(num_decoder_layers - text_config.num_kv_shared_layers):
+                    if is_legacy_cache:
+                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
+
+                    # Self attention
+                    if is_legacy_cache:
+                        self_attention_layer_keys = past_kv[i][0]
+                        self_attention_layer_values = past_kv[i][1]
+                    elif getattr(past_kv, "layers", None) is None:
+                        # Cache is lot layered (i.e, Mamba derivatives)
+                        self_attention_layer_keys = past_kv.key_cache[i]
+                        self_attention_layer_values = past_kv.value_cache[i]
+                    else:
+                        self_attention_layer_keys = past_kv.layers[i].keys
+                        self_attention_layer_values = past_kv.layers[i].values
+                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
 
 class Gemma3nVision2TextModelTester:
@@ -577,64 +827,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         pass
 
     @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
         reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
@@ -644,6 +836,14 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
     )
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     def test_automodelforcausallm(self):
@@ -659,7 +859,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             self.assertIsInstance(for_causal_lm, Gemma3nForCausalLM)
 
 
-@unittest.skip("Skipped for now!")
 @slow
 @require_torch_gpu
 @require_read_token
@@ -682,7 +881,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         audio_ds = load_dataset(
             "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"]["path"]
+        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -690,9 +890,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     def test_model_4b_bf16(self):
         model_id = "Google/gemma-3n-E4B-it"
 
-        model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3nForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -704,8 +902,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like']  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_with_audio(self):
@@ -717,8 +914,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages = [
             [
@@ -754,8 +951,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=False, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -766,7 +963,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -784,27 +984,15 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [
-            'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
-            "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
-        ]  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_4b_crops(self):
+    def test_model_4b_image(self):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
-
-        crop_config = {
-            "images_kwargs": {
-                "do_pan_and_scan": True,
-                "pan_and_scan_max_num_crops": 448,
-                "pan_and_scan_min_crop_size": 32,
-                "pan_and_scan_min_ratio_to_activate": 0.3,
-            }
-        }
+            model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -812,14 +1000,13 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             add_generation_prompt=True,
-            **crop_config,
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background.']  # fmt: skip
+        EXPECTED_NUM_IMAGES = 1  # Gemma3n does not support crops
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly']  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -827,15 +1014,18 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },
@@ -853,15 +1043,14 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"]  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @unittest.skip("For now, using a gemma model with the 3n class is not supported")
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3nForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Gemma3nForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
@@ -871,38 +1060,17 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    # TODO: raushan FA2 generates gibberish for no reason, check later
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    def test_model_4b_flash_attn(self):
-        model_id = "Google/gemma-3n-E4B-it"
-
-        model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        ).to(torch_device)
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
+    @parameterized.expand([("sdpa",), ("eager",), ("flash_attention_2",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
-        we need to correctly slice the attention mask in all cases (because we use a HybridCache).
+        we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
         Outputs for every attention functions should be coherent and identical.
         """
-        model_id = "google/gemma-3-1b-it"
+
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("Test requires Flash Attention")
+
+        model_id = "google/gemma-3n-E2B-it"
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -912,26 +1080,25 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
-        ).to(torch_device)
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16, device_map=torch_device
+        )
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.sliding_window)
+        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     def test_generation_beyond_sliding_window_with_generation_config(self):
-        """
-        Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
+        """Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
         ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
         """
-        model_id = "google/gemma-3-1b-it"
-        attn_implementation = "sdpa"
+
+        model_id = "google/gemma-3n-E2B-it"
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -940,18 +1107,16 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, device_map=torch_device)
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.sliding_window)
+        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        generation_config = GenerationConfig(max_new_tokens=20)
-
-        out = model.generate(**inputs, generation_config=generation_config)[:, input_size:]
+        out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[
+            :, input_size:
+        ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-07-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -30,10 +31,10 @@ rendered properly in your Markdown viewer.
 The Ernie 4.5 Moe model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
 This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
 model with mixture of experts (moe) - one with 21B total, 3B active parameters and another one with 300B total, 47B active parameters.
-It uses the standard [Llama](./llama.md) at its core combined with a specialized MoE based on [Mixtral](./mixtral.md) with additional shared
+It uses the standard [Llama](./llama) at its core combined with a specialized MoE based on [Mixtral](./mixtral) with additional shared
 experts.
 
-Other models from the family can be found at [Ernie 4.5](./ernie4_5.md).
+Other models from the family can be found at [Ernie 4.5](./ernie4_5).
 
 <div class="flex justify-center">
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
@@ -55,7 +56,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 # prepare the model input
@@ -95,7 +96,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     tp_plan="auto",
 )
 

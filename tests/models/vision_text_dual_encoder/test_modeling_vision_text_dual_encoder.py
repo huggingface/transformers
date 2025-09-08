@@ -134,6 +134,9 @@ class VisionTextDualEncoderMixin:
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
     ):
+        # The backbones don't support dynamic attention setting, so we manually change it. FIXME; when bert is refactored
+        vision_config._attn_implementation = "eager"
+        text_config._attn_implementation = "eager"
         vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
         model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
         model.to(torch_device)

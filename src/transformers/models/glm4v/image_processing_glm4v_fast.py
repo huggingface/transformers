@@ -22,8 +22,6 @@ from ...image_processing_utils import (
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -46,7 +44,6 @@ from .image_processing_glm4v import smart_resize
 
 if is_torch_available():
     import torch
-
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
@@ -90,11 +87,30 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
         super().__init__(**kwargs)
+        if self.size is not None and (
+            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
+        ):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -112,48 +128,46 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
         """
 
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
+        processed_images = []
+        processed_grids = []
+
+        all_target_sizes = []
+        for image in images:
+            height, width = image.shape[-2:]
+            resized_height, resized_width = smart_resize(
+                num_frames=temporal_patch_size,
+                height=height,
+                width=width,
+                temporal_factor=temporal_patch_size,
+                factor=patch_size * merge_size,
+                min_pixels=size.shortest_edge,
+                max_pixels=size.longest_edge,
+            )
+            all_target_sizes.append((resized_height, resized_width))
+
+        target_height = max([s[0] for s in all_target_sizes])
+        target_width = max([s[1] for s in all_target_sizes])
+
+        for image in images:
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    num_frames=temporal_patch_size,
-                    height=height,
-                    width=width,
-                    temporal_factor=temporal_patch_size,
-                    factor=patch_size * merge_size,
-                )
-                stacked_images = self.resize(
-                    stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                image = self.resize(
+                    image,
+                    size=SizeDict(height=target_height, width=target_width),
                     interpolation=interpolation,
                 )
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            # add a temporal dimension
-            patches = stacked_images.unsqueeze(1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
+            image = self.rescale_and_normalize(
+                image.unsqueeze(0), do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            ).squeeze(0)
+
+            patches = image.unsqueeze(0)
+            if patches.shape[0] % temporal_patch_size != 0:
+                repeats = patches[-1:].repeat(temporal_patch_size - (patches.shape[0] % temporal_patch_size), 1, 1, 1)
+                patches = torch.cat([patches, repeats], dim=0)
+            channel = patches.shape[1]
+            grid_t = patches.shape[0] // temporal_patch_size
+            grid_h, grid_w = target_height // patch_size, target_width // patch_size
             patches = patches.view(
-                batch_size,
                 grid_t,
                 temporal_patch_size,
                 channel,
@@ -164,18 +178,14 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
             flatten_patches = patches.reshape(
-                batch_size,
                 grid_t * grid_h * grid_w,
                 channel * temporal_patch_size * patch_size * patch_size,
             )
+            processed_images.append(flatten_patches)
+            processed_grids.append([grid_t, grid_h, grid_w])
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
         pixel_values = torch.stack(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids)
 

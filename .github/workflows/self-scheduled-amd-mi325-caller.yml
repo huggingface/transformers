@@ -24,6 +24,7 @@ jobs:
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
+      env_file: /etc/podinfo/gha-gpu-isolation-settings
     secrets: inherit
 
   torch-pipeline:
@@ -36,6 +37,7 @@ jobs:
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
+      env_file: /etc/podinfo/gha-gpu-isolation-settings
     secrets: inherit
 
   example-ci:
@@ -48,6 +50,7 @@ jobs:
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
+      env_file: /etc/podinfo/gha-gpu-isolation-settings
     secrets: inherit
 
   deepspeed-ci:
@@ -60,4 +63,5 @@ jobs:
       docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
+      env_file: /etc/podinfo/gha-gpu-isolation-settings
     secrets: inherit

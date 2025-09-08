@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-01-09 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Transformer XL
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 <Tip warning={true}>
@@ -117,13 +117,6 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 [[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
 
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
-
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
-
-<frameworkcontent>
-<pt>
-
 ## TransfoXLModel
 
 [[autodoc]] TransfoXLModel
@@ -139,29 +132,6 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 [[autodoc]] TransfoXLForSequenceClassification
     - forward
 
-</pt>
-<tf>
-
-## TFTransfoXLModel
-
-[[autodoc]] TFTransfoXLModel
-    - call
-
-## TFTransfoXLLMHeadModel
-
-[[autodoc]] TFTransfoXLLMHeadModel
-    - call
-
-## TFTransfoXLForSequenceClassification
-
-[[autodoc]] TFTransfoXLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>
-
 ## Internal Layers
 
 [[autodoc]] AdaptiveEmbedding
-
-[[autodoc]] TFAdaptiveEmbedding

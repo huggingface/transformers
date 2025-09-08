@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-17 and added to Hugging Face Transformers on 2025-04-17.*
 
 # Janus
 
@@ -44,11 +45,11 @@ Here is the example of visual understanding with a single image.
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
-import torch  
-from PIL import Image  
-import requests  
+import torch
+from PIL import Image
+import requests
 
-from transformers import JanusForConditionalGeneration, JanusProcessor  
+from transformers import JanusForConditionalGeneration, JanusProcessor
 
 model_id = "deepseek-community/Janus-Pro-1B"
 # Prepare Input for generation.
@@ -65,7 +66,7 @@ messages = [
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,     
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto")
 
 inputs = processor.apply_chat_template(
@@ -127,7 +128,7 @@ messages = [
 # Load model and processor
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, dtype=torch.bfloat16, device_map="auto"
 )
 
 inputs = processor.apply_chat_template(
@@ -159,7 +160,7 @@ from transformers import JanusForConditionalGeneration, JanusProcessor
 model_id = "deepseek-community/Janus-Pro-1B"
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto")
 
 messages = [
@@ -208,6 +209,10 @@ for i, image in enumerate(images['pixel_values']):
 ## JanusImageProcessor
 
 [[autodoc]] JanusImageProcessor
+
+## JanusImageProcessorFast
+
+[[autodoc]] JanusImageProcessorFast
 
 ## JanusVisionModel
 

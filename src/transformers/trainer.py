@@ -294,9 +294,6 @@ def safe_globals():
 if TYPE_CHECKING:
     import optuna
 
-    if is_datasets_available():
-        import datasets
-
 logger = logging.get_logger(__name__)
 
 
@@ -418,14 +415,14 @@ class Trainer:
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module, None] = None,
-        args: TrainingArguments = None,
+        args: Optional[TrainingArguments] = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset], "datasets.Dataset"]] = None,
         processing_class: Optional[
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
         ] = None,
-        model_init: Optional[Callable[[], PreTrainedModel]] = None,
+        model_init: Optional[Callable[..., PreTrainedModel]] = None,
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
         callbacks: Optional[list[TrainerCallback]] = None,
@@ -770,6 +767,16 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        # Check for multi-label classification incompatibility
+        if self.args.label_smoothing_factor > 0:
+            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
+                warnings.warn(
+                    "Label smoothing is not compatible with multi-label classification. "
+                    "Disabling label smoothing for this training run.",
+                    UserWarning,
+                )
+                self.label_smoother = None
+
         self.control = TrainerControl()
 
         self.state = TrainerState(
@@ -783,15 +790,17 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        if _is_peft_model(self.model) and self.args.label_names is None:
-            logger.warning(
-                f"No label_names provided for model class `{self.model.__class__.__name__}`."
-                " Since `PeftModel` hides base models input arguments, if label_names is not given, label_names can't be set automatically within `Trainer`."
-                " Note that empty label_names list will be used instead."
-            )
-        default_label_names = find_labels(self.model.__class__)
+
+        model_to_inspect = self.model
+        if _is_peft_model(self.model):
+            if hasattr(self.model, "get_base_model"):
+                model_to_inspect = self.model.get_base_model()
+            else:
+                # PeftMixedModel do not provide a `get_base_model` method
+                model_to_inspect = self.model.base_model.model
+        default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.can_return_loss = can_return_loss(self.model.__class__)
+        self.can_return_loss = can_return_loss(model_to_inspect.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # Internal variables to help with automatic batch size reduction
@@ -902,6 +911,79 @@ class Trainer:
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
+
+    def _align_special_tokens(self):
+        """
+        Aligns the special tokens of the tokenizer with the model configs.
+
+        A new tokens may be defined in the tokenizer for fine-tuning purposes, e.g. an "end of turn" token may be
+        added on chat models. In that case, we want the model configs to be aligned with the tokenizer, so that all
+        downstream uses work as expected. This alignment should happen before training, to ensure the prediction step
+        uses the new tokens as well.
+        """
+        if isinstance(self.processing_class, ProcessorMixin):
+            tokenizer = self.processing_class.tokenizer
+        else:
+            tokenizer = self.processing_class
+        model_has_generation_config = (
+            hasattr(self.model, "generation_config") and self.model.generation_config is not None
+        )
+        updated_tokens = {}
+
+        # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
+        # token.
+        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+        if model_has_generation_config:
+            # `generation_config.eos_token_id` is None: direct comparison
+            if self.model.generation_config.eos_token_id is None:
+                tokenizer_has_new_eos |= tokenizer.eos_token_id != self.model.generation_config.eos_token_id
+            else:
+                # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+                if isinstance(self.model.generation_config.eos_token_id, int):
+                    self.model.generation_config.eos_token_id = [self.model.generation_config.eos_token_id]
+                # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+                tokenizer_has_new_eos |= tokenizer.eos_token_id not in self.model.generation_config.eos_token_id
+
+        if tokenizer_has_new_eos:
+            updated_tokens["eos_token_id"] = tokenizer.eos_token_id
+            self.model.config.eos_token_id = tokenizer.eos_token_id
+            # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
+            # EOS tokens defined here will halt generation.
+            if model_has_generation_config:
+                all_eos_tokens = [tokenizer.eos_token_id]
+                if self.model.generation_config.eos_token_id is not None:
+                    all_eos_tokens += list(self.model.generation_config.eos_token_id)
+                self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+
+        # 2 - Align BOS
+        tokenizer_has_new_bos = tokenizer.bos_token_id != self.model.config.bos_token_id
+        if model_has_generation_config:
+            tokenizer_has_new_bos |= tokenizer.bos_token_id != self.model.generation_config.bos_token_id
+
+        if tokenizer_has_new_bos:
+            updated_tokens["bos_token_id"] = tokenizer.bos_token_id
+            self.model.config.bos_token_id = tokenizer.bos_token_id
+            if model_has_generation_config:
+                self.model.generation_config.bos_token_id = tokenizer.bos_token_id
+
+        # 3 - Align PAD
+        tokenizer_has_new_pad = tokenizer.pad_token_id != self.model.config.pad_token_id
+        if model_has_generation_config:
+            tokenizer_has_new_pad |= tokenizer.pad_token_id != self.model.generation_config.pad_token_id
+
+        if tokenizer_has_new_pad:
+            updated_tokens["pad_token_id"] = tokenizer.pad_token_id
+            self.model.config.pad_token_id = tokenizer.pad_token_id
+            if model_has_generation_config:
+                self.model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        # 4 - Warn users about the changes
+        if len(updated_tokens) > 0:
+            logger.warning(
+                "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+                "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+                f"values. Updated tokens: {updated_tokens}."
+            )
 
     def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
@@ -1032,17 +1114,16 @@ class Trainer:
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
-        dataloader = DataLoader(dataset, **dataloader_params)
+        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # Accelerator.free_memory() will destroy the references, so
-        # we need to store the non-prepared version for eval dataloaders.
+        # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
             if hasattr(self, "_eval_dataloaders"):
                 self._eval_dataloaders[dataloader_key] = dataloader
             else:
                 self._eval_dataloaders = {dataloader_key: dataloader}
 
-        return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -1130,7 +1211,7 @@ class Trainer:
             and dataloader_key in self._eval_dataloaders
             and self.args.dataloader_persistent_workers
         ):
-            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+            return self._eval_dataloaders[dataloader_key]
 
         eval_dataset = (
             self.eval_dataset[eval_dataset]
@@ -1745,6 +1826,7 @@ class Trainer:
             if kahan_sum is not None:
                 kahan_sum = bool(kahan_sum)
 
+            adam_kwargs["weight_decay"] = args.weight_decay
             stable_adamw_kwargs = {
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
@@ -2160,6 +2242,12 @@ class Trainer:
         args = self.args
 
         self.is_in_train = True
+
+        # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
+            self._align_special_tokens()
 
         # Attach NEFTune hooks if necessary
         if self.neftune_noise_alpha is not None:
@@ -3732,6 +3820,134 @@ class Trainer:
 
         return inputs
 
+    def _is_attention_mask_causal(self, attention_mask):
+        """
+        Check if an attention mask is causal (compatible with causal attention).
+        Context parallelism only supports causal attention patterns. This function
+        checks if the provided attention mask is compatible.
+
+        Args:
+            attention_mask (torch.Tensor): The attention mask to check
+
+        Returns:
+            bool: True if the mask is causal or compatible with causal attention
+        """
+        if attention_mask is None:
+            return True  # No mask is considered causal (model uses default causal masking)
+
+        # Handle different mask dimensions
+        if attention_mask.dim() == 2:
+            # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+            return True
+        elif attention_mask.dim() in [3, 4]:
+            # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+            # Check if it's lower triangular (causal)
+            seq_len = attention_mask.shape[-1]
+            if seq_len <= 1:
+                return True  # Single token or empty is always causal
+
+            # Take first batch and head (if 4D) for checking pattern
+            if attention_mask.dim() == 4:
+                mask = attention_mask[0, 0]  # First batch, first head
+            else:
+                mask = attention_mask[0]  # First batch
+
+            # Check if upper triangular part is masked (should be 0 or very negative for causal)
+            upper_triangular = torch.triu(mask, diagonal=1)
+
+            # For causal masks, upper triangular should be 0 or very negative (like -inf)
+            # Use a reasonable threshold to handle float precision issues
+            is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+            return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+        # For unknown dimensions, be conservative and reject
+        return False
+
+    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
+        """
+        Prepare inputs for context parallelism by setting up buffers and validation.
+
+        Args:
+            model: The model being trained
+            inputs: Input tensors to prepare
+
+        Returns:
+            tuple: (context_manager, prepared_inputs) where context_manager is either
+                   the context parallelism wrapper or a no-op context
+        """
+        if (
+            getattr(self.accelerator, "parallelism_config", None) is not None
+            and self.accelerator.parallelism_config.cp_enabled
+        ):
+            if hasattr(model, "config"):
+                if model.config._attn_implementation != "sdpa":
+                    raise ValueError(
+                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                    )
+
+            if "position_ids" not in inputs:
+                logger.warning_once("Position IDs not found in the inputs, generating manually")
+                inputs["position_ids"] = torch.arange(
+                    inputs["input_ids"].size(1), device=inputs["input_ids"].device
+                ).expand(inputs["input_ids"].size(0), -1)
+            if "shift_labels" not in inputs:
+                logger.warning_once("Shift labels not found in the inputs, shifting manually")
+                if "labels" in inputs:
+                    _ignore_index = -100
+                    labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
+                    inputs["shift_labels"] = labels[:, 1:].contiguous()
+
+            buffers = []
+            buffer_seq_dims = []
+
+            if "input_ids" in inputs:
+                buffers.append(inputs["input_ids"])
+                buffer_seq_dims.append(1)  # Sequence dimension
+            if "labels" in inputs:
+                buffers.append(inputs["labels"])
+                buffer_seq_dims.append(1)
+            if "shift_labels" in inputs:
+                buffers.append(inputs["shift_labels"])
+                buffer_seq_dims.append(1)
+            # Add attention_mask to buffers for context parallel splitting (only if causal)
+            if "attention_mask" in inputs:
+                # Only validate causal mask once for performance
+                if not getattr(self, "_attn_mask_causal_checked", False):
+                    # Context parallel currently doesn't support other masks than causal
+                    # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+                    # Check if the mask is really causal and if not throw an error
+                    attention_mask = inputs["attention_mask"]
+                    if not self._is_attention_mask_causal(attention_mask):
+                        raise ValueError(
+                            "Context parallelism only supports causal attention masks. "
+                            "The provided attention_mask is not causal. "
+                            "Please ensure your data uses causal masking (lower triangular) "
+                            "or remove the attention_mask to use the model's default causal masking."
+                        )
+                    self._attn_mask_causal_checked = True
+                if self._attn_mask_causal_checked:
+                    # Add to buffers only after validation (or if validation already passed)
+                    attention_mask = inputs["attention_mask"]
+                    if attention_mask.dim() == 2:
+                        buffers.append(attention_mask)
+                        buffer_seq_dims.append(1)
+                    else:
+                        # Other dimensionality; keep as-is without sharding to avoid incorrect splits
+                        pass
+            # Include position_ids in context parallelism splitting
+            if "position_ids" in inputs and inputs["position_ids"] is not None:
+                buffers.append(inputs["position_ids"])
+                buffer_seq_dims.append(1)
+
+            return partial(
+                self.accelerator.maybe_context_parallel,
+                buffers=buffers,
+                buffer_seq_dims=buffer_seq_dims,
+                no_restore_buffers=set(buffers),
+            ), inputs
+
+        return contextlib.nullcontext, inputs
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3782,66 +3998,74 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        model.train()
-        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
-            self.optimizer.train()
+        # Prepare buffers for context parallelism
 
-        inputs = self._prepare_inputs(inputs)
-        if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
-            return loss_mb.reduce_mean().detach().to(self.args.device)
+        cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
 
-        with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+        # Context manager is no-op if CP isn't enabled
+        with cp_context():
+            model.train()
+            if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+                self.optimizer.train()
 
-        del inputs
-        if (
-            self.args.torch_empty_cache_steps is not None
-            and self.state.global_step % self.args.torch_empty_cache_steps == 0
-        ):
-            if is_torch_xpu_available():
-                torch.xpu.empty_cache()
-            elif is_torch_mlu_available():
-                torch.mlu.empty_cache()
-            elif is_torch_musa_available():
-                torch.musa.empty_cache()
-            elif is_torch_npu_available():
-                torch.npu.empty_cache()
-            elif is_torch_mps_available():
-                torch.mps.empty_cache()
-            elif is_torch_hpu_available():
-                logger.warning(
-                    "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                )
+            inputs = self._prepare_inputs(inputs)
+            if is_sagemaker_mp_enabled():
+                loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+                return loss_mb.reduce_mean().detach().to(self.args.device)
+
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+
+            del inputs
+            if (
+                self.args.torch_empty_cache_steps is not None
+                and self.state.global_step % self.args.torch_empty_cache_steps == 0
+            ):
+                if is_torch_xpu_available():
+                    torch.xpu.empty_cache()
+                elif is_torch_mlu_available():
+                    torch.mlu.empty_cache()
+                elif is_torch_musa_available():
+                    torch.musa.empty_cache()
+                elif is_torch_npu_available():
+                    torch.npu.empty_cache()
+                elif is_torch_mps_available():
+                    torch.mps.empty_cache()
+                elif is_torch_hpu_available():
+                    logger.warning(
+                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
+                    )
+                else:
+                    torch.cuda.empty_cache()
+
+            kwargs = {}
+
+            # For LOMO optimizers you need to explicitly use the learning rate
+            if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+                kwargs["learning_rate"] = self._get_learning_rate()
+
+            if self.args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+            if self.use_apex:
+                from apex import amp
+
+                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
             else:
-                torch.cuda.empty_cache()
+                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
+                if (
+                    not self.model_accepts_loss_kwargs or num_items_in_batch is None
+                ) and self.compute_loss_func is None:
+                    # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+                    loss = loss / self.current_gradient_accumulation_steps
 
-        kwargs = {}
+                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+                # https://github.com/huggingface/transformers/pull/35808
+                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                    kwargs["scale_wrt_gas"] = False
 
-        # For LOMO optimizers you need to explicitly use the learnign rate
-        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            kwargs["learning_rate"] = self._get_learning_rate()
-
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-        if self.use_apex:
-            from apex import amp
-
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
-                loss = loss / self.current_gradient_accumulation_steps
-
-            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-            # https://github.com/huggingface/transformers/pull/35808
-            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                kwargs["scale_wrt_gas"] = False
-
-            self.accelerator.backward(loss, **kwargs)
+                self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
 
@@ -3869,7 +4093,7 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
 
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
@@ -4411,7 +4635,8 @@ class Trainer:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
-        model.eval()
+        if hasattr(model, "eval") and callable(model.eval):
+            model.eval()
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
 
@@ -5245,6 +5470,16 @@ class Trainer:
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
+
+        # We defer compatibility checks to accelerator
+        if self.args.parallelism_config is not None:
+            if not is_accelerate_available("1.10.1"):
+                raise ImportError(
+                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
+                )
+
+            args["parallelism_config"] = self.args.parallelism_config
+
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
@@ -5342,7 +5577,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
@@ -5387,6 +5622,9 @@ class Trainer:
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
                     # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
                     num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                # Divide by number of devices with the same batch
+                if pc := getattr(self.accelerator, "parallelism_config", None):
+                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return batch_samples, num_items_in_batch
 

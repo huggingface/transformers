@@ -35,6 +35,7 @@ from ...utils import (
     TransformersKwargs,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -84,7 +85,7 @@ class Exaone4Config(PretrainedConfig):
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -246,7 +247,7 @@ class Exaone4Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         if "sliding_window" in self.layer_types:
-            self._attn_implementation = "hybrid"
+            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
 
         super().__init__(
@@ -287,12 +288,13 @@ class Exaone4Attention(nn.Module):
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -312,11 +314,11 @@ class Exaone4Attention(nn.Module):
         if self.sliding_window is None or self.is_sliding:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -366,7 +368,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -382,7 +384,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -422,7 +424,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping[layer_type],
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,

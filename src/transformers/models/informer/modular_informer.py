@@ -37,6 +37,7 @@ from ...utils import (
     auto_docstring,
     is_torch_flex_attn_available,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..bart.modeling_bart import BartAttention
 from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesFeatureEmbedder,
@@ -245,11 +246,12 @@ class InformerProbSparseAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -268,19 +270,20 @@ class InformerProbSparseAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
+                    curr_past_key_value = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_value.self_attention_cache
+                    curr_past_key_value = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_value
+                curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
             key_states = curr_past_key_value.layers[self.layer_idx].keys
             value_states = curr_past_key_value.layers[self.layer_idx].values
@@ -290,15 +293,15 @@ class InformerProbSparseAttention(nn.Module):
             key_states = key_states.view(*kv_input_shape).transpose(1, 2)
             value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -648,9 +651,9 @@ class InformerDecoder(TimeSeriesTransformerDecoder):
         self.post_init()
 
 
-class InformerModel(TimeSeriesTransformerModel, nn.Module):
+class InformerModel(TimeSeriesTransformerModel):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(config)
@@ -798,9 +801,9 @@ class InformerModel(TimeSeriesTransformerModel, nn.Module):
         super().forward(**super_kwargs)
 
 
-class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
+class InformerForPrediction(TimeSeriesTransformerForPrediction):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.model = InformerModel(config)
         if config.distribution_output == "student_t":

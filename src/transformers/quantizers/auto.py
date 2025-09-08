@@ -31,6 +31,7 @@ from ..utils.quantization_config import (
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -54,6 +55,7 @@ from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
@@ -81,6 +83,7 @@ AUTO_QUANTIZER_MAPPING = {
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
+    "mxfp4": Mxfp4HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -103,6 +106,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
+    "mxfp4": Mxfp4Config,
 }
 
 logger = logging.get_logger(__name__)
@@ -210,21 +214,32 @@ class AutoHfQuantizer:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
+            quantization_config_from_args is not None
+            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
+        ):
+            raise ValueError(
+                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+            )
+
+        if (
             isinstance(
-                quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig)
+                quantization_config,
+                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
             )
             and quantization_config_from_args is not None
         ):
-            # special case for GPTQ / AWQ / FbgemmFp8 config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "":
+        if warning_msg != "" and not isinstance(quantization_config, Mxfp4Config):
             warnings.warn(warning_msg)
-
+        else:
+            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
+            logger.info(warning_msg)
         return quantization_config
 
     @staticmethod
@@ -278,3 +293,42 @@ def register_quantizer(name: str):
         return cls
 
     return register_quantizer_fn
+
+
+def get_hf_quantizer(config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent):
+    pre_quantized = hasattr(config, "quantization_config")
+    if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
+        pre_quantized = False
+
+    if pre_quantized or quantization_config is not None:
+        if pre_quantized:
+            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
+                config.quantization_config, quantization_config
+            )
+        else:
+            config.quantization_config = quantization_config
+
+        hf_quantizer = AutoHfQuantizer.from_config(
+            config.quantization_config,
+            pre_quantized=pre_quantized,
+        )
+    else:
+        hf_quantizer = None
+
+    if hf_quantizer is not None:
+        hf_quantizer.validate_environment(
+            dtype=dtype,
+            from_tf=from_tf,
+            from_flax=from_flax,
+            device_map=device_map,
+            weights_only=weights_only,
+        )
+        dtype = hf_quantizer.update_dtype(dtype)
+        device_map = hf_quantizer.update_device_map(device_map)
+        config = hf_quantizer.update_tp_plan(config)
+
+        # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
+        if not getattr(hf_quantizer.quantization_config, "dequantize", False):
+            quant_method = hf_quantizer.quantization_config.quant_method
+            user_agent["quant"] = getattr(quant_method, "value", quant_method)
+    return hf_quantizer, config, dtype, device_map

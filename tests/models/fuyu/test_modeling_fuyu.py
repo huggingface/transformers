@@ -13,19 +13,21 @@
 # limitations under the License.
 """Testing suite for the PyTorch Fuyu model."""
 
+import copy
 import io
 import unittest
 
 import pytest
 import requests
+import torch
 from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -47,6 +49,7 @@ class FuyuModelTester:
         parent,
         batch_size=13,
         seq_length=7,
+        num_image_tokens=2,
         image_size=30,
         patch_size=15,
         num_channels=3,
@@ -67,12 +70,14 @@ class FuyuModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        pad_token_id=0,
+        pad_token_id=10,
+        image_token_id=1,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.num_image_tokens = num_image_tokens
+        self.seq_length = seq_length + num_image_tokens
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -94,10 +99,15 @@ class FuyuModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
+        self.image_token_id = image_token_id
         self.scope = scope
 
     def prepare_config_and_inputs(self):
+        config = self.get_config()
+
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
 
         input_mask = None
         if self.use_input_mask:
@@ -108,8 +118,6 @@ class FuyuModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-
-        config = self.get_config()
 
         return config, input_ids, input_mask, sequence_labels, token_labels
 
@@ -128,6 +136,7 @@ class FuyuModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -139,7 +148,10 @@ class FuyuModelTester:
             sequence_labels,
             token_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        image_patches = floats_tensor(
+            [self.batch_size, self.num_image_tokens, config.num_channels * config.patch_size**2]
+        )
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "image_patches": image_patches}
         return config, inputs_dict
 
 
@@ -165,6 +177,27 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)
+
+    def test_mismatching_image_patches(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+
+            # two image token and two image
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # remove one image but leave the image token in text
+            input_ids = curr_input_dict["input_ids"]
+            image_patches = curr_input_dict["image_patches"][1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, image_patches=image_patches)
+
+            # remove one image token from text
+            input_ids = curr_input_dict["input_ids"][2:]
+            image_patches = curr_input_dict["image_patches"]
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, image_patches=image_patches)
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -211,7 +244,15 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_model_parallelism()
 
     @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
-    def test_generate_continue_from_inputs_embeds():
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
@@ -232,7 +273,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_model(self):
-        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b", dtype="float16", device_map=torch_device)
 
     def test_greedy_generation(self):
         processor = self.default_processor
@@ -243,7 +284,9 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
 
-        inputs = processor(images=image, text=text_prompt_coco_captioning, return_tensors="pt")
+        inputs = processor(images=image, text=text_prompt_coco_captioning, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=10)
 
         # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them

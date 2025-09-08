@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import textwrap
 from typing import Any, Callable
 
 from transformers import is_torch_available, is_torch_xpu_available
@@ -24,6 +25,7 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
     torch_device,
+    torchrun,
 )
 from transformers.utils import is_ccl_available, is_ipex_available
 
@@ -122,7 +124,7 @@ class TestFSDPGeneration(TestCasePlus):
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()
-        args = "--fsdp".split()
+        args = ["--fsdp"]
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
@@ -135,10 +137,37 @@ class TestFSDPGeneration(TestCasePlus):
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()
-        args = "--fsdp2".split()
+        args = ["--fsdp2"]
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
+
+
+class TestFSDPGenericTaskModel(TestCasePlus):
+    nproc_per_node = 2
+
+    def test_generic_task_model_can_be_sharded(self):
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            from torch.distributed.fsdp import fully_shard
+            from transformers import AutoModelForTokenClassification
+
+            torch.distributed.init_process_group(
+                backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://"
+            )
+            rank = torch.distributed.get_rank()
+            if torch.cuda.is_available():
+                torch.cuda.set_device(rank)
+
+            # Make sure it works
+            model = AutoModelForTokenClassification.from_pretrained("Qwen/Qwen2-0.5B")
+            module = fully_shard(model)
+
+            torch.distributed.destroy_process_group()
+            """
+        )
+        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
 
 
 if __name__ == "__main__":

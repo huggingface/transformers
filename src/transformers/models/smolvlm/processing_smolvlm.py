@@ -120,6 +120,9 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
         },
+        "videos_kwargs": {
+            "return_metadata": True,
+        },
     }
 
 
@@ -174,24 +177,10 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def process_vision(self, text, images, output_kwargs):
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-
-        n_images_in_images = [len(sublist) for sublist in images]
-        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-
-        if text is None:
-            return None, image_inputs
-
-        if n_images_in_images != n_images_in_text:
-            raise ValueError(
-                f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-            )
-        image_rows = image_inputs.pop("rows", [[0] * len(text)])
-        image_cols = image_inputs.pop("cols", [[0] * len(text)])
-
+    def expand_text_with_image_tokens(self, text, image_rows, image_cols):
         prompt_strings = []
+        image_rows = image_rows if image_rows is not None else [[0] * len(text)]
+        image_cols = image_cols if image_cols is not None else [[0] * len(text)]
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             image_prompt_strings = []
@@ -216,32 +205,25 @@ class SmolVLMProcessor(ProcessorMixin):
                 sample += image_prompt_string + split_sample[i + 1]
             prompt_strings.append(sample)
 
-        return prompt_strings, image_inputs
+        return prompt_strings
 
-    def process_video(self, text, videos, output_kwargs):
-        if text is not None:
-            n_videos_in_text = [sample.count(self.video_token) for sample in text]
-
-        n_videos_in_videos = [len(sublist) for sublist in videos]
-        video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
-
+    def expand_text_with_video_tokens(self, text, video_inputs):
         num_frames = video_inputs["pixel_values"].shape[1]
-        batch_timestamps = iter(video_inputs.pop("timestamps"))
-        batch_durations = iter(video_inputs.pop("durations"))
-
-        if text is None:
-            return None, video_inputs
-
-        if n_videos_in_videos != n_videos_in_text:
-            raise ValueError(
-                f"The number of videos in the text {n_videos_in_text} and videos {n_videos_in_videos} should be the same."
-            )
+        video_metadata = iter(video_inputs["video_metadata"])
 
         prompt_strings = []
         for sample in text:
             while self.video_token in sample:
-                timestamps = next(batch_timestamps)
-                duration = next(batch_durations)
+                metadata = next(video_metadata)
+                if metadata.fps is None:
+                    logger.warning_once(
+                        "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                        "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                    )
+                    metadata.fps = 24  # Set the default fps to 24 for BC, otherwise `timestamps` can't be inferred
+                timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
+                duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
                 duration_td = timedelta(seconds=int(duration))
                 image_prompt_strings = DEFAULT_VIDEO_INTRO.format(
                     frame_count=num2words(num_frames), video_duration=str(duration_td)
@@ -260,14 +242,14 @@ class SmolVLMProcessor(ProcessorMixin):
                 image_prompt_strings += DEFAULT_MEDIA_OUTTRO
                 sample = sample.replace(self.video_token, image_prompt_strings, 1)
             prompt_strings.append(sample)
-        return prompt_strings, video_inputs
+        return prompt_strings
 
     def __call__(
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -341,19 +323,38 @@ class SmolVLMProcessor(ProcessorMixin):
         inputs = {}
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
-            text, vision_inputs = self.process_vision(
-                text,
-                images,
-                output_kwargs,
-            )
+            vision_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+
+            image_rows = vision_inputs.pop("rows", None)
+            image_cols = vision_inputs.pop("cols", None)
             inputs.update(vision_inputs)
+
+            if text is not None:
+                n_images_in_text = [sample.count(self.image_token) for sample in text]
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_images != n_images_in_text:
+                    raise ValueError(
+                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+                    )
+                text = self.expand_text_with_image_tokens(text, image_rows=image_rows, image_cols=image_cols)
+
         elif videos is not None:
-            text, vision_inputs = self.process_video(
-                text,
-                videos,
-                output_kwargs,
-            )
+            vision_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
+            if text is not None:
+                n_videos_in_text = [sample.count(self.video_token) for sample in text]
+                n_videos_in_videos = [len(sublist) for sublist in videos]
+                if n_videos_in_videos != n_videos_in_text:
+                    raise ValueError(
+                        f"The number of videos in the text {n_videos_in_text} and videos {n_videos_in_videos} should be the same."
+                    )
+                text = self.expand_text_with_video_tokens(text, vision_inputs)
+
+            # If user has not requested video metadata, pop it. By default metadata
+            # is always returned to expand video tokens correctly
+            if "return_metadata" not in kwargs:
+                vision_inputs.pop("video_metadata")
             inputs.update(vision_inputs)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
@@ -364,28 +365,6 @@ class SmolVLMProcessor(ProcessorMixin):
             inputs.update(text_inputs)
 
         return BatchFeature(inputs, tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SmolVLMTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return batched_decode_output
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SmolVLMTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return decode_output
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
     def apply_chat_template(
         self,

@@ -81,14 +81,26 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
+  - sections:
+    - local: serving
+      title: Serving LLMs, VLMs, and other chat-based models
+    - local: jan
+      title: Jan
+    - local: cursor
+      title: Cursor
+    - local: tiny_agents
+      title: Tiny-Agents CLI and MCP tools
+    - local: open_webui
+      title: Open WebUI
+    title: Serving
   - sections:
     - local: perf_torch_compile
       title: torch.compile
@@ -103,8 +115,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: serving
-    title: Serving
   - local: transformers_as_backend
     title: Inference server backends
   title: Inference
@@ -267,6 +277,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
+      - local: tasks/keypoint_matching
+        title: Keypoint matching
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -363,6 +375,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
       - local: model_doc/arcee
         title: Arcee
       - local: model_doc/bamba
@@ -501,6 +515,8 @@
         title: GPT2
       - local: model_doc/gpt_bigcode
         title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -519,6 +535,10 @@
         title: HerBERT
       - local: model_doc/hgnet_v2
         title: HGNet-V2
+      - local: model_doc/hunyuan_v1_dense
+        title: HunYuanDenseV1
+      - local: model_doc/hunyuan_v1_moe
+        title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -659,6 +679,8 @@
         title: RoFormer
       - local: model_doc/rwkv
         title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -753,6 +775,8 @@
         title: DINOV2
       - local: model_doc/dinov2_with_registers
         title: DINOv2 with Registers
+      - local: model_doc/dinov3
+        title: DINOv3
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -769,6 +793,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
       - local: model_doc/hiera
         title: Hiera
       - local: model_doc/ijepa
@@ -929,6 +955,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xcodec
+        title: X-Codec
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -971,6 +999,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cohere2_vision
+        title: Cohere2Vision
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
@@ -987,6 +1017,8 @@
         title: Evolla
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/florence2
+        title: Florence2
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n
@@ -995,6 +1027,8 @@
         title: GIT
       - local: model_doc/glm4v
         title: glm4v
+      - local: model_doc/glm4v_moe
+        title: glm4v_moe
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1019,6 +1053,8 @@
         title: Janus
       - local: model_doc/kosmos-2
         title: KOSMOS-2
+      - local: model_doc/kosmos2_5
+        title: KOSMOS-2.5
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -1032,7 +1068,7 @@
       - local: model_doc/llama4
         title: Llama4
       - local: model_doc/llava
-        title: Llava
+        title: LLaVA
       - local: model_doc/llava_next
         title: LLaVA-NeXT
       - local: model_doc/llava_next_video
@@ -1043,18 +1079,24 @@
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
+      - local: model_doc/metaclip_2
+        title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mllama
         title: mllama
+      - local: model_doc/mm-grounding-dino
+        title: MM Grounding DINO
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo
         title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
+      - local: model_doc/ovis2
+        title: Ovis2
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/owlv2
@@ -1079,6 +1121,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/sam2
+        title: SAM2
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/sam_hq

@@ -233,5 +233,13 @@ class ZoeDepthConfig(PretrainedConfig):
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
         self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]
