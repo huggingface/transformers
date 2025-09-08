@@ -67,16 +67,44 @@ class PagedAttentionCache:
     The cache uses a three-level hierarchy:
     - Pages: The smallest unit of cache, a page has a size of [num_heads, head_size], which is the space needed to
         store the key or value states for one token and one layer. For a model with only full-attention layers, to store
-        the KV cache of one token, we need 2 * num_layers pages. Pages are grouped into blocks:
+        the KV cache of one token, we need `2 * num_layers` pages: key and values each take `num_layers` pages.
+        Pages are grouped into blocks:
     - Blocks: A block is a collection of `block_size` pages, serving as the allocation unit to reduce management
-        complexity and fragmentation. A block is the smallest unit of cache that can be allocated or freed, and one
-        block is allocated to one layer group.
+        complexity and fragmentation. Cache is allocated and freed block by block, not page by page. One block is
+        allocated to one layer group, which only has one attention type, like full-attention or sliding-attention.
+        If all layers in the model have the same attention type, then all layers will be in the same group. There is
+        more than one group if and only if the model has a mixed attention types, like layers with full-attention and
+        layers with sliding-attention.
     - Cache tensors: The physical supports for the cache. There are as many cache tensors as there are layer in a
         layer group, and the shape of the cache tensor is `[num_blocks * block_size, num_heads, head_size]`.
 
-    Grouping layers into groups is usefull because when we allocate one block to a group N, the block allocated is the
+    Grouping layers into groups is useful because when we allocate one block to a group N, the block allocated is the
         same for all layers in group N, equivalently it is allocated accross all cache tensors. This allows us to
         efficiently allocate and free blocks, and to efficiently read and write key and value states.
+    For instance, imagine we have 8 blocks of cache and a model with two layer groups: group 0 with 3 sliding-attention
+    layers and group 1 with 3 full-attention layers. At creation time, the physical cache tensors look like this:
+
+    Cache tensor 0: [., ., ., ., ., ., ., .]
+    Cache tensor 1: [., ., ., ., ., ., ., .]
+    Cache tensor 2: [., ., ., ., ., ., ., .]
+
+    where . means the blocks is not allocated to any layer group yet. We have 3 cache tensors because there are
+    3 layers per group.
+    We allocate 1 block to each group, after allocation, the cache tensors look like this:
+
+    Cache tensor 0: [0, 1, ., ., ., ., ., .]
+    Cache tensor 1: [0, 1, ., ., ., ., ., .]
+    Cache tensor 2: [0, 1, ., ., ., ., ., .]
+
+    Now, if we continue to generate, and the sliding window has been reached, we only need to allocate a new block
+    for the full-attention group, and the cache tensors look like this:
+
+    Cache tensor 0: [0, 1, 1, ., ., ., ., .]
+    Cache tensor 1: [0, 1, 1, ., ., ., ., .]
+    Cache tensor 2: [0, 1, 1, ., ., ., ., .]
+
+    This would not have been possible if all layers were in the same group: we would have had to allocate a new block
+    for the sliding-attention group, although it is not needed.
     """
 
     # TODO: this init is quite long, maybe a refactor is in order
@@ -117,18 +145,20 @@ class PagedAttentionCache:
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
 
+        self.sliding_windows = {}
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
+            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else NO_SLIDING_WINDOW
             for j, layer in enumerate(group):
                 self.layer_index_to_group_indices[layer] = (i, j)
+                self.sliding_windows[layer] = sliding_window
 
         # Handle TP (or dont)
         if tp_size is not None and tp_size > 1:
-            raise NotImplementedError("Tensor parallelism is not supported yet")
-            # if self.num_key_value_heads % tp_size != 0:
-            #     raise ValueError(
-            #         f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
-            #     )
+            if self.num_key_value_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                )
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
             # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
 
@@ -138,6 +168,7 @@ class PagedAttentionCache:
         if getattr(config, "attn_implementation", None) == "paged_attention":
             num_attention_masks = 0
         else:
+            # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
             num_attention_masks = 2 if "sliding_attention" in group_types else 1
 
         memory_handler = PagedAttentionMemoryHandler(
@@ -188,12 +219,6 @@ class PagedAttentionCache:
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
-
-        # Add the sliding windows to the class
-        self.sliding_windows = {
-            layer: getattr(self.group_cache_managers[i], "sliding_window", NO_SLIDING_WINDOW)
-            for layer, (i, _) in self.layer_index_to_group_indices.items()
-        }
 
     @traced
     def allocate_blocks(self, n_blocks: int, request_id: str) -> int:
@@ -278,7 +303,8 @@ class PagedAttentionCache:
             key_states_with_cache = k_cache[layer_read_index, :, :]
             value_states_with_cache = v_cache[layer_read_index, :, :]
 
-        # Case: sliding window
+        # Case: sliding window -- we  need to be careful of read/write order because of chunked prefill, because it's
+        # the only case where you may write over cache you need to use
         else:
             # Add the cache to the key and value states
             mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?

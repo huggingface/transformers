@@ -160,16 +160,21 @@ class ContinuousBatchProcessor:
         T = self.max_batch_tokens
         num_pages = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
-        # Prepare empty tensors
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.empty((2, T + 1), **tensor_metadata)  # [full, sliding]
-        self.write_index_tensor = torch.empty((num_groups, T), **tensor_metadata)
-        self.read_index_tensor = torch.empty(
-            (num_groups, num_pages + T), **tensor_metadata
-        )  # +T is because there are -1 for seqlen_q when model uses a sliding window
+        self.cumulative_seqlens_k = [
+            torch.empty((T + 1), **tensor_metadata),  # full attention
+            torch.empty((T + 1), **tensor_metadata),  # sliding attention
+            # TODO: can be generalized using layer types, for block-attn for instance
+        ]
+
+        # There is one read and write index tensor per group
+        self.write_index_tensors = [torch.empty((T,), **tensor_metadata) for _ in range(num_groups)]
+        self.read_index_tensors = [torch.empty((num_pages + T), **tensor_metadata) for _ in range(num_groups)]
+        # +T is because there are -1 for seqlen_q when model uses a sliding window
+
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = [0, 0]
@@ -192,16 +197,18 @@ class ContinuousBatchProcessor:
         """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
         batch, but for initialisation, we can reset everything using the (full_reset) flag."""
         # Compute the slice to reset
-        t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_tensor.size(-1)
-        c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_tensor.size(-1)
-        b = self.total_batch_size if self.slice_inputs and not full_reset else self.write_index_tensor.size(0)
+        t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_tensors[0].size(-1)
+        c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_tensors[0].size(-1)
+        b = self.total_batch_size if self.slice_inputs and not full_reset else self.write_index_tensors[0].size(0)
         # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
         self.cumulative_seqlens_q[: b + 1].zero_()
-        self.cumulative_seqlens_k[: b + 1].zero_()
-        self.write_index_tensor[:, :t].fill_(-1)
-        self.read_index_tensor[:, :t+c].fill_(-1)
+        self.cumulative_seqlens_k[0][: b + 1].zero_()
+        self.cumulative_seqlens_k[1][: b + 1].zero_()
+        for i in range(self.cache.num_groups):
+            self.write_index_tensors[i][:t].fill_(-1)
+            self.read_index_tensors[i][:t + c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = [0, 0]
@@ -221,7 +228,7 @@ class ContinuousBatchProcessor:
             "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
             "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
-            "cu_seq_lens_k": self.cumulative_seqlens_k[:, : b + 1],
+            "cu_seq_lens_k": [self.cumulative_seqlens_k[0][: b + 1], self.cumulative_seqlens_k[1][: b + 1]],
             "read_index": self.read_index,  # slicing is done during building
             "write_index": self.write_index,  # slicing is done during building
             "logits_indices": self.logits_indices[:t],
@@ -375,17 +382,18 @@ class ContinuousBatchProcessor:
         self.write_index = []
         for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
             # Write in the actual tensors
-            self.read_index_tensor[i, : len(group_read_indices)] = to_tensor(group_read_indices)
-            self.write_index_tensor[i, : len(group_write_indices)] = to_tensor(group_write_indices)
+            self.read_index_tensors[i][: len(group_read_indices)] = to_tensor(group_read_indices)
+            self.write_index_tensors[i][: len(group_write_indices)] = to_tensor(group_write_indices)
             # Slice to the right size
-            r = len(group_read_indices) if self.slice_inputs else self.write_index_tensor.size(-1)
-            w = len(group_write_indices) if self.slice_inputs else self.read_index_tensor.size(-1)
+            r = len(group_read_indices) if self.slice_inputs else self.read_index_tensors[i].size(-1)
+            w = len(group_write_indices) if self.slice_inputs else self.write_index_tensors[i].size(-1)
             # Add to the index
-            self.read_index.append(self.read_index_tensor[i, :r])
-            self.write_index.append(self.write_index_tensor[i, :w])
+            self.read_index.append(self.read_index_tensors[i][:r])
+            self.write_index.append(self.write_index_tensors[i][:w])
 
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[:, : len(cumulative_seqlens_k[0])] = to_tensor(cumulative_seqlens_k)
+        self.cumulative_seqlens_k[0][: len(cumulative_seqlens_k[0])] = to_tensor(cumulative_seqlens_k[0])
+        self.cumulative_seqlens_k[1][: len(cumulative_seqlens_k[1])] = to_tensor(cumulative_seqlens_k[1])
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         if self.attention_mask is not None:
