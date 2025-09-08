@@ -38,18 +38,11 @@ FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding win
 def generate_simple(
     attn_implem: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
 ) -> dict[str, str]:
-
-    paged_to_not = {
+    attn_implem = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
         "flash_paged": "flash_attention_2",
-        "paged_attention": "sdpa",
-    }
-
-    attn_implementation = paged_to_not.get(attn_implem.split("|")[0], None)
-    if attn_implementation is None:
-        logger.warning(f"Attention implementation {attn_implem} not found, using eager")
-        attn_implementation = "eager"
+    }[attn_implem]
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_implem)
     model = model.cuda().eval()
