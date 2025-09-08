@@ -328,15 +328,13 @@ class EdgeTamVideoConfig(PretrainedConfig):
         perceiver_resampler_num_latents=256,
         perceiver_resampler_num_latents_2d=256,
         perceiver_resampler_hidden_size=64,
+        perceiver_resampler_ff_intermediate_size=256,
         perceiver_resampler_num_attention_heads=1,
         perceiver_resampler_attention_head_dim=64,
         perceiver_resampler_num_layers=2,
-        perceiver_resampler_use_self_attention=True,
         perceiver_resampler_hidden_dropout=0.0,
         perceiver_resampler_attention_dropout=0.0,
-        perceiver_resampler_concat_kv_latents=False,
         perceiver_resampler_pos_encoding_at_input=True,
-        perceiver_resampler_ff_intermediate_size_multiplier=4,
         # memory encoder
         memory_encoder_hidden_size=256,
         memory_encoder_output_channels=64,
@@ -431,15 +429,13 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
         self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
         self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
+        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
         self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
         self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
         self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
-        self.perceiver_resampler_use_self_attention = perceiver_resampler_use_self_attention
         self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
         self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
-        self.perceiver_resampler_concat_kv_latents = perceiver_resampler_concat_kv_latents
         self.perceiver_resampler_pos_encoding_at_input = perceiver_resampler_pos_encoding_at_input
-        self.perceiver_resampler_ff_intermediate_size_multiplier = perceiver_resampler_ff_intermediate_size_multiplier
 
 
 __all__ = ["EdgeTamVideoMaskDecoderConfig", "EdgeTamVideoPromptEncoderConfig", "EdgeTamVideoConfig"]

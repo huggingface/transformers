@@ -32,6 +32,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     auto_docstring,
 )
@@ -50,6 +51,7 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoMemoryEncoder,
     Sam2VideoMemoryFuserCXBlock,
     Sam2VideoModel,
+    Sam2VideoPositionEmbeddingSine,
     Sam2VideoPreTrainedModel,
     Sam2VideoRoPEAttention,
     Sam2VideoTwoWayAttentionBlock,
@@ -248,15 +250,13 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         perceiver_resampler_num_latents=256,
         perceiver_resampler_num_latents_2d=256,
         perceiver_resampler_hidden_size=64,
+        perceiver_resampler_ff_intermediate_size=256,
         perceiver_resampler_num_attention_heads=1,
         perceiver_resampler_attention_head_dim=64,
         perceiver_resampler_num_layers=2,
-        perceiver_resampler_use_self_attention=True,
         perceiver_resampler_hidden_dropout=0.0,
         perceiver_resampler_attention_dropout=0.0,
-        perceiver_resampler_concat_kv_latents=False,
         perceiver_resampler_pos_encoding_at_input=True,
-        perceiver_resampler_ff_intermediate_size_multiplier=4,
         # memory encoder
         memory_encoder_hidden_size=256,
         memory_encoder_output_channels=64,
@@ -334,15 +334,13 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
         self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
         self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
+        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
         self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
         self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
         self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
-        self.perceiver_resampler_use_self_attention = perceiver_resampler_use_self_attention
         self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
         self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
-        self.perceiver_resampler_concat_kv_latents = perceiver_resampler_concat_kv_latents
         self.perceiver_resampler_pos_encoding_at_input = perceiver_resampler_pos_encoding_at_input
-        self.perceiver_resampler_ff_intermediate_size_multiplier = perceiver_resampler_ff_intermediate_size_multiplier
 
         # memory encoder
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
@@ -409,6 +407,13 @@ class EdgeTamVideoRoPEAttention(Sam2VideoRoPEAttention):
 
 class EdgeTamVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
     pass
+
+
+class EdgeTamVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
+    # maxsize=2 because we need to cache the forward method for both memory encoder and perceiver resampler
+    @compile_compatible_method_lru_cache(maxsize=2)
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
 
 
 class EdgeTamVideoMemoryEncoder(Sam2VideoMemoryEncoder):
@@ -686,9 +691,10 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
 
 
 class EdgeTamVideoPerceiverFeedForward(nn.Module):
-    def __init__(self, config: EdgeTamVideoConfig, hidden_size: int):
+    def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        intermediate_size = int(hidden_size * config.perceiver_resampler_ff_intermediate_size_multiplier)
+        hidden_size = config.perceiver_resampler_hidden_size
+        intermediate_size = config.perceiver_resampler_ff_intermediate_size
 
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.linear1 = nn.Linear(hidden_size, intermediate_size, bias=False)
@@ -704,35 +710,23 @@ class EdgeTamVideoPerceiverFeedForward(nn.Module):
 
 
 class EdgeTamVideoPerceiverCrossAttention(nn.Module):
-    def __init__(self, config: EdgeTamVideoConfig, hidden_size: int):
+    def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = hidden_size
+        self.hidden_size = config.perceiver_resampler_hidden_size
         self.num_attention_heads = config.perceiver_resampler_num_attention_heads
-        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
+        self.head_dim = config.perceiver_resampler_attention_head_dim
         self.attention_dropout = config.perceiver_resampler_attention_dropout
-        self.concat_kv_latents = config.perceiver_resampler_concat_kv_latents
 
-        self.inner_dim = self.attention_head_dim * self.num_attention_heads
-        self.scale = self.attention_head_dim**-0.5
-
-        self.layer_norm_input = nn.LayerNorm(hidden_size)
-        self.layer_norm_latents = nn.LayerNorm(hidden_size)
-
-        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
-        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
-        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
-
+        self.inner_dim = self.head_dim * self.num_attention_heads
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
+        self.layer_norm_input = nn.LayerNorm(self.hidden_size)
+        self.layer_norm_latents = nn.LayerNorm(self.hidden_size)
 
-    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
-        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
+        self.q_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.kv_proj = nn.Linear(self.hidden_size, self.inner_dim * 2, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -744,119 +738,115 @@ class EdgeTamVideoPerceiverCrossAttention(nn.Module):
         normalized_latents = self.layer_norm_latents(latents)
         normalized_input = self.layer_norm_input(input_features)
 
-        query_states = self.query_proj(normalized_latents)
+        batch_size, seq_len_q = normalized_latents.shape[:2]
 
-        if self.concat_kv_latents:
-            key_value_input = torch.cat((normalized_input, normalized_latents), dim=-2)
-        else:
-            key_value_input = normalized_input
+        # Project queries from latents
+        query = self.q_proj(normalized_latents)
+        key_value = self.kv_proj(normalized_input)
+        key, value = key_value.chunk(2, dim=-1)
 
-        key_value_states = self.key_value_proj(key_value_input)
-        key_states, value_states = key_value_states.chunk(2, dim=-1)
+        # Reshape for multi-head attention
+        query = query.view(batch_size, seq_len_q, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        seq_len_kv = normalized_input.shape[1]
+        key = key.view(batch_size, seq_len_kv, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, seq_len_kv, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
-        query_states = self._separate_heads(query_states)
-        key_states = self._separate_heads(key_states)
-        value_states = self._separate_heads(value_states)
-
+        # Add positional encoding if provided
         if positional_encoding is not None:
-            if self.concat_kv_latents:
-                raise ValueError("Position encoding is not supported when concat_kv_latents is True")
-            pos_encoding = self._separate_heads(positional_encoding)
-            key_states = key_states + pos_encoding
-            value_states = value_states + pos_encoding
+            pos_encoding = positional_encoding.view(
+                batch_size, seq_len_kv, self.num_attention_heads, self.head_dim
+            ).transpose(1, 2)
+            key = key + pos_encoding
+            value = value + pos_encoding
 
+        # Apply attention
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_output, _ = attention_interface(
+        attn_output, _ = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            query,
+            key,
+            value,
             attention_mask=None,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
 
-        attention_output = self._recombine_heads(attention_output)
-        return self.output_proj(attention_output)
+        # Reshape output
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len_q, self.inner_dim)
+        return self.o_proj(attn_output)
 
 
 class EdgeTamVideoPerceiverSelfAttention(nn.Module):
-    def __init__(self, config: EdgeTamVideoConfig, hidden_size: int):
+    def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = hidden_size
+        self.hidden_size = config.perceiver_resampler_hidden_size
         self.num_attention_heads = config.perceiver_resampler_num_attention_heads
-        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
+        self.head_dim = config.perceiver_resampler_attention_head_dim
         self.attention_dropout = config.perceiver_resampler_attention_dropout
 
-        self.inner_dim = self.attention_head_dim * self.num_attention_heads
-        self.scale = self.attention_head_dim**-0.5
-
-        self.layer_norm = nn.LayerNorm(hidden_size)
-
-        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
-        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
-        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
-
+        self.inner_dim = self.head_dim * self.num_attention_heads
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
-        return hidden_states.transpose(1, 2)
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
 
-    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
-        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
+        self.q_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.kv_proj = nn.Linear(self.hidden_size, self.inner_dim * 2, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         normalized_states = self.layer_norm(hidden_states)
 
-        query_states = self.query_proj(normalized_states)
-        key_value_states = self.key_value_proj(normalized_states)
-        key_states, value_states = key_value_states.chunk(2, dim=-1)
+        batch_size, seq_len = normalized_states.shape[:2]
 
-        query_states = self._separate_heads(query_states)
-        key_states = self._separate_heads(key_states)
-        value_states = self._separate_heads(value_states)
+        # Project queries, keys, and values
+        query = self.q_proj(normalized_states)
+        key_value = self.kv_proj(normalized_states)
+        key, value = key_value.chunk(2, dim=-1)
 
+        # Reshape for multi-head attention
+        query = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+
+        # Apply attention
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_output, _ = attention_interface(
+        attn_output, _ = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            query,
+            key,
+            value,
             attention_mask=None,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
 
-        attention_output = self._recombine_heads(attention_output)
-        return self.output_proj(attention_output)
+        # Reshape output
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.inner_dim)
+        return self.o_proj(attn_output)
 
 
 class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
-    def __init__(self, config: EdgeTamVideoConfig, hidden_size: int):
+    def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        self.use_self_attention = config.perceiver_resampler_use_self_attention
 
-        self.cross_attention = EdgeTamVideoPerceiverCrossAttention(config, hidden_size)
-        self.feed_forward = EdgeTamVideoPerceiverFeedForward(config, hidden_size)
+        self.cross_attention = EdgeTamVideoPerceiverCrossAttention(config)
+        self.feed_forward = EdgeTamVideoPerceiverFeedForward(config)
         self.dropout = nn.Dropout(config.perceiver_resampler_hidden_dropout)
 
-        if self.use_self_attention:
-            self.self_attention = EdgeTamVideoPerceiverSelfAttention(config, hidden_size)
-            self.self_feed_forward = EdgeTamVideoPerceiverFeedForward(config, hidden_size)
+        self.self_attention = EdgeTamVideoPerceiverSelfAttention(config)
+        self.self_feed_forward = EdgeTamVideoPerceiverFeedForward(config)
 
     def forward(
         self,
@@ -870,75 +860,13 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         feed_forward_output = self.feed_forward(latents)
         latents = latents + feed_forward_output
 
-        if self.use_self_attention:
-            self_attention_output = self.self_attention(latents)
-            latents = latents + self_attention_output
+        self_attention_output = self.self_attention(latents)
+        latents = latents + self_attention_output
 
-            self_feed_forward_output = self.self_feed_forward(latents)
-            latents = latents + self_feed_forward_output
+        self_feed_forward_output = self.self_feed_forward(latents)
+        latents = latents + self_feed_forward_output
 
         return latents
-
-
-class EdgeTamVideoPerceiverPositionEmbeddingSine(nn.Module):
-    def __init__(
-        self,
-        num_position_features: int,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        if num_position_features % 2 != 0:
-            raise ValueError(f"num_position_features must be even, got {num_position_features}")
-
-        self.num_position_features_per_dim = num_position_features // 2
-        self.temperature = temperature
-        self.normalize = normalize
-
-        if scale is not None and not normalize:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        cache_key = (hidden_states.shape[-2], hidden_states.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(hidden_states.shape[0], 1, 1, 1)
-
-        height, width = hidden_states.shape[-2:]
-
-        y_embed = (
-            torch.arange(1, height + 1, dtype=torch.float32, device=hidden_states.device)
-            .view(1, -1, 1)
-            .repeat(hidden_states.shape[0], 1, width)
-        )
-        x_embed = (
-            torch.arange(1, width + 1, dtype=torch.float32, device=hidden_states.device)
-            .view(1, 1, -1)
-            .repeat(hidden_states.shape[0], height, 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_position_features_per_dim, dtype=torch.float32, device=hidden_states.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features_per_dim)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-
-        positional_encoding = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = positional_encoding[0]
-        return positional_encoding
 
 
 class EdgeTamVideoPerceiverResampler(nn.Module):
@@ -956,11 +884,11 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         if self.num_latents_2d > 0:
             self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, self.hidden_size))
 
-        self.positional_encoding = EdgeTamVideoPerceiverPositionEmbeddingSine(self.hidden_size)
-
-        self.layers = nn.ModuleList(
-            [EdgeTamVideoPerceiverEncoderLayer(config, self.hidden_size) for _ in range(self.num_layers)]
+        self.positional_encoding = EdgeTamVideoPositionEmbeddingSine(
+            num_pos_feats=self.hidden_size // 2, normalize=True
         )
+
+        self.layers = nn.ModuleList([EdgeTamVideoPerceiverEncoderLayer(config) for _ in range(self.num_layers)])
 
         self.layer_norm = nn.LayerNorm(self.hidden_size)
 
@@ -1034,7 +962,9 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
             0, 3, 1, 2
         )
 
-        positional_encoding_2d = self.positional_encoding(latents_2d).to(dtype=hidden_states.dtype)
+        positional_encoding_2d = self.positional_encoding(latents_2d.shape, latents_2d.device, latents_2d.dtype).to(
+            dtype=hidden_states.dtype
+        )
         positional_encoding_2d = positional_encoding_2d.permute(0, 2, 3, 1).flatten(1, 2)
 
         latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
