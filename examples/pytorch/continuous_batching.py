@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from transformers.generation.continuous_batching.requests import logger
 
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
@@ -37,11 +38,18 @@ FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding win
 def generate_simple(
     attn_implem: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
 ) -> dict[str, str]:
-    attn_implem = {
+
+    paged_to_not = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
         "flash_paged": "flash_attention_2",
-    }[attn_implem]
+        "paged_attention": "sdpa",
+    }
+
+    attn_implementation = paged_to_not.get(attn_implem.split("|")[0], None)
+    if attn_implementation is None:
+        logger.warning(f"Attention implementation {attn_implem} not found, using eager")
+        attn_implementation = "eager"
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_implem)
     model = model.cuda().eval()
