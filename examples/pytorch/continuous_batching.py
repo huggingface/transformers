@@ -26,7 +26,6 @@ from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
-from transformers.generation.continuous_batching.requests import logger
 
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
