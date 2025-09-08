@@ -44,7 +44,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -320,7 +319,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -373,7 +372,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         all_images = []
         for image in images:
@@ -554,7 +553,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         image_grid_pinpoints: Optional[list] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -640,6 +639,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -677,7 +677,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        new_images = []
+        processed_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
@@ -711,10 +711,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values = np.array(pixel_values)
-            new_images.append(pixel_values)
+            processed_images.append(pixel_values)
 
         if do_pad:
-            processed_images = self._pad_for_batching(new_images)
+            processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors

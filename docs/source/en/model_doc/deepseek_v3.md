@@ -53,7 +53,7 @@ chat = [
 ]
 
 
-model = AutoModelForCausalLM.from_pretrained("deepseek-r1", device_map="auto", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("deepseek-r1", device_map="auto", dtype=torch.bfloat16)
 inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 import time
 start = time.time()
@@ -182,4 +182,14 @@ error, it means NCCL was probably not loaded.
 ## DeepseekV3ForCausalLM
 
 [[autodoc]] DeepseekV3ForCausalLM
+    - forward
+
+## DeepseekV3ForSequenceClassification
+
+[[autodoc]] DeepseekV3ForSequenceClassification
+    - forward
+
+## DeepseekV3ForTokenClassification
+
+[[autodoc]] DeepseekV3ForTokenClassification
     - forward

@@ -21,7 +21,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -216,13 +216,13 @@ class InternVLProcessor(ProcessorMixin):
         video_patch_indices = np.array([0])
         video_num_patches_indices = np.array([0])
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
-            videos = make_batched_videos(videos)
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_pixel_values = video_inputs.pop("pixel_values_videos")
 
@@ -246,7 +246,7 @@ class InternVLProcessor(ProcessorMixin):
             )
             if images is not None and image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-            if videos is not None and video_index != len(videos):
+            if videos is not None and video_index != len(num_frames_per_video):
                 raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
 
             # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
@@ -293,25 +293,12 @@ class InternVLProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
+        # Overwritten because InternVL renames video inputs to `pixel_values` before returning
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names) + list(image_processor_input_names)
+        return tokenizer_input_names + image_processor_input_names
 
 
 __all__ = ["InternVLProcessor"]
