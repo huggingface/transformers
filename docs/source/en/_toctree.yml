@@ -703,8 +703,6 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
-      - local: model_doc/xcodec2
-        title: X-Codec2
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -957,6 +955,8 @@
         title: Whisper
       - local: model_doc/xcodec
         title: X-Codec
+      - local: model_doc/xcodec2
+        title: X-Codec2
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
