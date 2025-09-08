@@ -24,9 +24,14 @@ Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It 
 
 ## Virtual environment
 
-A [virtual environment](https://docs.astral.sh/uv/pip/environments/) helps manage different projects and avoids compatibility issues between dependencies.
+[uv](https://docs.astral.sh/uv/) is an extremely fast Rust-based Python package and project manager and requires a [virtual environment](https://docs.astral.sh/uv/pip/environments/) by default to manage different projects and avoids compatibility issues between dependencies.
 
-[uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
+It can be used as a drop-in replacement for [pip](https://pip.pypa.io/en/stable/), but if you prefer to use pip, remove `uv` from the commands below.
+
+> [!TIP]
+> Refer to the uv [installation](https://docs.astral.sh/uv/guides/install-python/) docs to install uv.
+
+Create a virtual environment to install Transformers in.
 
 ```bash
 uv venv .env
