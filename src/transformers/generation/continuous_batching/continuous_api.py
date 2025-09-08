@@ -442,6 +442,10 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
+        if model.config._attn_implementation not in self.supported_attention_implementations():
+            raise ValueError(
+                f"Model attention implementation '{model.config._attn_implementation}' is not supported for continuous batching. Supported implementations: {self.supported_attention_implementations()}"
+            )
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
