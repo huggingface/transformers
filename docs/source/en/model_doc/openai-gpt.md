@@ -19,8 +19,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat&logo=data:image/png;base64,...">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
   </div>
@@ -51,7 +49,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-generator = pipeline(task="text-generation", model="openai-community/gpt", torch_dtype=torch.float16, device=0)
+generator = pipeline(task="text-generation", model="openai-community/gpt", dtype=torch.float16, device=0)
 output = generator("The future of AI is", max_length=50, do_sample=True)
 print(output[0]["generated_text"])
 ```
@@ -63,7 +61,7 @@ print(output[0]["generated_text"])
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt")
-model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", dtype=torch.float16)
 
 inputs = tokenizer("The future of AI is", return_tensors="pt")
 outputs = model.generate(**inputs, max_length=50)
@@ -115,23 +113,3 @@ echo -e "The future of AI is" | transformers run --task text-generation --model 
 ## OpenAIGPTTokenizerFast
 
 [[autodoc]] OpenAIGPTTokenizerFast
-
-## TFOpenAIGPTModel
-
-[[autodoc]] TFOpenAIGPTModel
-- call
-
-## TFOpenAIGPTLMHeadModel
-
-[[autodoc]] TFOpenAIGPTLMHeadModel
-- call
-
-## TFOpenAIGPTDoubleHeadsModel
-
-[[autodoc]] TFOpenAIGPTDoubleHeadsModel
-- call
-
-## TFOpenAIGPTForSequenceClassification
-
-[[autodoc]] TFOpenAIGPTForSequenceClassification
-- call

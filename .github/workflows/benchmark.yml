@@ -48,7 +48,7 @@ jobs:
 
       - name: Run database init script
         run: |
-          psql -f benchmark/init_db.sql
+          psql -f benchmark/utils/init_db.sql
         env:
           PGDATABASE: metrics
           PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}

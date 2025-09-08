@@ -42,7 +42,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="HuggingFaceTB/SmolLM3-3B",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -63,7 +63,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "HuggingFaceTB/SmolLM3-3B",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -79,7 +79,7 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(
     model_inputs.input_ids,
@@ -103,7 +103,7 @@ print(response)
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat HuggingFaceTB/SmolLM3-3B --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+transformers chat HuggingFaceTB/SmolLM3-3B --dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -128,13 +128,13 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-3B")
 model = AutoModelForCausalLM.from_pretrained(
     "HuggingFaceTB/SmolLM3-3B",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"
 )
 
-inputs = tokenizer("Gravity is the force", return_tensors="pt").to("cuda")
+inputs = tokenizer("Gravity is the force", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

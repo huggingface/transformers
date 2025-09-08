@@ -228,10 +228,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Unstable test")
-    def test_dola_decoding_sample(self):
-        pass
-
     @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_with_static_cache(self):
         pass

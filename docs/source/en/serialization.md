@@ -42,7 +42,7 @@ pip install optimum[exporters]
 > optimum-cli export onnx --help
 > ```
 
-Set the `--model` argument to export a PyTorch or TensorFlow model from the Hub.
+Set the `--model` argument to export a PyTorch model from the Hub.
 
 ```bash
 optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/

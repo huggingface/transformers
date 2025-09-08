@@ -23,26 +23,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from transformers.models.maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
-from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
-from transformers.models.sam.modeling_sam import (
-    SamLayerNorm,
-    SamMaskDecoder,
-    SamMaskEmbedding,
-    SamModel,
-    SamPromptEncoder,
-    SamTwoWayAttentionBlock,
-    SamTwoWayTransformer,
-    eager_attention_forward,
-)
-from transformers.models.vitdet.modeling_vitdet import window_partition, window_unpartition
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import (
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -60,11 +43,23 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
+from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
+from ..sam.image_processing_sam_fast import SamImageProcessorFast
+from ..sam.modeling_sam import (
+    SamLayerNorm,
+    SamMaskDecoder,
+    SamMaskEmbedding,
+    SamModel,
+    SamPromptEncoder,
+    SamTwoWayAttentionBlock,
+    SamTwoWayTransformer,
+    eager_attention_forward,
+)
+from ..vitdet.modeling_vitdet import window_partition, window_unpartition
 from .configuration_sam2 import (
     Sam2Config,
     Sam2HieraDetConfig,
@@ -77,11 +72,6 @@ from .configuration_sam2 import (
 if is_torch_available():
     import torch
     from torch.nn import functional as F
-
-if is_torchvision_v2_available():
-    pass
-elif is_torchvision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -116,15 +106,15 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     mask_pad_size = None
 
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
-        SamImageProcessorFast().__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image():
+    def pad_image(self):
         raise NotImplementedError("No pad_image for SAM 2.")
 
-    def _get_preprocess_shape():
+    def _get_preprocess_shape(self):
         raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
 
-    def resize():
+    def resize(self):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
     def _preprocess(
@@ -133,7 +123,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> "torch.Tensor":
-        return SamImageProcessorFast()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+        return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _preprocess_image_like_inputs(
         self,
@@ -213,10 +203,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -316,7 +314,7 @@ class Sam2VisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -348,9 +346,9 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -706,7 +704,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         super().__init__(config)
 
         self.patch_embed = Sam2PatchEmbeddings(config)
-        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
+        # Windowed positional embedding (https://huggingface.co/papers/2311.05613)
         self.pos_embed = nn.Parameter(
             torch.zeros(1, config.hidden_size, *config.window_positional_embedding_background_size)
         )
@@ -844,7 +842,7 @@ class Sam2MaskEmbedding(SamMaskEmbedding):
 
 class Sam2PromptEncoder(SamPromptEncoder):
     def __init__(self, config: Sam2PromptEncoderConfig):
-        SamPromptEncoder().__init__()
+        nn.Module.__init__(self)
         self.shared_embedding = Sam2PositionalEmbedding(config)
         self.mask_embed = Sam2MaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
@@ -869,8 +867,8 @@ class Sam2PromptEncoder(SamPromptEncoder):
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
@@ -942,7 +940,7 @@ class Sam2Attention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -958,7 +956,7 @@ class Sam2Attention(nn.Module):
 
 class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
-        SamTwoWayAttentionBlock().__init__()
+        nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size)
 
@@ -981,8 +979,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
 
 
 class Sam2LayerNorm(SamLayerNorm):
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
+    pass
 
 
 class Sam2MaskDecoder(SamMaskDecoder):
@@ -1186,7 +1183,7 @@ class Sam2Model(SamModel):
     ]
 
     def __init__(self, config: Sam2Config):
-        SamModel().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
@@ -1332,7 +1329,7 @@ class Sam2Model(SamModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1387,9 +1384,7 @@ class Sam2Model(SamModel):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()

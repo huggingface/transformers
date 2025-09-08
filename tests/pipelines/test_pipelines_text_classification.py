@@ -132,7 +132,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
             device=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         outputs = text_classifier("This is great !")
@@ -145,7 +145,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
             device=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
 
         outputs = text_classifier("This is great !")
@@ -170,7 +170,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         text_classifier = TextClassificationPipeline(
             model=model,
@@ -178,7 +178,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return text_classifier, ["HuggingFace is in", "This is another test"]
 

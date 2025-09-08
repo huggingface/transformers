@@ -358,9 +358,10 @@ class IdeficsProcessor(ProcessorMixin):
             if not all(isinstance(i, str) for i in text):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
             if isinstance(images[0], (list, tuple)):
-                # if nested images, nest text as well
-                text = [[i] for i in text]
-            prompts = list(zip(images, text))
+                # if nested images, un-nest each sublist and create `prompts`
+                prompts = [[sample, *image_list] for image_list, sample in zip(images, text)]
+            else:
+                prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
             IdeficsProcessorKwargs,
@@ -518,25 +519,11 @@ class IdeficsProcessor(ProcessorMixin):
             }
         )
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
 __all__ = ["IdeficsProcessor"]

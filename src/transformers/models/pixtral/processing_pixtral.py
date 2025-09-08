@@ -16,12 +16,12 @@
 Processor class for Pixtral.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, load_image
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -118,7 +118,7 @@ class PixtralProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -166,21 +166,6 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            if is_image_or_image_url(images):
-                images = [images]
-            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
-                pass
-            elif (
-                isinstance(images, (list, tuple))
-                and isinstance(images[0], (list, tuple))
-                and is_image_or_image_url(images[0][0])
-            ):
-                images = [image for sublist in images for image in sublist]
-            else:
-                raise ValueError(
-                    "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
-                )
-            images = [load_image(im) if isinstance(im, str) else im for im in images]
             image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
@@ -267,28 +252,11 @@ class PixtralProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return tokenizer_input_names + image_processor_input_names + ["image_sizes"]
 
 
 __all__ = ["PixtralProcessor"]

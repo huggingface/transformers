@@ -18,13 +18,9 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
-from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import group_images_by_shape, reorder_images
-from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
-
-from ...image_processing_utils_fast import (
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_base import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -39,6 +35,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+from ..beit.image_processing_beit_fast import BeitImageProcessorFast
 
 
 if TYPE_CHECKING:
@@ -143,7 +140,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,
@@ -177,7 +174,9 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
         )
-        return BeitImageProcessorFast().resize(image, output_size, interpolation=interpolation, antialias=antialias)
+        return BaseImageProcessorFast.resize(
+            self, image, output_size, interpolation=interpolation, antialias=antialias
+        )
 
     def pad_image(
         self,

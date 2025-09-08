@@ -130,11 +130,10 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
             new_imports.extend(get_relative_imports(f))
 
         module_path = Path(module_file).parent
-        new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
+        new_import_files = [f"{str(module_path / m)}.py" for m in new_imports]
+        files_to_check = [f for f in new_import_files if f not in all_relative_imports]
 
-        no_change = len(new_import_files) == 0
+        no_change = len(files_to_check) == 0
         all_relative_imports.extend(files_to_check)
 
     return all_relative_imports
@@ -429,10 +428,10 @@ def get_cached_module_file(
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
-            if not (submodule_path / f"{module_needed}.py").exists():
+            if not ((submodule_path / module_file).parent / f"{module_needed}.py").exists():
                 get_cached_module_file(
                     pretrained_model_name_or_path,
-                    f"{module_needed}.py",
+                    f"{Path(module_file).parent / module_needed}.py",
                     cache_dir=cache_dir,
                     force_download=force_download,
                     resume_download=resume_download,
