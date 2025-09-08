@@ -28,22 +28,31 @@ def sdpa_attention_paged_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+
+    # Add KV cache to the key and value tensors
     cache = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         key, value = cache.update(key, value, module.layer_idx, **kwargs)
         key = key.transpose(0, 1).unsqueeze(0)
         value = value.transpose(0, 1).unsqueeze(0)
+
+    # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    sliding_window = cache.sliding_windows[module.layer_idx]
-    if sliding_window == NO_SLIDING_WINDOW:
-        causal_mask = attention_mask[:1, :, :, : key.size(2)]
+    # Get the right causal mask for the current layer
+    if cache is not None:
+        sliding_window = cache.sliding_windows[module.layer_idx]
+        if sliding_window == NO_SLIDING_WINDOW:
+            causal_mask = attention_mask[:1, :, :, : key.size(2)]
+        else:
+            causal_mask = attention_mask[1:, :, :, : key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
     else:
-        causal_mask = attention_mask[1:, :, :, : key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
+        causal_mask = None if attention_mask is None else attention_mask[:, :, :, : key.size(2)]
 
+    # Run the actual attention
     query = query.contiguous()
     key = key.contiguous()
     value = value.contiguous()
