@@ -7,14 +7,14 @@ including functions to determine encoder dimensions and handle configuration edg
 import inspect
 from functools import cache
 
-from transformers import AutoModelForImageClassification
 import torch
+from transformers import AutoModelForImageClassification
 
 
 class UnknownImageEncoderError(ValueError):
     """
     Exception raised when an image encoder's hidden size cannot be determined.
-    
+
     This error is raised when the image encoder model doesn't have any of the
     expected configuration attributes for determining the hidden size
     """
@@ -26,20 +26,20 @@ class UnknownImageEncoderError(ValueError):
 def image_encoder_size(image_encoder: AutoModelForImageClassification) -> int:
     """
     Determine the hidden size of an image encoder model.
-    
+
     This function extracts the hidden size dimension from various types of image encoder
     models by checking different configuration attributes in a prioritized order.
-    
+
     Args:
         image_encoder: An AutoModelForImageClassification instance.
-    
+
     Returns:
         int: The hidden size of the image encoder.
-    
+
     Raises:
         UnknownImageEncoderError: If the image encoder doesn't have any of the
                                  expected configuration attributes for hidden size.
-    
+
     Note:
         The function checks for configuration attributes in the following order:
         1. config.vision_config.hidden_size (for CLIP-like models)
@@ -79,18 +79,18 @@ def image_encoder_size(image_encoder: AutoModelForImageClassification) -> int:
 def model_args_dict(model: AutoModelForImageClassification) -> dict:
     """
     Generate model arguments dictionary for image encoder forward pass.
-    
+
     This function creates a dictionary of arguments optimized for feature extraction
     from image encoder models, including conditional parameters based on model capabilities.
-    
+
     Args:
         model: An AutoModelForImageClassification instance to generate arguments for.
-    
+
     Returns:
         dict: Dictionary of arguments to pass to the model's forward method.
               Always includes 'output_hidden_states': True.
               May include 'interpolate_pos_encoding': True if supported by the model.
-              
+
     Note:
         The function is cached to avoid repeated signature inspection for the same model.
         Positional encoding interpolation is enabled for models that support it,
@@ -110,17 +110,17 @@ def model_args_dict(model: AutoModelForImageClassification) -> dict:
 def accepts(func, param_name: str) -> bool:
     """
     Check if a function accepts a specific parameter.
-    
+
     This function inspects the signature of a given function to determine whether
     it accepts a specific parameter either as a named parameter or through **kwargs.
-    
+
     Args:
         func: The function to inspect.
         param_name: The name of the parameter to check for.
-    
+
     Returns:
         bool: True if the function accepts the parameter, False otherwise.
-        
+
     Note:
         Returns True if either:
         1. The parameter name is explicitly defined in the function signature
@@ -135,24 +135,24 @@ def accepts(func, param_name: str) -> bool:
 def pool_hidden_dim(tensor: torch.Tensor, hidden_size: int) -> torch.Tensor:
     """
     Pool a tensor across all dimensions except batch and hidden dimensions.
-    
+
     This function performs mean pooling across spatial or patch dimensions while
     preserving the batch and hidden dimensions. It works with various tensor layouts
     from different vision model architectures.
-    
+
     Args:
         tensor: Input tensor to pool. Can have various shapes depending on the model:
                - ViT-like: `(batch_size, num_patches, hidden_size)`
-               - ConvNet-like: `(batch_size, height, width, channels)` or 
+               - ConvNet-like: `(batch_size, height, width, channels)` or
                               `(batch_size, channels, height, width)`
         hidden_size: The size of the hidden/feature dimension to preserve.
-    
+
     Returns:
         torch.Tensor: Pooled tensor with shape `(batch_size, hidden_size)`.
-        
+
     Raises:
         StopIteration: If no dimension matches the specified hidden_size (excluding batch dim).
-        
+
     Note:
         The function identifies the hidden dimension by finding the dimension that
         matches hidden_size (excluding the batch dimension at index 0), then pools
@@ -160,10 +160,10 @@ def pool_hidden_dim(tensor: torch.Tensor, hidden_size: int) -> torch.Tensor:
     """
     # Find the dimension index that matches our hidden size (skip batch dim at index 0)
     hidden_dim = next(i for i, s in enumerate(tensor.shape) if s == hidden_size and i != 0)
-    
+
     # Identify all dimensions to pool over (everything except batch and hidden dims)
     non_hidden_dims = tuple(i for i in range(len(tensor.shape)) if i != hidden_dim and i != 0)
-    
+
     # Perform mean pooling across spatial/patch dimensions
     return tensor.mean(dim=non_hidden_dims)
 
@@ -171,7 +171,7 @@ def pool_hidden_dim(tensor: torch.Tensor, hidden_size: int) -> torch.Tensor:
 def encode_images(image_encoder: AutoModelForImageClassification, images: torch.Tensor) -> torch.Tensor:
     """
     Encode a batch of images using the provided image encoder model.
-    
+
     This function runs images through the encoder and extracts the final hidden states,
     with optional support for positional encoding interpolation when available.
 
@@ -183,7 +183,7 @@ def encode_images(image_encoder: AutoModelForImageClassification, images: torch.
     Returns:
         torch.Tensor: The encoded image features with shape `(batch_size, hidden_size)`.
                      Features are pooled across spatial/patch dimensions.
-                     
+
     Note:
         The function automatically enables output_hidden_states to access intermediate
         representations and conditionally enables interpolate_pos_encoding for models
@@ -193,13 +193,20 @@ def encode_images(image_encoder: AutoModelForImageClassification, images: torch.
     model_args = model_args_dict(image_encoder)
 
     # Run the forward pass through the image encoder
-    encoded_image = image_encoder(images, **model_args)
-    
+    encoded_images = image_encoder(images, **model_args)
+
+    # Default to using pooler_output if available (shape [batch_size, hidden_size])
+    if hasattr(encoded_images, "pooler_output"):
+        return encoded_images.pooler_output
+
     # Extract the final layer's hidden states (shape varies by model architecture)
-    last_hidden_states = encoded_image.hidden_states[-1]
+    if hasattr(encoded_images, "last_hidden_state"):
+        last_hidden_states = encoded_images.last_hidden_state
+    else:
+        last_hidden_states = encoded_images.hidden_states[-1]
 
     # Get the hidden size dimension for this encoder model
     hidden_size = image_encoder_size(image_encoder)
-    
+
     # Pool across spatial/patch dimensions to get [batch_size, hidden_size] output
     return pool_hidden_dim(last_hidden_states, hidden_size)
