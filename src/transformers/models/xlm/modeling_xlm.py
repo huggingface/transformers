@@ -72,7 +72,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         attn_mask = mask
 
     # sanity check
-    assert mask.size() == (bs, slen), f"mask.size(): {mask.size()}, should be: {(bs, slen)}"
+    assert mask.size() == (bs, slen)
     assert causal is False or attn_mask.size() == (bs, slen, slen)
 
     return mask, attn_mask

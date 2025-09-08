@@ -572,9 +572,12 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
         model_inputs = {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
 
+        # token_type_ids are computed on CTRLModel.forward()
+        kwargs.pop("token_type_ids", None)
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
                 model_inputs[key] = value
 
         return model_inputs
