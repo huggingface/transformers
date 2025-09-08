@@ -2669,18 +2669,23 @@ class Trainer:
                         else contextlib.nullcontext
                     )
                     with context():
-                        # For multi-GPU, calculate the number of tokens that each GPU will actually see
+                        # Fix for DataParallel: Adjust token count for per-GPU loss scaling
+                        # When using multiple GPUs with DataParallel, each GPU processes a different slice
+                        # of the batch, so we need to calculate the actual tokens each GPU will see
                         current_num_items_in_batch = num_items_in_batch
                         if num_items_in_batch is not None and self.args.n_gpu > 1 and "labels" in inputs:
                             try:
-                                # Each GPU gets 1/n_gpu portion of the tokens
-                                full_batch_tokens = (inputs["labels"].ne(-100)).sum()  # Count all non-padding tokens
-                                tokens_per_gpu = full_batch_tokens // self.args.n_gpu
-                                current_num_items_in_batch = tokens_per_gpu
+                                # Count non-padding tokens in this specific batch (inputs represents one batch)
+                                full_batch_tokens = (inputs["labels"].ne(-100)).sum()  # -100 = padding tokens => ignored
+                                tokens_per_gpu = full_batch_tokens // self.args.n_gpu  # each GPU sees 1/n_gpu tokens
+                                current_num_items_in_batch = tokens_per_gpu  # Update to the per-GPU token count
 
+                                # Convert scalar tensor to 1D tensor if needed (required by some model implementations)
+                                # This ensures compatibility with models expecting a 1D tensor for num_items_in_batch
                                 if current_num_items_in_batch.dim() == 0:
                                     current_num_items_in_batch = current_num_items_in_batch.unsqueeze(0)
                             except (TypeError, AttributeError):
+                                # Fallback for non-standard label formats (e.g., object detection, custom models)
                                 current_num_items_in_batch = num_items_in_batch
 
                         tr_loss_step = self.training_step(model, inputs, current_num_items_in_batch)
