@@ -208,7 +208,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k[1][: b + 1].zero_()
         for i in range(self.cache.num_groups):
             self.write_index_tensors[i][:t].fill_(-1)
-            self.read_index_tensors[i][:t + c].fill_(-1)
+            self.read_index_tensors[i][: t + c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = [0, 0]

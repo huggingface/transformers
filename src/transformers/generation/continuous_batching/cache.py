@@ -348,6 +348,7 @@ class PagedAttentionMemoryHandler:
     3. Fixed batch: Calculates number of pages given a fixed maximum batch size
 
     """
+
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
     _upper_bound_max_batch_tokens = 256
@@ -503,7 +504,9 @@ class PagedAttentionMemoryHandler:
         num = cache_memory
         num -= 2 * num_pages * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
         # Compute denominator
-        denum = self._activation_dtype.itemsize * (num_pages * self.num_attention_masks + self.peak_activation_per_token)
+        denum = self._activation_dtype.itemsize * (
+            num_pages * self.num_attention_masks + self.peak_activation_per_token
+        )
         denum += 28 + 4 * self.num_groups
         # Compute max batch tokens and return
         max_batch_tokens = floor(num / denum)
@@ -563,23 +566,25 @@ class PagedAttentionMemoryHandler:
         activation_memory_footprint = self.peak_activation_per_token * self._activation_dtype.itemsize
         activation_memory_footprint *= max_batch_tokens
 
-        inputs_outputs_positions_and_logits_memory_footprint = 4 * max_batch_tokens * 4 # second 4 is for int32 size
+        inputs_outputs_positions_and_logits_memory_footprint = 4 * max_batch_tokens * 4  # second 4 is for int32 size
 
         attention_memory_footprint = self.num_attention_masks * self._activation_dtype.itemsize
         attention_memory_footprint *= num_pages * max_batch_tokens
 
-        cumulative_seqlens_memory_footprint = 3 * max_batch_tokens * 4 # 4 is for int32 size
+        cumulative_seqlens_memory_footprint = 3 * max_batch_tokens * 4  # 4 is for int32 size
 
-        write_index_memory_footprint = self.num_groups * max_batch_tokens * 4 # 4 is for int32 size
-        read_index_memory_footprint = self.num_groups * (num_pages + max_batch_tokens) * 4 # 4 is for int32 size
+        write_index_memory_footprint = self.num_groups * max_batch_tokens * 4  # 4 is for int32 size
+        read_index_memory_footprint = self.num_groups * (num_pages + max_batch_tokens) * 4  # 4 is for int32 size
 
-        total_memory_footprint = sum([
-            cache_memory_footprint,
-            activation_memory_footprint,
-            inputs_outputs_positions_and_logits_memory_footprint,
-            attention_memory_footprint,
-            cumulative_seqlens_memory_footprint,
-            write_index_memory_footprint,
-            read_index_memory_footprint,
-        ])
+        total_memory_footprint = sum(
+            [
+                cache_memory_footprint,
+                activation_memory_footprint,
+                inputs_outputs_positions_and_logits_memory_footprint,
+                attention_memory_footprint,
+                cumulative_seqlens_memory_footprint,
+                write_index_memory_footprint,
+                read_index_memory_footprint,
+            ]
+        )
         return total_memory_footprint

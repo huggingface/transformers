@@ -59,6 +59,7 @@ class Scheduler(ABC):
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
         return len(self.active_requests) or len(self.waiting_requests)
+
     @traced
     def finish_request(self, request_id: str, evict_from_cache: bool = True):
         """Completes processing of a request and optionally frees its allocated cache blocks. This method is called
@@ -150,6 +151,7 @@ class Scheduler(ABC):
                 state.status = RequestStatus.PREFILLING_SPLIT
             state.remaining_prompt_ids = request_tokens[token_budget:]
             state.prompt_ids = request_tokens[:token_budget]
+
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):

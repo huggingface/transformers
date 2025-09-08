@@ -28,7 +28,6 @@ def sdpa_attention_paged_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-
     # Add KV cache to the key and value tensors
     cache = kwargs.pop("cache", None)
     if cache is not None:
@@ -48,7 +47,9 @@ def sdpa_attention_paged_forward(
         if sliding_window == NO_SLIDING_WINDOW:
             causal_mask = attention_mask[:1, :, :, : key.size(2)]
         else:
-            causal_mask = attention_mask[1:, :, :, : key.size(2)]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
+            causal_mask = attention_mask[
+                1:, :, :, : key.size(2)
+            ]  # TODO: check if we can go from [1, 1, T, C] to [T, C]
     else:
         causal_mask = None if attention_mask is None else attention_mask[:, :, :, : key.size(2)]
 

@@ -9,6 +9,7 @@ from .requests import logger
 class CacheManager(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
     when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
+
     _index: int
     _block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
@@ -175,7 +176,6 @@ class SlidingAttentionCacheManager(CacheManager):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
-
 
 
 # TODO: test the impact of this
