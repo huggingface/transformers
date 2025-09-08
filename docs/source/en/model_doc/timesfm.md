@@ -267,7 +267,7 @@ for i, forecast in enumerate(price_forecasts):
 TimesFM supports two modes for combining TimesFM and external regression (XReg) predictions:
 
 1. **"xreg + timesfm"** (default): Fit linear model on targets first, then forecast residuals with TimesFM
-2. **"timesfm + xreg"**: Forecast with TimesFM first, then fit linear model on residuals
+2. **"timesfm + xreg"**: Forecast with TimesFM first, then fit a linear model on residuals
 
 ```python
 # Compare different modes
@@ -306,3 +306,4 @@ The covariate forecasting leverages batched in-context regression to efficiently
 
 [[autodoc]] TimesFmModelForPrediction
     - forward
+    - forecast_with_covariates
