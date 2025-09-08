@@ -41,6 +41,7 @@ class Lfm2VlMultiModalProjector(nn.Module):
     def __init__(self, config: Lfm2VlConfig):
         super().__init__()
         in_channels = config.vision_config.hidden_size * (config.downsample_factor**2)
+        self.factor = config.downsample_factor
         self.layer_norm = nn.LayerNorm(in_channels)
         self.linear_1 = nn.Linear(
             in_channels,
@@ -54,24 +55,15 @@ class Lfm2VlMultiModalProjector(nn.Module):
             bias=config.projector_bias,
         )
 
-    def forward(self, image_features):
+    def forward(self, image_features: torch.Tensor):
+        image_features = self.pixel_unshuffle(image_features)
         image_features = self.layer_norm(image_features)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
-
-class PixelUnshuffleBlock(nn.Module):
-    """
-    Pixel Unshuffle for non-square images.
-    """
-
-    def __init__(self, factor: int):
-        super().__init__()
-        self.factor = factor
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def pixel_unshuffle(self, hidden_states: torch.Tensor):
         batch_size, width, height, channels = hidden_states.size()
         hidden_states = hidden_states.reshape(batch_size, width, height // self.factor, channels * self.factor)
         hidden_states = hidden_states.permute(0, 2, 1, 3)
@@ -163,7 +155,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 
         self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.pixel_unshuffle = PixelUnshuffleBlock(config.downsample_factor)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -215,7 +206,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             # reshape to original height and width
             feature_org_h, feature_org_w = spatial_shapes[img_idx]
             feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
-            feature = self.pixel_unshuffle(feature)
 
             # project the image representation
             img_embedding = self.multi_modal_projector(feature)
