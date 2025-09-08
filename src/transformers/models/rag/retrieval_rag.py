@@ -173,7 +173,7 @@ class LegacyIndex(Index):
         self._deserialize_index()
         self._index_initialized = True
 
-    def get_doc_dicts(self, doc_ids: np.array):
+    def get_doc_dicts(self, doc_ids: np.ndarray):
         doc_list = []
         for doc_ids_i in doc_ids:
             ids = [str(int(doc_id)) for doc_id in doc_ids_i]
