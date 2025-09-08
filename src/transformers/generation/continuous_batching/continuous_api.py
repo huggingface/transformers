@@ -631,16 +631,31 @@ class ContinuousBatchingManager:
             self.logit_processor.set_continuous_batching_context(
                 batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
-        return self.logit_processor(batch_data["input_ids"], logits)
+
+        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_2d = logits.view(batch_size * seq_len, vocab_size)
+        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+
+        # Process with 2D tensors
+        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d)
+
+        # Reshape back to 3D
+        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
     def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
         if self.do_sample:  # sample
             probs = nn.functional.softmax(probs, dim=-1)
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+            # Add batch dimension back to match argmax output
+            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)
-        tokens = next_tokens.size(1)
+            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+
+        tokens = next_tokens.size(1)  # Get seq_len dimension
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
