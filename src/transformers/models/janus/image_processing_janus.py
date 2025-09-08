@@ -40,12 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import (
-    TensorType,
-    filter_out_non_signature_kwargs,
-    is_vision_available,
-    logging,
-)
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -210,7 +205,7 @@ class JanusImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

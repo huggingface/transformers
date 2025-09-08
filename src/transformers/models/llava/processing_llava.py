@@ -16,7 +16,7 @@
 Processor class for Llava.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -92,7 +92,7 @@ class LlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,

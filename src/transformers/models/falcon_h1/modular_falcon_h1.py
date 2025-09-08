@@ -360,7 +360,6 @@ class FalconH1Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.A_log._no_weight_decay = True
         self.mamba_rms_norm = config.mamba_rms_norm
 
         if self.mamba_rms_norm:
@@ -371,7 +370,6 @@ class FalconH1Mixer(nn.Module):
                 norm_before_gate=config.mamba_norm_before_gate,
             )
         self.D = nn.Parameter(torch.ones(self.num_heads))
-        self.D._no_weight_decay = True
 
         self.out_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=config.projectors_bias)
 
@@ -1023,7 +1021,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[FalconHybridMambaAttentionDynamicCache] = None,
@@ -1247,7 +1245,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
 class FalconH1ForCausalLM(LlamaForCausalLM):
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[FalconHybridMambaAttentionDynamicCache] = None,

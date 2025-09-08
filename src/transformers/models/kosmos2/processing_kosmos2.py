@@ -134,7 +134,7 @@ class Kosmos2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
         audio=None,
         videos=None,
@@ -342,7 +342,7 @@ class Kosmos2Processor(ProcessorMixin):
     def preprocess_examples(
         self,
         texts: Union[TextInput, list[TextInput]],
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
     ) -> Union[str, list[str]]:
