@@ -137,7 +137,12 @@ class Ernie4_5_VLConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        image_start_token_id=101304,
+        image_end_token_id=101305,
         image_token_id=100295,
+        video_start_token_id=101306,
+        video_end_token_id=101307,
+        video_token_id=100296,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -151,9 +156,12 @@ class Ernie4_5_VLConfig(PretrainedConfig):
             # For BC use all kwargs to init `TextConfig`
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
+        self.image_start_token_id = image_start_token_id
+        self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
-        # TODO: preprocessing
-        #self.video_token_id = video_token_id
+        self.video_start_token_id = video_start_token_id
+        self.video_end_token_id = video_end_token_id
+        self.video_token_id = video_token_id
 
         super().__init__(**kwargs)
 

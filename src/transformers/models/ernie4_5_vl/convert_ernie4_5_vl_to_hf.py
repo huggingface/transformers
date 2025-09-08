@@ -56,6 +56,88 @@ TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
 ADDED_TOKENS_FILE = "added_tokens.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+DEFAULT_CHAT_TEMPLATE = """{
+"chat_template": "
+{%- set image_count = namespace(value=0) -%}
+{%- set video_count = namespace(value=0) -%}
+{{- '<|begin_of_sentence |>' }}
+{%- for message in messages -%}
+    {%- if message.role in ['system', 'user'] -%}
+        {%- if message.role == 'user' -%}
+            {{- 'User: ' -}}
+        {%- endif -%}
+        {%- if message.content is string -%}
+            {{- message.content -}}
+        {%- else -%}
+            {%- for content_item in message.content -%}
+                {%- if content_item.type == 'text' -%}
+                    {{- content_item.text -}}
+                {%- elif content_item.type in ['image_url', 'image'] -%}
+                    {%- set image_count.value = image_count.value + 1 -%}
+                    Picture {{ image_count.value }}:<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>
+                {%- elif content_item.type in ['video_url', 'video'] -%}
+                    {%- set video_count.value = video_count.value + 1 -%}
+                    Video {{ video_count.value }}:<|VIDEO_START|><|VIDEO_PLACEHOLDER|><|VIDEO_END|>
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+        {%- if message.role == 'system' -%}
+            {{- '
+            ' -}}
+        {%- endif -%}
+    {%- elif message.role == 'assistant' -%}
+        {%- macro extract_text_content(content_field) -%}
+            {%- if content_field is string -%}
+                {{- content_field -}}
+            {%- elif content_field is iterable and content_field is not string -%}
+                {%- set ns = namespace(text_parts=[]) -%}
+                {%- set text_parts = [] -%}
+                {%- for item in content_field -%}
+                    {%- if item.type == 'text' -%}
+                        {%- set ns.text_parts = ns.text_parts + [item.text] -%}
+                    {%- endif -%}
+                {%- endfor -%}
+                {{- ns.text_parts | join("") -}}
+            {%- else -%}
+                {{- '' -}}
+            {%- endif -%}
+        {%- endmacro -%}
+        {%- set reasoning_content = extract_text_content(message.reasoning_content) -%}
+        {%- set content = extract_text_content(message.content) -%}
+        {%- if '</think>' in content %}
+            {%- set reasoning_content = content.split('</think>')[0].rstrip('
+                        ').split('<think>')[-1].lstrip('
+                        ') %}
+            {%- set content = content.split('</think>')[-1].lstrip('
+                        ') %}
+        {%- endif %}
+        {%- if reasoning_content %}
+            {{- '
+            ' + 'Assistant: ' + '<think>
+            ' + reasoning_content.strip('
+                        ') + '
+            </think>
+            ' + content.lstrip('
+            ') }}
+        {%- else %}
+            {{- '
+            ' + 'Assistant: ' + content }}
+        {%- endif %}
+        {{- '<|end_of_sentence |>' }}
+    {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt is not defined or add_generation_prompt is true %}
+    {{- '
+    Assistant: ' -}}
+    {%- if enable_thinking is defined and enable_thinking is false %}
+        {{- '<think>
+        </think>
+        ' }}
+    {%- endif %}
+    {%- if enable_thinking is not defined or enable_thinking is true %}{{- '<think>' }}{%- endif %}
+{%- endif %}
+"
+}"""
 
 
 def load_json(save_dir, filename):
@@ -258,7 +340,7 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
 
     # reload and save to get correct formatting
-    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR)
+    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR, chat_template=DEFAULT_CHAT_TEMPLATE)
     tokenizer.save_pretrained(save_dir)
 
 

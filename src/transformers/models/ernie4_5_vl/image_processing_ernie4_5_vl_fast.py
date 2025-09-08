@@ -41,7 +41,11 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    logging,
+)
 from ...video_utils import VideoInput, make_batched_videos
 
 

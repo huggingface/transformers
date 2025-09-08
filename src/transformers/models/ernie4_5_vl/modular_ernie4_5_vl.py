@@ -50,8 +50,15 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ...video_utils import VideoInput
@@ -66,12 +73,16 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.modeling_qwen2_vl import VisionMlp
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig
 
 
@@ -691,28 +702,15 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         return x
 
 
-# TODO: refactor a bit
-class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
+class Ernie4_5_VLModel(Qwen2_5_VLModel):
+    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
+
     def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
 
-        self.language_model = Ernie4_5_VLTextModel(config.text_config)
+        del self.visual
         self.vision_tower = Ernie4_5_VLVisionTransformerPretrainedModel(config.vision_config)
         self.resampler_model = Ernie4_5_VLVariableResolutionResamplerModel(config.vision_config)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     # TODO: same with videos
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
@@ -727,48 +725,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         image_embeds = self.resampler_model(image_embeds, grid_thw)
         return image_embeds
 
-    # TODO: fixup with videos, iirc this is not handled with a token atm
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-            special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_video_mask = special_video_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-            # special_video_mask = input_ids == self.config.video_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
-            )
-
-        """n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
-            )"""
-
-        # return special_image_mask, special_video_mask
-        return special_image_mask, None
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -780,31 +736,49 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        images: Optional[torch.Tensor] = None,
+        images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
         grid_thw: Optional[torch.Tensor] = None,
-        # pixel_values: Optional[torch.Tensor] = None,
-        # pixel_values_videos: Optional[torch.FloatTensor] = None,
-        # image_grid_thw: Optional[torch.LongTensor] = None,
-        # video_grid_thw: Optional[torch.LongTensor] = None,
-        # rope_deltas: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        # second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        # TODO: logic change for input embeds and videos
-        inputs_embeds = self.get_input_embeddings()(input_ids)
+    ) -> Union[tuple, MoeModelOutputWithPast]:
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if images is not None:
-            image_embeds = self.get_image_features(images, image_grid_thw=grid_thw)
+        # TODO: remove after refactoring all
+        if pixel_values is None and images is not None:
+            pixel_values = images
+        if image_grid_thw is None and grid_thw is not None:
+            image_grid_thw = grid_thw
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            # TODO
+            #image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        # TODO: add and check logic with videos ("or" mask?)
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            # TODO
+            #video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        # TODO
         if token_type_ids is None:
             token_type_ids = image_mask.to(torch.int64)
         token_type_ids[token_type_ids == TokenType.video] = TokenType.image
+
+        # TODO: rope delta approach by qwen 2.5 vl?
 
         outputs = self.language_model(
             input_ids=None,
@@ -828,27 +802,13 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         )
 
 
-class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+# TODO: use glm4v get imgs and vids nums
+class Ernie4_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, GenerationMixin):
+    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
 
-    def __init__(self, config: Ernie4_5_VLConfig):
-        super().__init__(config)
-        self.model = Ernie4_5_VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
+    @property
+    def visual(self):
+        return self.model.vision_tower
 
     def _update_model_kwargs_for_generation(
         self,
@@ -895,18 +855,17 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        images: Optional[torch.Tensor] = None,
+        images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
         grid_thw: Optional[torch.Tensor] = None,
-        #pixel_values: Optional[torch.Tensor] = None,
-        #pixel_values_videos: Optional[torch.FloatTensor] = None,
-        #image_grid_thw: Optional[torch.LongTensor] = None,
-        #video_grid_thw: Optional[torch.LongTensor] = None,
-        #rope_deltas: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        #second_per_grid_ts: Optional[torch.Tensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -923,13 +882,12 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             return_dict=True,
             images=images,
             grid_thw=grid_thw,
-            #pixel_values=pixel_values,
-            #pixel_values_videos=pixel_values_videos,
-            #image_grid_thw=image_grid_thw,
-            #video_grid_thw=video_grid_thw,
-            #rope_deltas=rope_deltas,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            rope_deltas=rope_deltas,
             cache_position=cache_position,
-            #second_per_grid_ts=second_per_grid_ts,
             **kwargs,
         )
 
@@ -1255,7 +1213,67 @@ class Ernie4_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
         )
 
 
+# TODO: needs customization around drawing timestamps on each frame
+# See https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT/blob/main/processing_ernie4_5_vl.py#L1314-L1341
+# TODO: different pixel defaults
+class Ernie4_5_VLVideoProcessor(Qwen2VLVideoProcessor):
+    pass
+
+
+class Ernie4_5_VLImagesKwargs(ImagesKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    merge_size: Optional[int]
+
+
+class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Ernie4_5_VLImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+    }
+
+
+class Ernie4_5_VLProcessor(Qwen2VLProcessor):
+    r"""
+    Constructs a Ernie 4.5 VL processor which wraps a Ernie 4.5 VL image processor and a Llama tokenizer into a single processor.
+    [`Ernie4_5_VLProcessor`] offers all the functionalities of [`Ernie4_5_VLImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~Ernie4_5_VLProcessor.__call__`] and [`~Ernie4_5_VLProcessor.decode`] for more information.
+    Args:
+        image_processor ([`Ernie4_5_VLImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        video_processor ([`Ernie4_5_VLVideoProcessor`], *optional*):
+            The video processor is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
+    tokenizer_class = (None, "LlamaTokenizerFast")
+
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.image_token = "<|IMAGE_PLACEHOLDER|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|VIDEO_PLACEHOLDER|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+
+
 __all__ = [
+    "Ernie4_5_VLProcessor",
+    "Ernie4_5_VLVideoProcessor",
     "Ernie4_5_VLImageProcessor",
     "Ernie4_5_VLImageProcessorFast",
     "Ernie4_5_VLForConditionalGeneration",
