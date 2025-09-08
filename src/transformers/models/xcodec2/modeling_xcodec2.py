@@ -62,18 +62,18 @@ _CONFIG_FOR_DOC = "Xcodec2Config"
 class Xcodec2Output(ModelOutput):
     """
     Args:
-        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
-            Discrete code embeddings computed using `model.encode`. These are the quantized
-            representations of the input audio used for further processing or generation.
         audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
             Decoded audio waveform values in the time domain, obtained using the decoder
             part of Xcodec2. These represent the reconstructed audio signal.
+        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`. These are the quantized
+            representations of the input audio used for further processing or generation.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input's embedding.
     """
 
-    audio_codes: Optional[torch.LongTensor] = None
     audio_values: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.LongTensor] = None
     quantized_representation: Optional[torch.Tensor] = None
 
 
@@ -90,6 +90,7 @@ class Xcodec2EncoderOutput(ModelOutput):
     """
 
     audio_codes: Optional[torch.LongTensor] = None
+    quantized_representation: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -103,13 +104,6 @@ class Xcodec2DecoderOutput(ModelOutput):
     """
 
     audio_values: Optional[torch.FloatTensor] = None
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -176,6 +170,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 class Xcodec2Attention(nn.Module):
@@ -1540,8 +1541,6 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     config_class = Xcodec2Config
     base_model_prefix = "xcodec2"
     main_input_name = "input_values"
-    supports_gradient_checkpointing = False
-    _supports_sdpa = True
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv1d)):

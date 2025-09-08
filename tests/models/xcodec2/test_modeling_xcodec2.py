@@ -88,7 +88,7 @@ class Xcodec2ModelTester:
         result = model(input_values)
         self.parent.assertEqual(
             result.audio_values.shape,
-            (self.batch_size, self.num_channels, self.num_samples + 320 - (self.num_samples % 320)),
+            (self.batch_size, self.num_channels, self.num_samples),
         )
 
 
@@ -100,6 +100,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
+    test_can_init_all_missing_weights = False  # Semantic model weights come from pretrained model
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -408,6 +409,8 @@ Integration tests for Xcodec2
 Code for reproducing expected outputs can be found here:
 https://gist.github.com/ebezzam/909243aa00934cab1c1aad3d6a161580
 
+PyPI model does not support batch inference.
+
 """
 
 
@@ -443,7 +446,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_codec_error = float(raw_data["codec_error"])
 
         # load model
-        model_id = "bezzam/xcodec2"
+        model_id = "hf-audio/xcodec2"
         model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

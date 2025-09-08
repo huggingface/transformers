@@ -40,23 +40,32 @@ Its architecture is based on [X-Codec](./xcodec) with several major differences:
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python 
->>> from datasets import load_dataset, Audio
->>> from transformers import XCodec2Model, AutoFeatureExtractor
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+>>> import torch
+>>> from datasets import Audio, load_dataset
+>>> from transformers import AutoFeatureExtractor, Xcodec2Model
+
+>>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 >>> # load model and feature extractor
->>> model = XCodec2Model.from_pretrained("Steveeeeeeen/XCodec2")
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("Steveeeeeeen/XCodec2")
+>>> model_id = "hf-audio/xcodec2"
+>>> model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
->>> # load audio sample
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+>>> # load data
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+>>> dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+>>> audio = dataset[0]["audio"]["array"]
 
->>> encoder_outputs = model.encode(inputs["input_values"])
->>> audio_values = model.decode(encoder_outputs.audio_codes)[0]
+>>> # prepare data
+>>> inputs = feature_extractor(raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(torch_device)
+
+>>> # encoder and decode
+>>> audio_codes = model.encode(inputs["input_values"]).audio_codes
+>>> audio_values = model.decode(audio_codes).audio_values
 >>> # or the equivalent with a forward pass
->>> audio_values = model(inputs["input_values"]).audio_values
+>>> model_output = model(inputs["input_values"])
+>>> audio_codes = model_output.audio_codes
+>>> audio_values = model_output.audio_values
 ```
 
 This model was contributed by [Steven Zheng](https://huggingface.co/Steveeeeeeen) and [Eric Bezzam](https://huggingface.co/bezzam).

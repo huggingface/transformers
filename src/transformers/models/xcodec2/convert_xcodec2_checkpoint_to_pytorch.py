@@ -277,7 +277,7 @@ wget https://huggingface.co/HKUSTAudio/xcodec2/resolve/main/model.safetensors -P
 python src/transformers/models/xcodec2/convert_xcodec2_checkpoint_to_pytorch.py \
     --checkpoint_path /raid/eric/xcodec2_original/model.safetensors \
     --config_path /raid/eric/xcodec2_original/config.json \
-    --push_to_hub bezzam/xcodec2
+    --push_to_hub hf-audio/xcodec2
 ```
 
 """
