@@ -4022,7 +4022,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model_to_save.config.dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
-        model_to_save.config.architectures = [model_to_save.__class__.__name__]
+        # When using FSDP2, unwrapping is a noop, so the model name doesn't change back to the original model name
+        model_to_save.config.architectures = [model_to_save.__class__.__name__.removeprefix("FSDP")]
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
