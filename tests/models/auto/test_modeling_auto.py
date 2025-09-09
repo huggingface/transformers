@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import copy
+import os
+import os.path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -39,6 +42,7 @@ from ..bert.test_modeling_bert import BertModelTester
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
+from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 if is_torch_available():
@@ -556,7 +560,18 @@ class AutoModelTest(unittest.TestCase):
 
     def test_dynamic_saving_from_local_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
-            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
+            # `Repository` is deprecated and will be removed in `huggingface_hub v1.0`.
+            # TODO: Remove this test when this comes.
+            # Here is a ugly approach to avoid `too many requests`
+            repo_id = url_to_local_path("hf-internal-testing/tiny-random-custom-architecture")
+            if os.path.isdir(repo_id):
+                shutil.copytree(repo_id, tmp_dir, dirs_exist_ok=True)
+            else:
+                _ = Repository(
+                    local_dir=tmp_dir,
+                    clone_from=url_to_local_path("hf-internal-testing/tiny-random-custom-architecture"),
+                )
+
             model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
             model.save_pretrained(tmp_dir_out)
             _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)

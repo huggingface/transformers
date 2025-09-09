@@ -46,8 +46,8 @@ model_name = "vidore/colpali-v1.3-hf"
 
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
+    dtype=torch.bfloat16,
+    device_map="auto",  # "cpu", "cuda", "xpu", or "mps" for Apple Silicon
 )
 processor = ColPaliProcessor.from_pretrained(model_name)
 
@@ -119,7 +119,7 @@ bnb_config = BitsAndBytesConfig(
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda",
+    device_map="auto",
 )
 
 processor = ColPaliProcessor.from_pretrained(model_name)

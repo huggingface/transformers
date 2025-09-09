@@ -568,7 +568,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="flash_attention_2",
                     load_in_4bit=True,
                 )
@@ -581,17 +581,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 _ = model(dummy_input)
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        r"""
-        Overriding the test_flash_attn_2_inference_padding_right test as the Zamba2 model, like Mixtral, doesn't support
-        right padding + use cache with FA2
-        """
-        self.skipTest(reason="Zamba2 flash attention does not support right padding")
 
     @unittest.skip(reason="Zamba2 has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
@@ -630,7 +619,7 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
     @slow
     def setUpClass(cls):
         model_id = "Zyphra/Zamba2-1.2B"
-        cls.model = Zamba2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, revision="PR")
+        cls.model = Zamba2ForCausalLM.from_pretrained(model_id, dtype=torch.float32, revision="PR")
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision="PR")
 
     @parameterized.expand([(torch_device,), ("cpu",)])

@@ -1,5 +1,4 @@
-name: Self-hosted runner (scheduled)
-
+name: Nvidia CI
 
 on:
   repository_dispatch:
@@ -7,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_nvidia_ci*
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -53,7 +52,9 @@ jobs:
       slack_report_channel: "#transformers-ci-daily-models"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
+      runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   torch-pipeline:
@@ -65,6 +66,7 @@ jobs:
       docker: huggingface/transformers-pytorch-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   example-ci:
@@ -76,6 +78,7 @@ jobs:
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   trainer-fsdp-ci:
@@ -87,6 +90,7 @@ jobs:
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   deepspeed-ci:
@@ -99,6 +103,7 @@ jobs:
       ci_event: Daily CI
       working-directory-prefix: /workspace
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   quantization-ci:
@@ -110,4 +115,5 @@ jobs:
       docker: huggingface/transformers-quantization-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit

@@ -62,8 +62,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    torch_dtype=torch.bfloat16,
-    device_map="cuda"
+    dtype=torch.bfloat16,
+    device_map="auto"
 )
 
 conversation = [
@@ -124,8 +124,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    torch_dtype=torch.bfloat16,
-    device_map="cuda"
+    dtype=torch.bfloat16,
+    device_map="auto"
 )
 
 # Conversation for the first image

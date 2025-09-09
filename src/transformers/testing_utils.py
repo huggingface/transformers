@@ -103,7 +103,6 @@ from .utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
-    is_jieba_available,
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
@@ -142,9 +141,6 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tensorflow_probability_available,
-    is_tensorflow_text_available,
-    is_tf2onnx_available,
     is_tf_available,
     is_tiktoken_available,
     is_timm_available,
@@ -159,7 +155,6 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
-    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_xla_available,
@@ -509,26 +504,11 @@ def require_rjieba(test_case):
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
 
 
-def require_jieba(test_case):
-    """
-    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
-    """
-    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
-
-
 def require_jinja(test_case):
     """
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
-
-
-def require_tf2onnx(test_case):
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf2onnx`, is deprecated and will be removed in "
-        "Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf2onnx_available(), "test requires tf2onnx")(test_case)
 
 
 def require_onnx(test_case):
@@ -602,7 +582,16 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel("kernels-community/flash-attn")
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):
@@ -622,15 +611,6 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
-
-
-def require_torch_sdpa(test_case):
-    """
-    Decorator marking a test that requires PyTorch's SDPA.
-
-    These tests are skipped when requirements are not met (torch version).
-    """
-    return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
 def require_read_token(test_case):
@@ -725,47 +705,11 @@ def require_intel_extension_for_pytorch(test_case):
     )(test_case)
 
 
-def require_tensorflow_probability(test_case):
-    """
-    Decorator marking a test that requires TensorFlow probability.
-
-    These tests are skipped when TensorFlow probability isn't installed.
-
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_probability`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_probability_available(), "test requires TensorFlow probability")(
-        test_case
-    )
-
-
 def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
     """
     return unittest.skipUnless(is_torchaudio_available(), "test requires torchaudio")(test_case)
-
-
-def require_tf(test_case):
-    """
-    Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf_available(), "test requires TensorFlow")(test_case)
-
-
-def require_flax(test_case):
-    """
-    Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
-    """
-    logger.warning_once(
-        "JAX test-related code, including `require_flax`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
 
 def require_sentencepiece(test_case):
@@ -801,18 +745,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_tensorflow_text(test_case):
-    """
-    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
-    installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_text`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
 def require_keras_nlp(test_case):
@@ -3471,6 +3403,32 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
 
     def __repr__(self):
         return f"{self.data}"
+
+
+def patch_torch_compile_force_graph():
+    """
+    Patch `torch.compile` to always use `fullgraph=True`.
+
+    This is useful when some `torch.compile` tests are running with `fullgraph=False` and we want to be able to run
+    them with `fullgraph=True` in some occasion (without introducing new tests) to make sure there is no graph break.
+
+    After PR #40137, `CompileConfig.fullgraph` is `False` by default, this patch is necessary.
+    """
+
+    force_fullgraph = os.environ.get("TORCH_COMPILE_FORCE_FULLGRAPH", "")
+    force_fullgraph = force_fullgraph.lower() in ("yes", "true", "on", "t", "y", "1")
+
+    if force_fullgraph:
+        import torch
+
+        orig_method = torch.compile
+
+        def patched(*args, **kwargs):
+            # In `torch_compile`, all arguments except `model` is keyword only argument.
+            kwargs["fullgraph"] = True
+            return orig_method(*args, **kwargs)
+
+        torch.compile = patched
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):

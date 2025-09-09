@@ -16,14 +16,10 @@
 import gc
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, BitNetConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -179,20 +175,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
-    # Ignore copy
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="BitNet flash attention does not support right padding")
-
 
 @require_torch
 class BitNetIntegrationTest(unittest.TestCase):
@@ -239,7 +221,7 @@ class BitNetIntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "What is your favourite food?"}], add_generation_prompt=True, tokenize=False
         )
         model = BitNetForCausalLM.from_pretrained(
-            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", torch_dtype=torch.bfloat16
+            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

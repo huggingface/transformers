@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,24 +14,23 @@
 """Testing suite for the PyTorch Xcodec model."""
 
 import inspect
+import json
 import math
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 from datasets import Audio, load_dataset
-from pytest import mark
+from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import AutoFeatureExtractor, XcodecConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -52,7 +51,6 @@ class XcodecModelTester:
         num_channels=1,
         sample_rate=16000,
         codebook_size=1024,
-        num_quantizers=8,
         num_samples=400,
         is_training=False,
     ):
@@ -61,14 +59,14 @@ class XcodecModelTester:
         self.num_channels = num_channels
         self.sample_rate = sample_rate
         self.codebook_size = codebook_size
-        self.num_quantizers = num_quantizers
         self.is_training = is_training
         self.num_samples = num_samples
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {
+            "input_values": floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -79,9 +77,8 @@ class XcodecModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         codes_length = math.ceil(self.num_samples / config.hop_length)
         inputs_dict["audio_codes"] = ids_tensor(
-            [self.batch_size, self.num_quantizers, codes_length], config.codebook_size
+            [self.batch_size, config.num_quantizers, codes_length], config.codebook_size
         )
-
         return config, inputs_dict
 
     def get_config(self):
@@ -89,13 +86,11 @@ class XcodecModelTester:
             sample_rate=self.sample_rate,
             audio_channels=self.num_channels,
             codebook_size=self.codebook_size,
-            num_quantizers=self.num_quantizers,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = XcodecModel(config=config).to(torch_device).eval()
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        result = model(input_values=inputs_dict["input_values"])
         self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.num_channels, self.num_samples))
 
 
@@ -121,7 +116,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = XcodecModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=XcodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=XcodecConfig, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -367,42 +362,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                outputs = model(dummy_input)
-                outputs_fa = model_fa(dummy_input)
-
-                logits = outputs[1]
-                logits_fa = outputs_fa[1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-    @unittest.skip(reason="The XcodecModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="The XcodecModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -417,53 +376,97 @@ def normalize(arr):
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
-    arr1_normalized = normalize(arr1)
-    arr2_normalized = normalize(arr2)
+    arr1_np = arr1.cpu().numpy().squeeze()
+    arr2_np = arr2.cpu().numpy().squeeze()
+    max_length = min(arr1.shape[-1], arr2.shape[-1])
+    arr1_np = arr1_np[..., :max_length]
+    arr2_np = arr2_np[..., :max_length]
+    arr1_normalized = normalize(arr1_np)
+    arr2_normalized = normalize(arr2_np)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
-# @slow
+"""
+Integration tests for XCodec
+
+Code for reproducing expected outputs can be found here:
+https://gist.github.com/ebezzam/cdaf8c223e59e7677b2ea6bc2dc8230b
+
+One reason for higher tolerances is because of different implementation of `Snake1d` within Transformer version DAC
+See here: https://github.com/huggingface/transformers/pull/39793#issue-3277407384
+
+"""
+
+RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/xcodec/integration_tests.json"
+
+with open(RESULTS_PATH, "r") as f:
+    raw_data = json.load(f)
+
+# convert dicts into tuples ordered to match test args
+EXPECTED_OUTPUTS_JSON = [
+    (
+        f"{d['repo_id']}_{d['bandwidth']}",
+        d["repo_id"],
+        d["bandwidth"],
+        d["codes"],
+        d["decoded"],
+        d["codec_error"],
+        d["codec_tol"],
+        d["dec_tol"],
+    )
+    for d in raw_data
+]
+
+
+@slow
 @require_torch
 class XcodecIntegrationTest(unittest.TestCase):
-    def test_integration(self):
-        expected_rmse = {
-            "0.5": 0.0065491,
-            "4.0": 0.0070978,
-        }
-        expected_codesums = {
-            "0.5": [117262],
-            "4.0": [926416],
-        }
+    @parameterized.expand(EXPECTED_OUTPUTS_JSON)
+    def test_integration(
+        self, test_name, repo_id, bandwidth, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol
+    ):
+        # load model
+        model = XcodecModel.from_pretrained(repo_id).to(torch_device).eval()
+        feature_extractor = AutoFeatureExtractor.from_pretrained(repo_id)
 
-        librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "Manel/X-Codec"
-        model = XcodecModel.from_pretrained(model_id).to(torch_device).eval()
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
-        librispeech = librispeech.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-        audio = librispeech[-1]["audio"]["array"]
-
+        # load audio example
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=feature_extractor.sampling_rate)
+        )
+        audio_array = librispeech_dummy[0]["audio"]["array"]
         inputs = feature_extractor(
-            raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+            raw_audio=audio_array, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
         ).to(torch_device)
+        x = inputs["input_values"]
 
-        for bandwidth, exp_rmse in expected_rmse.items():
-            bandwidth = float(bandwidth)
-            with torch.no_grad():
-                audio_codes = model.encode(inputs["input_values"], bandwidth=bandwidth, return_dict=False)
-                codesum = int(audio_codes.sum().item())
+        with torch.no_grad():
+            ENC_TOL = 0
+            audio_codes = model.encode(x, bandwidth=bandwidth, return_dict=False)
+            if exp_codes is not None:
+                exp_codes = torch.tensor(exp_codes).to(torch_device)
+                torch.testing.assert_close(
+                    audio_codes[..., : exp_codes.shape[-1]],
+                    exp_codes,
+                    rtol=ENC_TOL,
+                    atol=ENC_TOL,
+                )
 
-                expected_codesum = expected_codesums[str(bandwidth)][0]
-                self.assertEqual(codesum, expected_codesum)
+            # dec_tol = 1e-5    # increased to 1e-4 for passing on 4 kbps
+            input_values_dec = model.decode(audio_codes).audio_values
+            if exp_decoded is not None:
+                exp_decoded = torch.tensor(exp_decoded).to(torch_device)
+                torch.testing.assert_close(
+                    input_values_dec[..., : exp_decoded.shape[-1]],
+                    exp_decoded,
+                    rtol=dec_tol,
+                    atol=dec_tol,
+                )
 
-                input_values_dec = model.decode(audio_codes, return_dict=False)
-                input_values_enc_dec = model(inputs["input_values"], bandwidth=bandwidth)[1]
+            # compute codec error
+            codec_err = compute_rmse(input_values_dec, x)
+            torch.testing.assert_close(codec_err, exp_codec_err, rtol=codec_tol, atol=codec_tol)
 
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
-
-            self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
-
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
-            rmse = compute_rmse(arr, arr_enc_dec)
-            self.assertTrue(np.abs(rmse - exp_rmse) < 1e-5)
+            # make sure forward and decode gives same result
+            audio_values_enc_dec = model(x, bandwidth=bandwidth).audio_values
+            torch.testing.assert_close(input_values_dec, audio_values_enc_dec, rtol=1e-6, atol=1e-6)

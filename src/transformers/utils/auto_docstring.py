@@ -63,6 +63,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "openai": "OpenAIGPTConfig",
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
+    "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
 }
@@ -1120,9 +1121,8 @@ def get_model_name(obj):
         if file_name.startswith(start) and file_name.endswith(end):
             model_name_lowercase = file_name[len(start) : -len(end)]
             return model_name_lowercase
-    else:
-        print(f"🚨 Something went wrong trying to find the model name in the path: {path}")
-        return "model"
+    print(f"🚨 Something went wrong trying to find the model name in the path: {path}")
+    return "model"
 
 
 def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
