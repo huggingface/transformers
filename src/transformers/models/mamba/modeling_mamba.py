@@ -52,8 +52,12 @@ else:
 
 if is_kernels_available():
     from kernels import get_kernel
+
     kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
-    causal_conv1d_update, causal_conv1d_fn = kernel_causal_conv1d.causal_conv1d_update, kernel_causal_conv1d.causal_conv1d_fn
+    causal_conv1d_update, causal_conv1d_fn = (
+        kernel_causal_conv1d.causal_conv1d_update,
+        kernel_causal_conv1d.causal_conv1d_fn,
+    )
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
