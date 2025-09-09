@@ -81,27 +81,36 @@ class PagedAttentionCache:
     Grouping layers into groups is useful because when we allocate one block to a group N, the block allocated is the
         same for all layers in group N, equivalently it is allocated accross all cache tensors. This allows us to
         efficiently allocate and free blocks, and to efficiently read and write key and value states.
-    For instance, imagine we have 8 blocks of cache and a model with two layer groups: group 0 with 3 sliding-attention
-    layers and group 1 with 3 full-attention layers. At creation time, the physical cache tensors look like this:
 
-    Cache tensor 0: [., ., ., ., ., ., ., .]
-    Cache tensor 1: [., ., ., ., ., ., ., .]
-    Cache tensor 2: [., ., ., ., ., ., ., .]
+    For instance, imagine we have 8 blocks of cache and a model with two layer groups: a full-attention group with 3
+    layers and a sliding-attention group with 3 layers. At creation time, the physical cache tensors look like this:
 
-    where . means the blocks is not allocated to any layer group yet. We have 3 cache tensors because there are
+    cache_tensor_0: □ □ □ □ □ □ □ □
+    cache_tensor_1: □ □ □ □ □ □ □ □
+    cache_tensor_2: □ □ □ □ □ □ □ □
+
+    where □ means the blocks is not allocated to any layer group yet. We have 3 cache tensors because there are
     3 layers per group.
     We allocate 1 block to each group, after allocation, the cache tensors look like this:
 
-    Cache tensor 0: [0, 1, ., ., ., ., ., .]
-    Cache tensor 1: [0, 1, ., ., ., ., ., .]
-    Cache tensor 2: [0, 1, ., ., ., ., ., .]
+    cache_tensor_0: ✖ ◉ □ □ □ □ □ □
+    cache_tensor_1: ✖ ◉ □ □ □ □ □ □
+    cache_tensor_2: ✖ ◉ □ □ □ □ □ □
 
+    where ✖ means the block is allocated to the full-attention group, and ◉ means the block is allocated to the
+    sliding-attention group.
     Now, if we continue to generate, and the sliding window has been reached, we only need to allocate a new block
     for the full-attention group, and the cache tensors look like this:
 
-    Cache tensor 0: [0, 1, 1, ., ., ., ., .]
-    Cache tensor 1: [0, 1, 1, ., ., ., ., .]
-    Cache tensor 2: [0, 1, 1, ., ., ., ., .]
+    cache_tensor_0: ✖ ◉ ✖ □ □ □ □ □
+    cache_tensor_1: ✖ ◉ ✖ □ □ □ □ □
+    cache_tensor_2: ✖ ◉ ✖ □ □ □ □ □
+
+    And after further generation, when we need a new block allocated:
+
+    cache_tensor_0: ✖ ◉ ✖ ✖ □ □ □ □
+    cache_tensor_1: ✖ ◉ ✖ ✖ □ □ □ □
+    cache_tensor_2: ✖ ◉ ✖ ✖ □ □ □ □
 
     This would not have been possible if all layers were in the same group: we would have had to allocate a new block
     for the sliding-attention group, although it is not needed.
