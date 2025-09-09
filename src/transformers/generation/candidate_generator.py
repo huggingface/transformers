@@ -1009,8 +1009,11 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         num_output_tokens (`int`):
             The number of tokens to be output as candidate tokens.
         max_length (`int`):
-            The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
-            Defaults to 20, which is the max length used as default in generation config.
+            The number of total maximum tokens that can be generated. For decoder-only models that includes the
+            prompt length. Defaults to 20, which is the max length used as default in generation config.
+        bad_words_ids (`list[list[int]]`, *optional*):
+            List of sequences of tokens that are not allowed to be generated. In other words, if if prompt lookup
+            contains a match of any of these sequences, the match is skipped.
     """
 
     def __init__(
@@ -1021,6 +1024,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         max_length: int = 20,
         bad_words_ids: Optional[list[list[int]]] = None,
     ):
+        # TODO (joao): at call time (get_candidates), check if there are other logits processors that set
+        # probabilities to `-inf` and block those tokens
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
         self.max_length = max_length
