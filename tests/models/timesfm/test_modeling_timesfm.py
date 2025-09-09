@@ -670,3 +670,33 @@ class TimesFmCovariatesTest(unittest.TestCase):
         # XReg predictions should capture some of the load-price relationship
         mean_price = output.combined_predictions.mean()
         self.assertTrue(20 < mean_price < 200)  # Reasonable electricity price range
+
+    def test_covariates_training_backward(self):
+        """Ensure loss computes and gradients flow for covariate training."""
+        covariates = self._create_test_covariates()
+
+        # Fresh small model for training step
+        model = TimesFmModelForPrediction(self.config).to(torch_device)
+        model.train()
+
+        # Future values matching the covariate-driven horizon per series
+        future_values = torch.zeros(len(self.past_values), self.horizon_len, dtype=torch.float32, device=torch_device)
+
+        # Use residual training path (xreg + timesfm) by default
+        output = model.forecast_with_covariates(
+            past_values=self.past_values,
+            future_values=future_values,
+            ridge=0.1,
+            **covariates,
+        )
+
+        self.assertIsNotNone(output.loss)
+        # Backward pass should produce non-zero gradients on some parameters
+        output.loss.backward()
+
+        total_grad = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                total_grad += float(p.grad.detach().abs().sum().item())
+
+        self.assertGreater(total_grad, 0.0)

@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_timesfm import TimesFmConfig
-from .xreg_utils import BatchedInContextXRegLinear, _normalize, _renormalize
+from .xreg_utils import BatchedInContextXRegLinear, _normalize
 
 
 logger = logging.get_logger(__name__)
@@ -865,6 +865,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        future_values: Optional[torch.Tensor] = None,
     ) -> TimesFmOutputForPredictionWithCovariates:
         r"""
         Forecasts time series with external covariates using batched in-context regression.
@@ -908,6 +909,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 Whether to output the hidden states.
             return_dict (`bool`, *optional*):
                 Whether to return a dictionary or a tuple.
+            future_values (`torch.Tensor`, *optional*):
+                Optional future time series values to compute a training loss. Shape should be `(batch_size, horizon)`
+                matching the produced horizon from covariates (or model horizon if not provided).
 
         Returns:
             [`TimesFmOutputForPredictionWithCovariates`]: The output containing both TimesFM
@@ -1038,7 +1042,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             )
 
             # Calculate residuals exactly like JAX implementation
-            mean_outputs = timesfm_output.mean_predictions.cpu().float().numpy()
+            mean_outputs = timesfm_output.mean_predictions  # keep as torch for grad flow
             targets = []
             # Use the actual forecast context length, not the model's max context length
             actual_context_len = len(inputs[0]) if inputs else fcontext_len
@@ -1046,8 +1050,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
             for i, (input_ts, mean_output, train_len) in enumerate(zip(inputs, mean_outputs, train_lens)):
                 if train_len > 0:
+                    # compute on CPU/NumPy only for target arrays; does not affect autograd
                     input_segment = np.array(input_ts)[-train_len:]
-                    context_prediction = mean_output[(horizon_start - train_len) : horizon_start]
+                    context_prediction = (
+                        mean_output[(horizon_start - train_len) : horizon_start].detach().cpu().numpy()
+                    )
                     target_residuals = input_segment - context_prediction
                     targets.append(target_residuals.tolist())
                 else:
@@ -1111,31 +1118,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-
-            # Combine XReg and TimesFM predictions exactly like JAX
-            timesfm_predictions = timesfm_output.mean_predictions.cpu().float().numpy()
-
-            combined_outputs = []
-            for i, (timesfm_pred, xreg_pred, test_len) in enumerate(
-                zip(timesfm_predictions, xreg_predictions, test_lens)
-            ):
-                # Compute horizon_start for each series individually
-                actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
-                horizon_start = max(0, actual_context_len - self.config.patch_length)
-                horizon_end = min(len(timesfm_pred), horizon_start + test_len)
-                timesfm_forecast = timesfm_pred[horizon_start:horizon_end]
-                # Ensure same length by padding or truncating
-                if len(timesfm_forecast) < test_len:
-                    # Pad with last value if forecast is shorter
-                    last_val = timesfm_forecast[-1] if len(timesfm_forecast) > 0 else 0.0
-                    timesfm_forecast = np.concatenate(
-                        [timesfm_forecast, np.full(test_len - len(timesfm_forecast), last_val)]
-                    )
-                elif len(timesfm_forecast) > test_len:
-                    timesfm_forecast = timesfm_forecast[:test_len]
-                combined = timesfm_forecast + np.array(xreg_pred)
-                combined_outputs.append(combined)
-
         else:  # "timesfm + xreg"
             # Just get XReg predictions
             xreg_predictions = xreg_model.fit(
@@ -1145,54 +1127,24 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 assert_covariates=True,
             )
 
-            # Combine with TimesFM predictions exactly like JAX
-            timesfm_predictions = timesfm_output.mean_predictions.cpu().float().numpy()
-
-            combined_outputs = []
-            for i, (timesfm_pred, xreg_pred, test_len) in enumerate(
-                zip(timesfm_predictions, xreg_predictions, test_lens)
-            ):
-                # Compute horizon_start for each series individually
-                actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
-                horizon_start = max(0, actual_context_len - self.config.patch_length)
-                horizon_end = min(len(timesfm_pred), horizon_start + test_len)
-                timesfm_forecast = timesfm_pred[horizon_start:horizon_end]
-                # Ensure same length by padding or truncating
-                if len(timesfm_forecast) < test_len:
-                    # Pad with last value if forecast is shorter
-                    last_val = timesfm_forecast[-1] if len(timesfm_forecast) > 0 else 0.0
-                    timesfm_forecast = np.concatenate(
-                        [timesfm_forecast, np.full(test_len - len(timesfm_forecast), last_val)]
-                    )
-                elif len(timesfm_forecast) > test_len:
-                    timesfm_forecast = timesfm_forecast[:test_len]
-                combined = timesfm_forecast + np.array(xreg_pred)
-                combined_outputs.append(combined)
-
-        # Denormalize if needed
-        if normalize_xreg_target_per_input and per_instance_stats:
-            combined_outputs = _renormalize(combined_outputs, per_instance_stats)
-            xreg_predictions = _renormalize(xreg_predictions, per_instance_stats)
-
         # Convert to tensors with proper padding
         max_horizon = max(test_lens)
         batch_size = len(past_values)
 
         model_dtype = next(self.parameters()).dtype
-        combined_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
         xreg_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
         mean_predictions_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
+        combined_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
 
-        # Slice mean_predictions exactly like JAX for consistency
-        for i, (combined_out, xreg_out, test_len) in enumerate(zip(combined_outputs, xreg_predictions, test_lens)):
-            combined_tensor[i, :test_len] = torch.tensor(combined_out, dtype=model_dtype, device=device)
+        # Fill tensors from XReg outputs and sliced TimesFM predictions (torch ops to keep grad)
+        for i, (xreg_out, test_len) in enumerate(zip(xreg_predictions, test_lens)):
             xreg_tensor[i, :test_len] = torch.tensor(xreg_out, dtype=model_dtype, device=device)
             # Take the forecast portion from TimesFM predictions exactly like JAX
             # Compute horizon_start for each series individually
             actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
             horizon_start = max(0, actual_context_len - self.config.patch_length)
             horizon_end = min(timesfm_output.mean_predictions.shape[1], horizon_start + test_len)
-            timesfm_forecast = timesfm_output.mean_predictions[i, horizon_start:horizon_end].to(device)
+            timesfm_forecast = timesfm_output.mean_predictions[i, horizon_start:horizon_end]
             # Ensure same length by padding if needed
             if len(timesfm_forecast) < test_len:
                 last_val = (
@@ -1204,6 +1156,20 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 padding = last_val.repeat(pad_len)
                 timesfm_forecast = torch.cat([timesfm_forecast, padding])
             mean_predictions_tensor[i, :test_len] = timesfm_forecast
+        # Denormalize XReg if needed; TimesFM stays in original scale
+        if normalize_xreg_target_per_input and per_instance_stats:
+            for i, test_len in enumerate(test_lens):
+                mean_i, std_i = per_instance_stats[i]
+                if std_i is None:
+                    continue
+                # Undo normalization for XReg outputs and combined outputs
+                if test_len > 0:
+                    xreg_tensor[i, :test_len] = xreg_tensor[i, :test_len] * float(std_i) + float(mean_i)
+
+        # Now compute combined = TimesFM (residual or absolute) + (denormalized) XReg
+        for i, tl in enumerate(test_lens):
+            if tl > 0:
+                combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
 
         # Apply truncation if requested
         if truncate_negative:
@@ -1212,6 +1178,38 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 combined_tensor = torch.maximum(combined_tensor, torch.tensor(0.0, device=device))
                 xreg_tensor = torch.maximum(xreg_tensor, torch.tensor(0.0, device=device))
 
+        # Compute training loss if labels provided (always on combined)
+        loss = None
+        if future_values is not None:
+            # Build mask using per-series horizon lengths
+            mask = torch.zeros_like(combined_tensor, dtype=combined_tensor.dtype, device=device)
+            for i, tl in enumerate(test_lens):
+                if tl > 0:
+                    mask[i, :tl] = 1.0
+            denom = torch.clamp(mask.sum(), min=1.0)
+
+            if future_values.shape[1] < combined_tensor.shape[1]:
+                raise ValueError(
+                    f"future_values width {future_values.shape[1]} < expected horizon {combined_tensor.shape[1]}"
+                )
+
+            # MSE on combined prediction
+            mse_loss = (((combined_tensor - future_values[:, : mask.shape[1]]) ** 2) * mask).sum() / denom
+
+            # Quantile loss: shift TimesFM quantiles by XReg per-step predictions
+            q_losses = []
+            for i, tl in enumerate(test_lens):
+                if tl == 0:
+                    continue
+                actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
+                h_start = max(0, actual_context_len - self.config.patch_length)
+                h_end = min(timesfm_output.full_predictions.shape[1], h_start + tl)
+                timesfm_quants = timesfm_output.full_predictions[i, h_start:h_end, 1:]
+                shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                q_losses.append(self._quantile_loss(shifted_quants, future_values[i, :tl]))
+            quantile_loss = torch.stack(q_losses).mean() if q_losses else torch.tensor(0.0, device=device)
+            loss = mse_loss + quantile_loss
+
         # Create output
         output = TimesFmOutputForPredictionWithCovariates(
             last_hidden_state=timesfm_output.last_hidden_state,
@@ -1219,7 +1217,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             hidden_states=timesfm_output.hidden_states if output_hidden_states else None,
             mean_predictions=mean_predictions_tensor,
             full_predictions=timesfm_output.full_predictions,
-            loss=timesfm_output.loss,
+            loss=loss,
             xreg_predictions=xreg_tensor,
             combined_predictions=combined_tensor,
         )
