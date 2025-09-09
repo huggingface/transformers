@@ -57,11 +57,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## LongcatFlashForCausalLM
 
 [[autodoc]] LongcatFlashForCausalLM
-
-## LongcatFlashForSequenceClassification
-
-[[autodoc]] LongcatFlashForSequenceClassification
-
-## LongcatFlashForTokenClassification
-
-[[autodoc]] LongcatFlashForTokenClassification
