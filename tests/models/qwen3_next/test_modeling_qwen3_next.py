@@ -358,6 +358,9 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             inputs_dict = {k: v.to(0) if isinstance(v, torch.Tensor) else v for k, v in inputs_dict.items()}
+            # We want the linear attention layer to reside on device 1 with the device map (i.e. not the first/default device),
+            # to check if cache initialization is on the correct device
+            config.layer_types = ["full_attention", "linear_attention"]
             model = model_class(config).eval()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
