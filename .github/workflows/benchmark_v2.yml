@@ -33,7 +33,7 @@ on:
         type: string
         default: ''
       upload_to_hub:
-        description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
+        description: 'Enable/disable uploading results to a HuggingFace Dataset'
         required: false
         type: string
         default: ''
