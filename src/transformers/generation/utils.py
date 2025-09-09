@@ -1025,7 +1025,8 @@ class GenerationMixin(ContinuousMixin):
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
                 max_matching_ngram_size=generation_config.max_matching_ngram_size,
                 max_length=generation_config.max_length,
-                bad_words_ids=generation_config.bad_words_ids,
+                logits_processor=logits_processor,
+                vocab_size=self.config.get_text_config().vocab_size,
             )
         elif different_tokenizers:
             if generation_config.do_sample is True:
@@ -2548,7 +2549,7 @@ class GenerationMixin(ContinuousMixin):
                 input_ids=input_ids,
                 inputs_tensor=inputs_tensor,
                 assistant_model=generation_mode_kwargs.pop("assistant_model", None),
-                logits_processor=logits_processor,
+                logits_processor=prepared_logits_processor,
                 target_tokenizer=generation_mode_kwargs.pop("tokenizer", None),
                 assistant_tokenizer=generation_mode_kwargs.pop("assistant_tokenizer", None),
                 model_kwargs=model_kwargs,
