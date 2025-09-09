@@ -17,20 +17,28 @@ limitations under the License.
 
 -->
 
-
 # VaultGemma
 
 ## Overview
 
-VaultGemma (link to tech report) is a text-only decoder model based on the Gemma family of models that is  trained from scratch with sequence-level differential privacy. VaultGemma model is only available as a pretrained model, has 1B parameters and uses a 1024 token sequence length.
+[VaultGemma](https://google.com) is a text-only decoder model based on the
+[Gemma 2](https://huggingface.co/docs/transformers/en/model_doc/gemma2)
+[family](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315) of models, trained from
+scratch with sequence-level differential privacy (DP). VaultGemma model is available as a pretrained model with 1B
+parameters that uses a 1024 token sequence length.
 
-VaultGemma was trained on the same training mixture that was used to train the Gemma 2 model, consisting of a number of documents of varying lengths. It is trained using DP-SGD and provides a (ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where a sequence consists of 1024 consecutive tokens extracted from heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after sampling and packing of the mixture. 
-
+VaultGemma was trained on the same training mixture as the Gemma 2 models, consisting of a number of documents of
+varying lengths. Additionally, it is trained using
+[DP stochastic gradient descent (DP-SGD)](https://arxiv.org/abs/1607.00133) and provides a
+(ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where a sequence consists of 1024 consecutive tokens extracted from
+heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after sampling and
+packing of the mixture.
 
 > [!TIP]
 > Click on the VaultGemma models in the right sidebar for more examples of how to apply VaultGemma to different language tasks.
 
-The example below demonstrates how to chat with the model with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
+The example below demonstrates how to chat with the model with [`Pipeline`], the [`AutoModel`] class, or from the
+command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -42,7 +50,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     "text2text-generation",
-    model="google/vaultgemma-1b-pt",
+    model="google/vaultgemma-1b",
     dtype=torch.bfloat16,
     device_map="auto",
 )
@@ -61,19 +69,21 @@ pipe(prompt, max_new_tokens=32)
 ```python
 # pip install accelerate
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("google/vaultgemma-1b-pt")
-model = AutoModelForSeq2SeqLM.from_pretrained(
-    "google/vaultgemma-1b-pt",
-    device_map="auto",
-    dtype=torch.bfloat16,
-)
+model_id = "google/vaultgemma-1b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
 
 messages = [
     {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True).to(model.device)
+input_ids = tokenizer.apply_chat_template(
+    messages,
+    return_tensors="pt",
+    return_dict=True,
+    add_generation_prompt=True
+).to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
@@ -85,19 +95,19 @@ print(tokenizer.decode(outputs[0]))
 ```
 echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/vaultgemma-1b-pt --device 0
 ```
+
 </hfoption>
 </hfoptions>
-
 
 ## VaultGemmaConfig
 
 [[autodoc]] VaultGemmaConfig
 
-## VaultGemmaForCausalLM
-
-[[autodoc]] VaultGemmaForCausalLM
-
 ## VaultGemmaModel
 
 [[autodoc]] VaultGemmaModel
     - forward
+
+## VaultGemmaForCausalLM
+
+[[autodoc]] VaultGemmaForCausalLM
