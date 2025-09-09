@@ -96,7 +96,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3NextModelTester
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        "Qwen3-Next has a special Cache as it alternates with Mamba layers"
+        "Qwen3-Next has a special Cache as it alternates with gated deltanet layers"
         self.assertIsInstance(decoder_past_key_values, Qwen3NextDynamicCache)
 
         # (batch, head, seq_length, head_features)
@@ -119,7 +119,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @pytest.mark.generate
     def test_past_key_values_format(self):
-        "Needs to be overwritten as Qwen3-Next alternates between attention layers and mamba layers."
+        "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."
         for model_class in self.all_generative_model_classes:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -150,7 +150,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
                     self.assertEqual(self_attention_layer_values.shape, default_self_attention_shape)
 
     def test_attention_outputs(self):
-        "Needs to be overwritten as Qwen3-Next alternates between attention layers and mamba layers."
+        "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         # force eager attention to support output attentions

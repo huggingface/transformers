@@ -97,7 +97,7 @@ class Qwen3NextDynamicCache:
     cache (which has a constant shape regardless of seq_len).
 
     This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
-    and `ssm_states` for mamba cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
+    and `ssm_states` for gated deltanet cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
     For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
     while `conv_states` and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
     For linear attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
@@ -116,7 +116,7 @@ class Qwen3NextDynamicCache:
         self.recurrent_states = []
         self.transformer_layers = []
         for i in range(config.num_hidden_layers):
-            # NOTE: only use mamba2 and full attention now! need to change future for more blocks.
+            # NOTE: only use gated deltanet and full attention now! need to change future for more blocks.
             if self.layer_types[i] == "linear_attention":
                 self.conv_states += [
                     torch.zeros(
