@@ -465,6 +465,15 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self.sound_token_id = config.sound_token_id
         self.end_newline_token_id = config.end_newline_token_id
 
+    @property
+    def end_emb_token(self) -> torch.Tensor:
+        """
+        Returns the (1, D) embedding row for the end-newline token.
+        Uses the live embedding weight so dtype/device are always correct.
+        """
+        w = self.llm.model.embed_tokens.weight
+        return w[self.end_newline_token_id : self.end_newline_token_id + 1]  # (1, D)
+
     def _sound_features(
         self,
         sounds: torch.Tensor,  # (N, M, T_mel)
@@ -474,7 +483,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         Runs the audio tower + projector and appends a newline embedding per window.
 
         Returns:
-            Tensor of shape (N, S_plus, D), where S_plus = S_feat + 1 (newline token).
+            Tensor of shape (N, S_feat + 1, D).
         """
         device = self.llm.device
         feats = self.get_audio_features(
@@ -482,11 +491,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             masks.to(device) if masks is not None else None,
         )  # (N, S_feat, D)
 
-        # append a single newline embedding per window on the time dimension
-        end = self.llm.model.embed_tokens(torch.tensor([self.end_newline_token_id], device=device)).to(feats.dtype)  # (1, D)
-        end = end.unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
-
-        return torch.cat([feats, end], dim=1)  # (N, S_feat+1, D)
+        # append one end token per sample (vectorized)
+        end = self.end_emb_token.to(feats.dtype).unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
+        return torch.cat([feats, end], dim=1)  # (N, S_feat + 1, D)
 
     def get_audio_features(self, sounds: torch.Tensor, masks: Optional[torch.Tensor] = None) -> torch.Tensor:
         device = self.llm.device
