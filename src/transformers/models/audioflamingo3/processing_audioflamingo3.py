@@ -108,31 +108,60 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def _load_sound_mask(
         self,
         audio_data: Optional[np.ndarray],
-        sample_rate: int = 16000,
-        window_length: float = 30.0,
-        window_overlap: float = 0.0,
+        sample_rate: Optional[int] = None,
+        window_length: Optional[float] = None,
+        window_overlap: Optional[float] = None,
         max_num_window: int = 20,
     ) -> Optional[tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]]:
         """
         Returns 3 flat lists (one entry per window):
         - input_features      : [ (num_mel_bins, T_mel), ... ]
-        - feature_attn_masks  : [ (T_mel,), ... ]               # mel-frame masks for tower attention
-        - audio_features_mask : [ (751,), ... ]                 # mask for encoder output (+1 end token); end-token is 0
+        - feature_attn_masks  : [ (T_mel,), ... ]            # mel-frame masks for tower attention
+        - audio_features_mask : [ (S_max+1,), ... ]          # mask for encoder output (+1 end token); end-token stays 0
+
+        Notes:
+        * nb_max_frames = ceil(chunk_length * sampling_rate / hop_length)  (from the FE config)
+        * Frontend downsampling matches the encoder: conv2(k=3,p=1,s=2) then AvgPool1d(k=2,s=2)
+            so S_max = floor( ceil(nb_max_frames/2) / 2 ).
         """
         if audio_data is None:
             return None
 
-        wl = int(window_length * sample_rate)
-        wo = int(window_overlap * sample_rate)
+        # ---- Pull parameters from the feature extractor (WhisperFeatureExtractor) ----
+        fe = self.feature_extractor
+        sr = sample_rate or getattr(fe, "sampling_rate", 16_000)
+        hop = getattr(fe, "hop_length", 160)
+
+        # Preferred: explicit field in preprocessor_config.json
+        if hasattr(fe, "nb_max_frames"):
+            nb_max_frames = int(fe.nb_max_frames)
+        else:
+            # Fallback: compute from n_samples/hop_length
+            n_samples = getattr(fe, "n_samples", int((window_length or 30.0) * sr))
+            nb_max_frames = int(math.ceil(n_samples / hop))
+
+        # Windowing parameters (default to FE's chunk length; overlap 0 like Whisper)
+        win_len_sec = window_length if window_length is not None else (getattr(fe, "n_samples", 30 * sr) / sr)
+        win_ovl_sec = window_overlap if window_overlap is not None else 0.0
+        wl = int(win_len_sec * sr)
+        wo = int(win_ovl_sec * sr)
+
+        # Maximum encoder tokens per window after conv2(s=2) then avg-pool(s=2)
+        # conv2 length: L1 = floor((L0 - 1)/2) + 1 == ceil(L0/2)
+        length_after_conv2_max = (nb_max_frames - 1) // 2 + 1
+        # pool length:  L2 = floor((L1 - 2)/2) + 1 == floor(L1/2)
+        tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
+        # +1 for the appended end token (kept False in the mask)
+        encoder_mask_len = tokens_per_window_max + 1
 
         feats_per_win: list[torch.Tensor] = []
         feat_masks: list[torch.Tensor] = []
         token_masks: list[torch.Tensor] = []
 
-        T = len(audio_data)
+        # Flatten and stabilize dtype like before
         audio = audio_data.reshape(1, -1)
 
-        def int16_to_float32(x):  # keep incoming normalization stable
+        def int16_to_float32(x):
             return (x / 32767.0).astype(np.float32)
 
         def float32_to_int16(x):
@@ -140,31 +169,38 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         audio_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio))).float()
 
-        num_windows, _ = self._get_num_windows(T, sample_rate)
+        # Compute number of sliding windows (cap by max_num_window, no overlap by default)
+        T = audio_tensor.shape[1]
+        if T <= wl:
+            num_windows = 1
+        elif T >= (max_num_window * wl - (max_num_window - 1) * wo):
+            num_windows = max_num_window
+        else:
+            num_windows = 1 + int(math.ceil((T - wl) / float(wl - wo)))
 
         for i in range(num_windows):
             start = i * (wl - wo)
             chunk = audio_tensor[:, start : start + wl]  # (1, samples)
 
             # (1, M, T_mel) -> (M, T_mel)
-            fe = self.feature_extractor(chunk.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
-            mel = fe["input_features"][0]
+            fe_out = fe(chunk.cpu().numpy(), sampling_rate=sr, return_tensors="pt")
+            mel = fe_out["input_features"][0]
             feats_per_win.append(mel)
 
-            # mel frames before convs
-            orig_len = chunk.shape[1]
-            melspec_frames = int(math.ceil(orig_len / 160))  # 160 samp per frame @16kHz
-            fm = torch.zeros(3000, dtype=torch.int32)
-            fm[:melspec_frames] = 1
+            # ---- Feature-attention mask over mel frames (pre-conv) ----
+            # Number of mel frames produced for this chunk (100 fps @ 16k when hop=160)
+            melspec_frames = int(math.ceil(chunk.shape[1] / hop))
+            fm = torch.zeros(nb_max_frames, dtype=torch.int32)
+            fm[: min(melspec_frames, nb_max_frames)] = 1
             feat_masks.append(fm)
 
-            # length after conv2 (stride=2) and avg_pool (stride=2)
-            conv_lengths = (melspec_frames - 1) // 2 + 1
-            out_len = (conv_lengths - 2) // 2 + 1  # <= 750
+            # ---- Encoder-output mask length for this window (post downsampling) ----
+            # Mirror the exact frontend math on the per-window frame count
+            l1 = (melspec_frames - 1) // 2 + 1  # after conv2
+            out_len = max(0, (l1 - 2) // 2 + 1)  # after avg-pool
 
-            # final mask that the model will directly use over encoder output + appended end token
-            tm = torch.zeros(751, dtype=torch.bool)  # 750 feats + 1 end token
-            tm[:out_len] = True  # end-token intentionally left False
+            tm = torch.zeros(encoder_mask_len, dtype=torch.bool)
+            tm[: min(out_len, tokens_per_window_max)] = True  # end-token remains False
             token_masks.append(tm)
 
         return feats_per_win, feat_masks, token_masks
