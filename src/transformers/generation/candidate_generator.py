@@ -1026,13 +1026,13 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         self,
         eos_token_id: Optional[torch.Tensor] = None,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: Optional[int] = None,
+        max_matching_ngram_size: int = 2,
         max_length: int = 20,
         logits_processor: Optional["LogitsProcessorList"] = None,
         vocab_size: Optional[int] = None,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
+        self.max_matching_ngram_size = max_matching_ngram_size
         self.max_length = max_length
         self.eos_token_id = eos_token_id
         self.logits_processor = logits_processor
