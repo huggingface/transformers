@@ -105,106 +105,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return num_windows, full_length
 
-    def _load_sound_mask(
-        self,
-        audio_data: Optional[np.ndarray],
-        sample_rate: Optional[int] = None,
-        window_length: Optional[float] = None,
-        window_overlap: Optional[float] = None,
-        max_num_window: int = 20,
-    ) -> Optional[tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]]:
-        """
-        Returns 3 flat lists (one entry per window):
-        - input_features      : [ (num_mel_bins, T_mel), ... ]
-        - feature_attn_masks  : [ (T_mel,), ... ]            # mel-frame masks for tower attention
-        - audio_features_mask : [ (S_max+1,), ... ]          # mask for encoder output (+1 end token); end-token stays 0
-
-        Notes:
-        * nb_max_frames = ceil(chunk_length * sampling_rate / hop_length)  (from the FE config)
-        * Frontend downsampling matches the encoder: conv2(k=3,p=1,s=2) then AvgPool1d(k=2,s=2)
-            so S_max = floor( ceil(nb_max_frames/2) / 2 ).
-        """
-        if audio_data is None:
-            return None
-
-        # ---- Pull parameters from the feature extractor (WhisperFeatureExtractor) ----
-        fe = self.feature_extractor
-        sr = sample_rate or getattr(fe, "sampling_rate", 16_000)
-        hop = getattr(fe, "hop_length", 160)
-
-        # Preferred: explicit field in preprocessor_config.json
-        if hasattr(fe, "nb_max_frames"):
-            nb_max_frames = int(fe.nb_max_frames)
-        else:
-            # Fallback: compute from n_samples/hop_length
-            n_samples = getattr(fe, "n_samples", int((window_length or 30.0) * sr))
-            nb_max_frames = int(math.ceil(n_samples / hop))
-
-        # Windowing parameters (default to FE's chunk length; overlap 0 like Whisper)
-        win_len_sec = window_length if window_length is not None else (getattr(fe, "n_samples", 30 * sr) / sr)
-        win_ovl_sec = window_overlap if window_overlap is not None else 0.0
-        wl = int(win_len_sec * sr)
-        wo = int(win_ovl_sec * sr)
-
-        # Maximum encoder tokens per window after conv2(s=2) then avg-pool(s=2)
-        # conv2 length: L1 = floor((L0 - 1)/2) + 1 == ceil(L0/2)
-        length_after_conv2_max = (nb_max_frames - 1) // 2 + 1
-        # pool length:  L2 = floor((L1 - 2)/2) + 1 == floor(L1/2)
-        tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
-        # +1 for the appended end token (kept False in the mask)
-        encoder_mask_len = tokens_per_window_max + 1
-
-        feats_per_win: list[torch.Tensor] = []
-        feat_masks: list[torch.Tensor] = []
-        token_masks: list[torch.Tensor] = []
-
-        # Flatten and stabilize dtype like before
-        audio = audio_data.reshape(1, -1)
-
-        def int16_to_float32(x):
-            return (x / 32767.0).astype(np.float32)
-
-        def float32_to_int16(x):
-            return (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
-
-        audio_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio))).float()
-
-        # Compute number of sliding windows (cap by max_num_window, no overlap by default)
-        T = audio_tensor.shape[1]
-        if T <= wl:
-            num_windows = 1
-        elif T >= (max_num_window * wl - (max_num_window - 1) * wo):
-            num_windows = max_num_window
-        else:
-            num_windows = 1 + int(math.ceil((T - wl) / float(wl - wo)))
-
-        for i in range(num_windows):
-            start = i * (wl - wo)
-            chunk = audio_tensor[:, start : start + wl]  # (1, samples)
-
-            # (1, M, T_mel) -> (M, T_mel)
-            fe_out = fe(chunk.cpu().numpy(), sampling_rate=sr, return_tensors="pt")
-            mel = fe_out["input_features"][0]
-            feats_per_win.append(mel)
-
-            # ---- Feature-attention mask over mel frames (pre-conv) ----
-            # Number of mel frames produced for this chunk (100 fps @ 16k when hop=160)
-            melspec_frames = int(math.ceil(chunk.shape[1] / hop))
-            fm = torch.zeros(nb_max_frames, dtype=torch.int32)
-            fm[: min(melspec_frames, nb_max_frames)] = 1
-            feat_masks.append(fm)
-
-            # ---- Encoder-output mask length for this window (post downsampling) ----
-            # Mirror the exact frontend math on the per-window frame count
-            l1 = (melspec_frames - 1) // 2 + 1  # after conv2
-            out_len = max(0, (l1 - 2) // 2 + 1)  # after avg-pool
-
-            tm = torch.zeros(encoder_mask_len, dtype=torch.bool)
-            tm[: min(out_len, tokens_per_window_max)] = True  # end-token remains False
-            token_masks.append(tm)
-
-        return feats_per_win, feat_masks, token_masks
-
     def __call__(
         self,
         text: Union[TextInput, list[TextInput]],
@@ -215,11 +115,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
         Batched processing:
         - `text`: str or list[str]
         - `audio`: np.ndarray or list[np.ndarray] (one audio per text sample)
+
         Returns a BatchFeature with:
         - input_ids, attention_mask : (B, L)
-        - audio_features            : (N, M, T_mel)   or None
-        - audio_feature_masks       : (N, T_mel)      or None
-        - audio_features_mask       : (N, 751)        or None  # what the model consumes
+        - audio_features            : (N, M, T_mel)                 or None
+        - audio_feature_masks       : (N, nb_max_frames)            or None   # FE attention masks (mel-frame)
+        - audio_features_mask       : (N, S_max+1)                  or None   # encoder mask (+1 reserved end token)
         """
         if isinstance(text, str):
             text = [text]
@@ -236,36 +137,84 @@ class AudioFlamingo3Processor(ProcessorMixin):
             **kwargs,
         )
 
+        fe = self.feature_extractor
+        sr = int(getattr(fe, "sampling_rate", 16_000))
+        hop = int(getattr(fe, "hop_length", 160))
+        n_samples = int(getattr(fe, "n_samples", int(30.0 * sr)))
+        nb_max_frames = int(getattr(fe, "nb_max_frames", math.ceil(n_samples / hop)))
+
+        # Frontend downsampling (conv k=3,p=1,s=2 → pool k=2,s=2)
+        length_after_conv2_max = (nb_max_frames - 1) // 2 + 1
+        tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
+        encoder_mask_len = tokens_per_window_max + 1  # +1 reserved end token (kept False)
+
+        # Windowing (Whisper-style: 30s windows, 0 overlap by default)
+        wl = n_samples
+        wo = 0
+
         final_texts: list[str] = []
         feats_all: list[torch.Tensor] = []
         feat_masks_all: list[torch.Tensor] = []
         token_masks_all: list[torch.Tensor] = []
 
+        # FE call kwargs (let users override, but enforce mask + padding to max)
+        fe_kwargs = dict(output_kwargs.get("audio_kwargs", {}))
+        fe_kwargs.update(
+            {
+                "return_attention_mask": True,
+                "padding": "max_length",
+                "truncation": True,
+                "return_tensors": "pt",
+                "sampling_rate": sr,
+            }
+        )
+
         for t, a in zip(text, audio):
-            loaded = self._load_sound_mask(a)
-            if loaded is None:
-                final_texts.append(t.strip())
-                continue
+            if a.ndim != 1:
+                a = np.asarray(a).reshape(-1)
+            T = a.shape[0]
 
-            feats_per_win, feat_masks, token_masks = loaded
-            num_windows = len(feats_per_win)
+            if T <= wl:
+                num_windows = 1
+            elif T >= (20 * wl - 19 * wo):  # cap at 20 windows like before
+                num_windows = 20
+            else:
+                num_windows = 1 + int(math.ceil((T - wl) / float(wl - wo)))
 
+            # Build "<sound>" × num_windows in the prompt
             clean_t = t.replace("<sound>", "").strip()
             final_texts.append(("<sound>" * num_windows) + clean_t)
 
-            feats_all.extend(feats_per_win)
-            feat_masks_all.extend(feat_masks)
-            token_masks_all.extend(token_masks)
+            for i in range(num_windows):
+                start = i * (wl - wo)
+                chunk = a[start : start + wl]
+                # FE does the heavy lifting (features + mel-frame mask)
+                out = fe(chunk.reshape(1, -1), **fe_kwargs)
+                mel = out["input_features"][0]  # (M, T_mel)
+                fm = out["attention_mask"][0].to(torch.int32)  # (nb_max_frames,)
+
+                feats_all.append(mel)
+                feat_masks_all.append(fm)
+
+                # Derive encoder-length for this window from mel length
+                melspec_frames = int(fm.sum().item())
+                l1 = (melspec_frames - 1) // 2 + 1
+                out_len = max(0, (l1 - 2) // 2 + 1)
+
+                tm = torch.zeros(encoder_mask_len, dtype=torch.bool)
+                tm[: min(out_len, tokens_per_window_max)] = True  # keep last slot (end token) False
+                token_masks_all.append(tm)
 
         if len(feats_all) > 0:
             audio_features = torch.stack(feats_all, dim=0)  # (N, M, T_mel)
-            audio_feature_masks = torch.stack(feat_masks_all, 0)  # (N, T_mel)
-            audio_features_mask = torch.stack(token_masks_all, 0)  # (N, 751)
+            audio_feature_masks = torch.stack(feat_masks_all, 0)  # (N, nb_max_frames)
+            audio_features_mask = torch.stack(token_masks_all, 0)  # (N, S_max+1)
         else:
             audio_features = None
             audio_feature_masks = None
             audio_features_mask = None
 
+        # Tokenize text prompts (single-turn user message)
         convs = [[{"role": "user", "content": txt}] for txt in final_texts]
         prompts = [self.tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in convs]
         enc = self.tokenizer(
@@ -280,8 +229,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 "input_ids": enc["input_ids"],
                 "attention_mask": enc["attention_mask"],
                 "audio_features": audio_features,
-                "audio_feature_masks": audio_feature_masks,
-                "audio_features_mask": audio_features_mask,
+                "audio_feature_masks": audio_feature_masks,  # FE attention masks (mel-frame)
+                "audio_features_mask": audio_features_mask,  # encoder mask (+1 end token)
             }
         )
 
