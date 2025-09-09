@@ -18,9 +18,9 @@ from .requests import RequestState, RequestStatus
 
 
 __all__ = [
+    "ContinuousBatchingManager",
+    "ContinuousMixin",
     "PagedAttentionCache",
     "RequestState",
     "RequestStatus",
-    "ContinuousMixin",
-    "ContinuousBatchingManager",
 ]

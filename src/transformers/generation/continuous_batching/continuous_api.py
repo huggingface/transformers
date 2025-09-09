@@ -15,10 +15,10 @@
 # limitations under the License.
 import queue
 import threading
-import time
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
+from time import perf_counter
 from typing import Optional
 
 import torch
@@ -114,7 +114,7 @@ class ContinuousBatchProcessor:
             stop_event: Event to signal processing should stop
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
-            scheduler: The scheduler to use
+            scheduler: The [`Scheduler`] to use
             streaming: Whether to stream tokens as they're generated
             manual_eviction: Whether to manually evict blocks from the cache
             slice_inputs: Whether to slice the inputs to the model
@@ -215,7 +215,6 @@ class ContinuousBatchProcessor:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
         t = self.total_query_length if self.slice_inputs else self.write_index.size(-1)
-        c = self.total_key_length if self.slice_inputs else self.read_index.size(-1)
         b = self.total_batch_size
         # Prepare the kwargs
         kwargs = {
@@ -395,7 +394,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         for layer_type in self.cumulative_seqlens_k:
             l = len(cumulative_seqlens_k[layer_type])
-            self.cumulative_seqlens_k[layer_type][: l] = to_tensor(cumulative_seqlens_k[layer_type])
+            self.cumulative_seqlens_k[layer_type][:l] = to_tensor(cumulative_seqlens_k[layer_type])
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         if self.attention_mask is not None:
@@ -526,7 +525,6 @@ class ContinuousBatchingManager:
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
         self.slice_inputs = slice_inputs
-        self.creation_time = time.time()
 
     @traced
     def start(self):
@@ -538,7 +536,6 @@ class ContinuousBatchingManager:
         self._result_queue = queue.Queue()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
-        logger.info(f"Continuous batching manager started at {time.time() - self.creation_time} seconds")
 
     def is_running(self):
         """Check if the background generation thread is running."""
@@ -736,6 +733,7 @@ class ContinuousBatchingManager:
         """Main processing loop running in the background thread."""
         batch_processor = None
         try:
+            ref_time = perf_counter()
             paged_attention_cache = PagedAttentionCache(
                 self.model.config,
                 self.generation_config,
@@ -743,7 +741,7 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
-            logger.info(f"PagedAttentionCache created at {time.time() - self.creation_time} seconds")
+            logger.debug(f"PagedAttentionCache created in {perf_counter() - ref_time} seconds")
 
             scheduler = None
             if hasattr(self.generation_config, "scheduler"):
@@ -755,6 +753,7 @@ class ContinuousBatchingManager:
                 # Default to fifo
                 scheduler = FIFOScheduler
 
+            ref_time = perf_counter()
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
                 self.model.config,
@@ -771,12 +770,9 @@ class ContinuousBatchingManager:
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
-            logger.info(f"batch_processor created at {time.time() - self.creation_time} seconds")
+            logger.debug(f"batch_processor created in {perf_counter() - ref_time} seconds")
             while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
                 self._inner_generation_loop(batch_processor)
-                logger.debug(
-                    f"Inner generation loop {self.current_batch} ended at {time.time() - self.creation_time} seconds"
-                )
                 self.current_batch += 1
 
         except Exception as e:

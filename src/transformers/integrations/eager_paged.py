@@ -47,7 +47,7 @@ def eager_paged_attention_forward(
     else:
         causal_mask = attention_mask
 
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling  # TODO: fix this
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if causal_mask is not None:
         attn_weights = attn_weights + causal_mask
 

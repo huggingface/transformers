@@ -35,18 +35,18 @@ FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding win
 
 
 def generate_simple(
-    attn_implem: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
+    attn_impl: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
 ) -> dict[str, str]:
-    attn_implem = {
+    attn_impl = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
         "flash_paged": "flash_attention_2",
-    }[attn_implem]
+    }[attn_impl]
 
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_implem)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)
     model = model.cuda().eval()
     if getattr(model.config, "sliding_window", None) is not None:
-        model.config.sliding_window = SLIDIND_WINDOW
+        model.config.sliding_window = SLIDING_WINDOW
 
     decoded_outputs = {}
     for input_ids in tqdm(simple_batch_inputs, desc="Generating outputs without CB"):
@@ -215,8 +215,8 @@ if __name__ == "__main__":
     )
     model = model.cuda().eval()
     if getattr(model.config, "sliding_window", None) is not None:
-        print(f"Setting sliding window from {model.config.sliding_window} to {SLIDIND_WINDOW}")
-        model.config.sliding_window = SLIDIND_WINDOW
+        print(f"Setting sliding window from {model.config.sliding_window} to {SLIDING_WINDOW}")
+        model.config.sliding_window = SLIDING_WINDOW
 
     # If turned on, we compile the model
     if args.compile:

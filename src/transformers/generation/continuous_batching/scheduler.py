@@ -108,7 +108,7 @@ class Scheduler(ABC):
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
-        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheManager
+        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
         objects. Returns a boolean indicating if the allocation was successful or not.
         """
         # 1. we check that the occupancy is less than the requested length
@@ -155,11 +155,11 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
-    """This scheduler processes requests in the order they arrive, with decoding requests having priority over prefill
-    requests. It includes an optional safety margin mechanism to prevent cache exhaustion by limiting new prefill
-    requests when the remaining proportion of free blocks is low."""
+    """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
+    prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
+    when 80% of the cache is full, new requests will not be scheduled to prioritize decoding active requests."""
 
-    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.0):
+    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.2):
         """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
         scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
         or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
@@ -230,6 +230,7 @@ class FIFOScheduler(Scheduler):
         return scheduled_requests
 
 
+# FIXME: prioritize adding from waiting reqs before scheduling `RequestStatus.DECODING` when cache space allows it
 @attach_tracer()
 class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split

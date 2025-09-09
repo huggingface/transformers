@@ -49,7 +49,7 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
-    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
+    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window - 1, 0)
     layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
 
     # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]

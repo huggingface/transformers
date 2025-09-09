@@ -21,7 +21,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .cache_manager import CacheManager, FullAttentionCacheManager, SlidingAttentionCacheManager
+from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import get_device_and_memory_breakdown, logger
 
 
@@ -219,12 +219,12 @@ class PagedAttentionCache:
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
-        self.group_cache_managers: list[CacheManager] = []
+        self.group_cache_managers: list[CacheAllocator] = []
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
-                cm = FullAttentionCacheManager(i, self.block_size)
+                cm = FullAttentionCacheAllocator(i, self.block_size)
             elif group_type == "sliding_attention":
-                cm = SlidingAttentionCacheManager(i, self.block_size, config.sliding_window)
+                cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)

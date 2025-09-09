@@ -20,7 +20,7 @@ from typing import Optional
 from .requests import logger
 
 
-class CacheManager(ABC):
+class CacheAllocator(ABC):
     """Abstract base class for cache managers. Cache managers keep track of per-request cache allocations, determine
     when a new physical block needs to be allocated and compute physical indices for reading or writing to the cache."""
 
@@ -39,8 +39,8 @@ class CacheManager(ABC):
             blocks_to_free = self._block_table.pop(request_id)
             free_blocks.extend(blocks_to_free)
         else:
-            logger.info(
-                f"CacheManager {self._index} attempted to free blocks for non-existent request_id: {request_id}"
+            logger.warning(
+                f"CacheAllocator {self._index} attempted to free blocks for non-existent request_id: {request_id}"
             )
 
     @abstractmethod
@@ -54,7 +54,7 @@ class CacheManager(ABC):
         pass
 
 
-class FullAttentionCacheManager(CacheManager):
+class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
 
     def __init__(self, index: int, block_size: int) -> None:
@@ -109,7 +109,7 @@ class FullAttentionCacheManager(CacheManager):
         return physical_indices
 
 
-class SlidingAttentionCacheManager(CacheManager):
+class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
     def __init__(self, index: int, block_size: int, sliding_window: int) -> None:
