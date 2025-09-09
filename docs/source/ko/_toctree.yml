@@ -997,6 +997,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xclip
+        title: xclip
       - local: in_translation
         title: XLS-R
       - local: in_translation

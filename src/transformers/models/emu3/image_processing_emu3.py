@@ -143,7 +143,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -285,7 +285,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -482,7 +482,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def unnormalize(
         self,
-        image: np.array,
+        image: np.ndarray,
         image_mean: Union[float, Iterable[float]],
         image_std: Union[float, Iterable[float]],
         input_data_format: Optional[Union[str, ChannelDimension]] = None,

@@ -136,6 +136,8 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
+        use_bidirectional_attention (`bool`, *optional*, defaults to `False`): If True, the model will attend to all
+            text tokens instead of using a causal mask. This does not change behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -193,6 +195,7 @@ class Gemma3TextConfig(PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         super().__init__(
@@ -222,6 +225,9 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
+        if use_bidirectional_attention:
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling

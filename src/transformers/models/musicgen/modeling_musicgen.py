@@ -85,7 +85,7 @@ class MusicgenUnconditionalInput(ModelOutput):
         from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    encoder_outputs: tuple[torch.FloatTensor] = None
+    encoder_outputs: Optional[tuple[torch.FloatTensor]] = None
     attention_mask: Optional[torch.LongTensor] = None
     guidance_scale: Optional[float] = None
 
@@ -1931,7 +1931,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         model_kwargs: dict[str, torch.Tensor],
         decoder_start_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
-        device: torch.device = None,
+        device: Optional[torch.device] = None,
     ) -> tuple[torch.LongTensor, dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
 

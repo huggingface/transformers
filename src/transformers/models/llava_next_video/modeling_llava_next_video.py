@@ -480,8 +480,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -520,9 +520,9 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -746,9 +746,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,

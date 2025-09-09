@@ -332,7 +332,9 @@ class ProcessorTesterMixin:
                             {"type": "text", "text": "What is the capital of France?"},
                             {
                                 "type": "image",
-                                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                                "url": url_to_local_path(
+                                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+                                ),
                             },
                         ],
                     },
@@ -1132,7 +1134,9 @@ class ProcessorTesterMixin:
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -1154,7 +1158,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1165,10 +1169,11 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
+        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
         # Whan `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1180,7 +1185,7 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -1202,16 +1207,18 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-            ],
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
         }
         out_dict_with_video = processor.apply_chat_template(
             messages,

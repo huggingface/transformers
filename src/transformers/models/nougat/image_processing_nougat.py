@@ -122,7 +122,7 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def python_find_non_zero(self, image: np.array):
+    def python_find_non_zero(self, image: np.ndarray):
         """This is a reimplementation of a findNonZero function equivalent to cv2."""
         non_zero_indices = np.column_stack(np.nonzero(image))
         idxvec = non_zero_indices[:, [1, 0]]
@@ -140,7 +140,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
     def crop_margin(
         self,
-        image: np.array,
+        image: np.ndarray,
         gray_threshold: int = 200,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -371,7 +371,7 @@ class NougatImageProcessor(BaseImageProcessor):
         do_crop_margin: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_thumbnail: Optional[bool] = None,
         do_align_long_axis: Optional[bool] = None,
         do_pad: Optional[bool] = None,

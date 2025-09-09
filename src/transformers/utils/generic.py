@@ -1007,6 +1007,12 @@ def check_model_inputs(func):
             )
             for k in capture_flags
         }
+
+        # We let cross attentions to be saved separately because some models add `cross-attn` layer
+        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        if "output_attentions" in recordable_keys:
+            recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
+
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 
@@ -1084,10 +1090,11 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.last_hidden_state,)
 
                 outputs[key] = collected_outputs[key]

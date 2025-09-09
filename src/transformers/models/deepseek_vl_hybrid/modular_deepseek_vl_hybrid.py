@@ -130,9 +130,9 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
     def __init__(
         self,
-        text_config: AutoConfig = None,
-        vision_config: AutoConfig = None,
-        high_res_vision_config: AutoConfig = None,
+        text_config: Optional[AutoConfig] = None,
+        vision_config: Optional[AutoConfig] = None,
+        high_res_vision_config: Optional[AutoConfig] = None,
         image_token_id: int = 100015,
         **kwargs,
     ):
@@ -295,9 +295,9 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -358,9 +358,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -546,8 +546,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         high_res_size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        high_res_resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
+        high_res_resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -920,7 +920,7 @@ class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
         """

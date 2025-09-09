@@ -18,8 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import (
+    logging,
+)
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -66,9 +70,9 @@ class DeepseekVLHybridConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: AutoConfig = None,
-        vision_config: AutoConfig = None,
-        high_res_vision_config: AutoConfig = None,
+        text_config: Optional[AutoConfig] = None,
+        vision_config: Optional[AutoConfig] = None,
+        high_res_vision_config: Optional[AutoConfig] = None,
         image_token_id: int = 100015,
         **kwargs,
     ):

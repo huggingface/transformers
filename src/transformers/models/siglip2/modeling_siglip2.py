@@ -35,7 +35,9 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils.generic import check_model_inputs
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
 
@@ -322,29 +324,20 @@ class Siglip2EncoderLayer(GradientCheckpointingLayer):
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -353,12 +346,7 @@ class Siglip2EncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class Siglip2Encoder(nn.Module):
@@ -377,68 +365,22 @@ class Siglip2Encoder(nn.Module):
         self.gradient_checkpointing = False
 
     # Ignore copy
-    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Siglip2VisionTransformer(nn.Module):
@@ -613,6 +555,11 @@ class Siglip2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    _can_record_outputs = {
+        "hidden_states": Siglip2EncoderLayer,
+        "attentions": Siglip2Attention,
+    }
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Siglip2VisionEmbeddings):
@@ -718,14 +665,8 @@ class Siglip2TextTransformer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -746,8 +687,7 @@ class Siglip2TextTransformer(nn.Module):
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -760,8 +700,6 @@ class Siglip2TextTransformer(nn.Module):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -785,15 +723,14 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
@@ -816,8 +753,7 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
@@ -872,7 +808,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1034,6 +970,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         return pooled_output
 
+    # NOTE: Siglip2Model uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1167,7 +1104,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

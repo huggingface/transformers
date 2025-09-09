@@ -29,7 +29,8 @@ class CacheLayerMixin(ABC):
     is_compileable = False
 
     def __init__(self):
-        self.keys, self.values = None, None
+        self.keys: Optional[torch.Tensor] = None
+        self.values: Optional[torch.Tensor] = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}"

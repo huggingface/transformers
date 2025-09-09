@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import BatchFeature
 from ...image_utils import ImageInput
@@ -72,7 +72,7 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -179,7 +179,7 @@ class WatermarkDetector:
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
-    def _compute_z_score(self, green_token_count: np.array, total_num_tokens: np.array) -> np.array:
+    def _compute_z_score(self, green_token_count: np.ndarray, total_num_tokens: np.ndarray) -> np.array:
         expected_count = self.greenlist_ratio
         numer = green_token_count - expected_count * total_num_tokens
         denom = np.sqrt(total_num_tokens * expected_count * (1 - expected_count))

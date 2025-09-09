@@ -92,9 +92,9 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Qwen2VLProcessorKwargs],
     ) -> BatchFeature:
         """

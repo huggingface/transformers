@@ -406,27 +406,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         )
 
     @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
         pass

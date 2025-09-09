@@ -314,7 +314,7 @@ class DonutImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_thumbnail: Optional[bool] = None,
         do_align_long_axis: Optional[bool] = None,
         do_pad: Optional[bool] = None,

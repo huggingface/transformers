@@ -88,7 +88,9 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor = None):
+    def forward(
+        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
         if position_ids is None:

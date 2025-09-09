@@ -90,8 +90,8 @@ class VideoLlavaProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        videos: ImageInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[ImageInput] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,

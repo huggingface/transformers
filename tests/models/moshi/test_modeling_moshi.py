@@ -603,18 +603,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(
         "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )

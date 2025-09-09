@@ -781,7 +781,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
         or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -806,8 +806,8 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
         1/4 scale features from the last Pixel Decoder Layer.
     """
 
-    encoder_features: list[torch.FloatTensor] = None
-    decoder_features: list[torch.FloatTensor] = None
+    encoder_features: Optional[list[torch.FloatTensor]] = None
+    decoder_features: Optional[list[torch.FloatTensor]] = None
     decoder_last_feature: Optional[torch.FloatTensor] = None
 
 

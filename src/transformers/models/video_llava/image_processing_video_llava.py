@@ -175,7 +175,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         videos: Optional[list[VideoInput]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -326,10 +326,10 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def _preprocess_image(
         self,
-        image: ImageInput = None,
+        image: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

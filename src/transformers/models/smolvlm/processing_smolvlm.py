@@ -249,7 +249,7 @@ class SmolVLMProcessor(ProcessorMixin):
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
     ) -> BatchEncoding:
         """

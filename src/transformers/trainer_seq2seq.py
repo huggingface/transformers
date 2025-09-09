@@ -54,8 +54,8 @@ class Seq2SeqTrainer(Trainer):
     @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
-        model: Union["PreTrainedModel", nn.Module] = None,
-        args: "TrainingArguments" = None,
+        model: Optional[Union["PreTrainedModel", nn.Module]] = None,
+        args: Optional["TrainingArguments"] = None,
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
@@ -66,7 +66,7 @@ class Seq2SeqTrainer(Trainer):
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
         callbacks: Optional[list["TrainerCallback"]] = None,
-        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(

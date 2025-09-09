@@ -192,10 +192,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __init__(
         self,
         model: "PreTrainedModel",
-        feature_extractor: Union["SequenceFeatureExtractor", str] = None,
+        feature_extractor: Optional[Union["SequenceFeatureExtractor", str]] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        device: Union[int, "torch.device"] = None,
+        device: Optional[Union[int, "torch.device"]] = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
