@@ -652,7 +652,6 @@ class MT5ClassificationHead(nn.Module):
 # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
     config: MT5Config
-    load_tf_weights = load_tf_weights_in_mt5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True

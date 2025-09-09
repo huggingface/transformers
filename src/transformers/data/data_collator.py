@@ -685,7 +685,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     mask_replace_prob: float = 0.8
     random_replace_prob: float = 0.1
     pad_to_multiple_of: Optional[int] = None
-    tf_experimental_compile: bool = False
     return_tensors: str = "pt"
     seed: Optional[int] = None
 
@@ -1291,13 +1290,6 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             examples = [e["input_ids"] for e in examples]
         batch = _torch_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
-        return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
-
-    def tf_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
-        if isinstance(examples[0], Mapping):
-            examples = [e["input_ids"] for e in examples]
-        batch = _tf_collate_batch(examples, self.tokenizer)
-        inputs, perm_mask, target_mapping, labels = self.tf_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:

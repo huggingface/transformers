@@ -22,9 +22,7 @@ from transformers import (
     SpecialTokensMixin,
     UdopTokenizer,
     UdopTokenizerFast,
-    is_flax_available,
     is_mlx_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -1593,12 +1591,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-                if is_torch_available():
-                    returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                else:
-                    returned_tensor = "jax"
+                returned_tensor = "pt"
 
                 # Single example
                 words, boxes = self.get_words_and_boxes()
@@ -1897,18 +1890,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_return_type.append("np")
             output_tensor_type.append(np.int64)
 
-        if is_tf_available():
-            import tensorflow as tf
-
-            tokenizer_return_type.append("tf")
-            output_tensor_type.append(tf.int32)
-
-        if is_flax_available():
-            import jax.numpy as jnp
-
-            tokenizer_return_type.append("jax")
-            output_tensor_type.append(jnp.int32)
-
         if is_mlx_available():
             import mlx.core as mx
 
@@ -1916,7 +1897,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             output_tensor_type.append(mx.int32)
 
         if len(tokenizer_return_type) == 0:
-            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+            self.skipTest(reason="No expected framework from PT, or MLX found")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:

@@ -48,7 +48,6 @@ from ..utils import (
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -56,8 +55,6 @@ from ..utils import (
 
 logger = logging.get_logger(__name__)
 
-if is_tf_available():
-    from .. import TFPreTrainedModel
 
 if is_torch_available():
     import torch
@@ -760,12 +757,6 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
     with open(f"{output_dir}/model_architecture.txt", "w+") as f:
         if isinstance(model, PreTrainedModel):
             print(model, file=f)
-        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
-
-            def print_to_file(s):
-                print(s, file=f)
-
-            model.summary(print_fn=print_to_file)
         elif is_torch_available() and (
             isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
         ):

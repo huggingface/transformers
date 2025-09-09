@@ -42,7 +42,6 @@ from ..utils import (
     is_offline_mode,
     is_peft_available,
     is_pyctcdecode_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )

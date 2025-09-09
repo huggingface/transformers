@@ -652,7 +652,6 @@ class T5ClassificationHead(nn.Module):
 @auto_docstring
 class T5PreTrainedModel(PreTrainedModel):
     config: T5Config
-    load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -2279,7 +2278,6 @@ __all__ = [
     "T5ForConditionalGeneration",
     "T5Model",
     "T5PreTrainedModel",
-    "load_tf_weights_in_t5",
     "T5ForQuestionAnswering",
     "T5ForSequenceClassification",
     "T5ForTokenClassification",

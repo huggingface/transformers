@@ -37,7 +37,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     to_py_obj,
 )
-from ...utils import add_end_docstrings, is_tf_tensor, is_torch_tensor, logging
+from ...utils import add_end_docstrings, is_torch_tensor, logging
 from ...utils.import_utils import requires
 
 
@@ -1279,7 +1279,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -1304,7 +1303,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -1318,9 +1317,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 first_element = required_input[index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_tensor(first_element):
-                return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt" if return_tensors is None else return_tensors
             elif isinstance(first_element, np.ndarray):
                 return_tensors = "np" if return_tensors is None else return_tensors
