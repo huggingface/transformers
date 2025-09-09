@@ -434,6 +434,7 @@ else:
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
             "MinPLogitsWarper",
+            "TopHLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PhrasalConstraint",
@@ -692,6 +693,7 @@ if TYPE_CHECKING:
     from .generation import MinLengthLogitsProcessor as MinLengthLogitsProcessor
     from .generation import MinNewTokensLengthLogitsProcessor as MinNewTokensLengthLogitsProcessor
     from .generation import MinPLogitsWarper as MinPLogitsWarper
+    from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
     from .generation import PhrasalConstraint as PhrasalConstraint

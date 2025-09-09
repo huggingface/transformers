@@ -581,6 +581,133 @@ class TopKLogitsWarper(LogitsProcessor):
         scores_processed = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores_processed
 
+class TopHLogitsWarper(LogitsProcessor):
+
+    """
+    [`LogitsProcessor`] that implements Top-H sampling, a decoding method which adaptively selects a subset of
+    high-probability tokens based on entropy and cumulative probability constraints.
+
+    This method dynamically determines how many tokens to keep by analyzing the entropy difference of the selected
+    distribution, thereby balancing exploration and exploitation. It ensures that generated text maintains both
+    diversity and coherence.
+
+    Args:
+        top_n (`int`, *optional*, defaults to 100):
+            The maximum number of tokens to consider for filtering. 
+            Only the top `top_n` tokens (by probability) are evaluated.
+        temperature (`float`, *optional*, defaults to 1.0):
+            Softmax temperature. Higher values increase randomness, while lower values make predictions sharper.
+        alpha (`float`, *optional*, defaults to 0.4):
+            Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
+
+    >>> outputs = model.generate(**inputs, do_sample=True, top_h=0.1)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ```
+    """
+
+
+    def __init__(self, top_h: float, temperature: float = 1.0, filter_value: float = -float("Inf")):
+        super().__init__()
+
+        # input checks
+        if temperature == 0:
+            raise ValueError("Temperature must be non-zero to perform Top-H decoding.")
+        if not (0 < top_h <= 1):
+            raise ValueError("alpha must be in the range (0, 1].")
+        
+        self.top_n = 100
+        self.temperature = temperature
+        self.coef = top_h
+        self.filter_value = filter_value
+
+    @staticmethod
+    def calculate_entropy(probs):
+
+        """
+        Computes Shannon entropy of a probability distribution.
+
+        Args:
+            probs (`torch.FloatTensor`):
+                Probability distribution over tokens.
+
+        Return:
+            `torch.FloatTensor`: Scalar entropy value.
+        """
+
+        probs = probs/torch.sum(probs) 
+        return -torch.sum(probs * torch.log2(probs))
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                
+        """
+        Filters logits using Top-H sampling.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input token IDs.
+            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+                Raw logits from the model.
+
+        Return:
+            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+                Processed logits where invalid tokens are masked with `-inf`.
+        """
+                
+        batch_size, vocab_size = scores.shape
+        device = scores.device
+
+        # compute probabilities
+        scaled_logits = scores / self.temperature
+        probs = torch.softmax(scaled_logits, dim=-1)  
+
+        keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
+
+        top_n = min(self.top_n, vocab_size)
+
+        for b in range(batch_size):
+            # top-k for this example
+            top_probs, top_idx = torch.topk(probs[b], top_n, largest=True, sorted=True)
+
+            # entropy-based threshold tau (computed on the top-k distribution)
+            alpha_sum = top_probs.sum()
+            tau = (self.calculate_entropy(top_probs) - torch.log2(alpha_sum)) * alpha_sum * self.coef
+
+            # grow the kept set until the stopping rule triggers
+            sigma = top_probs[0]
+            H = - top_probs[0] * torch.log2(top_probs[0])
+            chosen = []
+            ind = 0
+            for idx, p in zip(top_idx, top_probs):
+                chosen.append(idx)
+                ind += 1
+                # update running sums for current prefix
+                sigma = sigma + top_probs[ind]
+                H = H + (-top_probs[ind] * torch.log2(top_probs[ind]))
+                # entropy difference term
+                entropy_diff = (H / sigma) + torch.log2(sigma)
+                if entropy_diff > (tau / sigma + torch.log2(sigma)):
+                    break
+
+            keep_mask[b, torch.stack(chosen)] = True
+
+        # apply filtering
+        scores_processed = scores.clone()
+        scores_processed[~keep_mask] = self.filter_value
+        
+        return scores_processed
 
 class MinPLogitsWarper(LogitsProcessor):
     """

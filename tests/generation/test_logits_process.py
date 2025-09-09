@@ -42,6 +42,7 @@ if is_torch_available():
         MinLengthLogitsProcessor,
         MinNewTokensLengthLogitsProcessor,
         MinPLogitsWarper,
+        TopHLogitsWarper,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
@@ -393,6 +394,76 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [3, 2])
+    def test_top_h_dist_warper():
+        """
+        We construct small distributions where the expected kept set is obvious for a given alpha.
+        We pass *log-probabilities* as "scores" so that softmax(scores) == original probabilities,
+        matching the style in other warper tests (e.g., MinP).
+        """
+
+        input_ids = None
+
+        # --- Case 1: Highly peaked distribution -> small alpha keeps only the top-1
+        dist1 = torch.log(
+            torch.tensor(
+                [[0.97, 0.01, 0.01, 0.01]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        top_h_warp = TopHLogitsWarper(alpha=0.3, min_tokens_to_keep=1)
+        filtered_logits = top_h_warp(input_ids, dist1.clone())
+        filtered_dist = torch.exp(filtered_logits)  # exp(-inf) -> 0
+
+        EXPECTED1 = torch.tensor(
+            [[0.97, 0.0, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, EXPECTED1, rtol=1e-3, atol=1e-3)
+
+        # --- Case 2: Moderately skewed distribution -> alpha large enough to keep exactly top-2
+        dist2 = torch.log(
+            torch.tensor(
+                [[0.4, 0.3, 0.2, 0.1]],  # entropy budget with alpha=0.7 yields 2-token prefix
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        top_h_warp = TopHLogitsWarper(alpha=0.7, min_tokens_to_keep=1)
+        filtered_logits = top_h_warp(input_ids, dist2.clone())
+        filtered_dist = torch.exp(filtered_logits)
+
+        EXPECTED2 = torch.tensor(
+            [[0.4, 0.3, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, EXPECTED2, rtol=1e-3, atol=1e-3)
+
+        # --- Case 3: Uniform distribution -> alpha=1.0 keeps all tokens
+        dist3 = torch.log(
+            torch.tensor(
+                [[0.25, 0.25, 0.25, 0.25]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        top_h_warp = TopHLogitsWarper(alpha=1.0, min_tokens_to_keep=1)
+        filtered_logits = top_h_warp(input_ids, dist3.clone())
+        filtered_dist = torch.exp(filtered_logits)
+
+        EXPECTED3 = torch.tensor(
+            [[0.25, 0.25, 0.25, 0.25]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, EXPECTED3, rtol=1e-3, atol=1e-3)
+
+        # Processor should not change logits in-place
+        top_h_warp = TopHLogitsWarper(alpha=0.5, min_tokens_to_keep=1)
+        out_again = top_h_warp(input_ids, dist3)
+        assert not torch.all(out_again == dist3)
 
     def test_min_p_dist_warper(self):
         input_ids = None
