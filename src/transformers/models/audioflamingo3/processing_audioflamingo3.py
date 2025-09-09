@@ -30,8 +30,8 @@ from ...tokenization_utils_base import TextInput
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": True,  # pad to longest in the batch
-            "truncation": True,  # safety: clip overlong prompts
+            "padding": True,  # Pad to longest sequence in the batch
+            "truncation": True,  # Truncate overlong prompts for safety
         },
         "audio_kwargs": {},
     }
@@ -119,8 +119,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         Returns a BatchFeature with:
         - input_ids, attention_mask : (B, L)
         - audio_features            : (N, M, T_mel)                 or None
-        - audio_feature_masks       : (N, nb_max_frames)            or None   # FE attention masks (mel-frame)
-        - audio_features_mask       : (N, S_max+1)                  or None   # encoder mask (+1 reserved end token)
+        - audio_feature_masks       : (N, nb_max_frames)            or None   # Feature extractor attention masks (mel-frame)
+        - audio_features_mask       : (N, S_max+1)                  or None   # Encoder mask with reserved end token
         """
         if isinstance(text, str):
             text = [text]
@@ -146,9 +146,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         # Frontend downsampling (conv k=3,p=1,s=2 → pool k=2,s=2)
         length_after_conv2_max = (nb_max_frames - 1) // 2 + 1
         tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
-        encoder_mask_len = tokens_per_window_max + 1  # +1 reserved end token (kept False)
+        encoder_mask_len = tokens_per_window_max + 1  # Reserve one additional slot for end token
 
-        # Windowing (Whisper-style: 30s windows, 0 overlap by default)
+        # Audio windowing configuration: 30 second windows with no overlap by default
         wl = n_samples
         wo = 0
 
@@ -157,7 +157,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         feat_masks_all: list[torch.Tensor] = []
         token_masks_all: list[torch.Tensor] = []
 
-        # FE call kwargs (let users override, but enforce mask + padding to max)
+        # Feature extraction call arguments with mask and padding enforced
         fe_kwargs = dict(output_kwargs.get("audio_kwargs", {}))
         fe_kwargs.update(
             {
@@ -176,19 +176,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             if T <= wl:
                 num_windows = 1
-            elif T >= (20 * wl - 19 * wo):  # cap at 20 windows like before
+            elif T >= (20 * wl - 19 * wo):  # Limit to maximum of 20 windows
                 num_windows = 20
             else:
                 num_windows = 1 + int(math.ceil((T - wl) / float(wl - wo)))
 
-            # Build "<sound>" × num_windows in the prompt
+            # Construct prompt with appropriate number of <sound> tokens
             clean_t = t.replace("<sound>", "").strip()
             final_texts.append(("<sound>" * num_windows) + clean_t)
 
             for i in range(num_windows):
                 start = i * (wl - wo)
                 chunk = a[start : start + wl]
-                # FE does the heavy lifting (features + mel-frame mask)
+                # Extract features and mel-frame mask
                 out = fe(chunk.reshape(1, -1), **fe_kwargs)
                 mel = out["input_features"][0]  # (M, T_mel)
                 fm = out["attention_mask"][0].to(torch.int32)  # (nb_max_frames,)
@@ -196,13 +196,13 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 feats_all.append(mel)
                 feat_masks_all.append(fm)
 
-                # Derive encoder-length for this window from mel length
+                # Calculate encoder output length for this window from mel length
                 melspec_frames = int(fm.sum().item())
                 l1 = (melspec_frames - 1) // 2 + 1
                 out_len = max(0, (l1 - 2) // 2 + 1)
 
                 tm = torch.zeros(encoder_mask_len, dtype=torch.bool)
-                tm[: min(out_len, tokens_per_window_max)] = True  # keep last slot (end token) False
+                tm[: min(out_len, tokens_per_window_max)] = True  # Reserve last slot for end token
                 token_masks_all.append(tm)
 
         if len(feats_all) > 0:
@@ -229,8 +229,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 "input_ids": enc["input_ids"],
                 "attention_mask": enc["attention_mask"],
                 "audio_features": audio_features,
-                "audio_feature_masks": audio_feature_masks,  # FE attention masks (mel-frame)
-                "audio_features_mask": audio_features_mask,  # encoder mask (+1 end token)
+                "audio_feature_masks": audio_feature_masks,  # Feature extractor attention masks (mel-frame)
+                "audio_features_mask": audio_features_mask,  # Encoder mask with end token
             }
         )
 
@@ -240,7 +240,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> list[str]:
         """
-        Batch text decoding that mirrors HF processors (see Dia).
+        Batch text decoding functionality.
         Returns a list[str] of decoded strings, one per sequence.
         """
         output_kwargs = self._merge_kwargs(

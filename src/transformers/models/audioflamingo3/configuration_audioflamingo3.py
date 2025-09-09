@@ -41,9 +41,9 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         encoder_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads for each attention layer in the Transformer encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+            Dimensionality of the intermediate feed-forward layer in encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
             for more details.
         d_model (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
@@ -57,7 +57,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
+            Scale embeddings by dividing by sqrt(d_model).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         max_source_positions (`int`, *optional*, defaults to 1500):
@@ -71,7 +71,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
     >>> # Initializing a AudioFlamingo3EncoderConfig
     >>> configuration = AudioFlamingo3EncoderConfig()
 
-    >>> # Initializing a AudioFlamingo3Encoder (with random weights)
+    >>> # Initializing a AudioFlamingo3Encoder with random weights
     >>> model = AudioFlamingo3Encoder(configuration)
 
     >>> # Accessing the model configuration
@@ -111,7 +111,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.num_hidden_layers = encoder_layers
         self.initializer_range = initializer_range
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = scale_embedding  # Scaling factor is sqrt(d_model) when enabled
         self.max_source_positions = max_source_positions
 
 

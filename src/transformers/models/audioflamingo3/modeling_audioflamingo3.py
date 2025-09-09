@@ -327,7 +327,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-        # extra downsampling after transformer
+        # Additional downsampling after transformer
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         # Initialize weights and apply final processing
         self.post_init()
@@ -378,7 +378,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        # Allow 2D frame mask and convert to Whisper's 4D square mask
+        # Convert 2D frame mask to Whisper's 4D square mask
         if attention_mask is not None and attention_mask.dim() == 2:
             attention_mask = self._build_square_attn_mask(attention_mask, input_features.shape[-1])
 
@@ -533,7 +533,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             masks.to(device) if masks is not None else None,
         )  # (N, S_feat, D)
 
-        # append one end token per sample (vectorized)
+        # Append one end token per sample
         end = self.end_emb_token.to(feats.dtype).unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
         return torch.cat([feats, end], dim=1)  # (N, S_feat + 1, D)
 
@@ -543,7 +543,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         sounds = sounds.to(device=device, dtype=proj_dtype)
         masks = masks.to(device) if masks is not None else None
 
-        # Call encoder.forward directly; it will up-convert masks if needed
+        # Forward pass through encoder with mask up-conversion
         enc_out = self.sound_tower(
             input_features=sounds,
             attention_mask=masks if masks is not None else None,
@@ -571,7 +571,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         feats = enc.last_hidden_state.to(dtype=proj_dtype)  # (N, S_audio, H_enc)
         feats = self.sound_mm_projector(feats)  # (N, S_audio, D)
 
-        # append one end-newline embedding per audio window
+        # Append one end-newline embedding per audio window
         end = self.end_emb_token.to(feats.dtype).unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
         return torch.cat([feats, end], dim=1)  # (N, S_audio+1, D)
 
@@ -584,7 +584,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         audio_embeds: Optional[torch.Tensor] = None,  # (N, S_audio+1, D) precomputed
         audio_features_mask: Optional[torch.Tensor] = None,  # (N, S_audio+1) boolean; end slot should be False
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
-        # defaults
+        # Set default values
         labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
 
@@ -593,7 +593,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         target_device = text_embeds.device
         batch_size = labels.shape[0]
 
-        # require precomputed audio embeddings & mask
+        # Validate precomputed audio embeddings and mask
         if audio_embeds is None or audio_features_mask is None:
             raise ValueError(
                 "`audio_embeds` and `audio_features_mask` must be provided to `_merge_input_ids_with_audio_features`."
@@ -604,7 +604,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         num_audios, max_audio_tokens, embed_dim = audio_embeds.shape
 
-        # flatten variable-length audio to (sum_used, D) — end-token excluded by mask
+        # Flatten variable-length audio to (sum_used, D) with end-token excluded by mask
         masked_audio_features = audio_embeds[audio_features_mask].view(-1, embed_dim)
         num_audio_tokens = audio_features_mask.sum(-1)  # (N,)
 
@@ -623,14 +623,14 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             else:
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
-        # 1) locate <sound> placeholders
+        # Locate <sound> placeholders
         special_audio_token_mask = input_ids == self.sound_token_id
         attention_mask = attention_mask.to(target_device)
         input_ids = input_ids.to(target_device)
 
         batch_indices, non_audio_indices = torch.where((input_ids != self.sound_token_id) & (attention_mask == 1))
 
-        # 2) compute positions for text after expanding placeholders
+        # Compute positions for text after expanding placeholders
         token_placeholder_num = torch.zeros_like(input_ids)
         token_placeholder_num[special_audio_token_mask] = num_audio_tokens.long() - 1
         token_placeholder_num = token_placeholder_num + 1
@@ -646,7 +646,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             text_to_overwrite.to(target_device),
         )
 
-        # 3) allocate
+        # Allocate final tensors
         final_embedding = torch.zeros(
             batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=target_device
         )
@@ -655,7 +655,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             (batch_size, max_token_num), self.pad_token_id, dtype=input_ids.dtype, device=target_device
         )
 
-        # 4) scatter text
+        # Scatter text embeddings
         final_embedding[batch_indices, text_to_overwrite] = text_embeds[batch_indices, non_audio_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_audio_indices]
         final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_audio_indices]
@@ -666,7 +666,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             final_labels = torch.full_like(final_attention_mask, self.config.ignore_index, dtype=torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_audio_indices]
 
-        # 5) scatter audio
+        # Scatter audio embeddings
         audio_to_overwrite = torch.full((batch_size, max_token_num), True, dtype=torch.bool, device=target_device)
         audio_to_overwrite[batch_indices, text_to_overwrite] = False
 
@@ -687,7 +687,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         )
         final_attention_mask |= audio_to_overwrite
 
-        # pad-to-batch (unchanged)
+        # Batch padding functionality
         final_embedding = list(final_embedding)
         final_labels = list(final_labels) if final_labels is not None else None
 
@@ -736,12 +736,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         audio_features_mask: Optional[torch.Tensor] = None,  # (N, S_audio+1)
         **generation_kwargs,
     ) -> torch.LongTensor:
-        # 1) compute audio embeddings upfront (like Qwen2)
+        # Compute audio embeddings upfront
         audio_embeds = None
         if audio_features is not None:
             audio_embeds = self._compute_audio_embeds(audio_features, audio_feature_masks)  # (N, S_audio+1, D)
 
-        # 2) merge text + audio
+        # Merge text and audio embeddings
         inputs_embeds, _, attn = self._merge_input_ids_with_audio_features(
             input_ids=input_ids,
             labels=None,
