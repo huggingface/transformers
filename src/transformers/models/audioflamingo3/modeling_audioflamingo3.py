@@ -328,7 +328,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         self.gradient_checkpointing = False
         # Additional downsampling after transformer
-        self.avg_pooler = nn.AvgPool1d(2, stride=2)
+        self.avg_pooler = nn.AvgPool1d(config.avg_pool_kernel_size, stride=config.avg_pool_stride)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -407,9 +407,8 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         all_attns = () if output_attentions else None
 
         if head_mask is not None:
-            assert head_mask.size(0) == len(self.layers), (
-                f"head_mask should have {len(self.layers)} layers, but has {head_mask.size(0)}."
-            )
+            if head_mask.size(0) != len(self.layers):
+                raise ValueError(f"head_mask should have {len(self.layers)} layers, but has {head_mask.size(0)}.")
 
         hidden_states = x
         for idx, layer in enumerate(self.layers):
@@ -449,10 +448,10 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         Convert a (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S)
         with -inf on padded positions. Here S = (T_mel - 2) // 2 + 1 (after frontend).
         """
-        assert mask_1d.dim() == 2, f"mask_1d must be (B, T_mel), got {tuple(mask_1d.shape)}"
-        assert mask_1d.shape[1] == max_mel_seq_len, (
-            f"T_mel mismatch: mask {mask_1d.shape[1]} vs features {max_mel_seq_len}"
-        )
+        if mask_1d.dim() != 2:
+            raise ValueError(f"mask_1d must be (B, T_mel), got {tuple(mask_1d.shape)}")
+        if mask_1d.shape[1] != max_mel_seq_len:
+            raise ValueError(f"T_mel mismatch: mask {mask_1d.shape[1]} vs features {max_mel_seq_len}")
 
         # length after first stride-2 conv
         audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1

@@ -51,60 +51,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-    def _tokenize_conversation(
-        self,
-        messages: Sequence[dict[str, str]],
-        add_generation_prompt: bool = False,
-        overrides: Optional[dict[str, str]] = None,
-        no_system_prompt: bool = False,
-    ) -> torch.Tensor:
-        # Normalize conversation before tokenization
-        for message in messages:
-            message["value"] = message["value"].strip()
-
-        conversation = []
-        for m in messages:
-            message = {}
-            if m["from"] == "human":
-                message["role"] = "user"
-            elif m["from"] == "gpt":
-                message["role"] = "assistant"
-            else:
-                raise ValueError(f"Unexpected sender '{m['from']}' in conversation entry.")
-
-            message["content"] = m["value"]
-            if overrides is not None and m["from"] in overrides:
-                message["content"] = overrides[m["from"]]
-            conversation.append(message)
-
-        if no_system_prompt:
-            conversation = [{"role": "system", "content": ""}] + conversation
-
-        text = self.tokenizer.apply_chat_template(
-            conversation,
-            add_generation_prompt=add_generation_prompt,
-            tokenize=False,
-        )
-
-        return self.tokenizer(text, return_tensors="pt").input_ids[0]
-
-    def _get_num_windows(self, T: int, sr: int) -> tuple[int, int]:
-        window_length = int(30.0 * sr)
-        window_overlap = int(0.0 * sr)
-        max_num_window = 20
-        num_windows = 1
-        if T <= window_length:
-            num_windows = 1
-            full_length = window_length
-        elif T >= (max_num_window * window_length - (max_num_window - 1) * window_overlap):
-            num_windows = max_num_window
-            full_length = max_num_window * window_length - (max_num_window - 1) * window_overlap
-        else:
-            num_windows = 1 + int(np.ceil((T - window_length) / float(window_length - window_overlap)))
-            full_length = num_windows * window_length - (num_windows - 1) * window_overlap
-
-        return num_windows, full_length
-
     def __call__(
         self,
         text: Union[TextInput, list[TextInput]],
@@ -265,10 +211,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if token_ids.ndim == 1:
             token_ids = token_ids.unsqueeze(0)
         elif token_ids.shape[0] != 1:
-            raise ValueError(
-                f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. "
-                "Use `batch_decode` for multi-sample outputs."
-            )
+            raise ValueError(f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. " "Use `batch_decode` for multi-sample outputs.")
 
         return self.batch_decode(token_ids, **kwargs)[0]
 

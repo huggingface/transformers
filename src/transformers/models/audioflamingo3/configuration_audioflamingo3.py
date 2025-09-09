@@ -62,6 +62,10 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        avg_pool_kernel_size (`int`, *optional*, defaults to 2):
+            Kernel size for the average pooling layer applied after the transformer encoder.
+        avg_pool_stride (`int`, *optional*, defaults to 2):
+            Stride for the average pooling layer applied after the transformer encoder.
 
     Example:
 
@@ -95,6 +99,8 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         scale_embedding: bool = False,
         initializer_range: float = 0.02,
         max_source_positions: int = 1500,
+        avg_pool_kernel_size: int = 2,
+        avg_pool_stride: int = 2,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -113,6 +119,8 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.scale_embedding = scale_embedding  # Scaling factor is sqrt(d_model) when enabled
         self.max_source_positions = max_source_positions
+        self.avg_pool_kernel_size = avg_pool_kernel_size
+        self.avg_pool_stride = avg_pool_stride
 
 
 class AudioFlamingo3Config(PretrainedConfig):
@@ -130,7 +138,7 @@ class AudioFlamingo3Config(PretrainedConfig):
     """
 
     model_type = "audioflamingo3"
-    sub_configs = {"text_config": AutoConfig, "encoder_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "encoder_config": AudioFlamingo3EncoderConfig}
 
     def __init__(
         self,
