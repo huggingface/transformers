@@ -16,6 +16,7 @@
 """LongCat Flash model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class LongcatFlashConfig(PretrainedConfig):
@@ -23,7 +24,7 @@ class LongcatFlashConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LongCat Flash architecture.
-
+    e.g. [meituan-longcat/LongCat-Flash-Chat](https://huggingface.co/meituan-longcat/LongCat-Flash-Chat)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -122,10 +123,6 @@ class LongcatFlashConfig(PretrainedConfig):
             The dimension of value heads.
         qk_head_dim (`int`, *optional*):
             The total dimension of query/key heads. If not specified, defaults to `qk_nope_head_dim + qk_rope_head_dim`.
-        mla_scale_q_lora (`bool`, *optional*, defaults to `False`):
-            Whether to scale query LoRA projections in MLA.
-        mla_scale_kv_lora (`bool`, *optional*, defaults to `False`):
-            Whether to scale key-value LoRA projections in MLA.
         moe_topk (`int`, *optional*, defaults to 6):
             Number of experts to route to for each token in the MoE layer.
         n_routed_experts (`int`, *optional*, defaults to 64):
@@ -205,8 +202,6 @@ class LongcatFlashConfig(PretrainedConfig):
         head_dim=64,  # for rope
         v_head_dim=128,
         qk_head_dim=None,
-        mla_scale_q_lora=False,
-        mla_scale_kv_lora=False,
         moe_topk=6,
         n_routed_experts=64,
         zero_expert_num=None,
@@ -250,8 +245,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.v_head_dim = v_head_dim
         self.qk_head_dim = qk_head_dim
         self.head_dim = head_dim
-        self.mla_scale_q_lora = mla_scale_q_lora
-        self.mla_scale_kv_lora = mla_scale_kv_lora
 
         # MoE configuration
         self.moe_topk = moe_topk
@@ -263,6 +256,17 @@ class LongcatFlashConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
         self.router_bias = router_bias
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, copy it it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+
+        if self.rope_scaling is not None:
+            for key in ["beta_fast", "beta_slow", "factor"]:
+                if key in self.rope_scaling:
+                    self.rope_scaling[key] = float(self.rope_scaling[key])
+
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

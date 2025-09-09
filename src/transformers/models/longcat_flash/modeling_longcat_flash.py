@@ -581,6 +581,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
