@@ -86,12 +86,6 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                         package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
                     except Exception:
                         package_exists = False
-            elif pkg_name == "fla":
-                try:
-                    package = importlib.import_module(pkg_name)
-                    package_version = getattr(package, "__version__", "N/A")
-                except Exception:
-                    package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
