@@ -40,12 +40,9 @@ from .utils import (
 # so that mypy, pylint or other static linters can recognize them,
 # given that they are not exported using `__all__` in this file.
 from .utils import is_bitsandbytes_available as is_bitsandbytes_available
-from .utils import is_flax_available as is_flax_available
-from .utils import is_keras_nlp_available as is_keras_nlp_available
 from .utils import is_scipy_available as is_scipy_available
 from .utils import is_sentencepiece_available as is_sentencepiece_available
 from .utils import is_speech_available as is_speech_available
-from .utils import is_tensorflow_text_available as is_tensorflow_text_available
 from .utils import is_timm_available as is_timm_available
 from .utils import is_tokenizers_available as is_tokenizers_available
 from .utils import is_torch_available as is_torch_available
@@ -224,8 +221,6 @@ _import_structure = {
         "is_bitsandbytes_available",
         "is_datasets_available",
         "is_faiss_available",
-        "is_flax_available",
-        "is_keras_nlp_available",
         "is_matplotlib_available",
         "is_mlx_available",
         "is_phonemizer_available",
@@ -238,7 +233,6 @@ _import_structure = {
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
-        "is_tensorflow_text_available",
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
@@ -580,20 +574,6 @@ if TYPE_CHECKING:
     from .generation import EpsilonLogitsWarper as EpsilonLogitsWarper
     from .generation import EtaLogitsWarper as EtaLogitsWarper
     from .generation import ExponentialDecayLengthPenalty as ExponentialDecayLengthPenalty
-    from .generation import FlaxForcedBOSTokenLogitsProcessor as FlaxForcedBOSTokenLogitsProcessor
-    from .generation import FlaxForcedEOSTokenLogitsProcessor as FlaxForcedEOSTokenLogitsProcessor
-    from .generation import FlaxForceTokensLogitsProcessor as FlaxForceTokensLogitsProcessor
-    from .generation import FlaxGenerationMixin as FlaxGenerationMixin
-    from .generation import FlaxLogitsProcessor as FlaxLogitsProcessor
-    from .generation import FlaxLogitsProcessorList as FlaxLogitsProcessorList
-    from .generation import FlaxLogitsWarper as FlaxLogitsWarper
-    from .generation import FlaxMinLengthLogitsProcessor as FlaxMinLengthLogitsProcessor
-    from .generation import FlaxSuppressTokensAtBeginLogitsProcessor as FlaxSuppressTokensAtBeginLogitsProcessor
-    from .generation import FlaxSuppressTokensLogitsProcessor as FlaxSuppressTokensLogitsProcessor
-    from .generation import FlaxTemperatureLogitsWarper as FlaxTemperatureLogitsWarper
-    from .generation import FlaxTopKLogitsWarper as FlaxTopKLogitsWarper
-    from .generation import FlaxTopPLogitsWarper as FlaxTopPLogitsWarper
-    from .generation import FlaxWhisperTimeStampLogitsProcessor as FlaxWhisperTimeStampLogitsProcessor
     from .generation import ForcedBOSTokenLogitsProcessor as ForcedBOSTokenLogitsProcessor
     from .generation import ForcedEOSTokenLogitsProcessor as ForcedEOSTokenLogitsProcessor
     from .generation import GenerationConfig as GenerationConfig
@@ -655,18 +635,14 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
-    from .keras_callbacks import KerasMetricCallback as KerasMetricCallback
-    from .keras_callbacks import PushToHubCallback as PushToHubCallback
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
 
     # Model Cards
     from .modelcard import ModelCard as ModelCard
-    from .modeling_flax_utils import FlaxPreTrainedModel as FlaxPreTrainedModel
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
-
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *

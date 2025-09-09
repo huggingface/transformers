@@ -49,7 +49,7 @@ _HIDDEN_STATES_START_POSITION = 2
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
-class Data2VecTextEmbeddings(nn.Module):
+class Data2VecTextForTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """

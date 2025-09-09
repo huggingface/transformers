@@ -21,7 +21,6 @@ import unittest
 from pathlib import Path
 
 import datasets
-import numpy as np
 from huggingface_hub import HfFolder, Repository, delete_repo
 from requests.exceptions import HTTPError
 
@@ -34,7 +33,6 @@ from transformers import (
     T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
-    TFAutoModelForSequenceClassification,
     pipeline,
 )
 from transformers.pipelines import PIPELINE_REGISTRY, get_task
@@ -51,11 +49,10 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    require_torch_or_tf,
     slow,
     torch_device,
 )
-from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -699,14 +696,6 @@ class PipelineUtilsTest(unittest.TestCase):
 
         return models_are_equal
 
-    def check_models_equal_tf(self, model1, model2):
-        models_are_equal = True
-        for model1_p, model2_p in zip(model1.weights, model2.weights):
-            if np.abs(model1_p.numpy() - model2_p.numpy()).sum() > 1e-5:
-                models_are_equal = False
-
-        return models_are_equal
-
 
 class CustomPipeline(Pipeline):
     def _sanitize_parameters(self, **kwargs):
@@ -751,31 +740,26 @@ class CustomPipelineTest(unittest.TestCase):
             "custom-text-classification",
             pipeline_class=PairClassificationPipeline,
             pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
-            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
-            default={"pt": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")},
+            default={"model": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")},
             type="text",
         )
         assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
 
         _, task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
         self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
-        self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
         self.assertEqual(task_def["type"], "text")
         self.assertEqual(task_def["impl"], PairClassificationPipeline)
-        self.assertEqual(
-            task_def["default"], {"model": {"pt": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")}}
-        )
+        self.assertEqual(task_def["default"], {"model": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")})
 
         # Clean registry for next tests.
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
 
-    @require_torch_or_tf
+    @require_torch
     def test_dynamic_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "pair-classification",
             pipeline_class=PairClassificationPipeline,
             pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
-            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
         )
 
         classifier = pipeline("pair-classification", model="hf-internal-testing/tiny-random-bert")
@@ -792,7 +776,6 @@ class CustomPipelineTest(unittest.TestCase):
                     "pair-classification": {
                         "impl": "custom_pipeline.PairClassificationPipeline",
                         "pt": ("AutoModelForSequenceClassification",) if is_torch_available() else (),
-                        "tf": ("TFAutoModelForSequenceClassification",) if is_tf_available() else (),
                     }
                 },
             )
@@ -821,7 +804,7 @@ class CustomPipelineTest(unittest.TestCase):
             [{"label": "LABEL_0", "score": 0.505}],
         )
 
-    @require_torch_or_tf
+    @require_torch
     def test_cached_pipeline_has_minimum_calls_to_head(self):
         # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
@@ -943,7 +926,6 @@ class DynamicPipelineTester(unittest.TestCase):
                     "pair-classification": {
                         "impl": "custom_pipeline.PairClassificationPipeline",
                         "pt": ("AutoModelForSequenceClassification",),
-                        "tf": (),
                     }
                 },
             )
@@ -966,7 +948,6 @@ class DynamicPipelineTester(unittest.TestCase):
                 "pair-classification": {
                     "impl": f"{USER}/test-dynamic-pipeline--custom_pipeline.PairClassificationPipeline",
                     "pt": ("AutoModelForSequenceClassification",),
-                    "tf": (),
                 }
             },
         )

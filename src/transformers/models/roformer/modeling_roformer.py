@@ -88,8 +88,7 @@ class RoFormerEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
+        # self.LayerNorm is not snake-cased due to old tensorflow checkpoint name matching
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -687,7 +686,6 @@ class RoFormerOnlyMLMHead(nn.Module):
 @auto_docstring
 class RoFormerPreTrainedModel(PreTrainedModel):
     config: RoFormerConfig
-    load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
     supports_gradient_checkpointing = True
 
@@ -1425,5 +1423,4 @@ __all__ = [
     "RoFormerLayer",
     "RoFormerModel",
     "RoFormerPreTrainedModel",
-    "load_tf_weights_in_roformer",
 ]

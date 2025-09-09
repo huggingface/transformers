@@ -56,8 +56,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     is_scipy_available,
-    is_tf_available,
-    is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
