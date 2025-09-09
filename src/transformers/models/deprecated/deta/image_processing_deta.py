@@ -50,10 +50,6 @@ from ....image_utils import (
     validate_preprocess_arguments,
 )
 from ....utils import (
-    is_flax_available,
-    is_jax_tensor,
-    is_tf_available,
-    is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
@@ -190,18 +186,11 @@ def get_numpy_to_framework_fn(arr) -> Callable:
     """
     if isinstance(arr, np.ndarray):
         return np.array
-    if is_tf_available() and is_tf_tensor(arr):
-        import tensorflow as tf
-
-        return tf.convert_to_tensor
     if is_torch_available() and is_torch_tensor(arr):
         import torch
 
         return torch.tensor
-    if is_flax_available() and is_jax_tensor(arr):
-        import jax.numpy as jnp
 
-        return jnp.array
     raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
@@ -829,10 +818,8 @@ class DetaImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -1024,10 +1011,7 @@ class DetaImageProcessor(BaseImageProcessor):
             annotations = [annotations] if annotations is not None else None
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor.")
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(
                 f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."

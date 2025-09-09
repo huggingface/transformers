@@ -4,14 +4,9 @@ from typing import Any, Union
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_torch_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
-
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -84,11 +79,7 @@ class Text2TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
 
     def _sanitize_parameters(
         self,
@@ -153,7 +144,7 @@ class Text2TextGenerationPipeline(Pipeline):
             raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
-        inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
+        inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors="pt")
         # This is produced by tokenizers but is an invalid generate kwargs
         if "token_type_ids" in inputs:
             del inputs["token_type_ids"]
@@ -184,7 +175,7 @@ class Text2TextGenerationPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
 
@@ -202,10 +193,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
-        if self.framework == "pt":
-            in_b, input_length = model_inputs["input_ids"].shape
-        elif self.framework == "tf":
-            in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
+        in_b, input_length = model_inputs["input_ids"].shape
 
         self.check_inputs(
             input_length,
@@ -219,10 +207,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
-        if self.framework == "pt":
-            output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
-        elif self.framework == "tf":
-            output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
+        output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
@@ -264,13 +249,10 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     Usage:
 
     ```python
-    # use bart in pytorch
+    # use bart
     summarizer = pipeline("summarization")
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
 
-    # use t5 in tf
-    summarizer = pipeline("summarization", model="google-t5/t5-base", tokenizer="google-t5/t5-base", framework="tf")
-    summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     ```"""
 
     # Used in the return key of the pipeline.
@@ -297,7 +279,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **summary_text** (`str`, present when `return_text=True`) -- The summary of the corresponding input.
-            - **summary_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+            - **summary_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
               ids of the summary.
         """
         return super().__call__(*args, **kwargs)
@@ -356,7 +338,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             return self.tokenizer._build_translation_inputs(
-                *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
+                *args, return_tensors="pt", truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
             )
         else:
             return super()._parse_and_tokenize(*args, truncation=truncation)
@@ -404,7 +386,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **translation_text** (`str`, present when `return_text=True`) -- The translation.
-            - **translation_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The
+            - **translation_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The
               token ids of the translation.
         """
         return super().__call__(*args, **kwargs)
