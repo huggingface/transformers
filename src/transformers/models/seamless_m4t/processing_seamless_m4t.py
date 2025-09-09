@@ -16,10 +16,13 @@
 Audio/Text processor class for SeamlessM4T
 """
 
-from typing import Optional
+from typing import Optional, Union
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...audio_utils import AudioInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +35,7 @@ class SeamlessM4TTextKwargs(TextKwargs):
 
 class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: SeamlessM4TTextKwargs
+    _defaults = {}
 
 
 class SeamlessM4TProcessor(ProcessorMixin):
@@ -57,7 +61,14 @@ class SeamlessM4TProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, audio=None, **kwargs):
+    @deprecate_kwarg("audios", version="v4.59.0", new_name="audio")
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        audios: Optional[AudioInput] = None,
+        audio: Optional[AudioInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
