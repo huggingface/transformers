@@ -33,7 +33,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import is_kernels_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_mamba import MambaConfig
 
 
@@ -50,8 +50,10 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+if is_kernels_available():
+    from kernels import get_kernel
+    kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
+    causal_conv1d_update, causal_conv1d_fn = kernel_causal_conv1d.causal_conv1d_update, kernel_causal_conv1d.causal_conv1d_fn
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
@@ -217,8 +219,8 @@ class MambaMixer(nn.Module):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamaba-ssm and"
+                        " install the kernels library using `pip install kernels`"
                     )
                 else:
                     raise ImportError(
@@ -227,8 +229,8 @@ class MambaMixer(nn.Module):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamaba-ssm and"
+                    " install the kernels library using `pip install kernels`. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
