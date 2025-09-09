@@ -363,32 +363,18 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if not _config_supports_rope_scaling(config):
             self.skipTest("This model does not support RoPE scaling")
 
-        # Retrieves the RoPE layer class from the base model class. Assumption: the RoPE layer is under a few
-        # possible attribute names and is found in the base model class. In some (inconsistent) cases, it may be
-        # found in the self_attention layer instead.
+        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
+        # named location of the RoPE layer class.
         base_model = self.model_tester.base_model_class(config)
         possible_rope_attributes = [
             "rotary_emb",  # most common case
             "global_rotary_emb",
             "local_rotary_emb",
         ]
-        for rope_attr in possible_rope_attributes:
-            rope_class = getattr(base_model, rope_attr, None)  # expected pattern
-            if (
-                rope_class is None
-                and hasattr(base_model, "layers")
-                and hasattr(base_model.layers[0], "self_attention")
-            ):
-                rope_class = getattr(base_model.layers[0].self_attention, rope_attr, None)  # fallback
-            if rope_class is not None:
-                rope_class = type(rope_class)
+        for name, module in base_model.named_modules():
+            if any(potential_name in name for potential_name in possible_rope_attributes):
+                rope_class = type(module)
                 break
-
-        if rope_class is None:
-            raise ValueError(
-                f"RoPE layer not found in the expected places (base class or self_attention) under any of the "
-                f"expected attribute names {possible_rope_attributes}"
-            )
 
         scaling_factor = 10
         short_input_length = 10
