@@ -28,6 +28,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import torch_npu
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,8 +70,10 @@ class Qwen2_5_VLMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-
+        # return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+        return self.down_proj(
+            torch_npu.npu_swiglu(torch.cat((self.gate_proj(hidden_state), self.up_proj(hidden_state)), dim=-1), dim=-1)
+        )
 
 class Qwen2_5_VisionPatchEmbed(nn.Module):
     def __init__(
@@ -120,11 +123,12 @@ class Qwen2RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return torch_npu.npu_rms_norm(hidden_states, self.weight, epsilon=self.variance_epsilon)[0]
+        # input_dtype = hidden_states.dtype
+        # hidden_states = hidden_states.to(torch.float32)
+        # variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -154,6 +158,110 @@ def apply_rotary_pos_emb_flashatt(
     q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
     k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
     return q_embed, k_embed
+
+
+def apply_rotary_pos_emb_custom(q, k, cos, sin):
+    """
+    优化内存使用的旋转位置嵌入实现
+    """
+    head_dim = q.size(-1)
+    half_dim = head_dim // 2
+
+    q1 = q[..., :half_dim]
+    q2 = q[..., half_dim:]
+    k1 = k[..., :half_dim]
+    k2 = k[..., half_dim:]
+
+    q_rot1 = q1 * cos - q2 * sin
+    q_rot2 = q1 * sin + q2 * cos
+    k_rot1 = k1 * cos - k2 * sin
+    k_rot2 = k1 * sin + k2 * cos
+
+    q_rot = torch.cat([q_rot1, q_rot2], dim=-1)
+    k_rot = torch.cat([k_rot1, k_rot2], dim=-1)
+
+    return q_rot, k_rot
+
+class Qwen2_5_VLVisionFlashAttention2_NPU(nn.Module):
+    def __init__(self, dim: int, num_heads: int = 16) -> None:
+        super().__init__()
+        self.num_heads = num_heads
+        self.qkv = nn.Linear(dim, dim * 3, bias=True)
+        self.proj = nn.Linear(dim, dim)
+        self.enable_gradient_checkpointing = True
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        if self.enable_gradient_checkpointing and self.training:
+            return torch.utils.checkpoint.checkpoint(
+                self._forward, hidden_states, cu_seqlens, rotary_pos_emb, position_embeddings
+            )
+        return self._forward(hidden_states, cu_seqlens, rotary_pos_emb, position_embeddings)
+
+    def _forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+
+        qkv = self.qkv(hidden_states)
+        q, k, v = qkv.reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        else:
+            cos, sin = position_embeddings
+
+        cos = cos[:seq_length, :q.size(-1)//2]
+        sin = sin[:seq_length, :q.size(-1)//2]
+
+        cos = cos.unsqueeze(1)  # [seq_len, 1, head_dim//2]
+        sin = sin.unsqueeze(1)  # [seq_len, 1, head_dim//2]
+
+        q, k = apply_rotary_pos_emb_custom(q, k, cos, sin)
+
+        head_num = q.shape[1]
+        scale_value = 1.0 / math.sqrt(q.size(-1))
+
+        if not hasattr(self, 'cached_seq_len') or self.cached_seq_len != tuple(cu_seqlens[1:].tolist()):
+            self.cached_seq_len = tuple(cu_seqlens[1:].tolist())
+            self.actual_seq_len = tuple(cu_seqlens[1:].cpu().numpy().tolist())
+
+        attn_output = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num,
+            pse=None,
+            padding_mask=None,
+            atten_mask=None,  # 非causal模式
+            scale=scale_value,
+            keep_prob=1.0,
+            input_layout="TND",
+            actual_seq_qlen=self.actual_seq_len,
+            actual_seq_kvlen=self.actual_seq_len,
+            sparse_mode=0
+        )[0]
+
+        # 优化：避免不必要的reshape操作
+        attn_output = self.proj(attn_output.reshape(seq_length, -1))
+        return attn_output
 
 
 class Qwen2_5_VLVisionFlashAttention2(nn.Module):
@@ -313,7 +421,8 @@ class Qwen2_5_VLVisionSdpaAttention(nn.Module):
 
 
 QWEN2_5_VL_VISION_ATTENTION_CLASSES = {
-    "eager": Qwen2_5_VLVisionAttention,
+    # "eager": Qwen2_5_VLVisionAttention,
+    "eager": Qwen2_5_VLVisionFlashAttention2_NPU,
     "flash_attention_2": Qwen2_5_VLVisionFlashAttention2,
     "sdpa": Qwen2_5_VLVisionSdpaAttention,
 }
@@ -600,8 +709,11 @@ class Qwen2MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        # down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        # return down_proj
+        return self.down_proj(
+            torch_npu.npu_swiglu(torch.cat((self.gate_proj(x), self.up_proj(x)), dim=-1), dim=-1)
+        )
 
 
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
