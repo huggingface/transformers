@@ -17,7 +17,6 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -28,7 +27,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     torch_device,
 )
 
@@ -36,10 +34,9 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

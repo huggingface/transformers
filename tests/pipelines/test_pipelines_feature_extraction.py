@@ -20,7 +20,6 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
-    TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
     is_torch_available,
@@ -36,7 +35,6 @@ if is_torch_available():
 @is_pipeline_test
 class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
-    tf_model_mapping = TF_MODEL_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

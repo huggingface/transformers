@@ -514,12 +514,12 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
-    def test_model_from_tf_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_tf=True` to load this model"):
+    def test_model_from_tf_error(self):
+        with self.assertRaisesRegex(EnvironmentError, "Can't load the model for"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
 
-    def test_model_from_flax_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
+    def test_model_from_flax_error(self):
+        with self.assertRaisesRegex(EnvironmentError, "Can't load the model for"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
     @unittest.skip("Failing on main")

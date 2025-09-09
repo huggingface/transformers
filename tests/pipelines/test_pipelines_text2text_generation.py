@@ -16,7 +16,6 @@ import unittest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     Text2TextGenerationPipeline,
     pipeline,
 )
@@ -33,7 +32,6 @@ if is_torch_available():
 @is_pipeline_test
 class Text2TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,

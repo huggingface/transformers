@@ -100,9 +100,8 @@ class PretrainedConfig(PushToHubMixin):
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
-            Store the string that was passed to [`PreTrainedModel.from_pretrained`] or
-            [`TFPreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path` if the configuration was created
-            with such a method.
+            Store the string that was passed to [`PreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path`
+            if the configuration was created with such a method.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return all hidden-states.
         output_attentions (`bool`, *optional*, defaults to `False`):

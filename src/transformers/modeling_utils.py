@@ -79,11 +79,8 @@ from .utils import (
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
     DUMMY_INPUTS,
-    FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
@@ -568,11 +565,7 @@ def load_state_dict(
                         "model. Make sure you have saved the model properly."
                     ) from e
         except (UnicodeDecodeError, ValueError):
-            raise OSError(
-                f"Unable to load weights from pytorch checkpoint file for '{checkpoint_file}' "
-                f"at '{checkpoint_file}'. "
-                "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
-            )
+            raise OSError(f"Unable to load weights from pytorch checkpoint file '{checkpoint_file}'.")
 
 
 def set_initialized_submodules(model, state_dict_keys):
@@ -1004,8 +997,6 @@ def _get_resolved_checkpoint_files(
     subfolder: str,
     variant: Optional[str],
     gguf_file: Optional[str],
-    from_tf: bool,
-    from_flax: bool,
     use_safetensors: bool,
     cache_dir: str,
     force_download: bool,
@@ -1032,27 +1023,14 @@ def _get_resolved_checkpoint_files(
                 # If the filename is explicitly defined, load this by default.
                 archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
-            elif from_tf and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-            ):
-                # Load from a TF 1.0 checkpoint in priority if from_tf
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-            elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)):
-                # Load from a TF 2.0 checkpoint in priority if from_tf
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)
-            elif from_flax and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
-            ):
-                # Load from a Flax checkpoint in priority if from_flax
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
-            elif use_safetensors is not False and os.path.isfile(
+            elif use_safetensors and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
             ):
                 # Load from a safetensors checkpoint
                 archive_file = os.path.join(
                     pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
                 )
-            elif use_safetensors is not False and os.path.isfile(
+            elif use_safetensors and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant))
             ):
                 # Load from a sharded safetensors checkpoint
@@ -1075,24 +1053,6 @@ def _get_resolved_checkpoint_files(
                     pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
                 )
                 is_sharded = True
-            # At this stage we don't have a weight file so we will raise an error.
-            elif not use_safetensors and (
-                os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
-                or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
-            ):
-                raise OSError(
-                    f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
-                    f" {pretrained_model_name_or_path} but there is a file for TensorFlow weights. Use"
-                    " `from_tf=True` to load this model from those weights."
-                )
-            elif not use_safetensors and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
-            ):
-                raise OSError(
-                    f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
-                    f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
-                    " to load this model from those weights."
-                )
             elif use_safetensors:
                 raise OSError(
                     f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
@@ -1100,20 +1060,11 @@ def _get_resolved_checkpoint_files(
                 )
             else:
                 raise OSError(
-                    f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
-                    f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
-                    f" {pretrained_model_name_or_path}."
+                    f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)}, or {_add_variant(WEIGHTS_NAME, variant)},"
+                    f" found in directory {pretrained_model_name_or_path}."
                 )
         elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             archive_file = pretrained_model_name_or_path
-            is_local = True
-        elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path + ".index")):
-            if not from_tf:
-                raise ValueError(
-                    f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "
-                    "from_tf to True to load from this checkpoint."
-                )
-            archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             filename = pretrained_model_name_or_path
@@ -1123,11 +1074,7 @@ def _get_resolved_checkpoint_files(
             if transformers_explicit_filename is not None:
                 filename = transformers_explicit_filename
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
-            elif from_tf:
-                filename = TF2_WEIGHTS_NAME
-            elif from_flax:
-                filename = FLAX_WEIGHTS_NAME
-            elif use_safetensors is not False:
+            elif use_safetensors:
                 filename = _add_variant(SAFE_WEIGHTS_NAME, variant)
             else:
                 filename = _add_variant(WEIGHTS_NAME, variant)
@@ -1232,19 +1179,7 @@ def _get_resolved_checkpoint_files(
                             "cache_dir": cache_dir,
                             "local_files_only": local_files_only,
                         }
-                        if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
-                                " Use `from_tf=True` to load this model from those weights."
-                            )
-                        elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
-                                " `from_flax=True` to load this model from those weights."
-                            )
-                        elif variant is not None and has_file(
+                        if variant is not None and has_file(
                             pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
                         ):
                             raise OSError(
@@ -1255,8 +1190,7 @@ def _get_resolved_checkpoint_files(
                         else:
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
-                                f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                                f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
                             )
 
             except OSError:
@@ -1269,8 +1203,7 @@ def _get_resolved_checkpoint_files(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)},"
-                    f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                    f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)}."
                 ) from e
 
         if is_local:
@@ -4513,7 +4446,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: Optional[bool] = None,
+        use_safetensors: bool = True,
         weights_only: bool = True,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
@@ -4537,13 +4470,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
-                    - A path or url to a model folder containing a *flax checkpoint file* in *.msgpack* format (e.g,
-                      `./flax_model/` containing `flax_model.msgpack`). In this case, `from_flax` should be set to
-                      `True`.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -4572,12 +4498,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             cache_dir (`Union[str, os.PathLike]`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
-            from_tf (`bool`, *optional*, defaults to `False`):
-                Load the model weights from a TensorFlow checkpoint save file (see docstring of
-                `pretrained_model_name_or_path` argument).
-            from_flax (`bool`, *optional*, defaults to `False`):
-                Load the model weights from a Flax checkpoint save file (see docstring of
-                `pretrained_model_name_or_path` argument).
             ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`):
                 Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
                 as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
@@ -4693,11 +4613,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
             variant (`str`, *optional*):
-                If specified load weights from `variant` filename, *e.g.* pytorch_model.<variant>.bin. `variant` is
-                ignored when using `from_tf` or `from_flax`.
-            use_safetensors (`bool`, *optional*, defaults to `None`):
-                Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
-                is not installed, it will be set to `False`.
+                If specified load weights from `variant` filename, *e.g.* pytorch_model.<variant>.bin.
+            use_safetensors (`bool`, *optional*, defaults to `True`):
+                Whether or not to use `safetensors` checkpoints. Defaults to `True`. If `safetensors` is not installed,
+                it will be set to `False`.
             weights_only (`bool`, *optional*, defaults to `True`):
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
@@ -4738,16 +4657,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         >>> # Update configuration during loading.
         >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
-        >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
-        >>> config = BertConfig.from_json_file("./tf_model/my_tf_model_config.json")
-        >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
-        >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
-        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", from_flax=True)
         ```
         """
         state_dict = kwargs.pop("state_dict", None)
-        from_tf = kwargs.pop("from_tf", False)
-        from_flax = kwargs.pop("from_flax", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -4790,8 +4702,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
         _ = kwargs.pop("mirror", None)
-        _ = kwargs.pop("_fast_init", True)
+        _ = kwargs.pop("_fast_init", None)
         _ = kwargs.pop("low_cpu_mem_usage", None)
+        _ = kwargs.pop("from_tf", None)
+        _ = kwargs.pop("from_flax", None)
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
@@ -4853,7 +4767,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
             adapter_kwargs["token"] = token
 
-        if use_safetensors is None and not is_safetensors_available():
+        if use_safetensors and not is_safetensors_available():
             use_safetensors = False
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4958,8 +4872,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
             )
 
-        from_pt = not (from_tf | from_flax)
-
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
@@ -5010,7 +4922,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
 
         hf_quantizer, config, dtype, device_map = get_hf_quantizer(
-            config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent
+            config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
         if gguf_file is not None and hf_quantizer is not None:
@@ -5033,8 +4945,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             subfolder=subfolder,
             variant=variant,
             gguf_file=gguf_file,
-            from_tf=from_tf,
-            from_flax=from_flax,
             use_safetensors=use_safetensors,
             cache_dir=cache_dir,
             force_download=force_download,
@@ -5067,11 +4977,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif metadata.get("format") == "pt":
                 pass
             elif metadata.get("format") == "tf":
-                from_tf = True
-                logger.info("A TensorFlow safetensors file is being loaded in a PyTorch model.")
+                raise ValueError("The safetensors file found has format `'tf'`, which is incompatible.")
             elif metadata.get("format") == "flax":
-                from_flax = True
-                logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
+                raise ValueError("The safetensors file found has format `'flax'`, which is incompatible.")
             elif metadata.get("format") == "mlx":
                 # This is a mlx file, we assume weights are compatible with pt
                 pass
@@ -5080,24 +4988,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
                 )
 
-        from_pt = not (from_tf | from_flax)
+        if gguf_file:
+            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
-        if from_pt:
-            if gguf_file:
-                from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
+            # passed directly as a kwarg from now on
+            with torch.device("meta"):
+                dummy_model = cls(config)
+            state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
+                "tensors"
+            ]
 
-                # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-                # passed directly as a kwarg from now on
-                with torch.device("meta"):
-                    dummy_model = cls(config)
-                state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
-                    "tensors"
-                ]
-
-            # Find the correct dtype based on current state
-            config, dtype, dtype_orig = _get_dtype(
-                cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
-            )
+        # Find the correct dtype based on current state
+        config, dtype, dtype_orig = _get_dtype(
+            cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
+        )
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
@@ -5160,40 +5065,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype, keep_in_fp32_regex)
 
-        # Finalize model weight initialization
-        if from_tf:
-            model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
-        elif from_flax:
-            model = cls._load_from_flax(model, checkpoint_files)
-        elif from_pt:
-            # restore default dtype
-            if dtype_orig is not None:
-                torch.set_default_dtype(dtype_orig)
+        # restore default dtype
+        if dtype_orig is not None:
+            torch.set_default_dtype(dtype_orig)
 
-            (
-                model,
-                missing_keys,
-                unexpected_keys,
-                mismatched_keys,
-                offload_index,
-                error_msgs,
-            ) = cls._load_pretrained_model(
-                model,
-                state_dict,
-                checkpoint_files,
-                pretrained_model_name_or_path,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-                sharded_metadata=sharded_metadata,
-                device_map=device_map,
-                disk_offload_folder=offload_folder,
-                offload_state_dict=offload_state_dict,
-                dtype=dtype,
-                hf_quantizer=hf_quantizer,
-                keep_in_fp32_regex=keep_in_fp32_regex,
-                device_mesh=device_mesh,
-                key_mapping=key_mapping,
-                weights_only=weights_only,
-            )
+        # Finalize model weight initialization
+        (
+            model,
+            missing_keys,
+            unexpected_keys,
+            mismatched_keys,
+            offload_index,
+            error_msgs,
+        ) = cls._load_pretrained_model(
+            model,
+            state_dict,
+            checkpoint_files,
+            pretrained_model_name_or_path,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            sharded_metadata=sharded_metadata,
+            device_map=device_map,
+            disk_offload_folder=offload_folder,
+            offload_state_dict=offload_state_dict,
+            dtype=dtype,
+            hf_quantizer=hf_quantizer,
+            keep_in_fp32_regex=keep_in_fp32_regex,
+            device_mesh=device_mesh,
+            key_mapping=key_mapping,
+            weights_only=weights_only,
+        )
+
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -5286,15 +5187,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if output_loading_info:
-            if from_pt:
-                loading_info = {
-                    "missing_keys": missing_keys,
-                    "unexpected_keys": unexpected_keys,
-                    "mismatched_keys": mismatched_keys,
-                    "error_msgs": error_msgs,
-                }
-            elif from_flax:
-                loading_info = None
+            loading_info = {
+                "missing_keys": missing_keys,
+                "unexpected_keys": unexpected_keys,
+                "mismatched_keys": mismatched_keys,
+                "error_msgs": error_msgs,
+            }
             return model, loading_info
         return model
 
@@ -5744,44 +5642,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
-
-    @classmethod
-    def _load_from_tf(cls, model, config, checkpoint_files):
-        if checkpoint_files[0].endswith(".index"):
-            # Load from a TensorFlow 1.X checkpoint - provided by original authors
-            model = cls.load_tf_weights(model, config, checkpoint_files[0][:-6])  # Remove the '.index'
-            loading_info = None
-        else:
-            # Load from our TensorFlow 2.0 checkpoints
-            try:
-                from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
-
-                model, loading_info = load_tf2_checkpoint_in_pytorch_model(
-                    model, checkpoint_files[0], allow_missing_keys=True, output_loading_info=True
-                )
-            except ImportError:
-                logger.error(
-                    "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed."
-                    " Please see https://pytorch.org/ and https://www.tensorflow.org/install/ for installation"
-                    " instructions."
-                )
-                raise
-        return model, loading_info
-
-    @classmethod
-    def _load_from_flax(cls, model, checkpoint_files):
-        try:
-            from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_pytorch_model
-
-            model = load_flax_checkpoint_in_pytorch_model(model, checkpoint_files[0])
-        except ImportError:
-            logger.error(
-                "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see"
-                " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for"
-                " installation instructions."
-            )
-            raise
-        return model
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = {".".join(key.split(".")[:-1]) for key in names}

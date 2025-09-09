@@ -673,9 +673,9 @@ def build_pipeline_init_args(
 ) -> str:
     docstring = r"""
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow."""
+            [`PreTrainedModel`]."""
     if has_tokenizer:
         docstring += r"""
         tokenizer ([`PreTrainedTokenizer`]):

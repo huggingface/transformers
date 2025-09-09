@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     slow,
     torch_device,
 )
@@ -36,7 +35,7 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram

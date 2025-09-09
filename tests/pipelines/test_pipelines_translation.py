@@ -18,7 +18,6 @@ import pytest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
     MBartConfig,
     MBartForConditionalGeneration,
@@ -33,7 +32,6 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
