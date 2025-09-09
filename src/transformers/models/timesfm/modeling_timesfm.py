@@ -1041,12 +1041,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 output_hidden_states=output_hidden_states,
             )
 
-            # Calculate residuals exactly like JAX implementation
+            # Calculate residuals:
             mean_outputs = timesfm_output.mean_predictions  # keep as torch for grad flow
             targets = []
-            # Use the actual forecast context length, not the model's max context length
-            actual_context_len = len(inputs[0]) if inputs else fcontext_len
-            horizon_start = actual_context_len - self.config.patch_length
+            # Slicing: use fixed horizon_start based on forecast_context_len
+            horizon_start = max(0, fcontext_len - self.config.patch_length)
 
             for i, (input_ts, mean_output, train_len) in enumerate(zip(inputs, mean_outputs, train_lens)):
                 if train_len > 0:
@@ -1139,10 +1138,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         # Fill tensors from XReg outputs and sliced TimesFM predictions (torch ops to keep grad)
         for i, (xreg_out, test_len) in enumerate(zip(xreg_predictions, test_lens)):
             xreg_tensor[i, :test_len] = torch.tensor(xreg_out, dtype=model_dtype, device=device)
-            # Take the forecast portion from TimesFM predictions exactly like JAX
-            # Compute horizon_start for each series individually
-            actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
-            horizon_start = max(0, actual_context_len - self.config.patch_length)
+            # Take the forecast portion from TimesFM predictions
+            horizon_start = max(0, fcontext_len - self.config.patch_length)
             horizon_end = min(timesfm_output.mean_predictions.shape[1], horizon_start + test_len)
             timesfm_forecast = timesfm_output.mean_predictions[i, horizon_start:horizon_end]
             # Ensure same length by padding if needed
@@ -1156,20 +1153,35 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 padding = last_val.repeat(pad_len)
                 timesfm_forecast = torch.cat([timesfm_forecast, padding])
             mean_predictions_tensor[i, :test_len] = timesfm_forecast
-        # Denormalize XReg if needed; TimesFM stays in original scale
-        if normalize_xreg_target_per_input and per_instance_stats:
-            for i, test_len in enumerate(test_lens):
-                mean_i, std_i = per_instance_stats[i]
-                if std_i is None:
-                    continue
-                # Undo normalization for XReg outputs and combined outputs
-                if test_len > 0:
-                    xreg_tensor[i, :test_len] = xreg_tensor[i, :test_len] * float(std_i) + float(mean_i)
+        # Keep a copy of normalized XReg predictions for later use
+        xreg_tensor_norm = xreg_tensor.clone()
 
-        # Now compute combined = TimesFM (residual or absolute) + (denormalized) XReg
-        for i, tl in enumerate(test_lens):
-            if tl > 0:
-                combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+        # Combine predictions with correct scaling depending on mode
+        if xreg_mode == "timesfm + xreg":
+            if normalize_xreg_target_per_input and per_instance_stats:
+                for i, test_len in enumerate(test_lens):
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is None or test_len == 0:
+                        continue
+                    xreg_tensor[i, :test_len] = xreg_tensor[i, :test_len] * float(std_i) + float(mean_i)
+            for i, tl in enumerate(test_lens):
+                if tl > 0:
+                    combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+        else:
+            for i, tl in enumerate(test_lens):
+                if tl == 0:
+                    continue
+                if normalize_xreg_target_per_input and per_instance_stats:
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is not None:
+                        combined_tensor[i, :tl] = (mean_predictions_tensor[i, :tl] + xreg_tensor_norm[i, :tl]) * float(
+                            std_i
+                        ) + float(mean_i)
+                        xreg_tensor[i, :tl] = xreg_tensor_norm[i, :tl] * float(std_i) + float(mean_i)
+                        # TimesFM contribution in original units as residual*std
+                        mean_predictions_tensor[i, :tl] = combined_tensor[i, :tl] - xreg_tensor[i, :tl]
+                else:
+                    combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
 
         # Apply truncation if requested
         if truncate_negative:
@@ -1196,16 +1208,25 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             # MSE on combined prediction
             mse_loss = (((combined_tensor - future_values[:, : mask.shape[1]]) ** 2) * mask).sum() / denom
 
-            # Quantile loss: shift TimesFM quantiles by XReg per-step predictions
+            # Quantile loss: combine TimesFM quantiles with XReg per-step predictions
             q_losses = []
             for i, tl in enumerate(test_lens):
                 if tl == 0:
                     continue
-                actual_context_len = len(inputs[i]) if i < len(inputs) else fcontext_len
-                h_start = max(0, actual_context_len - self.config.patch_length)
+                h_start = max(0, fcontext_len - self.config.patch_length)
                 h_end = min(timesfm_output.full_predictions.shape[1], h_start + tl)
                 timesfm_quants = timesfm_output.full_predictions[i, h_start:h_end, 1:]
-                shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                if xreg_mode == "xreg + timesfm" and normalize_xreg_target_per_input and per_instance_stats:
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is not None:
+                        xreg_norm_slice = xreg_tensor_norm[i, :tl]
+                        shifted_quants = (timesfm_quants + xreg_norm_slice.unsqueeze(-1)) * float(std_i) + float(
+                            mean_i
+                        )
+                    else:
+                        shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                else:
+                    shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
                 q_losses.append(self._quantile_loss(shifted_quants, future_values[i, :tl]))
             quantile_loss = torch.stack(q_losses).mean() if q_losses else torch.tensor(0.0, device=device)
             loss = mse_loss + quantile_loss
