@@ -1022,7 +1022,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def distribute_model_on_tp_axis(model, distributed_config, device_mesh):
     model._tp_size = device_mesh.size()
-    model._device_mesh = device_mesh
+    model._tp_device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
