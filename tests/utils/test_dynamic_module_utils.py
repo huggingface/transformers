@@ -17,7 +17,8 @@ import os
 import pytest
 
 from transformers import AutoModel
-from transformers.dynamic_module_utils import get_imports, require_torch
+from transformers.dynamic_module_utils import get_imports
+from transformers.testing_utils import require_torch
 
 
 TOP_LEVEL_IMPORT = """
