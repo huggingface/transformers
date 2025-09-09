@@ -259,8 +259,6 @@ class EdgeTamVideoConfig(PretrainedConfig):
             The initial value for the layer scale in the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
 
     Example:
 

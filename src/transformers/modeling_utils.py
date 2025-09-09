@@ -4963,6 +4963,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
+
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
