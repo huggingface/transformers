@@ -105,7 +105,7 @@ from .stopping_criteria import (
     MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
-    StopStringCriteria,
+    StopStringTextMatchCriteria,
 )
 
 
@@ -1334,7 +1334,11 @@ class GenerationMixin(ContinuousMixin):
                     "model's generation config, but we could not locate a tokenizer. When generating with "
                     "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
                 )
-            criteria.append(StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer))
+            # TODO (joao): when we support compilation of the decoding loop, we need to use StopStringCriteria here if
+            # want compilation support
+            criteria.append(
+                StopStringTextMatchCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer)
+            )
         if generation_config._eos_token_tensor is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config._eos_token_tensor))
         if (
