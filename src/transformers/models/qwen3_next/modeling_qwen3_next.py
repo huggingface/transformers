@@ -876,7 +876,7 @@ class Qwen3NextSparseMoeBlock(nn.Module):
 
 class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
-        nn.Module.__init__(self)
+        super().__init__()
         self.hidden_size = config.hidden_size
 
         # token mixer

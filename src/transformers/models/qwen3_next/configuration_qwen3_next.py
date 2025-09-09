@@ -143,7 +143,7 @@ class Qwen3NextConfig(PretrainedConfig):
             Indicate which layers use Qwen3NextMLP rather than Qwen3NextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        layer_types (`list[str]`, *optional*, defaults to None):
+        layer_types (`list[str]`, *optional*):
             Types of each layer (attention or linear).
 
     ```python
