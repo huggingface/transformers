@@ -71,7 +71,8 @@ class FalconMambaCache:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a smaller batch size is used.
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
+            a smaller batch size is used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
         device (`torch.device` or `str`, *optional*):
@@ -81,7 +82,7 @@ class FalconMambaCache:
 
         ```python
         >>> import torch
-        >>> from transformers import AutoTokenizer, FalconMambaForCausalLM, MambaCache
+        >>> from transformers import AutoTokenizer, FalconMambaForCausalLM, FalconMambaCache
 
         >>> model = FalconMambaForCausalLM.from_pretrained("tiiuae/falcon-mamba-7b")
         >>> tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
@@ -93,7 +94,6 @@ class FalconMambaCache:
         >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
         >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
         >>> outputs.cache_params
-        FalconMambaCache()
         ```
     """
 
