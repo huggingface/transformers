@@ -265,7 +265,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if token_ids.ndim == 1:
             token_ids = token_ids.unsqueeze(0)
         elif token_ids.shape[0] != 1:
-            raise ValueError(f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. " "Use `batch_decode` for multi-sample outputs.")
+            raise ValueError(
+                f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. "
+                "Use `batch_decode` for multi-sample outputs."
+            )
 
         return self.batch_decode(token_ids, **kwargs)[0]
 
