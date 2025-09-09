@@ -110,10 +110,10 @@ class Qwen3NextDynamicCache:
     def __init__(self, config: Qwen3NextConfig):
         super().__init__()
         self.layer_types = config.layer_types
-        self.has_previous_state = False
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
+        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
 
         # Initialize everything to None -> will be lazy initialized to allow multi-gpu (device_map) inference
         self.conv_states = [None for _ in range(config.num_hidden_layers)]
@@ -177,6 +177,11 @@ class Qwen3NextDynamicCache:
         past_seen_tokens = self.get_seq_length(layer_idx)
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
+
+    @property
+    def has_previous_state(self):
+        """We have a previous state if the last linear (conv) layer was already updated."""
+        return self.conv_states[self.last_linear_layer] is not None
 
 
 class Qwen3NextRotaryEmbedding(Qwen3MoeRotaryEmbedding):
@@ -498,11 +503,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             cache_params is not None
             and cache_params.has_previous_state
             and seq_len == 1
-            and cache_params.conv_states[self.layer_idx].shape[0]
-            == cache_params.recurrent_states[self.layer_idx].shape[0]
-            == batch_size
             and cache_position is not None
-            and cache_position.shape[0] == 1
         )
 
         # getting projected states from cache if it exists
@@ -778,9 +779,6 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
