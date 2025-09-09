@@ -112,8 +112,6 @@ class Qwen3NextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         head_dim (`int`, *optional*, defaults to 256):
             Projection weights dimension in multi-head attention.
-        full_attention_interval (`int`, *optional*, defaults to `4`):
-            Full attention layer interval.
         linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
             Kernel size of the convolution used in linear attention layers.
         linear_key_head_dim (`int`, *optional*, defaults to 128):
@@ -206,7 +204,6 @@ class Qwen3NextConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         head_dim=256,
-        full_attention_interval=4,
         linear_conv_kernel_dim=4,
         linear_key_head_dim=128,
         linear_value_head_dim=128,
@@ -245,11 +242,9 @@ class Qwen3NextConfig(PretrainedConfig):
         rope_config_validation(self)
 
         self.layer_types = layer_types
-        self.full_attention_interval = full_attention_interval
         if self.layer_types is None:
             self.layer_types = [
-                "linear_attention" if bool((i + 1) % full_attention_interval) else "full_attention"
-                for i in range(self.num_hidden_layers)
+                "linear_attention" if bool((i + 1) % 4) else "full_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
 
