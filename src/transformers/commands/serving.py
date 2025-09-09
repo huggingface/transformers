@@ -483,6 +483,19 @@ class ServeCommand(BaseTransformersCLICommand):
         # Store and process input arguments
         self.args = args
         self.use_continuous_batching = self.args.continuous_batching
+        if self.use_continuous_batching:
+            default_attn_impl = ContinuousBatchingManager.default_attention_implementation()
+            # checking if attn_implementation is supported by continuous batching
+            if self.args.attn_implementation is None:
+                self.args.attn_implementation = default_attn_impl  # default to sdpa_paged
+                logger.info(f"No attn_implementation passed, defaulting to {default_attn_impl}")
+            supported_attn_impl = ContinuousBatchingManager.supported_attention_implementations()
+            if self.args.attn_implementation not in supported_attn_impl:
+                raise ValueError(
+                    f"Continuous batching only supports {supported_attn_impl} as attn_implementation, got "
+                    f"{self.args.attn_implementation}"
+                    f"Try setting `--attn_implementation={default_attn_impl}`"
+                )
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:

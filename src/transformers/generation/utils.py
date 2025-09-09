@@ -3158,6 +3158,8 @@ class GenerationMixin(ContinuousMixin):
             vocab_size = self.config.audio_vocab_size
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
+        elif self.__class__.__name__ == "BarkSemanticModel":
+            vocab_size = self.config.output_vocab_size
         else:
             vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len

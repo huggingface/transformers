@@ -241,7 +241,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
     def pad_image(
         self,
-        image: np.array,
+        image: np.ndarray,
         size_divisor: int,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
