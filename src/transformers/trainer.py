@@ -5577,7 +5577,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """

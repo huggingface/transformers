@@ -105,7 +105,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _np_extract_fbank_features(self, waveform_batch: np.array, device: str) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
@@ -135,7 +135,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec_batch = np.array(log_spec_batch)
         return log_spec_batch
 
-    def _torch_extract_fbank_features(self, waveform: np.array, device: str = "cpu") -> np.ndarray:
+    def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str = "cpu") -> np.ndarray:
         """
         Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
         yielding results similar to cpu computing with 1e-5 tolerance.
