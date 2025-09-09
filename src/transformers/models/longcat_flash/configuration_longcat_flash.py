@@ -172,10 +172,6 @@ class LongcatFlashConfig(PretrainedConfig):
         "layers.*.mlp.experts.*.down_proj": "rowwise",
     }
 
-    base_model_ep_plan = {
-
-    }
-
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
