@@ -99,44 +99,19 @@ class Qwen3NextDynamicCache:
 
     is_compileable = False
 
-    def __init__(self, config: Qwen3NextConfig, batch_size, dtype=torch.float16, device=None):
+    def __init__(self, config: Qwen3NextConfig):
         super().__init__()
-        self.dtype = dtype
         self.layer_types = config.layer_types
         self.has_previous_state = False
-        self.conv_states = []
-        self.recurrent_states = []
-        self.transformer_layers = []
-        for i in range(config.num_hidden_layers):
-            # NOTE: only use gated deltanet and full attention now! need to change future for more blocks.
-            if self.layer_types[i] == "linear_attention":
-                self.conv_states += [
-                    torch.zeros(
-                        batch_size,
-                        config.linear_key_head_dim * config.linear_num_key_heads * 2
-                        + config.linear_value_head_dim * config.linear_num_value_heads,
-                        config.linear_conv_kernel_dim,
-                        device=device,
-                        dtype=dtype,
-                    )
-                ]
-                self.recurrent_states += [
-                    torch.zeros(
-                        batch_size,
-                        config.linear_num_value_heads,
-                        config.linear_key_head_dim,
-                        config.linear_value_head_dim,
-                        device=device,
-                        dtype=dtype,
-                    )
-                ]
-            elif self.layer_types[i] == "full_attention":
-                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
-                self.recurrent_states += [torch.tensor([[]] * batch_size, device=device)]
-                self.transformer_layers.append(i)
+        self.transformer_layers = [
+            i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
+        ]
 
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        # Initialize everything to None -> will be lazy initialized to allow multi-gpu (device_map) inference
+        self.conv_states = [None for _ in range(config.num_hidden_layers)]
+        self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
+        self.key_cache = [None for _ in range(config.num_hidden_layers)]
+        self.value_cache = [None for _ in range(config.num_hidden_layers)]
 
     def __len__(self):
         return len(self.layer_types)
@@ -151,8 +126,7 @@ class Qwen3NextDynamicCache:
         layer_idx: int,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Update the cache
-        if self.key_cache[layer_idx].shape[-1] == 0:
+        if self.key_cache[layer_idx] is None:
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
@@ -163,23 +137,24 @@ class Qwen3NextDynamicCache:
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        # NOTE: not used and checked....
         for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+            if self.key_cache[layer_idx] is not None:
+                device = self.key_cache[layer_idx].device
+                beam_idx = beam_idx.to(device)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
 
-            device = self.conv_states[layer_idx].device
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.recurrent_states[layer_idx].device
-            self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(0, beam_idx.to(device))
+            if self.conv_states[layer_idx] is not None:
+                device = self.conv_states[layer_idx].device
+                beam_idx = beam_idx.to(device)
+                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx)
+                self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(0, beam_idx)
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] is None:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -682,7 +657,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
-        conv_state, recurrent_state = None, None
 
         use_precomputed_states = (
             cache_params is not None
@@ -697,7 +671,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         # getting projected states from cache if it exists
         if cache_params is not None:
-            # decoding
             conv_state = cache_params.conv_states[self.layer_idx]
             recurrent_state = cache_params.recurrent_states[self.layer_idx]
 
@@ -722,7 +695,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         else:
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                cache_params.conv_states[self.layer_idx] = conv_state
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -763,7 +736,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=None,
-                output_final_state=recurrent_state is not None,
+                output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
 
@@ -775,13 +748,13 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=recurrent_state is not None,
+                output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
 
-        # Init cache
-        if recurrent_state is not None and cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx].copy_(last_recurrent_state)
+        # Update cache
+        if cache_params is not None:
+            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
 
         z_shape_og = z.shape
         # reshape input data into 2D tensor
@@ -1025,9 +998,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = Qwen3NextDynamicCache(
-                config=self.config, batch_size=inputs_embeds.shape[0], dtype=self.dtype, device=self.device
-            )
+            past_key_values = Qwen3NextDynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
