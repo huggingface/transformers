@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch OLMo2 model."""
+"""Testing suite for the PyTorch Olmo3 model."""
 
 import unittest
 
@@ -26,16 +26,13 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_tokenizers,
     require_torch,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -45,126 +42,18 @@ if is_torch_available():
         Olmo3ForCausalLM,
         Olmo3Model,
     )
+    from transformers.models.olmo3.modeling_olmo3 import Olmo3RotaryEmbedding
 
 
-class Olmo3ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="silu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return Olmo3Config(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Olmo3Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+class Olmo3ModelTester(CausalLMModelTester):
+    if is_torch_available():
+        config_class = Olmo3Config
+        base_model_class = Olmo3Model
+        causal_lm_class = Olmo3ForCausalLM
 
 
 @require_torch
-class Olmo3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (Olmo3Model, Olmo3ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -174,42 +63,35 @@ class Olmo3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
+    test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    test_torchscript = False
+    test_all_params_have_gradient = False
+    model_tester_class = Olmo3ModelTester
+    rotary_embedding_layer = Olmo3RotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def setUp(self):
-        self.model_tester = Olmo3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Olmo3Config, hidden_size=37)
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = Olmo3ForCausalLM if is_torch_available() else None
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="OLMo2 does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Rope only gets applied to full attention layers in Olmo3, so make all layers full attention.
+        config.layer_types = ["full_attention"] * len(config.layer_types)
+
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = Olmo3Model(config)
+        original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -217,7 +99,7 @@ class Olmo3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = Olmo3Model(config)
+        scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -243,37 +125,16 @@ class Olmo3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    def test_model_1b_logits_bfloat16(self):
-        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch_device, torch.bfloat16)
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
-        # Expected mean on dim = -1
-        expectations = Expectations(
-            {
-                ("cuda", 8): [[-5.6700, -6.5557, -3.1545, -2.7418, -5.5887, -4.5179, -4.9077, -4.6530]],
-            }
-        )
-        EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
-
-        # slicing logits[0, 0, 0:30]
-        expectations = Expectations(
-            {
-                ("cuda", 8): [2.65625, -5.25, -4.9375, -4.53125, -6.5, -3.828125, -4.15625, -4.1875, -7.0625, -4.71875, -3.609375, -3.09375, -4.59375, -2.640625, -5.25, 0.39453125, 1.3828125, 1.2265625, 1.0078125, 0.57421875, 0.330078125, -0.287109375, -0.3671875, 0.1943359375, -0.0732421875, -6.6875, -4.75, -6.4375, -0.625, -2.625],
-            }
-        )  # fmt: skip
-        EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
-
-    @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf").to(torch_device, dtype=torch.bfloat16)
+        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model").to(
+            torch_device, dtype=torch.bfloat16
+        )
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[-13.0518, -13.8897, -11.7999, -11.3222, -12.3441, -12.3884, -15.4874, -12.7365]],
+                ("cuda", 8): [[1.9575, -2.5172, 0.6279, 1.4340, -0.5264, -0.9742, -2.7632, -1.0411]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -281,7 +142,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
-                ("cuda", 8): [-5.5, -14.4375, -13.8125, -14.875, -14.125, -13.4375, -13.8125, -12.25, -9.5, -12.9375, -11.6875, -6.09375, -12.1875, -6.5, -11.3125, -7.34375, -6.5625, -6.71875, -7.375, -7.96875, -8.0625, -8.1875, -8.75, -8.75, -8.875, -9.9375, -8.1875, -12.875, -7.84375, -11.625],
+                ("cuda", 8): [8.5625, 5.7812, 4.4688, 2.7031, 3.1094, 4.8125, 5.7188, 3.4219, 2.3906, 2.0938, 3.9844, 5.4688, 3.5312, 5.0938, 2.7656, 8.8125, 9.4375, 9.0625, 8.5000, 8.1875, 7.8750, 7.5312, 7.3125, 7.2812, 7.0000, 2.5625, 4.0312, 3.1719, 7.6562, 4.5625],
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -289,45 +150,16 @@ class Olmo3IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
+        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer", device_map="auto")
+        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @require_tokenizers
-    def test_simple_encode_decode(self):
-        rust_tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf")
-
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [2028, 374, 264, 1296])
-        self.assertEqual(rust_tokenizer.decode([2028, 374, 264, 1296], skip_special_tokens=True), "This is a test")
-
-        # bytefallback showcase
-        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [21990, 76706, 9554, 89151, 39013, 249, 21043])  # fmt: skip
-        self.assertEqual(
-            rust_tokenizer.decode([21990, 76706, 9554, 89151, 39013, 249, 21043], skip_special_tokens=True),
-            "生活的真谛是",
-        )
-
-        # Inner spaces showcase
-        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [13347, 220, 22691])
-        self.assertEqual(rust_tokenizer.decode([13347, 220, 22691], skip_special_tokens=True), "Hi  Hello")
-
-        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [13347, 256, 22691])
-        self.assertEqual(rust_tokenizer.decode([13347, 256, 22691], skip_special_tokens=True), "Hi   Hello")
-
-        self.assertEqual(rust_tokenizer.encode(""), [])
-
-        self.assertEqual(rust_tokenizer.encode(" "), [220])
-
-        self.assertEqual(rust_tokenizer.encode("  "), [256])
-
-        self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
     @pytest.mark.torch_export_test
     @slow
@@ -340,11 +172,11 @@ class Olmo3IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        olmo2_model = "shanearora/OLMo2-7B-1124-hf"
+        olmo3_model = "shanearora/2025-sep-a-base-model"
 
-        tokenizer = AutoTokenizer.from_pretrained(olmo2_model, pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained(olmo3_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light",
+            "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2",
         ]
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
@@ -366,7 +198,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             },
         )
         model = Olmo3ForCausalLM.from_pretrained(
-            olmo2_model,
+            olmo3_model,
             device_map=device,
             dtype=dtype,
             attn_implementation=attn_implementation,
