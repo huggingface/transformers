@@ -473,10 +473,10 @@ class MultiModalData:
     and we might change its API in the future.
     """
 
-    num_image_tokens: list[int] = None
-    num_video_tokens: list[int] = None
-    num_audio_tokens: list[int] = None
-    num_image_patches: list[int] = None
+    num_image_tokens: Optional[list[int]] = None
+    num_video_tokens: Optional[list[int]] = None
+    num_audio_tokens: Optional[list[int]] = None
+    num_image_patches: Optional[list[int]] = None
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None

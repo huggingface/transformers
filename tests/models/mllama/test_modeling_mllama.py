@@ -368,16 +368,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
-        pass
-
-    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
-    def test_contrastive_generate_low_memory(self, assistant_type):
-        pass
-
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
