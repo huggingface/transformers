@@ -33,8 +33,8 @@ class LongcatFlashConfig(PretrainedConfig):
             `input_ids` passed when calling [`LongcatFlashModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 56):
-            Number of hidden layers in the Transformer decoder. Each layer contains one attention block and one MLP block.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
@@ -161,16 +161,15 @@ class LongcatFlashConfig(PretrainedConfig):
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.moe_shortcut.experts.*.gate_proj": "colwise",
-        "layers.*.moe_shortcut.experts.*.up_proj": "colwise",
-        "layers.*.moe_shortcut.experts.*.down_proj": "rowwise",
-        "layers.*.moe_shortcut.router.classifier": "colwise",
+        "layers.*.self_attn.*.q_b_proj": "colwise",
+        "layers.*.self_attn.*.kv_b_proj": "colwise",
+        "layers.*.self_attn.*.o_proj": "rowwise",
+        "layers.*.mlps.*.gate_proj": "colwise",
+        "layers.*.mlps.*.up_proj": "colwise",
+        "layers.*.mlps.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "colwise",
+        "layers.*.mlp.experts.*.up_proj": "colwise",
+        "layers.*.mlp.experts.*.down_proj": "rowwise",
     }
 
     base_model_pp_plan = {
@@ -183,7 +182,8 @@ class LongcatFlashConfig(PretrainedConfig):
         self,
         vocab_size=32000,
         hidden_size=4096,
-        num_hidden_layers=56,  # Actual number of decoder layers (28 logical × 2 sublayers)
+        num_hidden_layers=28,
+        num_layers=28,  # to remap to num_hidden_layers unless we refactor
         num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
@@ -230,6 +230,7 @@ class LongcatFlashConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
+        self.num_layers = num_layers
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
