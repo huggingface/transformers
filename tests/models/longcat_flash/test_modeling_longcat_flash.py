@@ -37,18 +37,19 @@ class LongcatFlashModelTester:
         is_training=True,
         use_input_mask=True,
         use_labels=True,
-        vocab_size=32,
-        hidden_size=32,
-        ffn_hidden_size=64,
-        expert_ffn_hidden_size=16,
+        vocab_size=99,
+        hidden_size=144,
+        ffn_hidden_size=288,
+        expert_ffn_hidden_size=48,
         num_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        kv_lora_rank=8,
-        q_lora_rank=16,
-        qk_rope_head_dim=8,
-        v_head_dim=16,
-        qk_nope_head_dim=16,
+        num_attention_heads=8,
+        num_key_value_heads=8,
+        kv_lora_rank=16,
+        q_lora_rank=48,
+        qk_rope_head_dim=4,
+        v_head_dim=8,
+        qk_nope_head_dim=8,
+        head_dim=4,
         n_routed_experts=4,
         zero_expert_num=2,
         moe_topk=2,
@@ -78,6 +79,7 @@ class LongcatFlashModelTester:
         self.ffn_hidden_size = ffn_hidden_size
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.num_layers = num_layers
+        self.num_hidden_layers = num_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_lora_rank = kv_lora_rank
@@ -85,6 +87,7 @@ class LongcatFlashModelTester:
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
+        self.head_dim = head_dim
         self.n_routed_experts = n_routed_experts
         self.zero_expert_num = zero_expert_num
         self.moe_topk = moe_topk
@@ -116,6 +119,7 @@ class LongcatFlashModelTester:
             qk_rope_head_dim=self.qk_rope_head_dim,
             v_head_dim=self.v_head_dim,
             qk_nope_head_dim=self.qk_nope_head_dim,
+            head_dim=self.head_dim,
             n_routed_experts=self.n_routed_experts,
             zero_expert_num=self.zero_expert_num,
             moe_topk=self.moe_topk,
@@ -205,9 +209,7 @@ class LongcatFlashModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LongcatFlashModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=LongcatFlashConfig, hidden_size=37, num_attention_heads=3
-        )
+        self.config_tester = ConfigTester(self, config_class=LongcatFlashConfig, hidden_size=37, num_attention_heads=3)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -224,6 +226,6 @@ class LongcatFlashModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")  
+    @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_to_base(self):
         pass

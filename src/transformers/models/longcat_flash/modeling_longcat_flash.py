@@ -129,6 +129,10 @@ class LongcatFlashTopkRouter(nn.Module):
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
+    @property
+    def weight(self):
+        return self.classifier.weight
+
     @torch.no_grad()
     def get_topk_indices(self, scores):
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)

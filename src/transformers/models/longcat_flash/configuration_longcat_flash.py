@@ -272,4 +272,5 @@ class LongcatFlashConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 __all__ = ["LongcatFlashConfig"]
