@@ -117,8 +117,8 @@ class TimmWrapperConfig(PretrainedConfig):
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
-        output["num_classes"] = self.num_labels
-        output["label_names"] = list(self.id2label.values())
+        output.setdefault("num_classes", self.num_labels)
+        output.setdefault("label_names", list(self.id2label.values()))
         output.pop("id2label", None)
         output.pop("label2id", None)
         return output
