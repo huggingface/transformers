@@ -779,27 +779,6 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
-                    # TODO: The list is growing huge 🙃! Let's try to check if the config has any of audio/image/video token id and skip the test!
-                    # All models below: shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
-                    "llava",
-                    "idefics2",
-                    "idefics3",
-                    "mllama",
-                    "paligemma",
-                    "emu3",
-                    "gotocr2",
-                    "qwen2vl",
-                    "qwen2_5_vl",
-                    "ayavision",
-                    "janus",
-                    "gemma3",
-                    "mistral3",
-                    "chameleon",
-                    "internvl",
-                    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
-                    # All models below: shouldn't suggest audio tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
-                    "voxtral",
-                    "qwen2audio",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -835,11 +814,12 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "use_cache": True,
             }
+            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
-            output_greedy = model.generate(**generation_kwargs, **inputs_dict)
+            output_greedy = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
-            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict)
+            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             # The two outputs must match and their shape must be as expected
             self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup))
