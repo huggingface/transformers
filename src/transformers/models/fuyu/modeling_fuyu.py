@@ -174,9 +174,10 @@ class FuyuModel(FuyuPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -280,9 +281,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

@@ -107,7 +107,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         generation_config: "GenerationConfig",
         model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
@@ -371,7 +371,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         generation_config: "GenerationConfig",
         model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
 
@@ -897,7 +897,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         model_kwargs: dict,
         atm_translator: AssistantToTargetTranslator,
         inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         # Initialize translator before parent class
         self._atm_translator = atm_translator
@@ -1181,7 +1181,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         generation_config: "GenerationConfig",
         model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         super().__init__(
             input_ids=input_ids,

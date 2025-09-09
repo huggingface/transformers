@@ -81,7 +81,9 @@ class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor = None):
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
         if position_ids is None:
