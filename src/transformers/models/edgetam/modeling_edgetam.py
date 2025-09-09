@@ -99,7 +99,7 @@ class EdgeTamVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -176,7 +176,7 @@ class EdgeTamAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -495,9 +495,9 @@ class EdgeTamImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
