@@ -96,7 +96,6 @@ class LongcatFlashModelTester:
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.pad_token_id = pad_token_id
-        self.attention_method = attention_method
         self.mla_scale_q_lora = mla_scale_q_lora
         self.mla_scale_kv_lora = mla_scale_kv_lora
         self.type_sequence_label_size = type_sequence_label_size
@@ -128,7 +127,6 @@ class LongcatFlashModelTester:
             initializer_range=self.initializer_range,
             rms_norm_eps=self.rms_norm_eps,
             pad_token_id=self.pad_token_id,
-            attention_method=self.attention_method,
             mla_scale_q_lora=self.mla_scale_q_lora,
             mla_scale_kv_lora=self.mla_scale_kv_lora,
         )

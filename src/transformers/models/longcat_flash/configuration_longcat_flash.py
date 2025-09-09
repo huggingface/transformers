@@ -122,8 +122,6 @@ class LongcatFlashConfig(PretrainedConfig):
             The dimension of value heads.
         qk_head_dim (`int`, *optional*):
             The total dimension of query/key heads. If not specified, defaults to `qk_nope_head_dim + qk_rope_head_dim`.
-        attention_method (`str`, *optional*, defaults to `"MLA"`):
-            The attention method to use. Currently only "MLA" (Multi-head Latent Attention) is supported.
         mla_scale_q_lora (`bool`, *optional*, defaults to `False`):
             Whether to scale query LoRA projections in MLA.
         mla_scale_kv_lora (`bool`, *optional*, defaults to `False`):
