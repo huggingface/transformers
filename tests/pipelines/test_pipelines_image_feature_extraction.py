@@ -19,7 +19,6 @@ import pytest
 
 from transformers import (
     MODEL_MAPPING,
-    TF_MODEL_MAPPING,
     TOKENIZER_MAPPING,
     ImageFeatureExtractionPipeline,
     is_torch_available,
@@ -45,7 +44,6 @@ def prepare_img():
 @is_pipeline_test
 class ImageFeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
-    tf_model_mapping = TF_MODEL_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

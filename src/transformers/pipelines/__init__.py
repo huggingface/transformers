@@ -584,10 +584,9 @@ def pipeline(
             - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
-        model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
+        model (`str` or [`PreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
-            actual instance of a pretrained model inheriting from [`PreTrainedModel`] (for PyTorch) or
-            [`TFPreTrainedModel`] (for TensorFlow).
+            actual instance of a pretrained model inheriting from [`PreTrainedModel`].
 
             If not provided, the default for the `task` will be loaded.
         config (`str` or [`PretrainedConfig`], *optional*):

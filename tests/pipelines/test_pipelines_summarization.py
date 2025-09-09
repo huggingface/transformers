@@ -16,9 +16,7 @@ import unittest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     SummarizationPipeline,
-    TFPreTrainedModel,
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, require_torch, slow, torch_device
@@ -30,7 +28,6 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class SummarizationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
@@ -78,17 +75,9 @@ class SummarizationPipelineTests(unittest.TestCase):
             "ProphetNetConfig",  # positional embeddings up to a fixed maximum size (otherwise clamping the values)
         ]
         if model.config.__class__.__name__ not in model_can_handle_longer_seq:
-            # Too long and exception is expected.
-            # For TF models, if the weights are initialized in GPU context, we won't get expected index error from
-            # the embedding layer.
-            if not (
-                isinstance(model, TFPreTrainedModel)
-                and len(summarizer.model.trainable_weights) > 0
-                and "GPU" in summarizer.model.trainable_weights[0].device
-            ):
-                if str(summarizer.device) == "cpu":
-                    with self.assertRaises(Exception):
-                        outputs = summarizer("This " * 1000)
+            if str(summarizer.device) == "cpu":
+                with self.assertRaises(Exception):
+                    outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch

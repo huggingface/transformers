@@ -22,7 +22,6 @@ from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
     if is_tokenizers_available():
@@ -258,7 +257,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: "PreTrainedModel",
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         task: str = "",

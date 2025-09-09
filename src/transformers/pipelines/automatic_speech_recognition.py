@@ -134,9 +134,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
