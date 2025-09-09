@@ -215,7 +215,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
-            hidden_states = None
+            hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
         else:
             if output_hidden_states:

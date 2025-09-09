@@ -38,7 +38,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+# fix this in modular
+if True:
+    from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamVisionConfig(PretrainedConfig):
@@ -93,13 +98,13 @@ class EdgeTamVisionConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone_channel_list=[384, 192, 96, 48],
-        backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
+        backbone_channel_list=None,
+        backbone_feature_sizes=None,
         fpn_hidden_size=256,
         fpn_kernel_size=1,
         fpn_stride=1,
         fpn_padding=0,
-        fpn_top_down_levels=[2, 3],
+        fpn_top_down_levels=None,
         fpn_interpolation_mode="nearest",
         num_feature_levels=3,
         fuse_type="sum",
@@ -110,9 +115,15 @@ class EdgeTamVisionConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
+        backbone_feature_sizes = (
+            [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
+        )
+        fpn_top_down_levels = [2, 3] if fpn_top_down_levels is None else fpn_top_down_levels
+
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = (
-                backbone_config["model_type"] if "model_type" in backbone_config else "hiera"
+                backbone_config["model_type"] if "model_type" in backbone_config else "timm_wrapper"
             )
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, AutoConfig):
@@ -120,7 +131,7 @@ class EdgeTamVisionConfig(PretrainedConfig):
         elif backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",
-                model_args={"in_chans": 3, "features_only": True, "out_indices": (0, 1, 2, 3)},
+                model_args={"in_chans": 3, "features_only": True, "out_indices": [0, 1, 2, 3]},
             )
 
         self.backbone_config = backbone_config
@@ -203,7 +214,10 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
 class EdgeTamVisionModel(Sam2VisionModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": AutoModel, "attentions": AutoModel}
+    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+
+    def get_input_embeddings(self):
+        raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
     @check_model_inputs
     def forward(
@@ -242,6 +256,9 @@ class EdgeTamModel(Sam2Model):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
+
+    def get_input_embeddings(self):
+        raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
 
 __all__ = [

@@ -46,6 +46,11 @@ from .configuration_edgetam import (
 )
 
 
+# fix this in modular
+if True:
+    from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
+
+
 class EdgeTamLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
@@ -426,7 +431,7 @@ class EdgeTamVisionNeck(nn.Module):
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": AutoModel, "attentions": AutoModel}
+    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
 
     def __init__(self, config: EdgeTamVisionConfig):
         super().__init__(config)
@@ -438,9 +443,6 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
         self.num_feature_levels = config.num_feature_levels
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.backbone.get_input_embeddings()
 
     @check_model_inputs
     def forward(
@@ -951,9 +953,6 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         self.prompt_encoder.shared_embedding.positional_embedding.data = (
             self.shared_image_embedding.positional_embedding.data
         )
-
-    def get_input_embeddings(self):
-        return self.vision_encoder.get_input_embeddings()
 
     def get_image_wide_positional_embeddings(self) -> torch.Tensor:
         size = self.prompt_encoder.image_embedding_size

@@ -422,6 +422,7 @@ def _test_eager_matches_sdpa_inference(
                 key = "hidden_states"
 
             # TODO: rename logits -> hidden_states
+            print("outputs_eager", outputs_eager.keys())
             logits_eager = outputs_eager[key]
             logits_sdpa = outputs_sdpa[key]
 

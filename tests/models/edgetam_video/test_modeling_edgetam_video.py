@@ -31,7 +31,7 @@ from transformers.video_utils import load_video
 if is_torch_available():
     import torch
 
-    from transformers import EdgeTamVideoModel, EdgeTamVideoProcessor
+    from transformers import EdgeTamVideoModel, Sam2VideoProcessor
 
 
 if is_vision_available():
@@ -66,8 +66,8 @@ def prepare_video():
 class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.video_model = EdgeTamVideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
-        self.processor = EdgeTamVideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
+        self.video_model = EdgeTamVideoModel.from_pretrained("../EdgeTAM-hf").to(torch.float32)
+        self.processor = Sam2VideoProcessor.from_pretrained("../EdgeTAM-hf")
         self.video_model.to(torch_device)
         self.video_model.eval()
 
@@ -100,7 +100,7 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-21.4113, -21.4113, -22.9687], [-23.3090, -23.3090, -24.2606], [-27.5705, -27.5705, -27.1616]]
+                [[-28.3880, -28.3880, -27.9277], [-27.5260, -27.5260, -27.2455], [-25.5902, -25.5902, -25.7136]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -122,9 +122,9 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-21.4113, -21.4113], [-23.3090, -23.3090]]]],
-                    [[[[-20.1003, -20.1003], [-21.2294, -21.2294]]]],
-                    [[[[-19.9619, -19.9619], [-21.3060, -21.3060]]]],
+                    [[[[-28.3880, -28.3880], [-27.5260, -27.5260]]]],
+                    [[[[-15.3350, -15.3350], [-15.0002, -15.0002]]]],
+                    [[[[-14.8729, -14.8729], [-14.6724, -14.6724]]]],
                 ],
             ).to(torch_device),
             atol=1e-4,
@@ -157,13 +157,14 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        print(f"VIDEO_TEST2 - ACTUAL frames[:3, :, :, :2, :2]: {frames[:3, :, :, :2, :2]}")
         torch.testing.assert_close(
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-21.4113, -21.4113], [-23.3090, -23.3090]]]],
-                    [[[[-20.1003, -20.1003], [-21.2294, -21.2294]]]],
-                    [[[[-19.9619, -19.9619], [-21.3060, -21.3060]]]],
+                    [[[[-28.3880, -28.3880], [-27.5260, -27.5260]]]],
+                    [[[[-15.3350, -15.3350], [-15.0002, -15.0002]]]],
+                    [[[[-14.8729, -14.8729], [-14.6724, -14.6724]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -193,7 +194,7 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-11.1487, -11.1487, -11.4202], [-11.6522, -11.6522, -11.8057], [-12.7829, -12.7829, -12.6715]]
+                [[-17.3081, -17.3081, -16.9805], [-16.8430, -16.8430, -16.6766], [-15.7986, -15.7986, -15.9941]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -217,9 +218,9 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-11.1487, -11.1487], [-11.6522, -11.6522]]]],
-                    [[[[-15.3821, -15.3821], [-16.0333, -16.0333]]]],
-                    [[[[-15.4855, -15.4855], [-16.4230, -16.4230]]]],
+                    [[[[-17.3081, -17.3081], [-16.8430, -16.8430]]]],
+                    [[[[-14.9302, -14.9302], [-14.8802, -14.8802]]]],
+                    [[[[-14.4372, -14.4372], [-14.3697, -14.3697]]]],
                 ]
             ).to(torch_device),
             atol=1e-2,
@@ -248,7 +249,7 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-13.1427, -13.1427, -13.6418], [-13.7753, -13.7753, -14.1144], [-15.1957, -15.1957, -15.1757]]
+                [[-17.3245, -17.3245, -16.9231], [-16.8773, -16.8773, -16.6082], [-15.8731, -15.8731, -15.9011]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -272,9 +273,9 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-13.1427, -13.1427], [-13.7753, -13.7753]]]],
-                    [[[[-14.9998, -14.9998], [-15.7086, -15.7086]]]],
-                    [[[[-15.4558, -15.4558], [-16.1649, -16.1649]]]],
+                    [[[[-17.3245, -17.3245], [-16.8773, -16.8773]]]],
+                    [[[[-16.2826, -16.2826], [-15.9087, -15.9087]]]],
+                    [[[[-15.8716, -15.8716], [-15.3992, -15.3992]]]],
                 ]
             ).to(torch_device),
             atol=1e-2,
@@ -305,7 +306,7 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-12.3525, -12.3525, -12.8907], [-13.0608, -13.0608, -13.4079], [-14.6511, -14.6511, -14.5694]]
+                [[-13.9780, -13.9780, -13.7824], [-13.7642, -13.7642, -13.6000], [-13.2842, -13.2842, -13.1904]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -329,9 +330,9 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-12.3525, -12.3525], [-13.0608, -13.0608]]]],
-                    [[[[-15.8181, -15.8181], [-16.4163, -16.4163]]]],
-                    [[[[-15.8900, -15.8900], [-16.5953, -16.5953]]]],
+                    [[[[-13.9780, -13.9780], [-13.7642, -13.7642]]]],
+                    [[[[-16.0142, -16.0142], [-15.5600, -15.5600]]]],
+                    [[[[-16.7568, -16.7568], [-16.2460, -16.2460]]]],
                 ]
             ).to(torch_device),
             atol=1e-2,
@@ -361,7 +362,7 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[:, 0, :2, :2],  # first object
             torch.tensor(
-                [[[-12.6294, -12.6294], [-13.3659, -13.3659]], [[-20.3319, -20.3319], [-22.0491, -22.0491]]]
+                [[[-12.6233, -12.6233], [-12.1809, -12.1809]], [[-13.4556, -13.4556], [-12.9549, -12.9549]]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -384,9 +385,9 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-12.6294, -12.6294], [-13.3659, -13.3659]]], [[[-20.3319, -20.3319], [-22.0491, -22.0491]]]],
-                    [[[[-18.5249, -18.5249], [-19.5830, -19.5830]]], [[[-17.5537, -17.5537], [-19.2259, -19.2259]]]],
-                    [[[[-14.2722, -14.2722], [-15.4622, -15.4622]]], [[[-18.3185, -18.3185], [-20.0314, -20.0314]]]],
+                    [[[[-12.6233, -12.6233], [-12.1809, -12.1809]]], [[[-13.4556, -13.4556], [-12.9549, -12.9549]]]],
+                    [[[[-12.5589, -12.5589], [-12.4450, -12.4450]]], [[[-12.2181, -12.2181], [-12.0188, -12.0188]]]],
+                    [[[[-15.3170, -15.3170], [-15.0254, -15.0254]]], [[[-11.4912, -11.4912], [-11.3171, -11.3171]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -452,8 +453,8 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [[[[-10.0000, -10.0000], [-10.0000, -10.0000]]]],
-                    [[[[-18.4807, -18.4807], [-19.1966, -19.1966]]]],
-                    [[[[-20.0512, -20.0512], [-20.9110, -20.9110]]]],
+                    [[[[-17.4083, -17.4083], [-17.2256, -17.2256]]]],
+                    [[[[-13.8533, -13.8533], [-13.7759, -13.7759]]]],
                 ],
             ).to(torch_device),
             atol=1e-4,
@@ -491,13 +492,14 @@ class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
             video_res_masks.shape, (max_frame_num_to_track, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
         )
         # higher tolerance due to errors propagating from frame to frame
+        print(f"VIDEO_TEST8 - ACTUAL video_res_masks[:3, :, :, :2, :2]: {video_res_masks[:3, :, :, :2, :2]}")
         torch.testing.assert_close(
             video_res_masks[:3, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-11.1487, -11.1487], [-11.6522, -11.6522]]]],
-                    [[[[-15.3821, -15.3821], [-16.0333, -16.0333]]]],
-                    [[[[-15.4855, -15.4855], [-16.4230, -16.4230]]]],
+                    [[[[-17.3081, -17.3081], [-16.8430, -16.8430]]]],
+                    [[[[-14.9302, -14.9302], [-14.8802, -14.8802]]]],
+                    [[[[-14.4372, -14.4372], [-14.3697, -14.3697]]]],
                 ]
             ).to(torch_device),
             atol=1e-2,
