@@ -1006,10 +1006,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     Args:
         eos_token_id (`torch.Tensor`, *optional*):
             The token id of the end of sequence token.
+        num_output_tokens (`int`, *optional*, defaults to 10):
+            The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*, defaults to 2):
             The maximum ngram size to be considered for matching in the prompt
-        num_output_tokens (`int`, *optional*):
-            The number of tokens to be output as candidate tokens.
         max_length (`int`, *optional*, defaults to 20):
             The number of total maximum tokens that can be generated. For decoder-only models that includes the
             prompt length. Defaults to 20, which is the max length used as default in generation config.
@@ -1025,9 +1025,9 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     def __init__(
         self,
         eos_token_id: Optional[torch.Tensor] = None,
-        num_output_tokens: Optional[int] = None,
+        num_output_tokens: int = 10,
         max_matching_ngram_size: Optional[int] = None,
-        max_length: Optional[int] = None,
+        max_length: int = 20,
         logits_processor: Optional["LogitsProcessorList"] = None,
         vocab_size: Optional[int] = None,
     ):
