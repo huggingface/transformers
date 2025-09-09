@@ -595,8 +595,6 @@ class TopHLogitsWarper(LogitsProcessor):
         top_n (`int`, *optional*, defaults to 100):
             The maximum number of tokens to consider for filtering. 
             Only the top `top_n` tokens (by probability) are evaluated.
-        temperature (`float`, *optional*, defaults to 1.0):
-            Softmax temperature. Higher values increase randomness, while lower values make predictions sharper.
         alpha (`float`, *optional*, defaults to 0.4):
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
         filter_value (`float`, *optional*, defaults to -inf):
@@ -619,17 +617,14 @@ class TopHLogitsWarper(LogitsProcessor):
     """
 
 
-    def __init__(self, top_h: float, temperature: float = 1.0, filter_value: float = -float("Inf")):
+    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
         super().__init__()
 
         # input checks
-        if temperature == 0:
-            raise ValueError("Temperature must be non-zero to perform Top-H decoding.")
         if not (0 < top_h <= 1):
             raise ValueError("alpha must be in the range (0, 1].")
         
         self.top_n = 100
-        self.temperature = temperature
         self.coef = top_h
         self.filter_value = filter_value
 
@@ -670,7 +665,7 @@ class TopHLogitsWarper(LogitsProcessor):
         device = scores.device
 
         # compute probabilities
-        scaled_logits = scores / self.temperature
+        scaled_logits = scores
         probs = torch.softmax(scaled_logits, dim=-1)  
 
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
@@ -693,6 +688,8 @@ class TopHLogitsWarper(LogitsProcessor):
             for idx, p in zip(top_idx, top_probs):
                 chosen.append(idx)
                 ind += 1
+                if ind == len(top_probs):
+                    break
                 # update running sums for current prefix
                 sigma = sigma + top_probs[ind]
                 H = H + (-top_probs[ind] * torch.log2(top_probs[ind]))
