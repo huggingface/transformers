@@ -294,9 +294,6 @@ def safe_globals():
 if TYPE_CHECKING:
     import optuna
 
-    if is_datasets_available():
-        import datasets
-
 logger = logging.get_logger(__name__)
 
 
@@ -418,14 +415,14 @@ class Trainer:
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module, None] = None,
-        args: TrainingArguments = None,
+        args: Optional[TrainingArguments] = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset], "datasets.Dataset"]] = None,
         processing_class: Optional[
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
         ] = None,
-        model_init: Optional[Callable[[], PreTrainedModel]] = None,
+        model_init: Optional[Callable[..., PreTrainedModel]] = None,
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
         callbacks: Optional[list[TrainerCallback]] = None,
@@ -3912,20 +3909,31 @@ class Trainer:
             if "shift_labels" in inputs:
                 buffers.append(inputs["shift_labels"])
                 buffer_seq_dims.append(1)
-            if "attention_mask" in inputs and not getattr(self, "_attn_mask_causal_checked", False):
-                # Context parallel currently doesn't support other masks than causal
-                # Accelerate applies hooks to replace mask with is_causal arg in SDPA
-                # Check if the mask is really causal and if not throw an error
-                # TODO: check this only once or always, with speed being the cost
-                attention_mask = inputs["attention_mask"]
-                if not self._is_attention_mask_causal(attention_mask):
-                    raise ValueError(
-                        "Context parallelism only supports causal attention masks. "
-                        "The provided attention_mask is not causal. "
-                        "Please ensure your data uses causal masking (lower triangular) "
-                        "or remove the attention_mask to use the model's default causal masking."
-                    )
-                self._attn_mask_causal_checked = True
+            # Add attention_mask to buffers for context parallel splitting (only if causal)
+            if "attention_mask" in inputs:
+                # Only validate causal mask once for performance
+                if not getattr(self, "_attn_mask_causal_checked", False):
+                    # Context parallel currently doesn't support other masks than causal
+                    # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+                    # Check if the mask is really causal and if not throw an error
+                    attention_mask = inputs["attention_mask"]
+                    if not self._is_attention_mask_causal(attention_mask):
+                        raise ValueError(
+                            "Context parallelism only supports causal attention masks. "
+                            "The provided attention_mask is not causal. "
+                            "Please ensure your data uses causal masking (lower triangular) "
+                            "or remove the attention_mask to use the model's default causal masking."
+                        )
+                    self._attn_mask_causal_checked = True
+                if self._attn_mask_causal_checked:
+                    # Add to buffers only after validation (or if validation already passed)
+                    attention_mask = inputs["attention_mask"]
+                    if attention_mask.dim() == 2:
+                        buffers.append(attention_mask)
+                        buffer_seq_dims.append(1)
+                    else:
+                        # Other dimensionality; keep as-is without sharding to avoid incorrect splits
+                        pass
             # Include position_ids in context parallelism splitting
             if "position_ids" in inputs and inputs["position_ids"] is not None:
                 buffers.append(inputs["position_ids"])
@@ -5569,7 +5577,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
@@ -5615,7 +5623,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
                     num_items_in_batch = num_items_in_batch.unsqueeze(0)
                 # Divide by number of devices with the same batch
-                if pc := self.accelerator.parallelism_config:
+                if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return batch_samples, num_items_in_batch
