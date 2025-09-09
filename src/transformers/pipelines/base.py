@@ -798,7 +798,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
