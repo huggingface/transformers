@@ -101,7 +101,7 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         streaming: bool = False,
         manual_eviction: bool = False,
-        slice_inputs: bool = True,  # TODO: rework this to have a smart router that can pick it
+        slice_inputs: bool = True,  # TODO: There should be an heuristic to decide on slicing, compile, cuda graphs...
     ):
         """Initialize the continuous batch processor.
 
@@ -236,7 +236,7 @@ class ContinuousBatchProcessor:
         if self.attention_mask is not None:
             kwargs["attention_mask"] = {}
             for layer_type, seqlens_k in kwargs["cu_seq_lens_k"].items():
-                kwargs["attention_mask"][layer_type] = self.attention_mask[:1, :, :t, :seqlens_k[-1]]
+                kwargs["attention_mask"][layer_type] = self.attention_mask[:1, :, :t, : seqlens_k[-1]]
         else:
             kwargs["attention_mask"] = None
         return kwargs
@@ -330,9 +330,12 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
 
             cumulative_seqlens_k["full_attention"].append(
-                cumulative_seqlens_k["full_attention"][-1] + query_length + past_length)
+                cumulative_seqlens_k["full_attention"][-1] + query_length + past_length
+            )
             cumulative_seqlens_k["sliding_attention"].append(
-                cumulative_seqlens_k["sliding_attention"][-1] + query_length + min(past_length, self.sliding_window - 1)
+                cumulative_seqlens_k["sliding_attention"][-1]
+                + query_length
+                + min(past_length, self.sliding_window - 1)
             )
 
             if len(state.remaining_prompt_ids) == 0:
@@ -401,7 +404,10 @@ class ContinuousBatchProcessor:
             build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k["full_attention"])
             if self.sliding_window != 1:
                 build_attention_mask(
-                    self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k["sliding_attention"], self.sliding_window
+                    self.attention_mask[1],
+                    cumulative_seqlens_q,
+                    cumulative_seqlens_k["sliding_attention"],
+                    self.sliding_window,
                 )
 
     @traced

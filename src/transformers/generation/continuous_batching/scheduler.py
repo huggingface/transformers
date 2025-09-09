@@ -244,7 +244,8 @@ class PrefillFirstScheduler(Scheduler):
         scheduled_requests = []
 
         for state in self.active_requests.values():
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+            # XXX: when cache is full, state can stay on `PREFILLING_SPLIT` so we need to take those into account
+            if state.status in [RequestStatus.PREFILLING_SPLIT, RequestStatus.SPLIT_PENDING_REMAINDER]:
                 priority_states.append(state)
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
