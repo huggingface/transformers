@@ -1972,7 +1972,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             dynamic_cache_kwargs = {}
         else:
-            dynamic_cache_kwargs = {"config": self.config}
+            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
