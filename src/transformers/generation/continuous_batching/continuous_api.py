@@ -220,7 +220,6 @@ class ContinuousBatchProcessor:
         # Prepare the kwargs
         kwargs = {
             "input_ids": self.input_ids[:, :t],
-            "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
             "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
             "cu_seq_lens_k": {},
@@ -236,7 +235,11 @@ class ContinuousBatchProcessor:
             kwargs["cu_seq_lens_k"][layer_type] = self.cumulative_seqlens_k[layer_type][: b + 1]
         # If the attention mask is not None, we slice it as the others
         if self.attention_mask is not None:
-            kwargs["attention_mask"] = self.attention_mask[..., :t, :c]
+            kwargs["attention_mask"] = {}
+            for layer_type, seqlens_k in kwargs["cu_seq_lens_k"].items():
+                kwargs["attention_mask"][layer_type] = self.attention_mask[:1, :, :t, :seqlens_k[-1]]
+        else:
+            kwargs["attention_mask"] = None
         return kwargs
 
     def __repr__(self):
