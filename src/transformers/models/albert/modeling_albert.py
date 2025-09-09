@@ -15,7 +15,6 @@
 """PyTorch ALBERT model."""
 
 import math
-import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -47,132 +46,6 @@ from .configuration_albert import AlbertConfig
 logger = logging.get_logger(__name__)
 
 
-def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        print(name)
-
-    for name, array in zip(names, arrays):
-        original_name = name
-
-        # If saved from the TF HUB module
-        name = name.replace("module/", "")
-
-        # Renaming and simplifying
-        name = name.replace("ffn_1", "ffn")
-        name = name.replace("bert/", "albert/")
-        name = name.replace("attention_1", "attention")
-        name = name.replace("transform/", "")
-        name = name.replace("LayerNorm_1", "full_layer_layer_norm")
-        name = name.replace("LayerNorm", "attention/LayerNorm")
-        name = name.replace("transformer/", "")
-
-        # The feed forward layer had an 'intermediate' step which has been abstracted away
-        name = name.replace("intermediate/dense/", "")
-        name = name.replace("ffn/intermediate/output/dense/", "ffn_output/")
-
-        # ALBERT attention was split between self and output which have been abstracted away
-        name = name.replace("/output/", "/")
-        name = name.replace("/self/", "/")
-
-        # The pooler is a linear layer
-        name = name.replace("pooler/dense", "pooler")
-
-        # The classifier was simplified to predictions from cls/predictions
-        name = name.replace("cls/predictions", "predictions")
-        name = name.replace("predictions/attention", "predictions")
-
-        # Naming was changed to be more explicit
-        name = name.replace("embeddings/attention", "embeddings")
-        name = name.replace("inner_group_", "albert_layers/")
-        name = name.replace("group_", "albert_layer_groups/")
-
-        # Classifier
-        if len(name.split("/")) == 1 and ("output_bias" in name or "output_weights" in name):
-            name = "classifier/" + name
-
-        # No ALBERT model currently handles the next sentence prediction task
-        if "seq_relationship" in name:
-            name = name.replace("seq_relationship/output_", "sop_classifier/classifier/")
-            name = name.replace("weights", "weight")
-
-        name = name.split("/")
-
-        # Ignore the gradients applied by the LAMB/ADAM optimizers.
-        if (
-            "adam_m" in name
-            or "adam_v" in name
-            or "AdamWeightDecayOptimizer" in name
-            or "AdamWeightDecayOptimizer_1" in name
-            or "global_step" in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except ValueError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        print(f"Initialize PyTorch weight {name} from {original_name}")
-        pointer.data = torch.from_numpy(array)
-
-    return model
-
-
 class AlbertEmbeddings(nn.Module):
     """
     Construct the embeddings from word, position and token_type embeddings.
@@ -184,8 +57,7 @@ class AlbertEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
+        # self.LayerNorm is not snake-cased due to old tensorflow checkpoint name matching
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -546,15 +418,12 @@ class AlbertTransformer(nn.Module):
 @auto_docstring
 class AlbertPreTrainedModel(PreTrainedModel):
     config: AlbertConfig
-    load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
     _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1337,7 +1206,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
 
 
 __all__ = [
-    "load_tf_weights_in_albert",
     "AlbertPreTrainedModel",
     "AlbertModel",
     "AlbertForPreTraining",

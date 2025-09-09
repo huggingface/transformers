@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers import LxmertConfig, is_tf_available, is_torch_available
+from transformers import LxmertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -37,10 +37,6 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-
-
-if is_tf_available():
-    import tensorflow as tf
 
 
 class LxmertModelTester:
@@ -740,30 +736,6 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(attentions_vision.grad)
         self.assertIsNotNone(hidden_states_vision.grad)
         self.assertIsNotNone(attentions_vision.grad)
-
-    def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-        tf_inputs_dict = {}
-        for key, value in pt_inputs_dict.items():
-            # skip key that does not exist in tf
-            if isinstance(value, dict):
-                tf_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
-            elif isinstance(value, (list, tuple)):
-                tf_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
-            elif isinstance(value, bool):
-                tf_inputs_dict[key] = value
-            elif key == "input_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            elif key == "pixel_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            elif key == "input_features":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            # other general float inputs
-            elif value.is_floating_point():
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            else:
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.int32)
-
-        return tf_inputs_dict
 
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"

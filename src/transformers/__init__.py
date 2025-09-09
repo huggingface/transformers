@@ -46,7 +46,6 @@ from .utils import is_scipy_available as is_scipy_available
 from .utils import is_sentencepiece_available as is_sentencepiece_available
 from .utils import is_speech_available as is_speech_available
 from .utils import is_tensorflow_text_available as is_tensorflow_text_available
-from .utils import is_tf_available as is_tf_available
 from .utils import is_timm_available as is_timm_available
 from .utils import is_tokenizers_available as is_tokenizers_available
 from .utils import is_torch_available as is_torch_available
@@ -66,7 +65,6 @@ _import_structure = {
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
-    "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
     "data": [
         "DataProcessor",
         "InputExample",
@@ -137,16 +135,6 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Losses
-    "modeling_tf_pytorch_utils": [
-        "convert_tf_weight_name_to_pt_weight_name",
-        "load_pytorch_checkpoint_in_tf2_model",
-        "load_pytorch_model_in_tf2_model",
-        "load_pytorch_weights_in_tf2_model",
-        "load_tf2_checkpoint_in_pytorch_model",
-        "load_tf2_model_in_pytorch_model",
-        "load_tf2_weights_in_pytorch_model",
-    ],
     # Models
     "onnx": [],
     "pipelines": [
@@ -218,7 +206,6 @@ _import_structure = {
     ],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
-    "training_args_tf": ["TFTrainingArguments"],
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -252,7 +239,6 @@ _import_structure = {
         "is_sklearn_available",
         "is_speech_available",
         "is_tensorflow_text_available",
-        "is_tf_available",
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
@@ -501,84 +487,6 @@ else:
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
 
-# TensorFlow-backed objects
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_tf_objects
-
-    _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
-else:
-    _import_structure["activations_tf"] = []
-    _import_structure["generation"].extend(
-        [
-            "TFForcedBOSTokenLogitsProcessor",
-            "TFForcedEOSTokenLogitsProcessor",
-            "TFForceTokensLogitsProcessor",
-            "TFGenerationMixin",
-            "TFLogitsProcessor",
-            "TFLogitsProcessorList",
-            "TFLogitsWarper",
-            "TFMinLengthLogitsProcessor",
-            "TFNoBadWordsLogitsProcessor",
-            "TFNoRepeatNGramLogitsProcessor",
-            "TFRepetitionPenaltyLogitsProcessor",
-            "TFSuppressTokensAtBeginLogitsProcessor",
-            "TFSuppressTokensLogitsProcessor",
-            "TFTemperatureLogitsWarper",
-            "TFTopKLogitsWarper",
-            "TFTopPLogitsWarper",
-        ]
-    )
-    _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
-    _import_structure["modeling_tf_outputs"] = []
-    _import_structure["modeling_tf_utils"] = [
-        "TFPreTrainedModel",
-        "TFSequenceSummary",
-        "TFSharedEmbeddings",
-        "shape_list",
-    ]
-    _import_structure["optimization_tf"] = [
-        "AdamWeightDecay",
-        "GradientAccumulator",
-        "WarmUp",
-        "create_optimizer",
-    ]
-    _import_structure["tf_utils"] = []
-
-
-# FLAX-backed objects
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_flax_objects
-
-    _import_structure["utils.dummy_flax_objects"] = [
-        name for name in dir(dummy_flax_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["generation"].extend(
-        [
-            "FlaxForcedBOSTokenLogitsProcessor",
-            "FlaxForcedEOSTokenLogitsProcessor",
-            "FlaxForceTokensLogitsProcessor",
-            "FlaxGenerationMixin",
-            "FlaxLogitsProcessor",
-            "FlaxLogitsProcessorList",
-            "FlaxLogitsWarper",
-            "FlaxMinLengthLogitsProcessor",
-            "FlaxTemperatureLogitsWarper",
-            "FlaxSuppressTokensAtBeginLogitsProcessor",
-            "FlaxSuppressTokensLogitsProcessor",
-            "FlaxTopKLogitsWarper",
-            "FlaxTopPLogitsWarper",
-            "FlaxWhisperTimeStampLogitsProcessor",
-        ]
-    )
-    _import_structure["modeling_flax_outputs"] = []
-    _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -716,22 +624,6 @@ if TYPE_CHECKING:
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
-    from .generation import TFForcedBOSTokenLogitsProcessor as TFForcedBOSTokenLogitsProcessor
-    from .generation import TFForcedEOSTokenLogitsProcessor as TFForcedEOSTokenLogitsProcessor
-    from .generation import TFForceTokensLogitsProcessor as TFForceTokensLogitsProcessor
-    from .generation import TFGenerationMixin as TFGenerationMixin
-    from .generation import TFLogitsProcessor as TFLogitsProcessor
-    from .generation import TFLogitsProcessorList as TFLogitsProcessorList
-    from .generation import TFLogitsWarper as TFLogitsWarper
-    from .generation import TFMinLengthLogitsProcessor as TFMinLengthLogitsProcessor
-    from .generation import TFNoBadWordsLogitsProcessor as TFNoBadWordsLogitsProcessor
-    from .generation import TFNoRepeatNGramLogitsProcessor as TFNoRepeatNGramLogitsProcessor
-    from .generation import TFRepetitionPenaltyLogitsProcessor as TFRepetitionPenaltyLogitsProcessor
-    from .generation import TFSuppressTokensAtBeginLogitsProcessor as TFSuppressTokensAtBeginLogitsProcessor
-    from .generation import TFSuppressTokensLogitsProcessor as TFSuppressTokensLogitsProcessor
-    from .generation import TFTemperatureLogitsWarper as TFTemperatureLogitsWarper
-    from .generation import TFTopKLogitsWarper as TFTopKLogitsWarper
-    from .generation import TFTopPLogitsWarper as TFTopPLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
@@ -775,20 +667,6 @@ if TYPE_CHECKING:
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
 
-    # TF 2.0 <=> PyTorch conversion utilities
-    from .modeling_tf_pytorch_utils import (
-        convert_tf_weight_name_to_pt_weight_name as convert_tf_weight_name_to_pt_weight_name,
-    )
-    from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model as load_pytorch_checkpoint_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_pytorch_model_in_tf2_model as load_pytorch_model_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_pytorch_weights_in_tf2_model as load_pytorch_weights_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model as load_tf2_checkpoint_in_pytorch_model
-    from .modeling_tf_pytorch_utils import load_tf2_model_in_pytorch_model as load_tf2_model_in_pytorch_model
-    from .modeling_tf_pytorch_utils import load_tf2_weights_in_pytorch_model as load_tf2_weights_in_pytorch_model
-    from .modeling_tf_utils import TFPreTrainedModel as TFPreTrainedModel
-    from .modeling_tf_utils import TFSequenceSummary as TFSequenceSummary
-    from .modeling_tf_utils import TFSharedEmbeddings as TFSharedEmbeddings
-    from .modeling_tf_utils import shape_list as shape_list
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
@@ -814,12 +692,6 @@ if TYPE_CHECKING:
     from .optimization import get_polynomial_decay_schedule_with_warmup as get_polynomial_decay_schedule_with_warmup
     from .optimization import get_scheduler as get_scheduler
     from .optimization import get_wsd_schedule as get_wsd_schedule
-
-    # Optimization
-    from .optimization_tf import AdamWeightDecay as AdamWeightDecay
-    from .optimization_tf import GradientAccumulator as GradientAccumulator
-    from .optimization_tf import WarmUp as WarmUp
-    from .optimization_tf import create_optimizer as create_optimizer
 
     # Pipelines
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
@@ -894,7 +766,6 @@ if TYPE_CHECKING:
     from .trainer_utils import set_seed as set_seed
     from .training_args import TrainingArguments as TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments as Seq2SeqTrainingArguments
-    from .training_args_tf import TFTrainingArguments as TFTrainingArguments
 
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
@@ -968,9 +839,7 @@ else:
     )
 
 
-if not is_tf_available() and not is_torch_available() and not is_flax_available():
+if not is_torch_available():
     logger.warning_advice(
-        "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
-        "Models won't be available and only tokenizers, configuration "
-        "and file/data utilities can be used."
+        "PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
     )

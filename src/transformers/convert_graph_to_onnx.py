@@ -22,7 +22,7 @@ from packaging.version import Version, parse
 
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
-from transformers.utils import ModelOutput, is_tf_available, is_torch_available
+from transformers.utils import ModelOutput, is_torch_available
 
 
 # This is the minimal required version to
@@ -67,7 +67,8 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument(
             "--framework",
             type=str,
-            choices=["pt", "tf"],
+            choices=["pt"],
+            default="pt",
             help="Framework for loading the model",
         )
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
@@ -165,7 +166,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> tuple[list[str], list[str], d
 
     Args:
         nlp: The pipeline object holding the model to be exported
-        framework: The framework identifier to dispatch to the correct inference scheme (pt/tf)
+        framework: Not used anymore, only kept for BC
 
     Returns:
 
@@ -194,9 +195,9 @@ def infer_shapes(nlp: Pipeline, framework: str) -> tuple[list[str], list[str], d
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
         return axes
 
-    tokens = nlp.tokenizer("This is a sample output", return_tensors=framework)
+    tokens = nlp.tokenizer("This is a sample output", return_tensors="pt")
     seq_len = tokens.input_ids.shape[-1]
-    outputs = nlp.model(**tokens) if framework == "pt" else nlp.model(tokens)
+    outputs = nlp.model(**tokens)
     if isinstance(outputs, ModelOutput):
         outputs = outputs.to_tuple()
     if not isinstance(outputs, (list, tuple)):
@@ -231,7 +232,7 @@ def load_graph_from_args(
 
     Args:
         pipeline_name: The kind of pipeline to use (ner, question-answering, etc.)
-        framework: The actual model to convert the pipeline from ("pt" or "tf")
+        framework: Not used anymore, only kept for BC
         model: The model name which will be loaded by the pipeline
         tokenizer: The tokenizer name which will be loaded by the pipeline, default to the model's value
 
@@ -242,16 +243,14 @@ def load_graph_from_args(
     if tokenizer is None:
         tokenizer = model
 
-    # Check the wanted framework is available
-    if framework == "pt" and not is_torch_available():
+    # Check pytorch is available
+    if not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
-    if framework == "tf" and not is_tf_available():
-        raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
 
     print(f"Loading pipeline (model: {model}, tokenizer: {tokenizer})")
 
     # Allocate tokenizer and model
-    return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework=framework, model_kwargs=models_kwargs)
+    return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework="pt", model_kwargs=models_kwargs)
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
@@ -291,46 +290,6 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
         )
 
 
-def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
-    """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
-
-    Args:
-        nlp: The pipeline to be exported
-        opset: The actual version of the ONNX operator set to use
-        output: Path where will be stored the generated ONNX model
-
-    Notes: TensorFlow cannot export model bigger than 2GB due to internal constraint from TensorFlow
-
-    """
-    if not is_tf_available():
-        raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
-
-    print("/!\\ Please note TensorFlow doesn't support exporting model > 2Gb /!\\")
-
-    try:
-        import tensorflow as tf
-        import tf2onnx
-        from tf2onnx import __version__ as t2ov
-
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
-
-        # Build
-        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
-
-        # Forward
-        nlp.model.predict(tokens.data)
-        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in tokens.items()]
-        model_proto, _ = tf2onnx.convert.from_keras(
-            nlp.model, input_signature, opset=opset, output_path=output.as_posix()
-        )
-
-    except ImportError as e:
-        raise Exception(
-            f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first. {e}"
-        )
-
-
 def convert(
     framework: str,
     model: str,
@@ -345,7 +304,7 @@ def convert(
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format
 
     Args:
-        framework: The framework the pipeline is backed by ("pt" or "tf")
+        framework: Not used anymore, only kept for BC
         model: The name of the model to load for the pipeline
         output: The path where the ONNX graph will be stored
         opset: The actual version of the ONNX operator set to use
@@ -366,7 +325,7 @@ def convert(
     print(f"ONNX opset version set to: {opset}")
 
     # Load the pipeline
-    nlp = load_graph_from_args(pipeline_name, framework, model, tokenizer, **model_kwargs)
+    nlp = load_graph_from_args(pipeline_name, "pt", model, tokenizer, **model_kwargs)
 
     if not output.parent.exists():
         print(f"Creating folder {output.parent}")
@@ -375,10 +334,7 @@ def convert(
         raise Exception(f"Folder {output.parent.as_posix()} is not empty, aborting conversion")
 
     # Export the graph
-    if framework == "pt":
-        convert_pytorch(nlp, opset, output, use_external_format)
-    else:
-        convert_tensorflow(nlp, opset, output)
+    convert_pytorch(nlp, opset, output, use_external_format)
 
 
 def optimize(onnx_model_path: Path) -> Path:
@@ -517,15 +473,6 @@ if __name__ == "__main__":
         if args.quantize:
             # Ensure requirements for quantization on onnxruntime is met
             check_onnxruntime_requirements(ORT_QUANTIZE_MINIMUM_VERSION)
-
-            # onnxruntime optimizations doesn't provide the same level of performances on TensorFlow than PyTorch
-            if args.framework == "tf":
-                print(
-                    "\t Using TensorFlow might not provide the same optimization level compared to PyTorch.\n"
-                    "\t For TensorFlow users you can try optimizing the model directly through onnxruntime_tools.\n"
-                    "\t For more information, please refer to the onnxruntime documentation:\n"
-                    "\t\thttps://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers\n"
-                )
 
             print("\n====== Optimizing ONNX model ======")
 
