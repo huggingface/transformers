@@ -1036,7 +1036,7 @@ class GenerationMixin(ContinuousMixin):
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
-                max_matching_ngram_size=generation_config.max_matching_ngram_size,
+                max_matching_ngram_size=generation_config.max_matching_ngram_size or 2,
                 max_length=generation_config.max_length,
                 logits_processor=logits_processor,
                 vocab_size=self.config.get_text_config().vocab_size,
