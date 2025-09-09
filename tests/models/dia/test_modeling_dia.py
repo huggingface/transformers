@@ -518,10 +518,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     )
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        pass
-
-    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):
         pass
 
