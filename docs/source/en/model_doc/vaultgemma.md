@@ -45,22 +45,19 @@ command line.
 
 
 ```python
-import torch
 from transformers import pipeline
 
 pipe = pipeline(
-    "text2text-generation",
+    task="text-generation",
     model="google/vaultgemma-1b",
-    dtype=torch.bfloat16,
+    dtype="auto",
     device_map="auto",
 )
 
-messages = [
-    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
-]
-prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-pipe(prompt, max_new_tokens=32)
+text = "Tell me an unknown interesting biology fact about the brain."
+outputs = pipe(text, max_new_tokens=32)
+response = outputs[0]["generated_text"]
+print(response)
 ```
 
 </hfoption>
@@ -68,22 +65,14 @@ pipe(prompt, max_new_tokens=32)
 
 ```python
 # pip install accelerate
-import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
 
-messages = [
-    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
-]
-input_ids = tokenizer.apply_chat_template(
-    messages,
-    return_tensors="pt",
-    return_dict=True,
-    add_generation_prompt=True
-).to(model.device)
+text = "Tell me an unknown interesting biology fact about the brain."
+input_ids = tokenizer(text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
