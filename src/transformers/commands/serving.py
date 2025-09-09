@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import base64
 import copy
 import datetime
@@ -23,8 +24,9 @@ import re
 import tempfile
 import threading
 import time
+import uuid
 from argparse import ArgumentParser, Namespace
-from collections.abc import Generator, Iterable
+from collections.abc import AsyncGenerator, Generator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -127,7 +129,7 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string) and passing the request_id
         """
 
         generation_config: str
@@ -208,6 +210,8 @@ _TOOL_CALL_TOKENS = {
     },
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+X_REQUEST_ID = "x-request-id"
 
 
 class Modality(enum.Enum):
@@ -479,6 +483,19 @@ class ServeCommand(BaseTransformersCLICommand):
         # Store and process input arguments
         self.args = args
         self.use_continuous_batching = self.args.continuous_batching
+        if self.use_continuous_batching:
+            default_attn_impl = ContinuousBatchingManager.default_attention_implementation()
+            # checking if attn_implementation is supported by continuous batching
+            if self.args.attn_implementation is None:
+                self.args.attn_implementation = default_attn_impl  # default to sdpa_paged
+                logger.info(f"No attn_implementation passed, defaulting to {default_attn_impl}")
+            supported_attn_impl = ContinuousBatchingManager.supported_attention_implementations()
+            if self.args.attn_implementation not in supported_attn_impl:
+                raise ValueError(
+                    f"Continuous batching only supports {supported_attn_impl} as attn_implementation, got "
+                    f"{self.args.attn_implementation}"
+                    f"Try setting `--attn_implementation={default_attn_impl}`"
+                )
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:
@@ -685,19 +702,17 @@ class ServeCommand(BaseTransformersCLICommand):
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-        else:
-            logger.warning_once(
-                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
-            )
+
+        from fastapi import Request
 
         @app.post("/v1/chat/completions")
-        def chat_completion(request: dict):
-            self.validate_chat_completion_request(request=request)
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(request)
+                output = self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
-                output = self.generate_chat_completion(request)
+                output = self.generate_chat_completion(body)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
@@ -706,8 +721,6 @@ class ServeCommand(BaseTransformersCLICommand):
 
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
-
-        from fastapi import Request
 
         @app.post("/v1/audio/transcriptions")
         async def audio_transcriptions(request: Request):
@@ -735,6 +748,14 @@ class ServeCommand(BaseTransformersCLICommand):
         @app.get("/health")
         def healthcheck():
             return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
@@ -784,7 +805,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> AsyncGenerator[str, None]:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -832,13 +853,8 @@ class ServeCommand(BaseTransformersCLICommand):
             model.device
         )
 
-        def stream_chat_completion(_inputs):
+        def stream_chat_completion(request_id, decode_stream):
             try:
-                decode_stream = DecodeStream(_inputs.tolist(), False)
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
-                )
-
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
@@ -862,9 +878,24 @@ class ServeCommand(BaseTransformersCLICommand):
 
             except Exception as e:
                 logger.error(str(e))
+                self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_chat_completion(inputs[0])
+        async def cancellation_wrapper(_inputs, request_id):
+            try:
+                decode_stream = DecodeStream(_inputs.tolist(), False)
+                # XXX: using returned request_id as safety in case it is None
+                request_id = self.running_continuous_batching_manager.add_request(
+                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
+                )
+                for chunk in stream_chat_completion(request_id, decode_stream):
+                    yield chunk
+                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(request_id)
+                logger.warning(f"Request {request_id} was cancelled.")
+
+        return cancellation_wrapper(inputs[0], request_id)
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:

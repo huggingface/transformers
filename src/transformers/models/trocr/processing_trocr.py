@@ -18,7 +18,7 @@ Processor class for TrOCR.
 
 import warnings
 from contextlib import contextmanager
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -71,7 +71,7 @@ class TrOCRProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,

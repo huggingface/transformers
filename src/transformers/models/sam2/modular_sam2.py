@@ -108,13 +108,13 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image():
+    def pad_image(self):
         raise NotImplementedError("No pad_image for SAM 2.")
 
-    def _get_preprocess_shape():
+    def _get_preprocess_shape(self):
         raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
 
-    def resize():
+    def resize(self):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
     def _preprocess(
@@ -314,7 +314,7 @@ class Sam2VisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -346,9 +346,9 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -940,7 +940,7 @@ class Sam2Attention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,

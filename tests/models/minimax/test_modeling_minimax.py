@@ -210,10 +210,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_sample(self):
         pass
 
@@ -223,10 +219,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_matches_greedy_search_1_same(self):
-        pass
-
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("Model needs refactor")

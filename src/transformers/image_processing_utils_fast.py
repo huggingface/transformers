@@ -243,7 +243,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
