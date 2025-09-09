@@ -17,6 +17,8 @@ import queue
 import threading
 from dataclasses import dataclass
 from functools import partial
+from itertools import count
+from time import perf_counter
 from typing import Optional
 
 import torch
@@ -28,8 +30,43 @@ from ...generation.configuration_utils import GenerationConfig
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .classes import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
+
+
+def build_attention_mask(
+    attention_mask: torch.Tensor,
+    cumulative_seqlens_q: torch.Tensor,
+    cumulative_seqlens_k: torch.Tensor,
+    sliding_window: int = 1,
+) -> None:
+    """Builds an attention mask inplace using the cumulative seqlens of the query and key. If given a sliding window, it
+    will also apply a sliding window mask on top. The attention mask is not boolean, it uses zeroes and -inf (or its
+    equivalent) so it's more of an attention score bias tensor."""
+    min_value = torch.finfo(attention_mask.dtype).min
+    for i in range(len(cumulative_seqlens_q) - 1):
+        seqlen_q = cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+        seqlen_k = cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+        if seqlen_q < seqlen_k and seqlen_q >= 1:
+            causal_diagonal = seqlen_k - seqlen_q + 1
+        else:
+            causal_diagonal = 1
+        query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
+        key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+        # Apply causal mask
+        minus_inf = torch.full(
+            attention_mask[..., query_range, key_range].shape,
+            min_value,
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
+        )
+        masked = torch.triu(minus_inf, diagonal=causal_diagonal)
+        # Apply sliding window mask if needed
+        if sliding_window > 1:
+            sliding_diagonal = seqlen_k - seqlen_q + sliding_window
+            masked = torch.tril(masked, diagonal=sliding_diagonal)
+        # Replace in attention mask
+        attention_mask[..., query_range, key_range] = masked
 
 
 @dataclass
@@ -41,10 +78,9 @@ class PagedAttentionArgs:
     cumulative_seqlens_k: torch.Tensor
     max_seqlen_q: int
     max_seqlen_k: int
-    write_index: torch.Tensor
-    read_index: torch.Tensor
+    write_index: list[torch.Tensor]
+    read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
-    block_tables: dict[str, list[int]]
     cache: PagedAttentionCache
     use_cache: bool = False
 
@@ -65,19 +101,23 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         streaming: bool = False,
         manual_eviction: bool = False,
-        slice_inputs: bool = True,  # TODO: remove this once parity is ensured
+        slice_inputs: bool = True,  # TODO: There should be an heuristic to decide on slicing, compile, cuda graphs...
     ):
         """Initialize the continuous batch processor.
 
         Args:
             cache: The paged attention cache to use
+            config: The model configuration
             generation_config: The generation configuration
             input_queue: Queue for incoming requests
             output_queue: Queue for outgoing results
             stop_event: Event to signal processing should stop
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
+            scheduler: The [`Scheduler`] to use
             streaming: Whether to stream tokens as they're generated
+            manual_eviction: Whether to manually evict blocks from the cache
+            slice_inputs: Whether to slice the inputs to the model
         """
         self.cache = cache
         self.config = config
@@ -92,66 +132,81 @@ class ContinuousBatchProcessor:
         self.manual_eviction = manual_eviction
         self.slice_inputs = slice_inputs
 
+        # Retrieve the size of the sliding window if there is one
+        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
+
         self.requests_in_batch: list[RequestState] = []
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
-        self.setup_static_tensors()
+        # Setup static tensors
+        self.total_query_length = 0
+        self.total_key_length = 0
+        self.total_batch_size = 0
+        self.setup_static_tensors(cache.num_groups)
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
 
     @traced(standalone=True)
-    def setup_static_tensors(self):
+    def setup_static_tensors(self, num_groups: int):
         T = self.max_batch_tokens
-        max_token_budget = self.cache.num_blocks * self.cache.block_size
+        num_pages = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
-        # Prepare empty tensors
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
-        self.write_index = torch.empty((T,), **tensor_metadata)
-        self.read_index = torch.empty((max_token_budget,), **tensor_metadata)
+        self.cumulative_seqlens_k = {
+            "full_attention": torch.empty((T + 1), **tensor_metadata),
+            "sliding_attention": torch.empty((T + 1), **tensor_metadata),
+            # TODO: can be generalized using layer types, for block-attn for instance
+        }
+
+        # There is one read and write index tensor per group
+        self.write_index_tensors = [torch.empty((T,), **tensor_metadata) for _ in range(num_groups)]
+        self.read_index_tensors = [torch.empty((num_pages + T), **tensor_metadata) for _ in range(num_groups)]
+        # +T is because there are -1 for seqlen_q when model uses a sliding window
+
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = 0
+        self.max_seqlen_k = {"full_attention": 0, "sliding_attention": 0}
         self.output_ids = torch.empty((1, T), **tensor_metadata)
-        # Since attenention_mask is not always needed, we only allocate it if it is needed
+        # Since attenention_mask is not always needed, we only allocate it if it is
         if self.return_attention_mask():
+            # TODO: this could be 2 iff model is hybrid, and then we can also change memory handler to account for it
+            size_0 = 1 if self.sliding_window == 1 else 2
             self.attention_mask = torch.empty(
-                (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+                (size_0, 1, T, num_pages), dtype=self.model_dtype, device=self.model_device
             )
         else:
+            logger.warning(f"Attention mask is not needed for {self.config._attn_implementation}")
             self.attention_mask = None
-        # Initialize the tensors by pretending they are in full use
-        self.actual_tokens = T
-        self.cache_used = max_token_budget
-        self.reset_static_tensors()
-        # Reset stats to 0
-        self.actual_tokens = 0
-        self.cache_used = 0
+        self.reset_static_tensors(full_reset=True)
 
     @traced
     @torch.no_grad()
-    def reset_static_tensors(self):
-        """Reset static tensors for the next batch."""
+    def reset_static_tensors(self, full_reset: bool = False):
+        """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
+        batch, but for initialisation, we can reset everything using the (full_reset) flag."""
         # Compute the slice to reset
-        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
-        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_tensors[0].size(-1)
+        c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_tensors[0].size(-1)
+        b = self.total_batch_size if self.slice_inputs and not full_reset else self.write_index_tensors[0].size(0)
         # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
-        self.cumulative_seqlens_q[: t + 1].zero_()
-        self.cumulative_seqlens_k[: t + 1].zero_()
-        self.write_index[:t].fill_(-1)
-        self.read_index[:c].fill_(-1)
+        self.cumulative_seqlens_q[: b + 1].zero_()
+        for layer_type in self.cumulative_seqlens_k:
+            self.cumulative_seqlens_k[layer_type][: b + 1].zero_()
+            self.max_seqlen_k[layer_type] = 0
+        for i in range(self.cache.num_groups):
+            self.write_index_tensors[i][:t].fill_(-1)
+            self.read_index_tensors[i][: t + c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = 0
         self.output_ids[:, :t].fill_(-1)
         if self.attention_mask is not None:
             self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
@@ -159,32 +214,37 @@ class ContinuousBatchProcessor:
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
-        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        t = self.total_query_length if self.slice_inputs else self.write_index.size(-1)
+        b = self.total_batch_size
         # Prepare the kwargs
         kwargs = {
             "input_ids": self.input_ids[:, :t],
-            "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[: t + 1],
-            "cu_seq_lens_k": self.cumulative_seqlens_k[: t + 1],
-            "write_index": self.write_index[:t],
-            "read_index": self.read_index[:c],
+            "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
+            "cu_seq_lens_k": {},
+            "read_index": self.read_index,  # slicing is done during building
+            "write_index": self.write_index,  # slicing is done during building
             "logits_indices": self.logits_indices[:t],
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
-            "block_tables": self.cache._block_tables,
             "cache": self.cache,
             "use_cache": False,
         }
+        for layer_type in self.cumulative_seqlens_k:
+            kwargs["cu_seq_lens_k"][layer_type] = self.cumulative_seqlens_k[layer_type][: b + 1]
         # If the attention mask is not None, we slice it as the others
         if self.attention_mask is not None:
-            kwargs["attention_mask"] = self.attention_mask[:, :, :t, :c]
+            kwargs["attention_mask"] = {}
+            for layer_type, seqlens_k in kwargs["cu_seq_lens_k"].items():
+                kwargs["attention_mask"][layer_type] = self.attention_mask[:1, :, :t, : seqlens_k[-1]]
+        else:
+            kwargs["attention_mask"] = None
         return kwargs
 
     def __repr__(self):
         return (
-            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, "
+            f"active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
             + self.get_model_kwargs().__repr__()
         )
 
@@ -226,6 +286,7 @@ class ContinuousBatchProcessor:
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
+        self.scheduler.clear_cancelled_requests()
         if not self.scheduler.has_pending_requests():
             return False
 
@@ -236,15 +297,19 @@ class ContinuousBatchProcessor:
             return False
 
         # Get the request objects for this batch
-        self.reset_static_tensors()
+        self.reset_static_tensors()  # TOOD: with slice_inputs, this might be unnecessary
         position_ids = []
         input_ids = []
-        read_index = []
-        write_index = []
+        read_index = [[] for _ in range(self.cache.num_groups)]
+        write_index = [[] for _ in range(self.cache.num_groups)]
         cumulative_seqlens_q = [0]
-        cumulative_seqlens_k = [0]
+        cumulative_seqlens_k = {"full_attention": [0], "sliding_attention": [0]}
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
+
+        self.total_query_length = 0
+        self.total_key_length = 0
+        self.total_batch_size = 0
 
         for state in self.requests_in_batch:
             next_input_ids = state.prompt_ids
@@ -252,27 +317,40 @@ class ContinuousBatchProcessor:
             past_length = state.position_offset
             query_length = len(next_input_ids)
             key_length = query_length + past_length
-            cache_index = list(range(key_length))
 
-            positions_to_add = cache_index[past_length:]
-            read_indices = self.cache._get_physical_indices(state, cache_index)
-            write_indices = read_indices[-query_length:]
+            self.total_query_length += query_length
+            self.total_key_length += key_length
+            self.total_batch_size += 1
+
+            positions_to_add = list(range(past_length, key_length))
+            self.cache.get_read_indices(state.request_id, past_length, query_length, read_index)
+            self.cache.get_write_indices(state.request_id, past_length, query_length, write_index)
 
             position_ids.extend(positions_to_add)
-            read_index.extend(read_indices)
-            write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
-            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
+
+            cumulative_seqlens_k["full_attention"].append(
+                cumulative_seqlens_k["full_attention"][-1] + query_length + past_length
+            )
+            cumulative_seqlens_k["sliding_attention"].append(
+                cumulative_seqlens_k["sliding_attention"][-1]
+                + query_length
+                + min(past_length, self.sliding_window - 1)
+            )
+
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
-            self.max_seqlen_k = max(self.max_seqlen_k, key_length)
+            self.max_seqlen_k["full_attention"] = max(self.max_seqlen_k["full_attention"], query_length + past_length)
+            self.max_seqlen_k["sliding_attention"] = max(
+                self.max_seqlen_k["sliding_attention"], query_length + min(past_length, self.sliding_window - 1)
+            )
             state.position_offset += query_length
 
         logger.debug(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
             f"Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. "
-            f"cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+            f"cum KV: {max(ck[-1] for ck in cumulative_seqlens_k)}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
@@ -293,8 +371,8 @@ class ContinuousBatchProcessor:
         self,
         input_ids,
         position_ids,
-        read_index,
-        write_index,
+        read_index: list[list[int]],
+        write_index: list[list[int]],
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
@@ -302,48 +380,41 @@ class ContinuousBatchProcessor:
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[: len(write_index)] = to_tensor(write_index)
-        self.read_index[: len(read_index)] = to_tensor(read_index)
+
+        self.read_index = []
+        self.write_index = []
+        for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
+            # Write in the actual tensors
+            self.read_index_tensors[i][: len(group_read_indices)] = to_tensor(group_read_indices)
+            self.write_index_tensors[i][: len(group_write_indices)] = to_tensor(group_write_indices)
+            # Slice to the right size
+            r = len(group_read_indices) if self.slice_inputs else self.read_index_tensors[i].size(-1)
+            w = len(group_write_indices) if self.slice_inputs else self.write_index_tensors[i].size(-1)
+            # Add to the index
+            self.read_index.append(self.read_index_tensors[i][:r])
+            self.write_index.append(self.write_index_tensors[i][:w])
+
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        for layer_type in self.cumulative_seqlens_k:
+            l = len(cumulative_seqlens_k[layer_type])
+            self.cumulative_seqlens_k[layer_type][:l] = to_tensor(cumulative_seqlens_k[layer_type])
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
-        self.actual_tokens = len(input_ids)
-        self.cache_used = len(read_index)
-
-        min_value = torch.finfo(self.model_dtype).min
         if self.attention_mask is not None:
-            for i in range(len(cumulative_seqlens_q) - 1):
-                if (
-                    cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                    < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                    and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
-                ):
-                    diagonal = (
-                        cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
-                    )
-                    diagonal = diagonal - cumulative_seqlens_k[i]
-                else:
-                    diagonal = 1
-                query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-                key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-
-                mask = torch.triu(
-                    torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        min_value,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
-                    ),
-                    diagonal=diagonal,
+            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k["full_attention"])
+            if self.sliding_window != 1:
+                build_attention_mask(
+                    self.attention_mask[1],
+                    cumulative_seqlens_q,
+                    cumulative_seqlens_k["sliding_attention"],
+                    self.sliding_window,
                 )
-                self.attention_mask[..., query_range, key_range] = mask
 
     @traced
     def _sync(self):
         if self.output_ids is not None:
             try:
-                out = self.output_ids.tolist()[0]  # should be the only synch we do
+                out = self.output_ids.tolist()[0]  # should be the only sync we do
             except Exception:
                 out = [0, 1]
         else:
@@ -471,7 +542,6 @@ class ContinuousBatchingManager:
         self._result_queue = queue.Queue()
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
-        logger.info("Continuous batching manager started.")
 
     def is_running(self):
         """Check if the background generation thread is running."""
@@ -547,6 +617,15 @@ class ContinuousBatchingManager:
         for input_ids in inputs:
             self.add_request(input_ids, **kwargs)
 
+    def cancel_request(self, request_id: str):
+        """Cancel a request by its ID.
+
+        Args:
+            request_id: The ID of the request to cancel
+        """
+        if self.batch_processor is not None:
+            self.batch_processor.scheduler.set_request_cancellation(request_id)
+
     def get_result(self, request_id=None, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
@@ -577,10 +656,21 @@ class ContinuousBatchingManager:
 
     def request_id_iter(self, request_id):
         """Iterate over results matching a specific request id as they become available."""
-        while self._generation_thread is not None and self._generation_thread.is_alive():
+        request_cancelled = False
+        while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
             result = self.get_result(request_id=request_id, timeout=0.1)
             if result is not None:
                 yield result
+            if self.batch_processor is not None:
+                request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+
+    @staticmethod
+    def supported_attention_implementations() -> set[str]:
+        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
+
+    @staticmethod
+    def default_attention_implementation() -> str:
+        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):
@@ -618,31 +708,46 @@ class ContinuousBatchingManager:
             self.logit_processor.set_continuous_batching_context(
                 batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
-        return self.logit_processor(batch_data["input_ids"], logits)
+
+        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_2d = logits.view(batch_size * seq_len, vocab_size)
+        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+
+        # Process with 2D tensors
+        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d)
+
+        # Reshape back to 3D
+        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
     def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
         if self.do_sample:  # sample
             probs = nn.functional.softmax(probs, dim=-1)
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+            # Add batch dimension back to match argmax output
+            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)
-        tokens = next_tokens.size(1)
+            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+
+        tokens = next_tokens.size(1)  # Get seq_len dimension
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
         batch_processor = None
         try:
+            ref_time = perf_counter()
             paged_attention_cache = PagedAttentionCache(
                 self.model.config,
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
-                # FIXME: this is unused, why was it added?
-                num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
+            logger.debug(f"PagedAttentionCache created in {perf_counter() - ref_time} seconds")
 
             scheduler = None
             if hasattr(self.generation_config, "scheduler"):
@@ -654,6 +759,7 @@ class ContinuousBatchingManager:
                 # Default to fifo
                 scheduler = FIFOScheduler
 
+            ref_time = perf_counter()
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
                 self.model.config,
@@ -670,6 +776,7 @@ class ContinuousBatchingManager:
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
+            logger.debug(f"batch_processor created in {perf_counter() - ref_time} seconds")
             while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
                 self._inner_generation_loop(batch_processor)
                 self.current_batch += 1
@@ -686,8 +793,9 @@ class ContinuousBatchingManager:
             torch.cuda.synchronize()
         if not batch_processor.prepare_next_batch():
             return
-        device, total, reserved, allocated = get_device_and_memory_breakdown()
-        logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
+        if logger.level <= logging.DEBUG:
+            device, total, reserved, allocated = get_device_and_memory_breakdown()
+            logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if self.current_batch == 0:
                 self.warmup(batch_processor)
