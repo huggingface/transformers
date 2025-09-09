@@ -159,11 +159,11 @@ class ContinuousBatchProcessor:
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = [
-            torch.empty((T + 1), **tensor_metadata),  # full attention
-            torch.empty((T + 1), **tensor_metadata),  # sliding attention
+        self.cumulative_seqlens_k = {
+            "full_attention": torch.empty((T + 1), **tensor_metadata),
+            "sliding_attention": torch.empty((T + 1), **tensor_metadata),
             # TODO: can be generalized using layer types, for block-attn for instance
-        ]
+        }
 
         # There is one read and write index tensor per group
         self.write_index_tensors = [torch.empty((T,), **tensor_metadata) for _ in range(num_groups)]
@@ -172,7 +172,7 @@ class ContinuousBatchProcessor:
 
         self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = [0, 0]
+        self.max_seqlen_k = {"full_attention": 0, "sliding_attention": 0}
         self.output_ids = torch.empty((1, T), **tensor_metadata)
         # Since attenention_mask is not always needed, we only allocate it if it is
         if self.return_attention_mask():
@@ -199,14 +199,14 @@ class ContinuousBatchProcessor:
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
         self.cumulative_seqlens_q[: b + 1].zero_()
-        self.cumulative_seqlens_k[0][: b + 1].zero_()
-        self.cumulative_seqlens_k[1][: b + 1].zero_()
+        for layer_type in self.cumulative_seqlens_k:
+            self.cumulative_seqlens_k[layer_type][: b + 1].zero_()
+            self.max_seqlen_k[layer_type] = 0
         for i in range(self.cache.num_groups):
             self.write_index_tensors[i][:t].fill_(-1)
             self.read_index_tensors[i][: t + c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
-        self.max_seqlen_k = [0, 0]
         self.output_ids[:, :t].fill_(-1)
         if self.attention_mask is not None:
             self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
@@ -223,7 +223,7 @@ class ContinuousBatchProcessor:
             "attention_mask": self.attention_mask,
             "position_ids": self.position_ids[:, :t],
             "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
-            "cu_seq_lens_k": [self.cumulative_seqlens_k[0][: b + 1], self.cumulative_seqlens_k[1][: b + 1]],
+            "cu_seq_lens_k": {},
             "read_index": self.read_index,  # slicing is done during building
             "write_index": self.write_index,  # slicing is done during building
             "logits_indices": self.logits_indices[:t],
@@ -232,6 +232,8 @@ class ContinuousBatchProcessor:
             "cache": self.cache,
             "use_cache": False,
         }
+        for layer_type in self.cumulative_seqlens_k:
+            kwargs["cu_seq_lens_k"][layer_type] = self.cumulative_seqlens_k[layer_type][: b + 1]
         # If the attention mask is not None, we slice it as the others
         if self.attention_mask is not None:
             kwargs["attention_mask"] = self.attention_mask[..., :t, :c]
@@ -299,7 +301,7 @@ class ContinuousBatchProcessor:
         read_index = [[] for _ in range(self.cache.num_groups)]
         write_index = [[] for _ in range(self.cache.num_groups)]
         cumulative_seqlens_q = [0]
-        cumulative_seqlens_k = [[0], [0]]
+        cumulative_seqlens_k = {"full_attention": [0], "sliding_attention": [0]}
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
@@ -325,18 +327,19 @@ class ContinuousBatchProcessor:
             position_ids.extend(positions_to_add)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
 
-            cumulative_seqlens_k[0].append(cumulative_seqlens_k[0][-1] + query_length + past_length)
-            cumulative_seqlens_k[1].append(
-                cumulative_seqlens_k[1][-1] + query_length + min(past_length, self.sliding_window - 1)
+            cumulative_seqlens_k["full_attention"].append(
+                cumulative_seqlens_k["full_attention"][-1] + query_length + past_length)
+            cumulative_seqlens_k["sliding_attention"].append(
+                cumulative_seqlens_k["sliding_attention"][-1] + query_length + min(past_length, self.sliding_window - 1)
             )
 
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
-            self.max_seqlen_k = [
-                max(self.max_seqlen_k[0], query_length + past_length),
-                max(self.max_seqlen_k[1], query_length + min(past_length, self.sliding_window - 1)),
-            ]
+            self.max_seqlen_k["full_attention"] = max(self.max_seqlen_k["full_attention"], query_length + past_length)
+            self.max_seqlen_k["sliding_attention"] = max(
+                self.max_seqlen_k["sliding_attention"], query_length + min(past_length, self.sliding_window - 1)
+            )
             state.position_offset += query_length
 
         logger.debug(
@@ -387,15 +390,16 @@ class ContinuousBatchProcessor:
             self.write_index.append(self.write_index_tensors[i][:w])
 
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[0][: len(cumulative_seqlens_k[0])] = to_tensor(cumulative_seqlens_k[0])
-        self.cumulative_seqlens_k[1][: len(cumulative_seqlens_k[1])] = to_tensor(cumulative_seqlens_k[1])
+        for layer_type in self.cumulative_seqlens_k:
+            l = len(cumulative_seqlens_k[layer_type])
+            self.cumulative_seqlens_k[layer_type][: l] = to_tensor(cumulative_seqlens_k[layer_type])
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         if self.attention_mask is not None:
-            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k[0], 1)
+            build_attention_mask(self.attention_mask[0], cumulative_seqlens_q, cumulative_seqlens_k["full_attention"])
             if self.sliding_window != 1:
                 build_attention_mask(
-                    self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k[1], self.sliding_window
+                    self.attention_mask[1], cumulative_seqlens_q, cumulative_seqlens_k["sliding_attention"], self.sliding_window
                 )
 
     @traced

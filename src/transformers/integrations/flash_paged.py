@@ -49,21 +49,22 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
+    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
+    layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
+
     # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
     if cache is not None:
         k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
         # Check if we are in a sliding window context
-        is_full_attention = cache.sliding_windows[module.layer_idx] == 1
-        cu_seq_lens_k = cu_seq_lens_k[0].clone() if is_full_attention else cu_seq_lens_k[1].clone()
-        max_seqlen_k = max_seqlen_k[0] if is_full_attention else max_seqlen_k[1]
+        cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
+        max_seqlen_k = max_seqlen_k[layer_type]
 
     # If there is no cache, we assume this is full attention, and we check if cu_seq_lens_k is a list of tensors
     elif isinstance(cu_seq_lens_k, list):
-        cu_seq_lens_k = cu_seq_lens_k[0].clone()
-        max_seqlen_k = max_seqlen_k[0]
+        cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
+        max_seqlen_k = max_seqlen_k[layer_type]
 
-    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
     custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
