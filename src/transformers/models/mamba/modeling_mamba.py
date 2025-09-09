@@ -33,7 +33,12 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_kernels_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import (
+    is_causal_conv1d_available,
+    is_kernels_available,
+    is_mamba_ssm_available,
+    is_mambapy_available,
+)
 from .configuration_mamba import MambaConfig
 
 
@@ -58,6 +63,8 @@ if is_kernels_available():
         kernel_causal_conv1d.causal_conv1d_update,
         kernel_causal_conv1d.causal_conv1d_fn,
     )
+elif is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
