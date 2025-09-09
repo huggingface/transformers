@@ -97,8 +97,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             Scale factor for the sigmoid function in the memory encoder.
         sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
             Bias for the sigmoid function in the memory encoder.
-        binarize_mask_from_pts_for_mem_enc (`bool`, *optional*, defaults to `True`):
-            Whether to binarize the mask from points for the memory encoder.
         enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
             Whether to enable spatial embedding for occlusions.
         multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
@@ -109,16 +107,10 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             The maximum number of points to trigger multimask output.
         multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
             Whether to use multimask output for tracking.
-        non_overlap_masks_for_mem_enc (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks for the memory encoder.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
-        project_temporal_pos_encoding_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to project temporal positional encoding in object pointers.
-        preserve_temporal_direction_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to preserve temporal direction in object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the memory attention hidden states.
         memory_attention_num_layers (`int`, *optional*, defaults to 2):
@@ -137,20 +129,36 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             The Rope theta parameter.
         memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
             The feature sizes for the Rope positional encoding.
+        memory_attention_rope_k_sizes (`List[int]`, *optional*, defaults to `[16, 16]`):
+            The key feature sizes for the RoPE positional encoding in memory attention.
         memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the Rope positional encoding.
-        memory_attention_apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the self-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
-            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
+        perceiver_resampler_num_latents (`int`, *optional*, defaults to 256):
+            The number of 1D latent tokens in the perceiver resampler.
+        perceiver_resampler_num_latents_2d (`int`, *optional*, defaults to 256):
+            The number of 2D latent tokens in the perceiver resampler.
+        perceiver_resampler_hidden_size (`int`, *optional*, defaults to 64):
+            The hidden size of the perceiver resampler.
+        perceiver_resampler_ff_intermediate_size (`int`, *optional*, defaults to 256):
+            The intermediate size of the feed forward network in the perceiver resampler.
+        perceiver_resampler_num_attention_heads (`int`, *optional*, defaults to 1):
+            The number of attention heads in the perceiver resampler.
+        perceiver_resampler_attention_head_dim (`int`, *optional*, defaults to 64):
+            The dimension of each attention head in the perceiver resampler.
+        perceiver_resampler_num_layers (`int`, *optional*, defaults to 2):
+            The number of layers in the perceiver resampler.
+        perceiver_resampler_hidden_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate for the hidden layers in the perceiver resampler.
+        perceiver_resampler_attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate for the attention layers in the perceiver resampler.
         memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the memory encoder hidden states.
         memory_encoder_output_channels (`int`, *optional*, defaults to 64):
             The number of output channels for the memory encoder.
         mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
             The dimension of the mask downsampler embedding.
+        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+            The intermediate dimension of the memory fuser feed forward network.
         mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the mask downsampler.
         mask_downsampler_stride (`int`, *optional*, defaults to 2):
@@ -173,10 +181,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             The initial value for the layer scale in the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
-        fill_hole_area (`int`, *optional*, defaults to 8):
-            The maximum area of holes to fill in the masks.
-        non_overlap_masks (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -185,16 +189,17 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
     ```python
     >>> from transformers import (
     ...     EdgeTamVisionConfig,
-    ...     EdgeTamPromptEncoderConfig,
-    ...     EdgeTamMaskDecoderConfig,
-    ...     EdgeTamModel,
+    ...     EdgeTamVideoPromptEncoderConfig,
+    ...     EdgeTamVideoMaskDecoderConfig,
+    ...     EdgeTamVideoModel,
+    ...     EdgeTamVideoConfig,
     ... )
 
-    >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> configuration = EdgeTamconfig()
+    >>> # Initializing a EdgeTamVideoConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> configuration = EdgeTamVideoConfig()
 
-    >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> model = EdgeTamModel(configuration)
+    >>> # Initializing a EdgeTamVideoModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> model = EdgeTamVideoModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -243,7 +248,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         memory_attention_dropout=0.1,
         memory_attention_rope_theta=10000,
         memory_attention_rope_feat_sizes=None,
-        memory_attention_rope_q_sizes=None,
         memory_attention_rope_k_sizes=None,
         memory_attention_rope_dropout=0.1,
         # spatial perceiver resampler
@@ -256,7 +260,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         perceiver_resampler_num_layers=2,
         perceiver_resampler_hidden_dropout=0.0,
         perceiver_resampler_attention_dropout=0.0,
-        perceiver_resampler_pos_encoding_at_input=True,
         # memory encoder
         memory_encoder_hidden_size=256,
         memory_encoder_output_channels=64,
@@ -281,9 +284,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
         memory_attention_rope_feat_sizes = (
             [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
-        )
-        memory_attention_rope_q_sizes = (
-            [64, 64] if memory_attention_rope_q_sizes is None else memory_attention_rope_q_sizes
         )
         memory_attention_rope_k_sizes = (
             [16, 16] if memory_attention_rope_k_sizes is None else memory_attention_rope_k_sizes
@@ -326,7 +326,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         self.memory_attention_dropout = memory_attention_dropout
         self.memory_attention_rope_theta = memory_attention_rope_theta
         self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_q_sizes = memory_attention_rope_q_sizes
         self.memory_attention_rope_k_sizes = memory_attention_rope_k_sizes
         self.memory_attention_rope_dropout = memory_attention_rope_dropout
 
@@ -340,7 +339,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
         self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
         self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
-        self.perceiver_resampler_pos_encoding_at_input = perceiver_resampler_pos_encoding_at_input
 
         # memory encoder
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
@@ -861,7 +859,6 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         self.num_latents_1d = config.perceiver_resampler_num_latents
         self.num_latents_2d = config.perceiver_resampler_num_latents_2d
         self.num_layers = config.perceiver_resampler_num_layers
-        self.use_positional_encoding_at_input = config.perceiver_resampler_pos_encoding_at_input
 
         if self.num_latents_1d > 0:
             self.latents_1d = nn.Parameter(torch.randn(self.num_latents_1d, self.hidden_size))
@@ -913,7 +910,7 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         flattened_features = hidden_states.permute(0, 2, 3, 1).flatten(1, 2)
 
         positional_features = None
-        if self.use_positional_encoding_at_input and positional_encoding is not None:
+        if positional_encoding is not None:
             positional_features = positional_encoding.permute(0, 2, 3, 1).flatten(1, 2)
 
         for layer in self.layers:

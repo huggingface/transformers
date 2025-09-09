@@ -1336,7 +1336,6 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         self.num_latents_1d = config.perceiver_resampler_num_latents
         self.num_latents_2d = config.perceiver_resampler_num_latents_2d
         self.num_layers = config.perceiver_resampler_num_layers
-        self.use_positional_encoding_at_input = config.perceiver_resampler_pos_encoding_at_input
 
         if self.num_latents_1d > 0:
             self.latents_1d = nn.Parameter(torch.randn(self.num_latents_1d, self.hidden_size))
@@ -1388,7 +1387,7 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
         flattened_features = hidden_states.permute(0, 2, 3, 1).flatten(1, 2)
 
         positional_features = None
-        if self.use_positional_encoding_at_input and positional_encoding is not None:
+        if positional_encoding is not None:
             positional_features = positional_encoding.permute(0, 2, 3, 1).flatten(1, 2)
 
         for layer in self.layers:

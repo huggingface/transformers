@@ -51,12 +51,8 @@ class EdgeTamVisionConfig(PretrainedConfig):
             The padding for the convolutions in the neck.
         fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
             The levels for the top-down FPN connections.
-        fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation model for the FPN.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels from the FPN to use.
-        fuse_type (`str`, *optional*, defaults to `"sum"`):
-            The type of fusion to use in the neck.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -82,9 +78,7 @@ class EdgeTamVisionConfig(PretrainedConfig):
         fpn_stride=1,
         fpn_padding=0,
         fpn_top_down_levels=None,
-        fpn_interpolation_mode="nearest",
         num_feature_levels=3,
-        fuse_type="sum",
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         initializer_range=0.02,
@@ -99,9 +93,7 @@ class EdgeTamVisionConfig(PretrainedConfig):
         fpn_top_down_levels = [2, 3] if fpn_top_down_levels is None else fpn_top_down_levels
 
         if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = (
-                backbone_config["model_type"] if "model_type" in backbone_config else "timm_wrapper"
-            )
+            backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, AutoConfig):
             backbone_config = backbone_config
@@ -113,7 +105,6 @@ class EdgeTamVisionConfig(PretrainedConfig):
 
         self.backbone_config = backbone_config
 
-        assert fuse_type in ["sum", "average"]
         # Neck
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
@@ -122,8 +113,6 @@ class EdgeTamVisionConfig(PretrainedConfig):
         self.fpn_stride = fpn_stride
         self.fpn_padding = fpn_padding
         self.fpn_top_down_levels = fpn_top_down_levels
-        self.fpn_interpolation_mode = fpn_interpolation_mode
-        self.fuse_type = fuse_type
         self.num_feature_levels = num_feature_levels
 
         self.hidden_act = hidden_act
