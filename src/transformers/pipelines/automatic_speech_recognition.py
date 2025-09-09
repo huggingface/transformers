@@ -313,8 +313,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if "generate_kwargs" in generate_kwargs:
             forward_params.update(generate_kwargs.pop("generate_kwargs"))
         # Default use for kwargs: they are generation-time kwargs
-        if generate_kwargs is not None:
-            forward_params.update(generate_kwargs)
+        forward_params.update(generate_kwargs)
 
         if getattr(self, "assistant_model", None) is not None:
             forward_params["assistant_model"] = self.assistant_model
