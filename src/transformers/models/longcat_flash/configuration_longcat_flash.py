@@ -172,6 +172,10 @@ class LongcatFlashConfig(PretrainedConfig):
         "layers.*.mlp.experts.*.down_proj": "rowwise",
     }
 
+    base_model_ep_plan = {
+
+    }
+
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -207,7 +211,6 @@ class LongcatFlashConfig(PretrainedConfig):
         head_dim=64,  # for rope
         v_head_dim=128,
         qk_head_dim=None,
-        attention_method="MLA",
         mla_scale_q_lora=False,
         mla_scale_kv_lora=False,
         moe_topk=6,
@@ -253,7 +256,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.v_head_dim = v_head_dim
         self.qk_head_dim = qk_head_dim
         self.head_dim = head_dim
-        self.attention_method = attention_method
         self.mla_scale_q_lora = mla_scale_q_lora
         self.mla_scale_kv_lora = mla_scale_kv_lora
 
