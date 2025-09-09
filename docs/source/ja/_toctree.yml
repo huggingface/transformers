@@ -109,8 +109,6 @@
     title: チャットモデルのテンプレート
   - local: serialization
     title: ONNX へのエクスポート
-  - local: tflite
-    title: TFLite へのエクスポート
   - local: torchscript
     title: トーチスクリプトへのエクスポート
   - local: community
@@ -132,8 +130,6 @@
       title: 分散CPUトレーニング
     - local: perf_train_tpu
       title: TPU に関するトレーニング
-    - local: perf_train_tpu_tf
-      title: TensorFlow を使用した TPU のトレーニング
     - local: perf_train_special
       title: 特殊なハードウェアに関するトレーニング
     - local: perf_hardware
@@ -153,8 +149,6 @@
     title: 推論の最適化
   - local: big_models
     title: 大きなモデルのインスタンス化
-  - local: tf_xla
-    title: TensorFlowモデルのXLA統合
   - local: perf_torch_compile
     title: torch.compile()を使用した推論の最適化
   title: パフォーマンスとスケーラビリティ

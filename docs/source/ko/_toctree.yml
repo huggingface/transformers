@@ -208,8 +208,6 @@
   sections:
   - local: serialization
     title: ONNX로 내보내기
-  - local: tflite
-    title: TFLite로 내보내기
   - local: executorch
     title: ExecuTorch
   - local: torchscript

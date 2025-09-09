@@ -44,8 +44,6 @@
     title: 聊天模型的模板
   - local: serialization
     title: 导出为 ONNX
-  - local: tflite
-    title: 导出为 TFLite
   - local: torchscript
     title: 导出为 TorchScript
   - local: gguf
@@ -76,8 +74,6 @@
     title: 实例化大模型
   - local: debugging
     title: 问题定位及解决
-  - local: tf_xla
-    title: TensorFlow模型的XLA集成
   - local: perf_torch_compile
     title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性

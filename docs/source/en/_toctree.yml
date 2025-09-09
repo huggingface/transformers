@@ -220,8 +220,6 @@
   sections:
   - local: serialization
     title: ONNX
-  - local: tflite
-    title: LiteRT
   - local: executorch
     title: ExecuTorch
   - local: torchscript
