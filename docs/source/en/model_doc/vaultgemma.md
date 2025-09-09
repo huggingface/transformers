@@ -101,16 +101,3 @@ echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --t
 
 [[autodoc]] VaultGemmaModel
     - forward
-
-## VaultGemmaPreTrainedModel
-
-[[autodoc]] VaultGemmaPreTrainedModel
-    - forward
-
-## VaultGemmaForSequenceClassification
-
-[[autodoc]] VaultGemmaForSequenceClassification
-
-## VaultGemmaForTokenClassification
-
-[[autodoc]] VaultGemmaForTokenClassification
