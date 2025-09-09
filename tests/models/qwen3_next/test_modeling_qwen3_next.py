@@ -251,5 +251,5 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
-class Qwen3MoeIntegrationTest(unittest.TestCase):
+class Qwen3NextIntegrationTest(unittest.TestCase):
     pass
