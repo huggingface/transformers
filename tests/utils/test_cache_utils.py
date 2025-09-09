@@ -42,6 +42,7 @@ from transformers.utils import is_hqq_available, is_optimum_quanto_available, is
 
 if is_torch_available():
     import torch
+    import torch.utils._pytree as pytree
 
     from transformers import (
         AutoModelForCausalLM,
@@ -56,7 +57,8 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.configuration_utils import PretrainedConfig
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_pytree_cache
 
 
 TEST_CACHE_IMPLEMENTATIONS = [
@@ -539,6 +541,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 @require_torch
 class CacheExportIntegrationTest(unittest.TestCase):
     """Cache tests that rely on `torch.export()` and model loading"""
+
+    @pytest.mark.torch_export_test
+    def test_static_cache_pytree(self):
+        cache = StaticCache(config=PretrainedConfig(num_hidden_layers=2), max_cache_len=1000)
+        cache.update(torch.ones(1, 1, 1, 1), torch.ones(1, 1, 1, 1), 0)
+
+        tree_spec = pytree.tree_flatten(cache)[1]
+        self.assertEqual(type(tree_spec), pytree.LeafSpec)
+
+        register_pytree_cache()
+
+        flattened, spec = pytree.tree_flatten(cache)
+        new_cache = pytree.tree_unflatten(flattened, spec)
+
+        torch.allclose(new_cache.layers[0].values, cache.layers[0].values)
 
     @pytest.mark.torch_export_test
     def test_dynamic_cache_exportability(self):
