@@ -51,6 +51,17 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
+    def __call__(self, *args, **kwargs):
+        """
+        Forwards the `audio` argument to EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`] and the `text`
+        argument to [`~T5Tokenizer.__call__`]. Please refer to the docstring of the above two methods for more
+        information.
+        """
+
+        if len(args) > 0:
+            kwargs["audio"] = args[0]
+        return super().__call__(*args, **kwargs)
+
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.batch_decode with padding_mask->attention_mask
     def batch_decode(self, *args, **kwargs):
         """

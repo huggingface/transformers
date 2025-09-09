@@ -102,7 +102,8 @@ class SeamlessM4TProcessor(ProcessorMixin):
             logger.warning(
                 "Passing `audios` as keyword argument is deprecated and will be removed in v4.63, please pass `audio` instead."
             )
-        return super().__call__(text=text, audio=audios, **kwargs)
+            audio = audios
+        return super().__call__(text=text, audio=audio, **kwargs)
 
 
 __all__ = ["SeamlessM4TProcessor"]
