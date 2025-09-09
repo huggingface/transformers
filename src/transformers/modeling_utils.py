@@ -60,12 +60,16 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
-    distribute_model,
     repack_weights,
     replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
     verify_tp_plan,
+    distribute_model_on_tp_axis,
 )
+from .integrations.pipeline_parallel import (
+    distribute_model_on_pp_axis,
+)
+
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import id_tensor_storage
@@ -5164,8 +5168,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             _assign_original_dtype(model)
 
         if _torch_distributed_available and device_mesh is not None:
-            tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-            model = distribute_model(model, distributed_config, tp_mesh, tp_size)
+            # tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+            # model = distribute_model(model, distributed_config, tp_mesh, tp_size)
+
+            if device_mesh["tp"].size() > 1:
+                model = distribute_model_on_tp_axis(model, distributed_config, device_mesh["tp"])
+
+            if device_mesh["pp"].size() > 1:
+                model = distribute_model_on_pp_axis(model, distributed_config, device_mesh["pp"])
+
 
         # Prepare the full device map
         if device_map is not None:

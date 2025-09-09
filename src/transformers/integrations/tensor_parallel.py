@@ -1020,8 +1020,8 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, distributed_config, device_mesh, tp_size):
-    model._tp_size = tp_size
+def distribute_model_on_tp_axis(model, distributed_config, device_mesh):
+    model._tp_size = device_mesh.size()
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
