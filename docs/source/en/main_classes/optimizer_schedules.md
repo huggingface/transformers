@@ -47,6 +47,10 @@ The `.optimization` module provides:
 
 [[autodoc]] get_cosine_with_hard_restarts_schedule_with_warmup
 
+[[autodoc]] get_cosine_with_min_lr_schedule_with_warmup
+
+[[autodoc]] get_cosine_with_min_lr_schedule_with_warmup_lr_rate
+
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_hard_restarts_schedule.png"/>
 
 [[autodoc]] get_linear_schedule_with_warmup
@@ -56,5 +60,7 @@ The `.optimization` module provides:
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
 
 [[autodoc]] get_inverse_sqrt_schedule
+
+[[autodoc]] get_reduce_on_plateau_schedule
 
 [[autodoc]] get_wsd_schedule
