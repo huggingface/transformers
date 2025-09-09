@@ -797,6 +797,7 @@ class GenerationTesterMixin:
                     "chameleon",
                     "internvl",
                     "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
+                    "lfm2vl",
                     # All models below: shouldn't suggest audio tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
                     "voxtral",
                     "qwen2audio",
@@ -2049,6 +2050,7 @@ class GenerationTesterMixin:
             "zamba",
             "zamba2",
             "lfm2",
+            "lfm2-vl",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
