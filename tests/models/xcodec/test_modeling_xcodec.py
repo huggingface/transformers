@@ -24,17 +24,13 @@ from pathlib import Path
 import numpy as np
 from datasets import Audio, load_dataset
 from parameterized import parameterized
-from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import AutoFeatureExtractor, XcodecConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -365,42 +361,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                outputs = model(dummy_input)
-                outputs_fa = model_fa(dummy_input)
-
-                logits = outputs[1]
-                logits_fa = outputs_fa[1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-    @unittest.skip(reason="The XcodecModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
 
     @unittest.skip(reason="The XcodecModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):

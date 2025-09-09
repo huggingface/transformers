@@ -66,18 +66,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate(self):
-        pass
-
     @unittest.skip(reason="SQRBound is known to have issues with gc")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -130,27 +118,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     @pytest.mark.generate
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
     def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_constrained_beam_search_generate(self):
         pass
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")

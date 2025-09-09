@@ -20,13 +20,11 @@ from functools import partial
 from typing import Optional
 
 import torch
-from tokenizers.decoders import DecodeStream
 from torch import nn
 from tqdm import tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -101,9 +99,6 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         self.setup_static_tensors()
-
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(self.config._name_or_path)
-        self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
@@ -227,18 +222,19 @@ class ContinuousBatchProcessor:
         self.output_queue.put(state.to_generation_output())
 
     @traced
-    def prepare_next_batch(self):
+    def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
+        self.scheduler.clear_cancelled_requests()
         if not self.scheduler.has_pending_requests():
-            return None
+            return False
 
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
         if not self.requests_in_batch:
-            return None
+            return False
 
         # Get the request objects for this batch
         self.reset_static_tensors()
@@ -290,6 +286,8 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
+
+        return True
 
     @traced
     def _build_tensors(
@@ -357,7 +355,6 @@ class ContinuousBatchProcessor:
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
         if self.streaming:
-            state.next_token = self.decode_stream.step(self.tokenizer, state.static_outputs[-1])
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
@@ -463,7 +460,6 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
-        self.decode_stream = DecodeStream(skip_special_tokens=True)
         self.slice_inputs = slice_inputs
 
     @traced
@@ -534,6 +530,7 @@ class ContinuousBatchingManager:
 
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
 
+        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
             prompt_ids=list(input_ids),
@@ -548,24 +545,34 @@ class ContinuousBatchingManager:
         return request_id
 
     def add_requests(self, inputs: list[list[int]], **kwargs):
-        for i, input_ids in enumerate(inputs):
-            # Assign a predictable request ID for ordering results later
-            req_id = f"batch_req_{i}"
-            self.add_request(input_ids, request_id=req_id, **kwargs)
+        for input_ids in inputs:
+            self.add_request(input_ids, **kwargs)
 
-    def get_result(self, timeout=None) -> Optional[GenerationOutput]:
+    def cancel_request(self, request_id: str):
+        """Cancel a request by its ID.
+
+        Args:
+            request_id: The ID of the request to cancel
+        """
+        if self.batch_processor is not None:
+            self.batch_processor.scheduler.set_request_cancellation(request_id)
+
+    def get_result(self, request_id=None, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
         Args:
             timeout: Maximum time to wait for a result
 
         Returns:
-            Optional[Dict]: The result data or None if timeout
+            Optional[GenerationOutput]: The result data or None if timeout
         """
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
             result = self.output_queue.get(block=True, timeout=timeout)
+            if request_id is not None and result.request_id != request_id:
+                self.output_queue.put(result)
+                return None
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -573,12 +580,28 @@ class ContinuousBatchingManager:
 
     def __iter__(self):
         """Iterate over results as they become available."""
-        while (
-            self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
-        ):
-            result = self.get_result(timeout=0.1)  # allow the model to run for 10 seconds
+        while self._generation_thread is not None and self._generation_thread.is_alive():
+            result = self.get_result(timeout=0.1)
             if result is not None:
                 yield result
+
+    def request_id_iter(self, request_id):
+        """Iterate over results matching a specific request id as they become available."""
+        request_cancelled = False
+        while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
+            result = self.get_result(request_id=request_id, timeout=0.1)
+            if result is not None:
+                yield result
+            if self.batch_processor is not None:
+                request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+
+    @staticmethod
+    def supported_attention_implementations() -> set[str]:
+        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
+
+    @staticmethod
+    def default_attention_implementation() -> str:
+        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):
@@ -616,16 +639,31 @@ class ContinuousBatchingManager:
             self.logit_processor.set_continuous_batching_context(
                 batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
-        return self.logit_processor(batch_data["input_ids"], logits)
+
+        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_2d = logits.view(batch_size * seq_len, vocab_size)
+        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+
+        # Process with 2D tensors
+        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d)
+
+        # Reshape back to 3D
+        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
     def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
         if self.do_sample:  # sample
             probs = nn.functional.softmax(probs, dim=-1)
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+            # Add batch dimension back to match argmax output
+            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)
-        tokens = next_tokens.size(1)
+            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+
+        tokens = next_tokens.size(1)  # Get seq_len dimension
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
@@ -637,6 +675,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
+                # FIXME: this is unused, why was it added?
                 num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
@@ -681,7 +720,8 @@ class ContinuousBatchingManager:
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
-        batch_processor.prepare_next_batch()
+        if not batch_processor.prepare_next_batch():
+            return
         device, total, reserved, allocated = get_device_and_memory_breakdown()
         logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
@@ -829,7 +869,6 @@ class ContinuousMixin:
                                 results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
-                            logger.debug(manager.batch_processor.tokenizer.decode(result.generated_tokens))
                         else:
                             if not manager.is_running():
                                 logger.error("Generation thread terminated unexpectedly.")

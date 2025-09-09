@@ -41,7 +41,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
@@ -217,7 +217,7 @@ class T5GemmaSelfAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        # Requied by flash attention: encoder selfattention is non-causal
+        # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
         self.q_proj = nn.Linear(
@@ -599,7 +599,7 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        # TODO: support intialization for encoders and decoders separately(?)
+        # TODO: support initialization for encoders and decoders separately(?)
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
@@ -1064,15 +1064,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        if self.training and self.config._attn_implementation != "eager":
-            msg = (
-                "It is strongly recommended to train T5Gemma models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
-            if is_torchdynamo_compiling():
-                raise ValueError(msg)
-            else:
-                logger.warning_once(msg)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right

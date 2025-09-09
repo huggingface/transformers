@@ -167,7 +167,6 @@ _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
-_jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
@@ -639,6 +638,8 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
+    if is_torch_musa_available():
+        return torch.musa.is_bf16_supported()
     return False
 
 
@@ -719,6 +720,11 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
+    if is_torch_musa_available():
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
+        return False
     if not torch.cuda.is_available() or torch.version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
@@ -1588,10 +1594,6 @@ def is_cython_available() -> bool:
     return importlib.util.find_spec("pyximport") is not None
 
 
-def is_jieba_available() -> Union[tuple[bool, str], bool]:
-    return _jieba_available
-
-
 def is_jinja_available() -> Union[tuple[bool, str], bool]:
     return _jinja_available
 
@@ -2017,9 +2019,9 @@ CYTHON_IMPORT_ERROR = """
 Cython`. Please note that you may need to restart your runtime after installation.
 """
 
-JIEBA_IMPORT_ERROR = """
-{0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
-jieba`. Please note that you may need to restart your runtime after installation.
+RJIEBA_IMPORT_ERROR = """
+{0} requires the rjieba library but it was not found in your environment. You can install it with pip: `pip install
+rjieba`. Please note that you may need to restart your runtime after installation.
 """
 
 PEFT_IMPORT_ERROR = """
@@ -2085,7 +2087,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
-        ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
+        ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
