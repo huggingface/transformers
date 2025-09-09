@@ -18,13 +18,14 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
-    "configuration_utils": ["DistributedConfig"],
+    "configuration_utils": ["DistributedConfig", "initialize_parallelism"],
 }
 
 
 if TYPE_CHECKING:
     from .configuration_utils import (
         DistributedConfig,
+        initialize_parallelism
     )
 
 else:

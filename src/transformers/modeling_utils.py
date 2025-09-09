@@ -45,7 +45,7 @@ from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PretrainedConfig
-from .distributed import DistributedConfig
+from .distributed import DistributedConfig, initialize_parallelism
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -61,7 +61,6 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
     distribute_model,
-    initialize_tensor_parallelism,
     repack_weights,
     replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
@@ -4772,6 +4771,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        pp_plan = kwargs.pop("pp_plan", None)
+        pp_size = kwargs.pop("pp_size", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4812,6 +4813,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
+        if pp_plan is not None and pp_plan != "auto":
+            raise ValueError(f"pp_plan supports 'auto' only for now but got {pp_plan}.")
+        if pp_plan is not None and device_map is not None:
+            raise ValueError(
+                "`pp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+            )
 
         if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
@@ -4822,10 +4829,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
-        if tp_plan is not None:
+        if tp_plan is not None or pp_plan is not None:
             if device_mesh is None:
-                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
+                #TODO(3outeille): Handle case where tp_size or pp_size are not provided
+                tp_plan, pp_plan, device_map, device_mesh = initialize_parallelism(tp_plan, pp_plan, tp_size=tp_size, pp_size=pp_size)
             else:
+                #TODO(3outeille): Readapt below to handle n-d device_mesh with PP
                 if device_mesh.ndim > 1:
                     if "tp" not in device_mesh.mesh_dim_names:
                         raise ValueError(
@@ -5155,7 +5164,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             _assign_original_dtype(model)
 
         if _torch_distributed_available and device_mesh is not None:
-            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+            tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+            model = distribute_model(model, distributed_config, tp_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
@@ -5170,6 +5180,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
+
+            if device_mesh is not None and device_mesh.ndim > 1:
+                tp_mesh = device_mesh["tp"]
+            else:
+                tp_mesh = device_mesh
 
             (
                 model,
@@ -5191,7 +5206,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 dtype=dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_regex=keep_in_fp32_regex,
-                device_mesh=device_mesh,
+                device_mesh=tp_mesh,
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
