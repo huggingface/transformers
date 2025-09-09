@@ -16,8 +16,6 @@
 
 import copy
 import math
-import warnings
-from collections import deque
 from typing import Any, Callable, Optional, Union
 
 import torch

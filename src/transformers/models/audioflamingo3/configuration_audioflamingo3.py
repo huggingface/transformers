@@ -117,36 +117,17 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
 
 class AudioFlamingo3Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AudioFlamingo3ForConditionalGeneration`]. It is used to instantiate an
-    AudioFlamingo3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the AudioFlamingo3 architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration for [`AudioFlamingo3ForConditionalGeneration`].
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the text backbone.
-        encoder_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the audio backbone.
-
-    Example:
-
-    ```python
-    >>> from transformers import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Config, AudioFlamingo3EncoderConfig
-
-    >>> # Initializing a AudioFlamingo3Encoder config
-    >>> audio_config = AudioFlamingo3EncoderConfig()
-
-    >>> # Initializing a AudioFlamingo3 configuration
-    >>> configuration = AudioFlamingo3Config(encoder_config=audio_config)
-
-    >>> # Initializing a model from the audioflamingo3 style configuration
-    >>> model = AudioFlamingo3ForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+            Config (or dict) for the text backbone. Dicts are resolved via `CONFIG_MAPPING`.
+            Defaults to a `qwen2` config when omitted.
+        encoder_config (`Union[AudioFlamingo3EncoderConfig, dict]`, *optional*):
+            Config (or dict) for the audio backbone. If a dict is provided, it is passed
+            to `AudioFlamingo3EncoderConfig(**encoder_config)`. Defaults to
+            `AudioFlamingo3EncoderConfig()` when omitted.
+    """
 
     model_type = "audioflamingo3"
     sub_configs = {"text_config": AutoConfig, "encoder_config": AutoConfig}
@@ -158,26 +139,12 @@ class AudioFlamingo3Config(PretrainedConfig):
         **kwargs,
     ) -> None:
         if isinstance(encoder_config, dict):
-            encoder_config["model_type"] = encoder_config.get("model_type", "audioflamingo3_encoder")
-            encoder_config = CONFIG_MAPPING[encoder_config["model_type"]](**encoder_config)
-        elif encoder_config is None:
-            encoder_config = CONFIG_MAPPING["audioflamingo3_encoder"](
-                d_model=1280,
-                encoder_attention_heads=20,
-                encoder_ffn_dim=5120,
-                encoder_layerdrop=0.0,
-                encoder_layers=32,
-                num_mel_bins=128,
-                max_source_positions=1500,
-                scale_embedding=False,
-                activation_function="gelu",
-            )
-
-        self.encoder_config = encoder_config
+            encoder_config = AudioFlamingo3EncoderConfig(**encoder_config)
+        self.encoder_config = encoder_config if encoder_config is not None else AudioFlamingo3EncoderConfig()
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            model_type = text_config.get("model_type", "qwen2")
+            text_config = CONFIG_MAPPING[model_type](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()
 
