@@ -1058,8 +1058,8 @@ class PretrainedConfig(PushToHubMixin):
         if d.get("dtype") is not None:
             if isinstance(d["dtype"], dict):
                 d["dtype"] = {k: str(v).split(".")[-1] for k, v in d["dtype"].items()}
-            elif not isinstance(d["dtype"], str):
-                d["dtype"] = str(d["dtype"]).split(".")[1]
+            elif not isinstance(d["dtype"], str) and (str_dtype := str(d["dtype"])).count("."):
+                d["dtype"] = str_dtype.split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_dtype_to_str(value)
