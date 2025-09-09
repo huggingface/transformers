@@ -24,7 +24,7 @@ limitations under the License.
 
 VaultGemma (link to tech report) is a text-only decoder model based on the Gemma family of models that is  trained from scratch with sequence-level differential privacy. VaultGemma model is only available as a pretrained model, has 1B parameters and uses a 1024 token sequence length.
 
-VaultGemma was trained on the same training mixture that was used to train the Gemma 2 model, consisting of a number of documents of varying lengths. It is trained using DP-SGD and provides a (ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where sequence consists of 1024 consecutive tokens extracted from heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after  sampling and packing of the mixture. 
+VaultGemma was trained on the same training mixture that was used to train the Gemma 2 model, consisting of a number of documents of varying lengths. It is trained using DP-SGD and provides a (ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where a sequence consists of 1024 consecutive tokens extracted from heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after sampling and packing of the mixture. 
 
 
 > [!TIP]
