@@ -378,10 +378,8 @@ class LongcatFlashMLA(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
-        if config.mla_scale_q_lora:  # TODO we can likely remove this check since it is always True
-            self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
-        if config.mla_scale_kv_lora:
-            self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
+        self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
+        self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
     def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
         """Apply LongCat LoRA scaling if configured."""
@@ -483,21 +481,14 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
 
         self.mlp = LongcatFlashMoE(config)
 
-        self_attn = []
-        mlps = []
-        input_layernorm = []
-        post_attention_layernorm = []
-
-        for i in range(2):
-            self_attn.append(LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i))
-            mlps.append(LongcatFlashMLP(config))
-            input_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
-            post_attention_layernorm.append(LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps))
-
-        self.self_attn = nn.ModuleList(self_attn)
-        self.mlps = nn.ModuleList(mlps)
-        self.input_layernorm = nn.ModuleList(input_layernorm)
-        self.post_attention_layernorm = nn.ModuleList(post_attention_layernorm)
+        self.self_attn = nn.ModuleList([LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i) for i in [0, 1]])
+        self.mlps = nn.ModuleList([LongcatFlashMLP(config) for _ in [0, 1]])
+        self.input_layernorm = nn.ModuleList(
+            [LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps) for _ in [0, 1]]
+        )
+        self.post_attention_layernorm = nn.ModuleList(
+            [LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps) for _ in [0, 1]]
+        )
 
     def forward(
         self,
@@ -510,35 +501,49 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
-        # There are 2 sublayers in each layer, with a shortcut MoE connection between them
-        for i in range(2):
-            residual = hidden_states
-            hidden_states = self.input_layernorm[i](hidden_states)
+        residual = hidden_states
+        hidden_states = self.input_layernorm[0](hidden_states)
 
-            hidden_states, _ = self.self_attn[i](
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-            hidden_states = residual + hidden_states
+        hidden_states, _ = self.self_attn[0](
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
 
-            residual = hidden_states
-            hidden_states = self.post_attention_layernorm[i](hidden_states)
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm[0](hidden_states)
 
-            if i == 0:
-                shortcut_mlp_output = self.mlp(hidden_states)
+        shortcut_mlp_output = self.mlp(hidden_states)
+        hidden_states = self.mlps[0](hidden_states)
+        hidden_states = residual + hidden_states
 
-            hidden_states = self.mlps[i](hidden_states)
-            hidden_states = residual + hidden_states
+        # shortcut connection after second sublayer
+        residual = hidden_states
+        hidden_states = self.input_layernorm[1](hidden_states)
 
-            # shortcut connection after second sublayer
-            if i == 1:
-                hidden_states = hidden_states + shortcut_mlp_output
+        hidden_states, _ = self.self_attn[1](
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm[1](hidden_states)
+
+        hidden_states = self.mlps[1](hidden_states)
+        hidden_states = residual + hidden_states + shortcut_mlp_output
 
         return hidden_states
 
