@@ -202,6 +202,15 @@ class T5GemmaModelTester:
         input_ids = torch.where(input_ids == self.bos_token_id, 42, input_ids)
         decoder_input_ids = torch.where(decoder_input_ids == self.bos_token_id, 42, decoder_input_ids)
 
+        # Avoid leading PAD tokens from inputs.
+        # `T5GemmaForTokenClassification` and `T5GemmaForSequenceClassification` specify `use_cache=False` when
+        # calling `self.model`. For `self.use_attention_mask=False` case below, the model goes through
+        # `make_default_2d_attention_mask`. When there are some pad tokens at the beginning of a sequence, it can't
+        # attend to any place, and the computed mask `[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38]`
+        # causes larger differences in some equivalence tests.
+        # Let's avoid such leading PAD tokens.
+        decoder_input_ids[:, 0] = self.pad_token_id + 1
+
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:

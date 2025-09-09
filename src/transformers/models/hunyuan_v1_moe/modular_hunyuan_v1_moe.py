@@ -187,7 +187,7 @@ class HunYuanMoEV1Moe(nn.Module):
 
 class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
         self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)
@@ -197,6 +197,8 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):

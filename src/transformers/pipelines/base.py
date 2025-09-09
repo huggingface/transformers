@@ -54,6 +54,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.deprecation import deprecate_kwarg
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -950,7 +951,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
-        device: Union[int, "torch.device"] = None,
+        device: Optional[Union[int, "torch.device"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -1549,6 +1550,7 @@ class PipelineRegistry:
             f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
         )
 
+    @deprecate_kwarg(old_name="tf_model", version="5.0.0")
     def register_pipeline(
         self,
         task: str,

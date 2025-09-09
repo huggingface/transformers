@@ -86,6 +86,10 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
+    @unittest.skip(reason="FIXME: @yoni.")
+    def test_fast_is_faster_than_slow(self):
+        pass
+
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)

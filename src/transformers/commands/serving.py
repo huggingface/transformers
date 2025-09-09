@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import base64
 import copy
 import datetime
@@ -23,8 +24,10 @@ import re
 import tempfile
 import threading
 import time
+import uuid
 from argparse import ArgumentParser, Namespace
-from collections.abc import Generator, Iterable
+from collections.abc import AsyncGenerator, Generator, Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
@@ -32,6 +35,7 @@ from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from tokenizers.decoders import DecodeStream
 
 import transformers
 from transformers.models.auto.modeling_auto import (
@@ -125,7 +129,7 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string) and passing the request_id
         """
 
         generation_config: str
@@ -206,6 +210,8 @@ _TOOL_CALL_TOKENS = {
     },
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+X_REQUEST_ID = "x-request-id"
 
 
 class Modality(enum.Enum):
@@ -313,16 +319,16 @@ class TimedModel:
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
         self.timeout_seconds = timeout_seconds
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
     def reset_timer(self):
         """Reset the timer for the deletion of the instances."""
         self._timer.cancel()
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
-    def _delete_model(self):
+    def delete_model(self):
         """Delete the wrapped model and processor and clean up resources."""
         if hasattr(self, "model") and self.model is not None:
             del self.model
@@ -335,9 +341,12 @@ class TimedModel:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            logger.info(
-                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
-            )
+            # XXX: in case we manually delete the model, like on server shutdown
+            self._timer.cancel()
+
+    def timeout_reached(self):
+        self.delete_model()
+        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
@@ -353,6 +362,10 @@ class ServeArguments:
     `transformers serve --help`
     """
 
+    continuous_batching: bool = field(
+        default=False,
+        metadata={"help": "Whether to use continuous batching for chat completions."},
+    )
     device: str = field(
         default="auto",
         metadata={
@@ -469,7 +482,20 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Store and process input arguments
         self.args = args
-        self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
+        self.use_continuous_batching = self.args.continuous_batching
+        if self.use_continuous_batching:
+            default_attn_impl = ContinuousBatchingManager.default_attention_implementation()
+            # checking if attn_implementation is supported by continuous batching
+            if self.args.attn_implementation is None:
+                self.args.attn_implementation = default_attn_impl  # default to sdpa_paged
+                logger.info(f"No attn_implementation passed, defaulting to {default_attn_impl}")
+            supported_attn_impl = ContinuousBatchingManager.supported_attention_implementations()
+            if self.args.attn_implementation not in supported_attn_impl:
+                raise ValueError(
+                    f"Continuous batching only supports {supported_attn_impl} as attn_implementation, got "
+                    f"{self.args.attn_implementation}"
+                    f"Try setting `--attn_implementation={default_attn_impl}`"
+                )
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:
@@ -569,11 +595,13 @@ class ServeCommand(BaseTransformersCLICommand):
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
-        content: Optional[str] = None,
+        content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
+        decode_stream: Optional[DecodeStream] = None,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
     ) -> str:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -598,6 +626,8 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if decode_stream is not None and content is not None and tokenizer is not None:
+            content = decode_stream.step(tokenizer._tokenizer, content)
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
@@ -635,7 +665,29 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
-        app = FastAPI()
+        """
+        Setup and run the FastAPI server for transformers serve.
+
+        Models will be loaded and unloaded automatically based on usage and a timeout.
+
+        The server will expose the following endpoints:
+        - POST /v1/chat/completions: Generates chat completions.
+        - POST /v1/responses: Generates responses.
+        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
+        - GET /v1/models: Lists available models for 3rd party tools.
+
+        Requires FastAPI and Uvicorn to be installed.
+        """
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        app = FastAPI(lifespan=lifespan)
 
         # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
         # security purposes, it's disabled by default
@@ -650,19 +702,17 @@ class ServeCommand(BaseTransformersCLICommand):
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-        else:
-            logger.warning_once(
-                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
-            )
+
+        from fastapi import Request
 
         @app.post("/v1/chat/completions")
-        def chat_completion(request: dict):
-            self.validate_chat_completion_request(request=request)
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(request)
+                output = self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
-                output = self.generate_chat_completion(request)
+                output = self.generate_chat_completion(body)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
@@ -671,8 +721,6 @@ class ServeCommand(BaseTransformersCLICommand):
 
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
-
-        from fastapi import Request
 
         @app.post("/v1/audio/transcriptions")
         async def audio_transcriptions(request: Request):
@@ -697,9 +745,21 @@ class ServeCommand(BaseTransformersCLICommand):
         def get_all_models():
             return JSONResponse({"object": "list", "data": self.get_gen_models()})
 
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
+
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
-    @functools.lru_cache(maxsize=None)
+    @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
         """
         This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
@@ -745,7 +805,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> AsyncGenerator[str, None]:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -774,10 +834,7 @@ class ServeCommand(BaseTransformersCLICommand):
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
             use_cache=False,
-            num_blocks=1,
-            block_size=1024,
             do_sample=False,
-            max_batch_tokens=10,
             scheduler="fifo",
         )
 
@@ -796,43 +853,49 @@ class ServeCommand(BaseTransformersCLICommand):
             model.device
         )
 
-        def stream_chat_completion(_inputs):
+        def stream_chat_completion(request_id, decode_stream):
             try:
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
-                )
-
-                queue_is_flushed = False
-
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
-                for result in self.running_continuous_batching_manager:
-                    if result.request_id != request_id:
-                        continue
-                    if req.get("request_id") is not None and not queue_is_flushed:
-                        if result.status == RequestStatus.FINISHED:
-                            continue
-                        else:
-                            queue_is_flushed = True
-
-                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     if result.status == RequestStatus.FINISHED:
                         yield self.build_chat_completion_chunk(
-                            request_id, finish_reason=finish_reason, model=model_id_and_revision
+                            request_id,
+                            finish_reason="stop",
+                            model=model_id_and_revision,
                         )
                         break
                     else:
                         yield self.build_chat_completion_chunk(
-                            request_id=request_id, content=result.next_token, model=model_id_and_revision
+                            request_id=request_id,
+                            content=result.generated_tokens[-1],
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
                         )
 
             except Exception as e:
                 logger.error(str(e))
+                self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_chat_completion(inputs[0])
+        async def cancellation_wrapper(_inputs, request_id):
+            try:
+                decode_stream = DecodeStream(_inputs.tolist(), False)
+                # XXX: using returned request_id as safety in case it is None
+                request_id = self.running_continuous_batching_manager.add_request(
+                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
+                )
+                for chunk in stream_chat_completion(request_id, decode_stream):
+                    yield chunk
+                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(request_id)
+                logger.warning(f"Request {request_id} was cancelled.")
+
+        return cancellation_wrapper(inputs[0], request_id)
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:

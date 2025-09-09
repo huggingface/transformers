@@ -24,11 +24,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    is_timm_available,
-    requires_backends,
-)
+from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -1878,7 +1874,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
     special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
     for special_token in SPECIAL_TOKENS:
-        special_tokens_mask |= input_ids == special_token
+        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
 
     # idxs: each row is a list of indices of special tokens
     idxs = torch.nonzero(special_tokens_mask)
@@ -1980,12 +1976,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

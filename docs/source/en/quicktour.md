@@ -45,7 +45,7 @@ notebook_login()
 
 </hfoption>
 <hfoption id="CLI">
-   
+
 Make sure the [huggingface_hub[cli]](https://huggingface.co/docs/huggingface_hub/guides/cli#getting-started) package is installed and run the command below. Paste your User Access Token when prompted to log in.
 
 ```bash
@@ -55,24 +55,11 @@ hf auth login
 </hfoption>
 </hfoptions>
 
-Install a machine learning framework.
-
-<hfoptions id="installation">
-<hfoption id="PyTorch">
+Install Pytorch.
 
 ```bash
 !pip install torch
 ```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-```bash
-!pip install tensorflow
-```
-
-</hfoption>
-</hfoptions>
 
 Then install an up-to-date version of Transformers and some additional libraries from the Hugging Face ecosystem for accessing datasets and vision models, evaluating training, and optimizing training for large models.
 
@@ -93,9 +80,6 @@ Each pretrained model inherits from three base classes.
 We recommend using the [AutoClass](./model_doc/auto) API to load models and preprocessors because it automatically infers the appropriate architecture for each task and machine learning framework based on the name or path to the pretrained weights and configuration file.
 
 Use [`~PreTrainedModel.from_pretrained`] to load the weights and configuration file from the Hub into the model and preprocessor class.
-
-<hfoptions id="base-classes">
-<hfoption id="PyTorch">
 
 When you load a model, configure the following parameters to ensure the model is optimally loaded.
 
@@ -125,35 +109,6 @@ tokenizer.batch_decode(generated_ids)[0]
 '<s> The secret to baking a good cake is 100% in the preparation. There are so many recipes out there,'
 ```
 
-</hfoption>
-<hfoption id="TensorFlow">
-
-```py
-from transformers import TFAutoModelForCausalLM, AutoTokenizer
-
-model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2-xl")
-tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2-xl")
-```
-
-Tokenize the text and return TensorFlow tensors with the tokenizer.
-
-```py
-model_inputs = tokenizer(["The secret to baking a good cake is "], return_tensors="tf")
-```
-
-The model is now ready for inference or training.
-
-For inference, pass the tokenized inputs to [`~GenerationMixin.generate`] to generate text. Decode the token ids back into text with [`~PreTrainedTokenizerBase.batch_decode`].
-
-```py
-generated_ids = model.generate(**model_inputs, max_length=30)
-tokenizer.batch_decode(generated_ids)[0]
-'The secret to baking a good cake is \xa0to use the right ingredients. \xa0The secret to baking a good cake is to use the right'
-```
-
-</hfoption>
-</hfoptions>
-
 > [!TIP]
 > Skip ahead to the [Trainer](#trainer-api) section to learn how to fine-tune a model.
 
@@ -169,7 +124,7 @@ Create a [`Pipeline`] object and select a task. By default, [`Pipeline`] downloa
 <hfoptions id="pipeline-tasks">
 <hfoption id="text generation">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
@@ -189,7 +144,7 @@ pipeline("The secret to baking a good cake is ", max_length=50)
 </hfoption>
 <hfoption id="image segmentation">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
@@ -216,7 +171,7 @@ segments[1]["label"]
 </hfoption>
 <hfoption id="automatic speech recognition">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
@@ -308,47 +263,6 @@ trainer.push_to_hub()
 ```
 
 Congratulations, you just trained your first model with Transformers!
-
-### TensorFlow
-
-> [!WARNING]
-> Not all pretrained models are available in TensorFlow. Refer to a models API doc to check whether a TensorFlow implementation is supported.
-
-[`Trainer`] doesn't work with TensorFlow models, but you can still train a Transformers model implemented in TensorFlow with [Keras](https://keras.io/). Transformers TensorFlow models are a standard [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model), which is compatible with Keras' [compile](https://keras.io/api/models/model_training_apis/#compile-method) and [fit](https://keras.io/api/models/model_training_apis/#fit-method) methods.
-
-Load a model, tokenizer, and dataset for training.
-
-```py
-from transformers import TFAutoModelForSequenceClassification, AutoTokenizer
-
-model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Create a function to tokenize the text and convert it into TensorFlow tensors. Apply this function to the whole dataset with the [`~datasets.Dataset.map`] method.
-
-```py
-def tokenize_dataset(dataset):
-    return tokenizer(dataset["text"])
-dataset = dataset.map(tokenize_dataset)
-```
-
-Transformers provides the [`~TFPreTrainedModel.prepare_tf_dataset`] method to collate and batch a dataset.
-
-```py
-tf_dataset = model.prepare_tf_dataset(
-    dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer
-)
-```
-
-Finally, call [compile](https://keras.io/api/models/model_training_apis/#compile-method) to configure the model for training and [fit](https://keras.io/api/models/model_training_apis/#fit-method) to start.
-
-```py
-from tensorflow.keras.optimizers import Adam
-
-model.compile(optimizer="adam")
-model.fit(tf_dataset)
-```
 
 ## Next steps
 

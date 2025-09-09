@@ -539,7 +539,7 @@ class AriaImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -614,6 +614,7 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -726,7 +727,7 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -759,7 +760,7 @@ class AriaImageProcessor(BaseImageProcessor):
         return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
@@ -839,7 +840,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
@@ -1291,7 +1292,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 
@@ -1391,9 +1392,9 @@ class AriaModel(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1462,9 +1463,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

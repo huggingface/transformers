@@ -225,7 +225,7 @@ class OmDetTurboProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[list[str], list[list[str]]]] = None,
         audio=None,
         videos=None,
