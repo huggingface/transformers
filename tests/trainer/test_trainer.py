@@ -1652,7 +1652,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         if torch_device in ["cuda"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
-            # DP is decprecated by PyTorch, accelerators like XPU doesn't support DP
+            # DP is deprecated by PyTorch, accelerators like XPU doesn't support DP
             n_gpu = 1
 
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -4980,7 +4980,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
-    def test_special_token_aligment(self):
+    def test_special_token_alignment(self):
         """
         Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
         ensure special tokens are aligned across configs

@@ -161,7 +161,7 @@ def summarize_all_tests(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Scan model tests for overridden or skipped common or generat tests.",
+        description="Scan model tests for overridden or skipped common or generate tests.",
     )
     parser.add_argument(
         "--output_dir",
