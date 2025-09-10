@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_swin import *
     from .modeling_swin import *
-    from .modeling_tf_swin import *
 else:
     import sys
 

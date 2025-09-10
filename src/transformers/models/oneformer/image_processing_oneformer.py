@@ -700,10 +700,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -718,8 +715,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
-                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
             )
 
         images = make_flat_list_of_images(images)

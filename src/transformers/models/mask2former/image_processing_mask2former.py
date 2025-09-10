@@ -739,10 +739,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         pad_size = self.pad_size if pad_size is None else pad_size
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -757,8 +754,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
-                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
             )
 
         images = make_flat_list_of_images(images)

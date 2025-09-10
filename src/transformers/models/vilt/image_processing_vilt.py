@@ -416,10 +416,7 @@ class ViltImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # Here the pad() method does not require any additional argument as it takes the maximum of (height, width).
         # Hence, it does not need to be passed to a validate_preprocess_arguments() method.

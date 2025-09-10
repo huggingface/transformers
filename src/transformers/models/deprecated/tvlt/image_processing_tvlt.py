@@ -380,8 +380,7 @@ class TvltImageProcessor(BaseImageProcessor):
 
         if not valid_images(videos):
             raise ValueError(
-                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
             )
 
         videos = make_batched(videos)

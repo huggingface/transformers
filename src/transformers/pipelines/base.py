@@ -230,6 +230,7 @@ def load_model(
     """
     if not is_torch_available():
         raise RuntimeError("PyTorch should be installed. Please follow the instructions at https://pytorch.org/.")
+
     if isinstance(model, str):
         model_kwargs["_from_pipeline"] = task
         class_tuple = model_classes if model_classes is not None else (AutoModel,)
@@ -259,7 +260,7 @@ def load_model(
                 # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
                 if "dtype" in kwargs:
-                    import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
+                    import torch
 
                     fallback_tried = True
                     fp32_kwargs = kwargs.copy()
