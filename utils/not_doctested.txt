@@ -26,7 +26,6 @@ docs/source/en/main_classes/data_collator.md
 docs/source/en/main_classes/deepspeed.md
 docs/source/en/main_classes/feature_extractor.md
 docs/source/en/main_classes/image_processor.md
-docs/source/en/main_classes/keras_callbacks.md
 docs/source/en/main_classes/logging.md
 docs/source/en/main_classes/model.md
 docs/source/en/main_classes/onnx.md

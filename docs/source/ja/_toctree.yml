@@ -196,8 +196,6 @@
       title: 構成
     - local: main_classes/data_collator
       title: データ照合者
-    - local: main_classes/keras_callbacks
-      title: Keras コールバック
     - local: main_classes/logging
       title: ロギング
     - local: main_classes/model

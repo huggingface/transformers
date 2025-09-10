@@ -254,8 +254,6 @@
 #       title: التكوين
 #     - local: main_classes/data_collator
 #       title: مجمع البيانات
-#     - local: main_classes/keras_callbacks
-#       title: استدعاءات Keras
 #     - local: main_classes/logging
 #       title: التسجيل
 #     - local: main_classes/model
