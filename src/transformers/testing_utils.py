@@ -1637,6 +1637,9 @@ def assert_screenout(out, what):
 
 
 def set_model_tester_for_less_flaky_test(test_case):
+    # NOTE: this function edits the config object, which may lead to hard-to-debug side-effects. Use with caution.
+    # Do not use in tests that rely on non-model objects initialized from the config, like KV caches.
+
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",

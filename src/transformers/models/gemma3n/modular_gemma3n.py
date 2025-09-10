@@ -290,7 +290,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         else:
             self.layer_types = layer_types
 
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers

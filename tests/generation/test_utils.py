@@ -52,7 +52,6 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -673,10 +672,6 @@ class GenerationTesterMixin:
         # - assisted_decoding does not support `use_cache = False`
         # - assisted_decoding does not support `batch_size > 1`
 
-        # No idea why this cause problem!
-        if type(self).__name__ not in ["Gemma3nTextModelTest"]:
-            set_model_tester_for_less_flaky_test(self)
-
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
@@ -718,6 +713,8 @@ class GenerationTesterMixin:
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -729,6 +726,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -802,6 +800,8 @@ class GenerationTesterMixin:
             #    prompt lookup is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -813,6 +813,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -870,6 +871,8 @@ class GenerationTesterMixin:
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
@@ -885,6 +888,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
@@ -1181,7 +1185,6 @@ class GenerationTesterMixin:
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -1814,7 +1817,6 @@ class GenerationTesterMixin:
             "flash_attention_3": "_supports_flash_attn",
         }
 
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")

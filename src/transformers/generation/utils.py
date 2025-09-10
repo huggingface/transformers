@@ -1977,8 +1977,9 @@ class GenerationMixin(ContinuousMixin):
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
                     logger.warning_once(
-                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
-                        f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
+                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. "
+                        f"Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be "
+                        "inferred automatically."
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
