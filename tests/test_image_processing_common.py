@@ -642,7 +642,7 @@ class ImageProcessingTestMixin:
         if self.image_processing_class is None:
             self.skipTest("No image processing class defined")
 
-        def _is_new_model_by_commit_date(model_type, date_cutoff=(2019, 1, 1)):
+        def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
             try:
                 # Convert model_type to directory name and construct file path
                 model_dir = model_type.replace("-", "_")
@@ -663,17 +663,17 @@ class ImageProcessingTestMixin:
                 first_line = result.stdout.strip().split("\n")[0]
                 date_part = first_line.split(" ")[0]  # Extract just the date part
                 commit_date = datetime.strptime(date_part, "%Y-%m-%d")
-                # Check if committed after the cutoff date
+                # Check if committed before the cutoff date
                 cutoff_date = datetime(*date_cutoff)
-                return commit_date >= cutoff_date
+                return commit_date <= cutoff_date
 
             except Exception:
-                # If any error occurs, conservatively skip the test
+                # If any error occurs, skip the test
                 return None
 
         image_processor_name = self.image_processing_class.__name__
         model_type = None
-        for mapping_model_type, (slow_class, fast_class) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+        for mapping_model_type, (slow_class, _) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
             if slow_class == image_processor_name:
                 model_type = mapping_model_type
                 break
@@ -681,12 +681,12 @@ class ImageProcessingTestMixin:
         if model_type is None:
             self.skipTest(f"Could not find model type for {image_processor_name} in IMAGE_PROCESSOR_MAPPING_NAMES")
         # Check if this is a new model (added after 2024-01-01) based on git history
-        is_new_model = _is_new_model_by_commit_date(model_type)
-        if is_new_model is None:
+        is_old_model = _is_old_model_by_commit_date(model_type)
+        if is_old_model is None:
             self.skipTest(f"Could not determine if {model_type} is new based on git history")
         # New models must have fast processors
         self.assertTrue(
-            is_new_model,
+            is_old_model,
             f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
             f"a fast image processor implementation. Please implement the corresponding fast processor.",
         )
