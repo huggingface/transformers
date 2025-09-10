@@ -62,7 +62,6 @@ if not is_torch_available():
     raise ValueError("Please install PyTorch.")
 
 
-FRAMEWORKS = ["pytorch"]
 INVALID_ARCH = []
 TARGET_VOCAB_SIZE = 1024
 
@@ -773,11 +772,11 @@ def fill_result_with_error(result, error, trace, models_to_create):
     """Fill `result` with errors for all target model arch if we can't build processor"""
     error = (error, trace)
     result["error"] = error
-    for framework in FRAMEWORKS:
-        if framework in models_to_create:
-            result[framework] = {}
-            for model_arch in models_to_create[framework]:
-                result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
+
+    if "pytorch" in models_to_create:
+        result["pytorch"] = {}
+        for model_arch in models_to_create["pytorch"]:
+            result["pytorch"][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
     result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
@@ -1055,7 +1054,7 @@ def build(config_class, models_to_create, output_dir):
             of the same model type which is associated to `config_class`.
         output_dir (`str`):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
-            it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
+            it.
     """
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
@@ -1208,40 +1207,40 @@ def build_tiny_model_summary(results, organization=None, token=None):
         processors = [key for key, value in results[config_name]["processor"].items()]
         tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                model_classes = [arch_name]
-                base_arch_name = arch_name
-                # tiny model is not created for `arch_name`
-                if results[config_name][framework][arch_name]["model"] is None:
-                    model_classes = []
-                if base_arch_name not in tiny_model_summary:
-                    tiny_model_summary[base_arch_name] = {}
-                tiny_model_summary[base_arch_name].update(
-                    {
-                        "tokenizer_classes": tokenizer_classes,
-                        "processor_classes": processor_classes,
-                    }
-                )
-                tiny_model_summary[base_arch_name]["model_classes"] = sorted(
-                    tiny_model_summary[base_arch_name].get("model_classes", []) + model_classes
-                )
-                if organization is not None:
-                    repo_name = f"tiny-random-{base_arch_name}"
-                    # composite models' checkpoints have more precise repo. names on the Hub.
-                    if base_arch_name in COMPOSITE_MODELS:
-                        repo_name = f"tiny-random-{COMPOSITE_MODELS[base_arch_name]}"
-                    repo_id = f"{organization}/{repo_name}"
-                    try:
-                        commit_hash = hf_api.repo_info(repo_id, token=token).sha
-                    except Exception:
-                        # The directory is not created, but processor(s) is/are included in `results`.
-                        logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
-                        del tiny_model_summary[base_arch_name]
-                        continue
-                    tiny_model_summary[base_arch_name]["sha"] = commit_hash
+
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            model_classes = [arch_name]
+            base_arch_name = arch_name
+            # tiny model is not created for `arch_name`
+            if results[config_name]["pytorch"][arch_name]["model"] is None:
+                model_classes = []
+            if base_arch_name not in tiny_model_summary:
+                tiny_model_summary[base_arch_name] = {}
+            tiny_model_summary[base_arch_name].update(
+                {
+                    "tokenizer_classes": tokenizer_classes,
+                    "processor_classes": processor_classes,
+                }
+            )
+            tiny_model_summary[base_arch_name]["model_classes"] = sorted(
+                tiny_model_summary[base_arch_name].get("model_classes", []) + model_classes
+            )
+            if organization is not None:
+                repo_name = f"tiny-random-{base_arch_name}"
+                # composite models' checkpoints have more precise repo. names on the Hub.
+                if base_arch_name in COMPOSITE_MODELS:
+                    repo_name = f"tiny-random-{COMPOSITE_MODELS[base_arch_name]}"
+                repo_id = f"{organization}/{repo_name}"
+                try:
+                    commit_hash = hf_api.repo_info(repo_id, token=token).sha
+                except Exception:
+                    # The directory is not created, but processor(s) is/are included in `results`.
+                    logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
+                    del tiny_model_summary[base_arch_name]
+                    continue
+                tiny_model_summary[base_arch_name]["sha"] = commit_hash
 
     return tiny_model_summary
 
@@ -1259,19 +1258,18 @@ def build_failed_report(results, include_warning=True):
                 failed_results[config_name] = {}
             failed_results[config_name]["warnings"] = results[config_name]["warnings"]
 
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                if "error" in results[config_name][framework][arch_name]:
-                    if config_name not in failed_results:
-                        failed_results[config_name] = {}
-                    if framework not in failed_results[config_name]:
-                        failed_results[config_name][framework] = {}
-                    if arch_name not in failed_results[config_name][framework]:
-                        failed_results[config_name][framework][arch_name] = {}
-                    error = results[config_name][framework][arch_name]["error"]
-                    failed_results[config_name][framework][arch_name]["error"] = error
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            if "error" in results[config_name]["pytorch"][arch_name]:
+                if config_name not in failed_results:
+                    failed_results[config_name] = {}
+                if "pytorch" not in failed_results[config_name]:
+                    failed_results[config_name]["pytorch"] = {}
+                if arch_name not in failed_results[config_name]["pytorch"]:
+                    failed_results[config_name]["pytorch"][arch_name] = {}
+                error = results[config_name]["pytorch"][arch_name]["error"]
+                failed_results[config_name]["pytorch"][arch_name]["error"] = error
 
     return failed_results
 
@@ -1280,16 +1278,15 @@ def build_simple_report(results):
     text = ""
     failed_text = ""
     for config_name in results:
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                if "error" in results[config_name][framework][arch_name]:
-                    result = results[config_name][framework][arch_name]["error"]
-                    failed_text += f"{arch_name}: {result[0]}\n"
-                else:
-                    result = ("OK",)
-                text += f"{arch_name}: {result[0]}\n"
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            if "error" in results[config_name]["pytorch"][arch_name]:
+                result = results[config_name]["pytorch"][arch_name]["error"]
+                failed_text += f"{arch_name}: {result[0]}\n"
+            else:
+                result = ("OK",)
+            text += f"{arch_name}: {result[0]}\n"
 
     return text, failed_text
 

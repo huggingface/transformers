@@ -396,7 +396,7 @@ class ImageTextToTextPipeline(Pipeline):
                 inputs.messages,
                 add_generation_prompt=not continue_final_message,
                 continue_final_message=continue_final_message,
-                return_tensors=self.framework,
+                return_tensors="pt",
                 tokenize=True,
                 return_dict=True,
             )
@@ -415,7 +415,7 @@ class ImageTextToTextPipeline(Pipeline):
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
-        model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
+        model_inputs = self.processor(images=images, text=text, return_tensors="pt", **processing_kwargs).to(
             dtype=self.dtype
         )
 

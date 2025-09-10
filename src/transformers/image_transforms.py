@@ -556,8 +556,7 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     corners format: contains the coordinates for the top-left and bottom-right corners of the box
         (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
     """
-    # Function is used during model forward pass, so we use the input framework if possible, without
-    # converting to numpy
+    # Function is used during model forward pass, so we use torch if relevant, without converting to numpy
     if is_torch_tensor(bboxes_center):
         return _center_to_corners_format_torch(bboxes_center)
     elif isinstance(bboxes_center, np.ndarray):

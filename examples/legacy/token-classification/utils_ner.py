@@ -208,11 +208,6 @@ if is_torch_available():
     from torch.utils.data import Dataset
 
     class TokenClassificationDataset(Dataset):
-        """
-        This will be superseded by a framework-agnostic approach
-        soon.
-        """
-
         features: list[InputFeatures]
         pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
         # Use cross entropy ignore_index as padding label id so that only

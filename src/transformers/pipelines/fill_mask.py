@@ -109,7 +109,7 @@ class FillMaskPipeline(Pipeline):
         self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
     ) -> dict[str, GenericTensor]:
         if return_tensors is None:
-            return_tensors = self.framework
+            return_tensors = "pt"
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
 

@@ -21,7 +21,6 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 """
 
 import argparse
-import copy
 import json
 import multiprocessing
 import os
@@ -62,22 +61,11 @@ def get_all_model_names():
 
 
 def get_tiny_model_names_from_repo():
-    # All model names defined in auto mappings
-    model_names = set(get_all_model_names())
-
     with open("tests/utils/tiny_model_summary.json") as fp:
         tiny_model_info = json.load(fp)
     tiny_models_names = set()
     for model_base_name in tiny_model_info:
         tiny_models_names.update(tiny_model_info[model_base_name]["model_classes"])
-
-    # Remove a tiny model name if one of its framework implementation hasn't yet a tiny version on the Hub.
-    not_on_hub = model_names.difference(tiny_models_names)
-    for model_name in copy.copy(tiny_models_names):
-        if not model_name.startswith("TF") and f"TF{model_name}" in not_on_hub:
-            tiny_models_names.remove(model_name)
-        elif model_name.startswith("TF") and model_name[2:] in not_on_hub:
-            tiny_models_names.remove(model_name)
 
     return sorted(tiny_models_names)
 

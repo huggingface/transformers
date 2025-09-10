@@ -38,9 +38,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         outputs = feature_extractor("This is a test")
         self.assertEqual(
             nested_simplify(outputs),
@@ -48,9 +46,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_tokenization_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         # test with empty parameters
         outputs = feature_extractor("This is a test")
         self.assertEqual(
@@ -88,9 +84,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_return_tensors_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         outputs = feature_extractor("This is a test", return_tensors=True)
         self.assertTrue(torch.is_tensor(outputs))
 

@@ -60,7 +60,7 @@ class TextToAudioPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
     >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
     >>> generate_kwargs = {

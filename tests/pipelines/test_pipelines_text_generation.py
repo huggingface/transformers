@@ -43,7 +43,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-random-LlamaForCausalLM",
-            framework="pt",
             max_new_tokens=10,
         )
         # Using `do_sample=False` to force deterministic output
@@ -73,7 +72,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -121,7 +119,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -155,7 +152,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -203,7 +199,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         dataset = MyDataset()
@@ -230,7 +225,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         # Using `do_sample=False` to force deterministic output

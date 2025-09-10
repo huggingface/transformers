@@ -82,7 +82,7 @@ class SummarizationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt", max_new_tokens=19)
+        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", max_new_tokens=19)
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

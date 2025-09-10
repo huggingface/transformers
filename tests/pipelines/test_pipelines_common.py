@@ -101,9 +101,7 @@ class CommonPipelineTest(unittest.TestCase):
             def __getitem__(self, i):
                 return self.data[i]
 
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        text_classifier = pipeline(task="text-classification", model="hf-internal-testing/tiny-random-distilbert")
         dataset = MyDataset()
         for output in text_classifier(dataset):
             self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
@@ -248,9 +246,7 @@ class PipelineScikitCompatTest(unittest.TestCase):
     def test_pipeline_predict(self):
         data = ["This is a test"]
 
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        text_classifier = pipeline(task="text-classification", model="hf-internal-testing/tiny-random-distilbert")
 
         expected_output = [{"label": ANY(str), "score": ANY(float)}]
         actual_output = text_classifier.predict(data)
@@ -259,9 +255,7 @@ class PipelineScikitCompatTest(unittest.TestCase):
     def test_pipeline_transform(self):
         data = ["This is a test"]
 
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        text_classifier = pipeline(task="text-classification", model="hf-internal-testing/tiny-random-distilbert")
 
         expected_output = [{"label": ANY(str), "score": ANY(float)}]
         actual_output = text_classifier.transform(data)
@@ -640,7 +634,6 @@ class PipelineUtilsTest(unittest.TestCase):
 
         if len(relevant_auto_classes) == 0:
             # task has no default
-            logger.debug(f"{task} in {framework} has no default")
             self.skipTest(f"{task} in {framework} has no default")
 
         # by default use first class
@@ -680,13 +673,11 @@ class PipelineUtilsTest(unittest.TestCase):
 
             # load default pipeline
             set_seed_fn()
-            default_pipeline = pipeline(task, framework=framework)
+            default_pipeline = pipeline(task)
 
             # compare pipeline model with default model
             models_are_equal = check_models_equal_fn(default_pipeline.model, model)
             self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
-
-            logger.debug(f"{task} in {framework} succeeded with {model_id}.")
 
     def check_models_equal_pt(self, model1, model2):
         models_are_equal = True

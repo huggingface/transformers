@@ -16,7 +16,7 @@
 
 import pathlib
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -211,23 +211,6 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
 # Copied from transformers.models.detr.image_processing_detr.safe_squeeze
@@ -1419,12 +1402,11 @@ class YolosImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process  with Detr->Yolos
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`YolosObjectDetectionOutput`]):

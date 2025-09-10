@@ -729,7 +729,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             # worker's generator, generated as the main seed + the worker's ID.
             # (https://pytorch.org/docs/stable/data.html#randomness-in-multi-process-data-loading)
             # Only PyTorch DataLoader allows us to access the worker ID, and so we check for this.
-            # For other frameworks, we will throw an error.
             import torch
 
             worker_info = torch.utils.data.get_worker_info()
