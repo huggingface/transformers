@@ -517,6 +517,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         )
                     )
 
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwarding(self):
+        super().test_prepare_inputs_for_generation_kwargs_forwarding(encoder_outputs=torch.randn(2, 2, 32))
+
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_past_key_values_format(self, custom_all_cache_shapes=None):
         pass
