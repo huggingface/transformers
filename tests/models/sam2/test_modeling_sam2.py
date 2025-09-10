@@ -899,8 +899,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
         self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
-        print("outputs.iou_scores", outputs.iou_scores)
-        print("outputs.pred_masks", outputs.pred_masks[:, :, :, :2, :2])
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9904], [0.9689], [0.9770], [0.9079]], [[0.9739], [0.9816], [0.9838], [0.9781]]]).to(
