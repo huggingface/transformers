@@ -55,7 +55,7 @@ class TestImportStructures(unittest.TestCase):
             frozenset({"torch"}): {
                 "import_structure_register_with_duplicates": {"C0", "C1", "C2", "C3", "c0", "c1", "c2", "c3"}
             },
-            frozenset({"tf", "torch"}): {
+            frozenset({"torch"}): {
                 "import_structure_raw_register": {"A1", "A2", "A3", "a1", "a2", "a3"},
                 "import_structure_register_with_comments": {"B1", "B2", "B3", "b1", "b2", "b3"},
             },
@@ -198,7 +198,6 @@ class TestImportStructures(unittest.TestCase):
     "backend,package_name,version_comparison,version",
     [
         pytest.param(Backend("torch>=2.5 "), "torch", VersionComparison.GREATER_THAN_OR_EQUAL.value, "2.5"),
-        pytest.param(Backend("tf<=1"), "tf", VersionComparison.LESS_THAN_OR_EQUAL.value, "1"),
         pytest.param(Backend("torchvision==0.19.1"), "torchvision", VersionComparison.EQUAL.value, "0.19.1"),
     ],
 )

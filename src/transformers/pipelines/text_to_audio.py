@@ -100,9 +100,6 @@ class TextToAudioPipeline(Pipeline):
         # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
         self.no_processor = no_processor
 
-        if self.framework == "tf":
-            raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
-
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
             self.vocoder = (

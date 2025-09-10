@@ -503,13 +503,6 @@ def load_state_dict(
     # Use safetensors if possible
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         with safe_open(checkpoint_file, framework="pt") as f:
-            metadata = f.metadata()
-
-            if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
-                raise OSError(
-                    f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
-                    "you save your model with the `save_pretrained` method."
-                )
             state_dict = {}
             for k in f.keys():
                 if map_location == "meta":
@@ -4956,34 +4949,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             transformers_explicit_filename=transformers_explicit_filename,
         )
 
-        is_sharded = sharded_metadata is not None
         is_quantized = hf_quantizer is not None
         is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
 
-        if (
-            is_safetensors_available()
-            and is_from_file
-            and not is_sharded
-            and checkpoint_files[0].endswith(".safetensors")
-        ):
+        # Just a helpful message in case we try to load safetensors files coming from old Transformers tf/flax classes
+        if is_safetensors_available() and is_from_file and checkpoint_files[0].endswith(".safetensors"):
             with safe_open(checkpoint_files[0], framework="pt") as f:
                 metadata = f.metadata()
-
-            if metadata is None:
-                # Assume it's a pytorch checkpoint (introduced for timm checkpoints)
-                pass
-            elif metadata.get("format") == "pt":
-                pass
-            elif metadata.get("format") == "tf":
-                raise ValueError("The safetensors file found has format `'tf'`, which is incompatible.")
-            elif metadata.get("format") == "flax":
-                raise ValueError("The safetensors file found has format `'flax'`, which is incompatible.")
-            elif metadata.get("format") == "mlx":
-                # This is a mlx file, we assume weights are compatible with pt
-                pass
-            else:
-                raise ValueError(
-                    f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
+            if metadata is not None and metadata.get("format") in ["tf", "flax"]:
+                logger.warning(
+                    "The safetensors checkpoint found has format `tf` or `flax`. This mean that the keys will very"
+                    "likely not match to the model you are trying to load, and will be newly initialized. If it's the case "
+                    "another warning will be raised later. Consider converting your checkpoint to the correct format."
                 )
 
         if gguf_file:

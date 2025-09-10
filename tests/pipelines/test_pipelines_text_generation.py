@@ -369,11 +369,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("", add_special_tokens=False)
 
-        if text_generator.framework == "tf":
-            # TF generation does not support max_new_tokens, and it's impossible
-            # to control long generation with only max_length without
-            # fancy calculation, dismissing tests for now.
-            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
@@ -480,10 +475,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_length_setting_warning(self):
         prompt = """Hello world"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5)
-        if text_generator.model.framework == "tf":
-            logger = logging.get_logger("transformers.generation.tf_utils")
-        else:
-            logger = logging.get_logger("transformers.generation.utils")
+        logger = logging.get_logger("transformers.generation.utils")
         logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
 
         # Both are set by the user -> log warning

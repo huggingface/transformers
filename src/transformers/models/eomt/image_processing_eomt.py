@@ -557,7 +557,7 @@ class EomtImageProcessor(BaseImageProcessor):
                 Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
                 denoted with 0 (background) will be replaced with `ignore_index`.
             return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be `"pt"`, `"tf"`, `"np"`, or `"jax"`.
+                The type of tensors to return. Can be `"pt"` or `"np"`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 Channel format of the output image. Either `"channels_first"` or `"channels_last"`.
             input_data_format (`ChannelDimension` or `str`, *optional*):
