@@ -54,8 +54,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module) -> None:
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.audio_config.initializer_range
-
+        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.encoder_config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -87,9 +86,6 @@ class AudioFlamingo3Encoder(WhisperEncoder):
         Convert a (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S)
         with -inf on padded positions. Here S = (T_mel - 2) // 2 + 1 (after frontend).
         """
-
-        # TODO input checks without assert
-
         # length after first stride-2 conv
         audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
         B = mask_1d.shape[0]
@@ -189,18 +185,7 @@ class AudioFlamingo3Encoder(WhisperEncoder):
 )
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     """
-    AudioFlamingo3 model for conditional generation tasks. This model inherits from [`PreTrainedModel`]. Check the
-    superclass documentation for the generic methods the library implements for all its model (such as downloading
-    or saving, resizing the input embeddings, pruning heads etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Args:
-        config (AudioFlamingo3Config): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    AudioFlamingo3 model for conditional generation tasks.
     """
 
     config_class = AudioFlamingo3Config
@@ -224,20 +209,19 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     @property
     def end_emb_token(self) -> torch.Tensor:
         """
-        Returns the (1, D) embedding row for the end-newline token.
-        Uses the live embedding weight so dtype/device are always correct.
+        Returns the (1, D) embedding row for the end-newline token from the live LLM embeddings.
         """
         w = self.llm.model.embed_tokens.weight
         return w[self.end_newline_token_id : self.end_newline_token_id + 1]  # (1, D)
 
-    def get_audio_features(
+    def _compute_audio_embeds(
         self,
         input_features: torch.Tensor,  # (N, M, T_mel)
-        feature_attention_mask: torch.Tensor | None = None,  # (N, T_mel) or None
+        feature_attention_mask: Optional[torch.Tensor],  # (N, T_mel) or None
     ) -> torch.Tensor:
         """
         Runs the audio tower + projector and appends one end token per window.
-        Returns: (N, S_audio + 1, D)
+        Returns: (N, S_audio + 1, D)  # -> audio_embeds
         """
         device = self.llm.device
         proj_dtype = next(self.sound_mm_projector.parameters()).dtype
@@ -254,32 +238,37 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         end = self.end_emb_token.to(feats.dtype).unsqueeze(0).expand(feats.size(0), 1, -1)  # (N, 1, D)
         return torch.cat([feats, end], dim=1)  # (N, S_audio+1, D)
 
-    def _merge_input_ids_with_audio_features(
+    def _merge_input_embeds_with_audio_embeds(
         self,
-        input_ids: torch.Tensor,
-        labels: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
         *,
+        inputs_embeds: torch.Tensor,  # (B, L, D) text token embeddings
+        input_ids: torch.Tensor,  # (B, L)
+        attention_mask: Optional[torch.Tensor],  # (B, L)
         audio_embeds: Optional[torch.Tensor],  # (N, S_audio+1, D) precomputed
-        audio_features_mask: Optional[torch.Tensor],  # (N, S_audio+1) boolean;
+        audio_embeds_mask: Optional[torch.Tensor],  # (N, S_audio+1) boolean
+        labels: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
-        # Set default values
-        labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
+        """
+        Merge text `inputs_embeds` with `audio_embeds` based on `<sound>` placeholders in `input_ids`.
+        """
+        # Defaults
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
+        labels = labels if labels is not None else torch.full_like(input_ids, self.config.ignore_index)
 
-        # text embeddings
-        text_embeds = self.llm.model.embed_tokens(input_ids)  # (B, L, D)
-        target_device = text_embeds.device
-        batch_size = labels.shape[0]
+        target_device = inputs_embeds.device
+        inputs_embeds = inputs_embeds.to(target_device)
+        attention_mask = attention_mask.to(target_device)
+        input_ids = input_ids.to(target_device)
 
+        # Audio tensors
         audio_embeds = audio_embeds.to(target_device)
-        audio_features_mask = audio_features_mask.to(target_device).to(torch.bool)  # (N, S_audio+1)
+        audio_embeds_mask = audio_embeds_mask.to(target_device).to(torch.bool)
 
         num_audios, max_audio_tokens, embed_dim = audio_embeds.shape
 
         # Flatten variable-length audio to (sum_used, D) with end-token excluded by mask
-        masked_audio_features = audio_embeds[audio_features_mask].view(-1, embed_dim)
-        num_audio_tokens = audio_features_mask.sum(-1)  # (N,)
+        masked_audio_features = audio_embeds[audio_embeds_mask].view(-1, embed_dim)
+        num_audio_tokens = audio_embeds_mask.sum(-1)  # (N,)
 
         batch_size, sequence_length = input_ids.shape
         _left_padding = torch.any(attention_mask[:, 0] == 0)
@@ -298,9 +287,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         # Locate <sound> placeholders
         special_audio_token_mask = input_ids == self.sound_token_id
-        attention_mask = attention_mask.to(target_device)
-        input_ids = input_ids.to(target_device)
-
         batch_indices, non_audio_indices = torch.where((input_ids != self.sound_token_id) & (attention_mask == 1))
 
         # Compute positions for text after expanding placeholders
@@ -320,12 +306,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         )
 
         # Allocate final tensors
-        final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=target_device)
+        final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=inputs_embeds.dtype, device=target_device)
         final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=target_device)
         final_input_ids = torch.full((batch_size, max_token_num), self.pad_token_id, dtype=input_ids.dtype, device=target_device)
 
         # Scatter text embeddings
-        final_embedding[batch_indices, text_to_overwrite] = text_embeds[batch_indices, non_audio_indices]
+        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_audio_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_audio_indices]
         final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_audio_indices]
 
@@ -346,8 +332,8 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             val = seq_indices < (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
         audio_to_overwrite &= val
 
-        if audio_to_overwrite.sum() != audio_features_mask.sum():
-            raise ValueError("Mismatch between audio feature tokens and <sound> placeholders; indexing would break.")
+        if audio_to_overwrite.sum() != audio_embeds_mask.sum():
+            raise ValueError("Mismatch between audio embed tokens and <sound> placeholders; indexing would break.")
 
         final_embedding[audio_to_overwrite] = masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= audio_to_overwrite
@@ -383,34 +369,51 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             if labels_pk is not None:
                 labels_batched.append(labels_pk)
 
-        inputs_embeds = torch.stack(inputs_batched, dim=0)
+        merged_inputs = torch.stack(inputs_batched, dim=0)
         labels = torch.stack(labels_batched, dim=0) if labels_batched else None
-        return inputs_embeds, labels, attention_mask
+        return merged_inputs, labels, attention_mask
 
     @torch.inference_mode()
     def generate(
         self,
-        input_ids: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         audio_features: Optional[torch.Tensor] = None,  # (N, M, T_mel)
         attention_mask: Optional[torch.LongTensor] = None,
         audio_feature_masks: Optional[torch.Tensor] = None,  # (N, T_mel)
-        audio_features_mask: Optional[torch.Tensor] = None,  # (N, S_audio+1)
+        audio_embeds_mask: Optional[torch.Tensor] = None,  # (N, S_audio+1)
         **generation_kwargs,
     ) -> torch.LongTensor:
+        # Back-compat: allow callers passing audio_features_mask via kwargs
+        if audio_embeds_mask is None and "audio_features_mask" in generation_kwargs:
+            import warnings as _warnings
+
+            audio_embeds_mask = generation_kwargs.pop("audio_features_mask")
+            _warnings.warn(
+                "`audio_features_mask` is deprecated; please pass `audio_embeds_mask` " "(token-level mask post-projection).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # Compute text token embeddings up front (Qwen-style)
+        inputs_embeds = self.llm.model.embed_tokens(input_ids)
+
         # Compute audio embeddings upfront
         audio_embeds = None
         if audio_features is not None:
-            audio_embeds = self.get_audio_features(audio_features, audio_feature_masks)  # (N, S_audio+1, D)
+            audio_embeds = self._compute_audio_embeds(audio_features, audio_feature_masks)  # (N, S_audio+1, D)
+            # match dtype to text embeds for safe concat/scatter
+            audio_embeds = audio_embeds.to(dtype=inputs_embeds.dtype)
 
         # Merge text and audio embeddings
-        inputs_embeds, _, attn = self._merge_input_ids_with_audio_features(
+        merged_embeds, _, attn = self._merge_input_embeds_with_audio_embeds(
+            inputs_embeds=inputs_embeds,
             input_ids=input_ids,
-            labels=None,
             attention_mask=attention_mask,
             audio_embeds=audio_embeds,
-            audio_features_mask=audio_features_mask,
+            audio_embeds_mask=audio_embeds_mask,
+            labels=None,
         )
-        return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attn, **generation_kwargs)
+        return self.llm.generate(inputs_embeds=merged_embeds, attention_mask=attn, **generation_kwargs)
 
     @property
     def default_generation_config(self) -> GenerationConfig:
@@ -440,11 +443,13 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
 
     def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
+        d_audio = config.encoder_config.d_model
+        d_text = config.text_config.hidden_size
         self.layers = nn.ModuleList(
             [
-                nn.Linear(config.sound_hidden_size, config.hidden_size),
+                nn.Linear(d_audio, d_text),
                 nn.GELU(),
-                nn.Linear(config.hidden_size, config.hidden_size),
+                nn.Linear(d_text, d_text),
             ]
         )
 

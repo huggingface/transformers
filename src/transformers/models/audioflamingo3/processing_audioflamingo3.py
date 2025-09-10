@@ -25,6 +25,10 @@ import torch
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -94,10 +98,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
         encoder_mask_len = tokens_per_window_max + 1  # Reserve one additional slot for end token
 
-        # Audio windowing configuration: 30 second windows with no overlap by default
-        wl = n_samples
-        wo = 0
-
         final_texts: list[str] = []
         feats_all: list[torch.Tensor] = []
         feat_masks_all: list[torch.Tensor] = []
@@ -120,20 +120,23 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 a = np.asarray(a).reshape(-1)
             T = a.shape[0]
 
-            if T <= wl:
+            if T <= n_samples:
                 num_windows = 1
-            elif T >= (20 * wl - 19 * wo):  # Limit to maximum of 20 windows
+            elif T >= 20 * n_samples:  # Limit to maximum of 20 windows
+                # Warn user about audio truncation
+                audio_duration_seconds = T / sr
+                logger.warning(f"Audio duration ({audio_duration_seconds:.1f}s) exceeds maximum supported length (600s). " f"Audio will be truncated to first 10 minutes.")
                 num_windows = 20
             else:
-                num_windows = 1 + int(math.ceil((T - wl) / float(wl - wo)))
+                num_windows = 1 + int(math.ceil((T - n_samples) / float(n_samples)))
 
             # Construct prompt with appropriate number of <sound> tokens
             clean_t = t.replace("<sound>", "").strip()
             final_texts.append(("<sound>" * num_windows) + clean_t)
 
             for i in range(num_windows):
-                start = i * (wl - wo)
-                chunk = a[start : start + wl]
+                start = i * n_samples
+                chunk = a[start : start + n_samples]
                 # Extract features and mel-frame mask
                 out = fe(chunk.reshape(1, -1), **fe_kwargs)
                 mel = out["input_features"][0]  # (M, T_mel)
