@@ -21,14 +21,14 @@ limitations under the License.
 
 ## Overview
 
-[VaultGemma](https://google.com) is a text-only decoder model based on the
-[Gemma 2](https://huggingface.co/docs/transformers/en/model_doc/gemma2)
-[family](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315) of models, trained from
-scratch with sequence-level differential privacy (DP). VaultGemma model is available as a pretrained model with 1B
-parameters that uses a 1024 token sequence length.
+[VaultGemma](https://google.com) is a text-only decoder model derived from
+[Gemma 2](https://huggingface.co/docs/transformers/en/model_doc/gemma2), notably it drops the norms after the Attention
+and MLP blocks, and uses full attention for all layers instead of alternating between full attention and local sliding
+attention. VaultGemma is available as a pretrained model with 1B parameters that uses a 1024 token sequence length.
 
-VaultGemma was trained on the same training mixture as the Gemma 2 models, consisting of a number of documents of
-varying lengths. Additionally, it is trained using
+VaultGemma was trained from scratch with sequence-level differential privacy (DP). Its training data includes the same
+mixture as the [Gemma 2 models](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315),
+consisting of a number of documents of varying lengths. Additionally, it is trained using
 [DP stochastic gradient descent (DP-SGD)](https://arxiv.org/abs/1607.00133) and provides a
 (ε ≤ 2.0, δ ≤ 1.1e-10)-sequence-level DP guarantee, where a sequence consists of 1024 consecutive tokens extracted from
 heterogeneous data sources. Specifically, the privacy unit of the guarantee is for the sequences after sampling and
