@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import torch
 import torch.distributed.checkpoint as dist_cp
