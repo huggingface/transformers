@@ -307,16 +307,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         # Get the corresponding modeling file path
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
-            framework = ""
-            if model_class.startswith("TF"):
-                framework = "tf"
-            elif model_class.startswith("Flax"):
-                framework = "flax"
-            fn = (
-                f"modeling_{module.split('.')[-1]}.py"
-                if framework == ""
-                else f"modeling_{framework}_{module.split('.')[-1]}.py"
-            )
+            fn = f"modeling_{module.split('.')[-1]}.py"
             files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
 
     return sorted(files)
@@ -808,7 +799,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
     The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
-    example files by linking each example to the example test file for the example framework.
+    example files by linking each example to the example test file for the example folder.
 
     Returns:
         `Tuple[Dict[str, List[str]], List[str]]`: A tuple with two elements: the initialized dependency map which is a
@@ -820,7 +811,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
 
     test_files = list((PATH_TO_EXAMPLES / "pytorch").glob("test_*.py"))
     all_examples.extend(test_files)
-    # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
+    # Remove the files at the root of examples/pytorch since they are not proper examples (they are either utils
     # or example test files).
     examples = [f for f in (PATH_TO_EXAMPLES / "pytorch").glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / "pytorch"]
     all_examples.extend(examples)

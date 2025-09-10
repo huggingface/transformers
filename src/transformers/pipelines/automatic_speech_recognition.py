@@ -168,11 +168,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             </Tip>
 
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed. If no framework is specified, will default to the one currently installed. If no framework is
-            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-            no model is provided.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
