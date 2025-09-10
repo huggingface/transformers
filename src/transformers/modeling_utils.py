@@ -5207,6 +5207,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             mode = Mode.INFERENCE if not model.training else Mode.TRAINING
             kernelize(model, device=Device(type=model.device.type), mode=mode)
+            model._use_kernels = True
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -6088,6 +6089,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return module.get_extra_state()
 
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+
+    def train(self, mode: bool = True):
+        out = super().train(mode)
+        if getattr(self, "_use_kernels", False):
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+            from kernels import Device, Mode, kernelize
+            kernel_mode = Mode.TRAINING if mode else Mode.INFERENCE
+            kernelize(self, device=Device(type=self.device.type), mode=kernel_mode)
+        return out
+
+    def eval(self):
+        return self.train(False)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
