@@ -142,4 +142,3 @@ def test_model_with_dotted_name_and_relative_imports():
     model_id = "hf-internal-testing/remote_code_model_with_dots"
 
     model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
-    assert model is not None
