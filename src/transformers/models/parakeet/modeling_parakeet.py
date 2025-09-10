@@ -76,8 +76,6 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         return position_embeddings
 
 
-# Similar to `..fastspeech2_conformer.modeling_fastspeech2_conformer.FastSpeech2ConformerMultiLayeredConv1d`
-# But uses Linear layers instead of Conv1d for efficiency
 class ParakeetEncoderFeedForward(nn.Module):
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
@@ -191,7 +189,7 @@ def eager_attention_forward(
 
 
 class ParakeetEncoderAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
 
     def __init__(self, config: ParakeetEncoderConfig, layer_idx: int):
         super().__init__()
@@ -470,13 +468,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Parakeet Encoder model is similar to `FastSpeech2ConformerEncoder`, namely they both consist of multi-head
-    attention blocks with Shaw-style relative positional encoding (https://huggingface.co/papers/1803.02155).
-
-    Main differences:
-    - Parakeet introduces a subsampling layer.
-    - Using Linear layers instead of Conv1d for the feed forward layers in the individual Encoder blocks
-    - Implementation differences in the multi-head attention component.
+    The Parakeet Encoder model, based on the [Fast Conformer architecture](https://huggingface.co/papers/2305.05084).
     """
 )
 class ParakeetEncoder(ParakeetPreTrainedModel):
@@ -547,8 +539,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
-            # skip the layer when `to_drop=True``, rather than setting `hidden_states=None`
-            # which can cause error when computing loss on None output
             if not to_drop:
                 hidden_states = encoder_layer(
                     hidden_states,
@@ -589,14 +579,14 @@ class ParakeetGenerateOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    Parakeet Encoder with a Connectionist Temporal Classification (CTC) head for decoding text.
+    Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
 class ParakeetForCTC(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetConfig):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
-        # Conv rather than linear to be consistent with NeMO decolying layer
+        # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
