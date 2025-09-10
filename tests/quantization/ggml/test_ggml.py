@@ -27,7 +27,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
-    require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -311,6 +310,7 @@ class GgufModelTests(unittest.TestCase):
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
+    umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -349,6 +349,7 @@ class GgufModelTests(unittest.TestCase):
     fp16_deci_model_id = "decilm-7b-uniform-gqa-f16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
+    q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
 
     example_text = "Hello"
 
@@ -1081,24 +1082,17 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-
-@slow
-@require_torch
-class T5GGUFIntegrationTests(unittest.TestCase):
-    def test_umt5_encoder_can_load_gguf_from_hub_path(self):
+    def test_umt5_encoder_q8_0(self):
         """
         Verifies that a UMT5 encoder loads directly from a GGUF file using
         UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
         """
-        if not is_gguf_available():
-            self.skipTest("gguf is not available in this environment")
 
-        model_id = "city96/umt5-xxl-encoder-gguf"
-        gguf_path = "umt5-xxl-encoder-Q8_0.gguf"
         model = UMT5EncoderModel.from_pretrained(
-            model_id,
-            gguf_file=gguf_path,
+            self.umt5_encoder_model_id,
+            gguf_file=self.q8_0_umt5_encoder_model_id,
             torch_dtype=torch.float16,
+            device_map="auto",
         )
         model.eval()
 
@@ -1110,7 +1104,7 @@ class T5GGUFIntegrationTests(unittest.TestCase):
         self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
 
         # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
-        input_ids = torch.ones((1, 4), dtype=torch.long)
+        input_ids = torch.ones((1, 4), dtype=torch.long).to(torch_device)
         with torch.no_grad():
             outputs = model(input_ids=input_ids)
         self.assertTrue(hasattr(outputs, "last_hidden_state"))
