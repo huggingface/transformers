@@ -169,7 +169,7 @@ class Text2TextGenerationPipeline(Pipeline):
                 max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./text_generation)).
+                [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -273,7 +273,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./text_generation)).
+                [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -380,7 +380,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./text_generation)).
+                [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:

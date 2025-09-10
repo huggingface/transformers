@@ -78,11 +78,6 @@ if is_torch_available():
     from torch.utils.data import Dataset
 
     class MultipleChoiceDataset(Dataset):
-        """
-        This will be superseded by a framework-agnostic approach
-        soon.
-        """
-
         features: list[InputFeatures]
 
         def __init__(

@@ -165,7 +165,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            framework="pt",
         )
         # There was a regression in 4.10 for this
         # Adding a test so we don't make the mistake again.
@@ -179,7 +178,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            framework="pt",
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
@@ -199,7 +197,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            framework="pt",
             dtype=torch.float16,
         )
         outputs = zero_shot_classifier(
@@ -220,7 +217,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
-            framework="pt",
             dtype=torch.bfloat16,
         )
         outputs = zero_shot_classifier(
@@ -239,9 +235,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        zero_shot_classifier = pipeline(
-            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="pt"
-        )
+        zero_shot_classifier = pipeline("zero-shot-classification", model="FacebookAI/roberta-large-mnli")
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )

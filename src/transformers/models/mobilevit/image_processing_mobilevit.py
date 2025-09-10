@@ -473,7 +473,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
-        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps.
 
         Args:
             outputs ([`MobileViTForSemanticSegmentation`]):
@@ -487,7 +487,6 @@ class MobileViTImageProcessor(BaseImageProcessor):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

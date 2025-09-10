@@ -18,7 +18,7 @@ import io
 import pathlib
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -183,22 +183,6 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
-
-
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
 def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
@@ -623,7 +607,6 @@ def resize_annotation(
     return new_annotation
 
 
-# TODO - (Amy) make compatible with other frameworks
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -646,7 +629,6 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# TODO - (Amy) make compatible with other frameworks
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -1483,12 +1465,11 @@ class DetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):

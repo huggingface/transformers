@@ -50,9 +50,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        text_classifier = pipeline(task="text-classification", model="hf-internal-testing/tiny-random-distilbert")
 
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
@@ -112,7 +110,6 @@ class TextClassificationPipelineTests(unittest.TestCase):
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
-            framework="pt",
             device=torch_device,
         )
 
@@ -124,7 +121,6 @@ class TextClassificationPipelineTests(unittest.TestCase):
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
-            framework="pt",
             device=torch_device,
             dtype=torch.float16,
         )
@@ -137,7 +133,6 @@ class TextClassificationPipelineTests(unittest.TestCase):
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
-            framework="pt",
             device=torch_device,
             dtype=torch.bfloat16,
         )

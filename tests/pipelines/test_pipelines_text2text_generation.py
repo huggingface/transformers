@@ -87,7 +87,6 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         generator = pipeline(
             "text2text-generation",
             model="patrickvonplaten/t5-tiny-random",
-            framework="pt",
             num_beams=1,
             max_new_tokens=9,
         )

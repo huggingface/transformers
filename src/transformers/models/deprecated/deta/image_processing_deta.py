@@ -16,7 +16,7 @@
 
 import pathlib
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -51,7 +51,6 @@ from ....image_utils import (
 )
 from ....utils import (
     is_torch_available,
-    is_torch_tensor,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -175,23 +174,6 @@ def get_image_size_for_max_height_width(
     new_height = int(height * min_scale)
     new_width = int(width * min_scale)
     return new_height, new_width
-
-
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
 def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:

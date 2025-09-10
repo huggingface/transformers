@@ -60,7 +60,6 @@ _import_structure = {
     "audio_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
-    "convert_graph_to_onnx": [],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
         "DataProcessor",

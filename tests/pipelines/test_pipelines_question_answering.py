@@ -200,7 +200,7 @@ class QAPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_iterator(self):
         # https://github.com/huggingface/transformers/issues/18510
-        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16)
 
         def data():
             for i in range(10):

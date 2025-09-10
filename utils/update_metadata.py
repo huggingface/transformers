@@ -211,27 +211,20 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
     Returns:
         `Dict[str, Tuple[str, str]]`: The updated table in the same format.
     """
-    auto_modules = [
-        transformers_module.models.auto.modeling_auto,
-    ]
-    for pipeline_tag, model_mapping, auto_class in PIPELINE_TAGS_AND_AUTO_MODELS:
-        model_mappings = [model_mapping]
-        auto_classes = [auto_class]
-        # Loop through all three frameworks
-        for module, cls, mapping in zip(auto_modules, auto_classes, model_mappings):
-            # The type of pipeline may not exist in this framework
-            if not hasattr(module, mapping):
-                continue
-            # First extract all model_names
-            model_names = []
-            for name in getattr(module, mapping).values():
-                if isinstance(name, str):
-                    model_names.append(name)
-                else:
-                    model_names.extend(list(name))
+    module = transformers_module.models.auto.modeling_auto
+    for pipeline_tag, model_mapping, cls in PIPELINE_TAGS_AND_AUTO_MODELS:
+        if not hasattr(module, model_mapping):
+            continue
+        # First extract all model_names
+        model_names = []
+        for name in getattr(module, model_mapping).values():
+            if isinstance(name, str):
+                model_names.append(name)
+            else:
+                model_names.extend(list(name))
 
-            # Add pipeline tag and auto model class for those models
-            table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
+        # Add pipeline tag and auto model class for those models
+        table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
 
     return table
 

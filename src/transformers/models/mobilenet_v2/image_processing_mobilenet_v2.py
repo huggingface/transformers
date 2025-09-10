@@ -478,7 +478,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileNetV2
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
-        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps.
 
         Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
@@ -492,7 +492,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

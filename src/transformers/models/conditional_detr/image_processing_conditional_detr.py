@@ -18,7 +18,7 @@ import io
 import pathlib
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -187,23 +187,6 @@ def get_image_size_for_max_height_width(
     new_height = int(height * min_scale)
     new_width = int(width * min_scale)
     return new_height, new_width
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
 # Copied from transformers.models.detr.image_processing_detr.safe_squeeze
@@ -1510,11 +1493,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
     def post_process(self, outputs, target_sizes):
         """
         Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the Pascal VOC format (xmin, ymin, xmax, ymax).
-        Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrObjectDetectionOutput`]):
