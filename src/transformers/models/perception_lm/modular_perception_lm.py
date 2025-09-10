@@ -317,6 +317,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         return model_inputs
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
