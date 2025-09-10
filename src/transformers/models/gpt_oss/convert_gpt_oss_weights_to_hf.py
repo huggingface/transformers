@@ -383,7 +383,7 @@ class GptOssConverter(TikTokenConverter):
     ):
         super().__init__(vocab_file, pattern=None)
 
-        # TODO 1st donwload the vocabfile!!!
+        # TODO 1st download the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
         # Complete list of Harmony special tokens as per o200k_harmony spec

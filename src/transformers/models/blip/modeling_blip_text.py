@@ -31,12 +31,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_blip import BlipTextConfig
@@ -444,9 +440,11 @@ class BlipTextEncoder(nn.Module):
             # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
             # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
             elif isinstance(past_key_values, DynamicCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None

@@ -189,7 +189,7 @@ _deps = [
     "timeout-decorator",
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
-    "tokenizers>=0.21,<0.22",
+    "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
     "torchvision",
@@ -463,7 +463,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.56.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.57.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

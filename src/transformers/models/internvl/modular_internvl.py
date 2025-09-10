@@ -79,7 +79,7 @@ class InternVLVisionRMSNorm(LlamaRMSNorm):
 
 class InternVLVisionAttention(JanusVisionAttention):
     def __init__(self, config: InternVLVisionConfig):
-        super().__init__()
+        super().__init__(config)
         del self.num_key_value_groups
 
         # Needed for flash attention

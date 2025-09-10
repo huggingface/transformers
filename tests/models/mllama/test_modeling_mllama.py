@@ -395,6 +395,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 

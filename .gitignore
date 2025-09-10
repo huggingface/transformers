@@ -170,3 +170,4 @@ tags
 
 # modular conversion
 *.modular_backup
+# (Removed previously added local conda noise patterns to keep .gitignore generic)

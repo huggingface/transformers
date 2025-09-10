@@ -45,7 +45,7 @@ results = keypoint_matcher([url_0, url_1], threshold=0.9)
 print(results[0])
 # {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
 ```
-<hfoption id="AutoModel">
+</hfoption>
 <hfoption id="AutoModel">
 
 ```py
@@ -65,7 +65,7 @@ processor = AutoImageProcessor.from_pretrained("zju-community/efficientloftr")
 model = AutoModelForKeypointMatching.from_pretrained("zju-community/efficientloftr")
 
 inputs = processor(images, return_tensors="pt")
-with torch.no_grad():
+with torch.inference_mode():
     outputs = model(**inputs)
 
 # Post-process to get keypoints and matches
@@ -92,7 +92,8 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     # EfficientLoFTR requires pairs of images
     images = [image1, image2]
     inputs = processor(images, return_tensors="pt")
-    outputs = model(**inputs)
+    with torch.inference_mode():
+        outputs = model(**inputs)
     
     # Extract matching information
     keypoints = outputs.keypoints        # Keypoints in both images

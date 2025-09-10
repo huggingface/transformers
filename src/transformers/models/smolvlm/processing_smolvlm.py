@@ -179,6 +179,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def expand_text_with_image_tokens(self, text, image_rows, image_cols):
         prompt_strings = []
+        image_rows = image_rows if image_rows is not None else [[0] * len(text)]
+        image_cols = image_cols if image_cols is not None else [[0] * len(text)]
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             image_prompt_strings = []
@@ -325,8 +327,8 @@ class SmolVLMProcessor(ProcessorMixin):
             images = make_nested_list_of_images(images)
             vision_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            image_rows = vision_inputs.pop("rows", [[0] * len(text)])
-            image_cols = vision_inputs.pop("cols", [[0] * len(text)])
+            image_rows = vision_inputs.pop("rows", None)
+            image_cols = vision_inputs.pop("cols", None)
             inputs.update(vision_inputs)
 
             if text is not None:

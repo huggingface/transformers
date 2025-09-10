@@ -199,6 +199,12 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester = InternVLVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=InternVLConfig, has_text_modality=False)
 
+    @unittest.skip(
+        reason="Failing with `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+    )
+    def test_flex_attention_with_grads(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

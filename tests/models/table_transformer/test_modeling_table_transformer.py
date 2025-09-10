@@ -20,7 +20,7 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -591,13 +591,18 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         expected_shape = (1, 15, 3)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_logits = torch.tensor(
-            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
-            device=torch_device,
-        )
+        expected_logits_data = Expectations({
+            ("cuda", None): [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            ("rocm", (9, 4)): [[-6.7668, -16.9917, 6.7738], [-8.0046, -22.2668, 6.9491], [-7.2834, -21.0321, 7.3785]],
+        }).get_expectation()  # fmt: skip
+
+        expected_logits = torch.tensor(expected_logits_data, device=torch_device)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
-        expected_boxes = torch.tensor(
-            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
-        )
+        expected_boxes_data = Expectations({
+            ("cuda", None): [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]],
+            ("rocm", (9, 4)): [[0.4868, 0.1766, 0.6732], [0.6686, 0.4526, 0.3859], [0.4717, 0.1760, 0.6362]],
+        }).get_expectation()  # fmt: skip
+
+        expected_boxes = torch.tensor(expected_boxes_data, device=torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3)

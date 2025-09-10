@@ -279,7 +279,7 @@ class GgufModelTests(unittest.TestCase):
     falcon7b_model_id_fp16 = "medmekk/falcon-7b-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
-    t5_model_id = "repetitio/flan-t5-small"
+    t5_model_id = "Felladrin/gguf-flan-t5-small"
     original_t5_model_id = "google/flan-t5-small"
     stablelm_model_id = "afrideva/stablelm-3b-4e1t-GGUF"
     stablelm2_model_id = "afrideva/stablelm-2-1_6b-GGUF"
@@ -317,8 +317,8 @@ class GgufModelTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
-    fp16_t5_model_id = "flan-t5-small-f16.gguf"
-    q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
+    fp16_t5_model_id = "flan-t5-small.F16.gguf"
+    q8_0_t5_model_id = "flan-t5-small.Q8_0.gguf"
     fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
     fp16_gpt2_model_id = "gpt2.f16.gguf"
     q8_gpt2_model_id = "gpt2.Q8_0.gguf"
@@ -825,8 +825,8 @@ class GgufModelTests(unittest.TestCase):
             gguf_file=self.q6_k_nemotron_model_id,
             dtype=torch.float16,
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
+        # use the original tokenizer from nvidia to avoid long load times
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-Mini-4B-Instruct")
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=16)
 
@@ -952,7 +952,7 @@ class GgufModelTests(unittest.TestCase):
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
             dtype=torch.float16,
-        )
+        ).model
 
         converted_state_dict = converted_model.state_dict()
         original_state_dict = original_model.state_dict()

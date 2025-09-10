@@ -232,7 +232,7 @@ class Siglip2VisionEmbeddings(nn.Module):
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     # Update: add `spatial_shapes` and `attention_mask`

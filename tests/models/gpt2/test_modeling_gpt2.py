@@ -443,7 +443,7 @@ class GPT2ModelTester:
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         cache_outputs = model(**cache_inputs)
         # Caches are mutable (unlike legacy tuples), so we need to copy them before using multiple times
-        pkv_copy = DynamicCache()
+        pkv_copy = DynamicCache(config=config)
         pkv_copy.update(
             cache_outputs.past_key_values.layers[0].keys, cache_outputs.past_key_values.layers[0].values, 0
         )

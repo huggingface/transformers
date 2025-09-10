@@ -198,7 +198,7 @@ if __name__ == "__main__":
         collated_report_buffer.append(report)
 
     # Write collated report
-    with open(f"collated_reports_{commit_hash}.json", "w") as f:
+    with open(f"collated_reports_{machine_type}_{commit_hash}.json", "w") as f:
         json.dump(
             {
                 "gpu_name": gpu_name,

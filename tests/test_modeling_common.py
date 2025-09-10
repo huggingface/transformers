@@ -1585,7 +1585,7 @@ class ModelTesterMixin:
                         head_dim = model.config.hidden_size // model.config.num_attention_heads
 
                         cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = DynamicCache()
+                        empty_pkv = DynamicCache(config=model.config)
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -4313,8 +4313,10 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
-        Tests that the given attention implementation can work with packed sequences and infers the mask
-        from position ids. This test requires the model to use new attention mask API which handles packing.
+        Tests whether flash attention can continue its generation from given position ids.
+
+        NOTE: This serves as regression check as we had instances where flash attention entered the varlen
+        path here. It should now always enter the base `flash_fn`.
         """
 
         max_new_tokens = 2
@@ -4737,6 +4739,7 @@ class ModelTesterMixin:
         (There are many more examples especially now that the `kernels` library is
         supported)
         """
+        config = copy.deepcopy(config)
 
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
@@ -4781,6 +4784,14 @@ class ModelTesterMixin:
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
                 config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+
+            # 3d rope also depends on the head dim
+            # (we assume easy shapes here where we get to the requested head dim at least)
+            if hasattr(config, "rope_scaling") and len(config.rope_scaling.get("mrope_section", None)) > 0:
+                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
+                config.rope_scaling["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                ]
 
         # Update config values
         update_config_headdim(config, requested_dim)

@@ -601,7 +601,16 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel("kernels-community/flash-attn")
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):

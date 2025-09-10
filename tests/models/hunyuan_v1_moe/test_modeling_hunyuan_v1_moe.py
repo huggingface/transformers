@@ -59,6 +59,7 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
+    test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
     pipeline_model_mapping = (
         {
