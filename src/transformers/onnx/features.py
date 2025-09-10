@@ -578,7 +578,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
-    def get_model_from_feature(feature: str, model: str, cache_dir: Optional[str] = None) -> PreTrainedModel:
+    def get_model_from_feature(feature: str, model: str, cache_dir: Optional[str] = None) -> "PreTrainedModel":
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
 
@@ -597,7 +597,7 @@ class FeaturesManager:
         return model
 
     @staticmethod
-    def check_supported_model_or_raise(model: PreTrainedModel, feature: str = "default") -> tuple[str, Callable]:
+    def check_supported_model_or_raise(model: "PreTrainedModel", feature: str = "default") -> tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.
 
