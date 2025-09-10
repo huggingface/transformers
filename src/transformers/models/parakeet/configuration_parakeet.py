@@ -149,7 +149,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.use_bias = True
 
 
-class ParakeetConfig(PretrainedConfig):
+class ParakeetCTCConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetCTC`]. It is used to instantiate a
     Parakeet CTC model according to the specified arguments, defining the model architecture.
@@ -193,48 +193,41 @@ class ParakeetConfig(PretrainedConfig):
     and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
-    model_type = "parakeet"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    model_type = "parakeet_ctc"
     sub_configs = {"encoder_config": ParakeetEncoderConfig}
 
     def __init__(
         self,
         vocab_size=1025,
         blank_token_id=1024,
-        pad_token_id=1024,
-        bos_token_id=1,
-        eos_token_id=2,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
         encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        pad_token_id=1024,
+        bos_token_id=1,
+        eos_token_id=2,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-        if encoder_config is None:
-            encoder_config = {}
-            logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
-
-        if encoder_config is None:
-            encoder_config = ParakeetEncoderConfig()
-        elif isinstance(encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
-        elif isinstance(encoder_config, ParakeetEncoderConfig):
-            self.encoder_config = encoder_config
-        else:
-            raise ValueError(
-                f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
-            )
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
         self.use_bias = self.encoder_config.use_bias
         self.initializer_range = self.encoder_config.initializer_range
+
+        if isinstance(encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig()
+        
+        self.encoder_config = self.encoder_config
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
@@ -248,4 +241,4 @@ class ParakeetConfig(PretrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["ParakeetConfig", "ParakeetEncoderConfig"]
+__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig"]
