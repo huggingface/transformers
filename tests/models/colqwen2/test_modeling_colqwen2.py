@@ -366,7 +366,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Preprocess the examples
         batch_images = self.processor(images=list(ds["image"])).to(torch_device)
         batch_queries = self.processor(text=list(ds["query"])).to(torch_device)
-        
+
         with torch.inference_mode():
             image_embeddings = model(**batch_images).embeddings
             query_embeddings = model(**batch_queries).embeddings

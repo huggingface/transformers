@@ -102,7 +102,7 @@ def convert_colqwen2_weights_to_hf(
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
-        model_id, 
+        model_id,
         revision=revision,
     )
     if original_vlm_name_or_path is not None:
@@ -201,7 +201,7 @@ if __name__ == "__main__":
         help="Name or path of the original VLM backbone model",
         default=None,
     )
-    
+
     args = parser.parse_args()
 
     convert_colqwen2_weights_to_hf(
