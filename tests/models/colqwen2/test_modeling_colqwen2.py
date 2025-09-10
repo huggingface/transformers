@@ -358,7 +358,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
             "Sahil-Kabir/colqwen2.5-v0.2",
             dtype=torch.bfloat16,
         ).eval()
-        processor = ColQwen2Processor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct", trust_remote_code=True)
+        processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2", trust_remote_code=True)
 
         # Load the test dataset
         ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")

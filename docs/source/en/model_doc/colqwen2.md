@@ -165,7 +165,6 @@ from transformers import ColQwen2ForRetrieval, ColQwen2Processor
 from transformers.utils.import_utils import is_flash_attn_2_available
 
 model_name = "Sahil-Kabir/colqwen2.5-v0.2" # An existing compatible checkpoint
-vlm_name = "Qwen/Qwen2.5-VL-3B-Instruct" # Processor source
 
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
@@ -173,7 +172,7 @@ model = ColQwen2ForRetrieval.from_pretrained(
     device_map="auto",
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa"
 )
-processor = ColQwen2Processor.from_pretrained(vlm_name)
+processor = ColQwen2Processor.from_pretrained(model_name)
 ```
 
 ## Notes
