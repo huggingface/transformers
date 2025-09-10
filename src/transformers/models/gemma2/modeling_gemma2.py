@@ -299,6 +299,36 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
+@auto_docstring
+class Gemma2PreTrainedModel(PreTrainedModel):
+    config: Gemma2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Gemma2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Gemma2DecoderLayer,
+        "attentions": Gemma2Attention,
+    }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(0.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+
+
 class Gemma2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -333,25 +363,6 @@ class Gemma2RotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
-class Gemma2PreTrainedModel(PreTrainedModel):
-    config: Gemma2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Gemma2DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Gemma2DecoderLayer,
-        "attentions": Gemma2Attention,
-    }
 
 
 @auto_docstring

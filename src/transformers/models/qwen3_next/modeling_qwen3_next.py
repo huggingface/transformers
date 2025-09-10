@@ -964,6 +964,13 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3NextGatedDeltaNet):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data.uniform_(0, 16).log_()
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif isinstance(module, Qwen3NextRMSNorm):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(0.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

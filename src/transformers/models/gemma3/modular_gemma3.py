@@ -527,6 +527,13 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
             module.mm_input_projection_weight.data.zero_()
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif "RMSNorm" in module.__class__.__name__:
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(0.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
