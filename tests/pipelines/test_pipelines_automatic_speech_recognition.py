@@ -1791,6 +1791,32 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
 
+    @require_torch
+    def test_pipeline_generation_kwargs(self):
+        """Tests that we can pass kwargs to `generate`, as in the text generation pipelines"""
+        model = "openai/whisper-tiny"
+        asr = pipeline("automatic-speech-recognition", model=model)
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+
+        # BC: with `generate_kwargs` as a dictionary
+        res = asr(
+            dataset[0]["audio"],
+            generate_kwargs={"task": "transcribe", "max_new_tokens": 256},
+        )
+        self.assertEqual(
+            res["text"], " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        )
+
+        # New: kwargs forwarded to `generate`
+        res = asr(
+            dataset[0]["audio"],
+            max_new_tokens=256,
+            task="transcribe",
+        )
+        self.assertEqual(
+            res["text"], " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        )
+
 
 def require_ffmpeg(test_case):
     """
