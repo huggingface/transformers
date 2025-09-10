@@ -138,8 +138,6 @@ class LongcatFlashConfig(PretrainedConfig):
         moe_intermediate_size (`int`, *optional*, defaults to 1408): size of the moe mlp.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor applied to the routing weights.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the top-k routing probabilities.
         router_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the router projection.
 

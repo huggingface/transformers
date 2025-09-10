@@ -31,7 +31,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
@@ -60,10 +59,12 @@ class LongcatFlashMLP(DeepseekV3MLP):
 # TODO remap config key moe_topk -> num_experts_per_tok
 class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
-        super().__init__(config)
         del self.n_group
         del self.topk_group
         del self.weight  # Remove inherited weight parameter
+        del self.norm_topk_prob
+        super().__init__(config)
+
         self.top_k = config.moe_topk
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -101,7 +102,7 @@ class LongcatFlashMoE(nn.Module):
         del self.shared_experts
 
         self.experts = nn.ModuleList(
-            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)] 
+            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
             + [nn.Identity() for _ in range(self.zero_expert_num)]
         )
 

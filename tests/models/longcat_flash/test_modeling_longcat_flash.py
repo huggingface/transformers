@@ -55,19 +55,14 @@ class LongcatFlashModelTester:
         zero_expert_num=2,
         moe_topk=2,
         routed_scaling_factor=1.0,
-        norm_topk_prob=False,
-        router_bias=False,
         hidden_act="silu",
         max_position_embeddings=128,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         pad_token_id=0,
-        mla_scale_q_lora=True,
-        mla_scale_kv_lora=True,
         type_sequence_label_size=2,
         num_labels=3,
         num_choices=4,
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -94,15 +89,11 @@ class LongcatFlashModelTester:
         self.zero_expert_num = zero_expert_num
         self.moe_topk = moe_topk
         self.routed_scaling_factor = routed_scaling_factor
-        self.norm_topk_prob = norm_topk_prob
-        self.router_bias = router_bias
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.pad_token_id = pad_token_id
-        self.mla_scale_q_lora = mla_scale_q_lora
-        self.mla_scale_kv_lora = mla_scale_kv_lora
         self.type_sequence_label_size = type_sequence_label_size
         self.num_labels = num_labels
         self.num_choices = num_choices
@@ -126,15 +117,11 @@ class LongcatFlashModelTester:
             zero_expert_num=self.zero_expert_num,
             moe_topk=self.moe_topk,
             routed_scaling_factor=self.routed_scaling_factor,
-            norm_topk_prob=self.norm_topk_prob,
-            router_bias=self.router_bias,
             hidden_act=self.hidden_act,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
             rms_norm_eps=self.rms_norm_eps,
             pad_token_id=self.pad_token_id,
-            mla_scale_q_lora=self.mla_scale_q_lora,
-            mla_scale_kv_lora=self.mla_scale_kv_lora,
         )
 
     def create_and_check_model(

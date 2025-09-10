@@ -120,11 +120,20 @@ class LongcatFlashMLP(nn.Module):
 class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
+        del self.n_group
+        del self.topk_group
+        del self.weight  # Remove inherited weight parameter
+        del self.norm_topk_prob
         self.config = config
+
         self.top_k = config.moe_topk
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
+
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
@@ -141,44 +150,32 @@ class LongcatFlashTopkRouter(nn.Module):
         scores = router_logits.softmax(dim=-1)
         topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
-    @property
-    def weight(self):
-        return self.classifier.weight
 
-
+# remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashMoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
     def __init__(self, config):
-        super().__init__()
         # ugly double getattr, will be solved when model and configs are converted
 
         self.intermediate_size = getattr(config, "expert_ffn_hidden_size", getattr(config, "moe_intermediate_size"))
         self.zero_expert_num = config.zero_expert_num
         self.zero_expert_type = getattr(config, "zero_expert_type", "identity")
-        self.config = config
+        super().__init__(config)
+        del self.gate
+        del self.shared_experts
 
         self.experts = nn.ModuleList(
             [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
+            + [nn.Identity() for _ in range(self.zero_expert_num)]
         )
 
         # Override total_experts to include zero experts
-        self.total_experts = len(self.experts) + (0 if self.zero_expert_num is None else self.zero_expert_num)
+        self.total_experts = len(self.experts) + self.zero_expert_num
         self.router = LongcatFlashTopkRouter(config)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
-        """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
 
         expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
@@ -191,13 +188,7 @@ class LongcatFlashMoE(nn.Module):
             if token_indices.numel() > 0:
                 expert_weights = topk_weights[token_indices, weight_indices]
                 expert_input = hidden_states[token_indices]
-
-                if expert_idx < len(self.experts):
-                    expert_output = self.experts[expert_idx](expert_input)
-                elif self.zero_expert_type == "identity":
-                    expert_output = expert_input
-                else:
-                    raise ValueError("Unknown zero expert type")
+                expert_output = self.experts[expert_idx](expert_input)
 
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)
