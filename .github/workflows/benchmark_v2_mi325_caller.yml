@@ -7,39 +7,6 @@ on:
   push:
     branches:
       - run-benchmarking-gh-actions*
-  workflow_dispatch:
-    inputs:
-      model_id:
-        description: 'Model ID to benchmark (leave empty for default models)'
-        required: false
-        default: ''
-      warmup_iterations:
-        description: 'Number of warmup iterations'
-        required: false
-        type: number
-        default: 3
-      measurement_iterations:
-        description: 'Number of measurement iterations'
-        required: false
-        type: number
-        default: 5
-      num_tokens_to_generate:
-        description: 'Number of tokens to generate'
-        required: false
-        type: number
-        default: 100
-      include_benchmarks:
-        description: 'Benchmarks to include (comma-separated, e.g., "llama")'
-        required: false
-        type: string
-        default: ''
-      exclude_benchmarks:
-        description: 'Benchmarks to exclude (comma-separated)'
-        required: false
-        type: string
-        default: ''
-  repository_dispatch:
-    types: [benchmark_v2_trigger]
 
 jobs:
   benchmark-v2-default:
@@ -47,9 +14,9 @@ jobs:
     uses: ./.github/workflows/benchmark_v2.yml
     with:
       runner: amd-mi325-ci-1gpu
-      warmup_iterations: ${{ inputs.warmup_iterations || 3 }}
-      measurement_iterations: ${{ inputs.measurement_iterations || 5 }}
-      num_tokens_to_generate: ${{ inputs.num_tokens_to_generate || 100 }}
+      warmup_iterations: 3
+      measurement_iterations: 5
+      num_tokens_to_generate: 100
       commit_sha: ${{ github.sha }}
       upload_to_hub: true
       run_id: ${{ github.run_id }}
