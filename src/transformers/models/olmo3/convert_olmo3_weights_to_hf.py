@@ -20,6 +20,7 @@ import json
 import os
 import pickle
 import shutil
+import traceback
 import uuid
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -127,9 +128,9 @@ class RemoteFileSystemReader(dist_cp.StorageReader):
         self,
         path: Path | str,
         *,
-        thread_count: Optional[int] = None,
+        thread_count: int | None = None,
         pre_download: bool = False,
-        work_dir: Optional[Path | str] = None,
+        work_dir: Path | str | None = None,
     ):
         super().__init__()
         if thread_count is not None and thread_count <= 0:
@@ -138,9 +139,9 @@ class RemoteFileSystemReader(dist_cp.StorageReader):
         self.thread_count = thread_count or 1
         self.pre_download = pre_download
         self.work_dir = normalize_path(work_dir) if work_dir is not None else None
-        self.storage_data: dict[MetadataIndex, _StorageInfo] = dict()
+        self.storage_data: dict[MetadataIndex, _StorageInfo] = {}
         self.load_id = generate_uuid()
-        self._metadata: Optional[Metadata] = None
+        self._metadata: Metadata | None = None
 
     def _get_bytes(self, relative_path: str, offset: int, length: int) -> bytes:
         full_path = f"{self.path}/{relative_path}"
@@ -151,8 +152,8 @@ class RemoteFileSystemReader(dist_cp.StorageReader):
         content = self._get_bytes(sinfo.relative_path, sinfo.offset, sinfo.length)
         return (read_item, content)
 
-    def reset(self, checkpoint_id: Optional[Path | str] = None) -> None:
-        self.storage_data = dict()
+    def reset(self, checkpoint_id: Path | str | None = None) -> None:
+        self.storage_data = {}
         if checkpoint_id:
             self.path = normalize_path(checkpoint_id)
         self.load_id = generate_uuid()
@@ -241,7 +242,7 @@ def load_model(model_path: str):
         keys: list[str],
         *,
         pre_download: bool = False,
-        work_dir: Optional[Path | str] = None,
+        work_dir: Path | str | None = None,
     ) -> dict[str, Any]:
         from torch.distributed.checkpoint.default_planner import _EmptyStateDictLoadPlanner
         from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
