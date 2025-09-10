@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import (

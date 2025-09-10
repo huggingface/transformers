@@ -562,7 +562,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
                 `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under

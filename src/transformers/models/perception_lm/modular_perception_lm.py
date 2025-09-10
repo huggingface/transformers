@@ -21,6 +21,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from ...cache_utils import Cache
 from ...utils import (
     auto_docstring,
     can_return_tuple,

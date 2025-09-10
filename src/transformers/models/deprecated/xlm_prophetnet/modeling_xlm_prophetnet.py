@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput
 from ....modeling_utils import PreTrainedModel

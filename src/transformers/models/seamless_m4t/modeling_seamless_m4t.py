@@ -1285,7 +1285,7 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
             encoder_attention_mask (`torch.FloatTensor`):
                 encoder attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by
                 very large negative values.
-            past_key_values (`Tuple(torch.FloatTensor)`):
+            past_key_values (`Cache`):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under

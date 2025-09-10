@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from ...cache_utils import EncoderDecoderCache
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
