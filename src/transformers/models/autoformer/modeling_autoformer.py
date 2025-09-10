@@ -81,7 +81,7 @@ class AutoFormerDecoderOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     trend: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -121,7 +121,7 @@ class AutoformerModelOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     trend: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -1064,7 +1064,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1440,7 +1440,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
@@ -1708,7 +1708,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,

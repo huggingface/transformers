@@ -154,7 +154,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -214,7 +214,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -271,7 +271,7 @@ class ProphetNetDecoderModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -324,7 +324,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -613,7 +613,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        past_key_values: Optional[tuple[Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask=None,
         layer_head_mask=None,
         extended_predict_attention_mask=None,
@@ -1188,7 +1188,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1522,7 +1522,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1658,7 +1658,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1862,7 +1862,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,

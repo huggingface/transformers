@@ -1206,7 +1206,7 @@ class LEDSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1245,7 +1245,7 @@ class LEDSeq2SeqLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1284,7 +1284,7 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1322,7 +1322,7 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: Optional[torch.FloatTensor] = None
     end_logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1899,7 +1899,7 @@ class LEDModel(LEDPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2064,7 +2064,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,

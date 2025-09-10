@@ -83,7 +83,7 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
         Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
         `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
-    past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
         Contains the model cache, used to speed up decoding. Different models have a different cache format, check
         the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     audio_codes (`torch.LongTensor` of shape `(batch_size*num_return_sequences, num_codeooks, sequence_length)`, *optional*):
@@ -98,7 +98,7 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
     audio_codes: Optional[torch.LongTensor] = None
 
 
@@ -124,7 +124,7 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
@@ -162,12 +162,12 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_loss: Optional[torch.FloatTensor] = None
     audio_logits: Optional[torch.FloatTensor] = None
-    depth_past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    depth_past_key_values: Optional[Cache] = None
     depth_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
