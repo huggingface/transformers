@@ -99,6 +99,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         num_attention_heads=8,
         intermediate_size=4096,
         hidden_act="silu",
+        attention_bias=True,
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=256,
@@ -124,6 +125,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.num_key_value_heads = num_attention_heads  # LlamaAttention compatibility
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.attention_bias = attention_bias
 
         if (conv_kernel_size - 1) % 2 != 0:
             raise ValueError(f"conv_kernel_size must be odd, got {conv_kernel_size}")
@@ -144,9 +146,6 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.scale_input = scale_input
         self.initializer_range = initializer_range
-
-        self.attention_bias = True  # LlamaAttention compatibility
-        self.use_bias = True
 
 
 class ParakeetCTCConfig(PretrainedConfig):
@@ -219,7 +218,7 @@ class ParakeetCTCConfig(PretrainedConfig):
             self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
         elif encoder_config is None:
             self.encoder_config = ParakeetEncoderConfig()
-        
+
         self.encoder_config = self.encoder_config
 
         super().__init__(
