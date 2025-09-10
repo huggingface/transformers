@@ -1838,7 +1838,8 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwarding(self, **extra_kwargs):
         """Tests that prepare_inputs_for_generation forwards arbitrary kwargs while manipulating specific args."""
-        # TODO: fixme, these old models do not clone input ids like the reference `prepare_inputs_for_generation`
+        # TODO: fixme. These old models do not clone input ids like the reference `prepare_inputs_for_generation`.
+        # Thus, we skip the clone check on them.
         non_compilable_model_classes = [
             "BambaForCausalLM",
             "CTRLLMHeadModel",
