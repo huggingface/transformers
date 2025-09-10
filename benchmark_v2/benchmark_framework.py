@@ -859,7 +859,7 @@ class ModelBenchmark(AbstractModelBenchmark):
             # Use SDPA context if specified
             with SDPAContext(config.sdpa_backend, self.logger):
                 with torch.no_grad():
-                    model_to_use.generate(**generation_kwargs)
+                    _ = model_to_use.generate(**generation_kwargs)
 
         return timer.elapsed_time()
 
