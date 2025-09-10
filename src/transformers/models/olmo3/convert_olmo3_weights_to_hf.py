@@ -1,4 +1,4 @@
-# Copyright 2024 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 EleutherAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,34 +15,44 @@ from __future__ import annotations
 
 import argparse
 import gc
+import io
 import json
 import os
+import pickle
 import shutil
+import uuid
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, cast
 
 import torch
-import yaml
-from tokenizers import Tokenizer
+import torch.distributed.checkpoint as dist_cp
+from torch.distributed.checkpoint.metadata import Metadata, MetadataIndex, StorageMeta
+from torch.distributed.checkpoint.planner import (
+    LoadItemType,
+    ReadItem,
+)
+from torch.futures import Future
 
-from transformers import Olmo2Config, Olmo2ForCausalLM
-from transformers.models.gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
+from transformers import AutoTokenizer, Olmo3Config, Olmo3ForCausalLM
 
 
 """
 Sample usage:
 
 ```
-python src/transformers/models/olmo2/convert_olmo2_weights_to_hf.py \
-    --input_dir /path/to/downloaded/olmo2/weights --model_size 7B --output_dir /output/path
+python src/transformers/models/olmo3/convert_olmo3_weights_to_hf.py \
+    --input_dir /path/to/downloaded/olmo3/weights --model_size 7B --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import Olmo2ForCausalLM, AutoTokenizer
+from transformers import Olmo3ForCausalLM, AutoTokenizer
 
-model = Olmo2ForCausalLM.from_pretrained("/output/path")
+model = Olmo3ForCausalLM.from_pretrained("/output/path")
 tokenizer = AutoTokenizer.from_pretrained("/output/path")
 ```
 
@@ -65,41 +75,228 @@ def write_json(text, path):
         json.dump(text, f)
 
 
+def normalize_path(path: Path | str) -> str:
+    return str(path).rstrip("/").replace("file://", "")
+
+
+def generate_uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def get_bytes_range(path: Path | str, bytes_start: int, num_bytes: int) -> bytes:
+    with open(path, "rb") as f:
+        f.seek(bytes_start)
+        return f.read(num_bytes)
+
+
+def _narrow_tensor_by_index(tensor: torch.Tensor, offsets: Sequence[int], sizes: Sequence[int]) -> torch.Tensor:
+    """
+    Narrow the tensor according to ``offsets`` and ``sizes``.
+    """
+    narrowed_tensor = tensor
+    for idx, (offset, size) in enumerate(zip(offsets, sizes)):
+        if size < tensor.size(idx):
+            # Reshape to get shard for this rank and we don't want autograd
+            # recording here for the narrow op and 'local_shard' should be a
+            # leaf variable in the autograd graph.
+            narrowed_tensor = narrowed_tensor.narrow(idx, offset, size)
+    return narrowed_tensor
+
+
+@dataclass
+class _StorageInfo:
+    """This is the per entry storage info."""
+
+    relative_path: str
+    offset: int
+    length: int
+
+
+@dataclass
+class _StoragePrefix:
+    prefix: str
+
+
+class RemoteFileSystemReader(dist_cp.StorageReader):
+    """
+    A :class:`~torch.distributed.checkpoint.StorageReader` based on :class:`~torch.distributed.checkpoint.FileSystemReader`
+    that can read data directly from cloud storage as well as a local directory.
+    """
+
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        thread_count: Optional[int] = None,
+        pre_download: bool = False,
+        work_dir: Optional[Path | str] = None,
+    ):
+        super().__init__()
+        if thread_count is not None and thread_count <= 0:
+            raise ValueError("thread count must be at least 1")
+        self.path = normalize_path(path)
+        self.thread_count = thread_count or 1
+        self.pre_download = pre_download
+        self.work_dir = normalize_path(work_dir) if work_dir is not None else None
+        self.storage_data: dict[MetadataIndex, _StorageInfo] = dict()
+        self.load_id = generate_uuid()
+        self._metadata: Optional[Metadata] = None
+
+    def _get_bytes(self, relative_path: str, offset: int, length: int) -> bytes:
+        full_path = f"{self.path}/{relative_path}"
+        return get_bytes_range(full_path, offset, length)
+
+    def _get_content_for_read(self, read_item: ReadItem) -> tuple[ReadItem, bytes]:
+        sinfo = self.storage_data[read_item.storage_index]
+        content = self._get_bytes(sinfo.relative_path, sinfo.offset, sinfo.length)
+        return (read_item, content)
+
+    def reset(self, checkpoint_id: Optional[Path | str] = None) -> None:
+        self.storage_data = dict()
+        if checkpoint_id:
+            self.path = normalize_path(checkpoint_id)
+        self.load_id = generate_uuid()
+
+    def read_data(self, plan: dist_cp.LoadPlan, planner: dist_cp.LoadPlanner) -> Future[None]:
+        with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
+            read_item_content_futures = []
+            for read_item in plan.items:
+                read_item_content_futures.append(executor.submit(self._get_content_for_read, read_item))
+            read_item_content_results = []
+            for f in as_completed(read_item_content_futures):
+                try:
+                    read_item_content_results.append(f.result())
+                except BaseException:
+                    # NOTE: we might get an error here that can't be pickled, which causes a different failure
+                    # later when PyTorch tries to reduce that error across ranks. So here we just make
+                    # sure we're raising a simple error type that can be pickled.
+                    raise RuntimeError(f"Original error:\n{traceback.format_exc()}")
+
+        # Modified from `FileSystemReader.read_data()`
+        for read_item, content in read_item_content_results:
+            bytes = io.BytesIO(content)
+            bytes.seek(0)
+            if read_item.type == LoadItemType.BYTE_IO:
+                planner.load_bytes(read_item, bytes)
+            else:
+                # NOTE: 'weights_only=False' needed to load torchao's float8 linear layer checkpoints
+                tensor = cast(torch.Tensor, torch.load(bytes, map_location="cpu", weights_only=False))
+                tensor = _narrow_tensor_by_index(tensor, read_item.storage_offsets, read_item.lengths)
+                target_tensor = planner.resolve_tensor(read_item).detach()
+
+                assert target_tensor.size() == tensor.size(), (
+                    f"req {read_item.storage_index} mismatch sizes {target_tensor.size()} vs {tensor.size()}"
+                )
+                target_tensor.copy_(tensor)
+                planner.commit_tensor(read_item, target_tensor)
+
+        fut: Future = Future()
+        fut.set_result(None)
+        return fut
+
+    def read_metadata(self) -> Metadata:
+        if self._metadata is None:
+            try:
+                with (Path(self.path) / ".metadata").open("rb") as metadata_file:
+                    metadata = pickle.load(metadata_file)
+            except FileNotFoundError as exc:
+                msg = f"'{self.path}' is not a distributed checkpoint folder."
+                suggested_dir = os.path.join(self.path, "model_and_optim")
+                if Path(os.path.join(suggested_dir, ".metadata")).exists():
+                    msg += f" Did you mean to use '{suggested_dir}'?"
+                raise FileNotFoundError(msg) from exc
+
+            if getattr(metadata, "storage_meta", None) is None:
+                metadata.storage_meta = StorageMeta()
+            metadata.storage_meta.load_id = self.load_id
+
+            self._metadata = metadata
+
+        return self._metadata
+
+    def set_up_storage_reader(self, metadata: Metadata, is_coordinator: bool) -> None:
+        del is_coordinator
+        self.storage_data = metadata.storage_data
+        assert self.storage_data is not None
+
+    def prepare_local_plan(self, plan: dist_cp.LoadPlan) -> dist_cp.LoadPlan:
+        return plan
+
+    def prepare_global_plan(self, global_plan: list[dist_cp.LoadPlan]) -> list[dist_cp.LoadPlan]:
+        return global_plan
+
+    @property
+    def checkpoint_id(self) -> str:
+        return self.path
+
+    @classmethod
+    def validate_checkpoint_id(cls, checkpoint_id: Path | str) -> bool:
+        del checkpoint_id
+        return True
+
+
+def load_model(model_path: str):
+    def _load_unsharded_keys(
+        dir: Path | str,
+        keys: list[str],
+        *,
+        pre_download: bool = False,
+        work_dir: Optional[Path | str] = None,
+    ) -> dict[str, Any]:
+        from torch.distributed.checkpoint.default_planner import _EmptyStateDictLoadPlanner
+        from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
+
+        state_dict: dict[str, Any] = {}
+        _load_state_dict(
+            state_dict,
+            storage_reader=RemoteFileSystemReader(dir, pre_download=pre_download, work_dir=work_dir),
+            planner=_EmptyStateDictLoadPlanner(keys=keys),
+            no_dist=True,
+        )
+        return state_dict
+
+    with (Path(model_path) / ".metadata").open("rb") as metadata_file:
+        metadata = pickle.load(metadata_file)
+        keys = [key for key in metadata.state_dict_metadata.keys() if key.startswith("model.")]
+
+    # keys = ["model.blocks.0.attention.w_q.weight"]
+
+    return _load_unsharded_keys(
+        model_path,
+        keys,
+        # model_path, ["model.blocks.0.attention.w_q.weight", "model.blocks.0.attention.w_k.weight"]
+    )
+
+
 def write_model(
     model_path,
     input_base_path,
     include_tokenizer=True,
-    tokenizer_path=None,
+    tokenizer_id=None,
     safe_serialization=True,
-    fix_eos_token_id=True,
     tmp_cleanup=True,
 ):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
 
-    config_path = Path(input_base_path) / "config.yaml"
-    olmo2_config = yaml.safe_load(config_path.read_text())["model"]
+    config_path = Path(input_base_path) / "config.json"
+    olmo3_config = json.loads(config_path.read_text())
+    model_config = olmo3_config["model"]
+    block_config = model_config["block"]
+    attention_config = block_config["attention"]
+    tokenizer_config = olmo3_config["dataset"]["tokenizer"]
 
-    if not olmo2_config.get("attention_layer_norm", False):
-        raise RuntimeError("OLMo2 checkpoints must have attention layer norm")
-    if not olmo2_config.get("norm_after", False):
-        raise RuntimeError("OLMo2 checkpoints must set norm_after to True")
-
-    n_layers = olmo2_config["n_layers"]
-    n_heads = olmo2_config["n_heads"]
-    dim = olmo2_config["d_model"]
+    n_layers = model_config["n_layers"]
+    n_heads = attention_config["n_heads"]
+    dim = model_config["d_model"]
     dims_per_head = dim // n_heads
-    base = olmo2_config["rope_theta"]
+    base = attention_config["rope"]["theta"]
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    max_position_embeddings = olmo2_config["max_sequence_length"]
+    max_position_embeddings = olmo3_config["train_module"]["max_sequence_length"]
 
-    vocab_size = olmo2_config.get("embedding_size", olmo2_config["vocab_size"])
-
-    if olmo2_config.get("n_kv_heads", None) is not None:
-        num_key_value_heads = olmo2_config["n_kv_heads"]  # for GQA / MQA
-    elif olmo2_config["multi_query_attention"]:  # compatibility with other checkpoints
-        num_key_value_heads = 1
+    if attention_config.get("n_kv_heads", None) is not None:
+        num_key_value_heads = model_config["n_kv_heads"]  # for GQA / MQA
     else:
         num_key_value_heads = n_heads
 
@@ -107,37 +304,30 @@ def write_model(
 
     # Not sharded
     # (The sharded implementation would also work, but this is simpler.)
-    loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu", weights_only=True)
+    loaded = load_model(os.path.join(input_base_path, "model_and_optim"))["model"]
+    print(loaded.keys())
+    # loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu", weights_only=True)
 
     param_count = 0
     index_dict: dict[str, Any] = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
         # Unsharded
-        # TODO: Layernorm stuff
-        # TODO: multi query attention
-        fused_dims = [dim, dims_per_head * num_key_value_heads, dims_per_head * num_key_value_heads]
-        q_proj_weight, k_proj_weight, v_proj_weight = torch.split(
-            loaded[f"transformer.blocks.{layer_i}.att_proj.weight"], fused_dims, dim=0
-        )
-        up_proj_weight, gate_proj_weight = torch.chunk(
-            loaded[f"transformer.blocks.{layer_i}.ff_proj.weight"], 2, dim=0
-        )
         state_dict = {
-            f"model.layers.{layer_i}.self_attn.q_proj.weight": q_proj_weight,
-            f"model.layers.{layer_i}.self_attn.k_proj.weight": k_proj_weight,
-            f"model.layers.{layer_i}.self_attn.v_proj.weight": v_proj_weight,
-            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"transformer.blocks.{layer_i}.attn_out.weight"],
-            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
-            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
-            f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
-            f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
-            f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
+            f"model.layers.{layer_i}.self_attn.q_proj.weight": loaded[f"blocks.{layer_i}.attention.w_q.weight"],
+            f"model.layers.{layer_i}.self_attn.k_proj.weight": loaded[f"blocks.{layer_i}.attention.w_k.weight"],
+            f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"blocks.{layer_i}.attention.w_v.weight"],
+            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"blocks.{layer_i}.attention.w_out.weight"],
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"blocks.{layer_i}.attention.q_norm.weight"],
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"blocks.{layer_i}.attention.k_norm.weight"],
+            f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w1.weight"],
+            f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w2.weight"],
+            f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w3.weight"],
             f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
-                f"transformer.blocks.{layer_i}.attn_norm.weight"
+                f"blocks.{layer_i}.attention_norm.weight"
             ],
             f"model.layers.{layer_i}.post_feedforward_layernorm.weight": loaded[
-                f"transformer.blocks.{layer_i}.ff_norm.weight"
+                f"blocks.{layer_i}.feed_forward_norm.weight"
             ],
         }
 
@@ -153,11 +343,9 @@ def write_model(
     # Unsharded
     # TODO: Deal with weight-tying
     state_dict = {
-        "model.embed_tokens.weight": loaded["transformer.wte.weight"],
-        "model.norm.weight": loaded["transformer.ln_f.weight"],
-        "lm_head.weight": loaded["transformer.ff_out.weight"]
-        if "transformer.ff_out.weight" in loaded
-        else loaded["transformer.wte.weight"],
+        "model.embed_tokens.weight": loaded["embeddings.weight"],
+        "model.norm.weight": loaded["lm_head.norm.weight"],
+        "lm_head.weight": loaded["lm_head.w_out.weight"],
     }
 
     for k, v in state_dict.items():
@@ -169,29 +357,19 @@ def write_model(
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
 
-    if olmo2_config.get("mlp_hidden_size", None) is not None:
-        intermediate_size = olmo2_config["mlp_hidden_size"] // 2
-    else:
-        intermediate_size = (dim * olmo2_config["mlp_ratio"]) // 2
-
-    if fix_eos_token_id and olmo2_config["eos_token_id"] == 0:
-        # Fixing a bug in OLMo where eos token id was incorrectly set
-        print("Changing eos_token_id from 0 to 50279.")
-        olmo2_config["eos_token_id"] = 50279
-
-    config = Olmo2Config(
-        vocab_size=vocab_size,
+    config = Olmo3Config(
+        vocab_size=model_config["vocab_size"],
         hidden_size=dim,
-        intermediate_size=intermediate_size,
+        intermediate_size=block_config["feed_forward"]["hidden_size"],
         num_hidden_layers=n_layers,
         num_attention_heads=n_heads,
         num_key_value_heads=num_key_value_heads,
         max_position_embeddings=max_position_embeddings,
-        pad_token_id=olmo2_config["pad_token_id"],
+        pad_token_id=tokenizer_config["pad_token_id"],
         bos_token_id=None,
-        eos_token_id=olmo2_config["eos_token_id"],
-        tie_word_embeddings=olmo2_config["weight_tying"],
-        rms_norm_eps=olmo2_config["layer_norm_eps"],
+        eos_token_id=tokenizer_config["eos_token_id"],
+        tie_word_embeddings=False,
+        rms_norm_eps=block_config["layer_norm"]["eps"],
         rope_theta=base,
     )
     config.save_pretrained(tmp_model_path)
@@ -202,10 +380,13 @@ def write_model(
     gc.collect()
 
     if include_tokenizer:
-        _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
+        tokenizer_id = tokenizer_id or tokenizer_config["identifier"]
+        _write_tokenizer(model_path, tokenizer_id)
 
-    print("Loading the checkpoint in a OLMo2 model.")
-    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, dtype=torch.float32)
+    print("Loading the checkpoint in a Olmo 3 model.")
+    model = Olmo3ForCausalLM.from_pretrained(tmp_model_path, dtype=torch.bfloat16)
+    print("Resizing token embeddings to match tokenizer config.")
+    model.resize_token_embeddings(tokenizer_config["vocab_size"])
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
@@ -218,33 +399,11 @@ def write_model(
 
 def _write_tokenizer(
     output_path: Path,
-    config: Olmo2Config,
-    checkpoint_dir: str,
-    input_tokenizer_path: Path | None,
+    tokenizer_id: str,
 ) -> None:
-    print(f"Saving a {GPT2TokenizerFast.__name__} to {output_path}.")
+    print(f"Saving a tokenizer to {output_path}.")
 
-    if input_tokenizer_path is not None:
-        base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
-    else:
-        config_path = Path(checkpoint_dir) / "config.yaml"
-        tokenizer_config = yaml.safe_load(config_path.read_text())["tokenizer"]
-
-        # Initialize tokenizer and validate vocab size.
-        if Path(tokenizer_config["identifier"]).is_file():
-            base_tokenizer = Tokenizer.from_file(tokenizer_config["identifier"])
-        else:
-            base_tokenizer = Tokenizer.from_pretrained(tokenizer_config["identifier"])
-
-    eos_token_id = config.eos_token_id if config.eos_token_id is not None else base_tokenizer.get_vocab_size() - 1
-    pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
-
-    tokenizer = GPT2TokenizerFast(
-        tokenizer_object=base_tokenizer,
-        eos_token=base_tokenizer.decode([eos_token_id], skip_special_tokens=False),
-        pad_token=base_tokenizer.decode([pad_token_id], skip_special_tokens=False),
-    )
-
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
     tokenizer.save_pretrained(output_path)
 
 
@@ -253,7 +412,7 @@ def main():
     parser.add_argument(
         "--input_dir",
         required=True,
-        help="Location of OLMo2 weights, which contains config.yaml and model.pt.",
+        help="Location of Olmo 3 weights, which contains config.yaml and model.pt.",
     )
     parser.add_argument(
         "--no_tokenizer",
@@ -262,21 +421,15 @@ def main():
         help="If set, do not convert OLMo tokenizer to HF tokenizer.",
     )
     parser.add_argument(
-        "--tokenizer_json_path",
+        "--tokenizer",
         type=Path,
         default=None,
-        help="Location of OLMo2 tokenizer json file. Defaults to what is set in the config file.",
+        help="Location of Olmo 3 tokenizer json file. Defaults to what is set in the config file.",
     )
     parser.add_argument(
         "--output_dir",
         required=True,
         help="Location to write HF model and tokenizer",
-    )
-    parser.add_argument(
-        "--no_fix_eos_token_id",
-        action="store_false",
-        dest="fix_eos_token_id",
-        help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
     parser.add_argument(
         "--no_tmp_cleanup",
@@ -296,8 +449,7 @@ def main():
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
         include_tokenizer=args.include_tokenizer,
-        tokenizer_path=args.tokenizer_json_path,
-        fix_eos_token_id=args.fix_eos_token_id,
+        tokenizer_id=args.tokenizer,
         tmp_cleanup=args.tmp_cleanup,
     )
 
