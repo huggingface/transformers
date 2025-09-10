@@ -620,7 +620,7 @@ def load_video(
     backend: str = "pyav",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
-) -> np.array:
+) -> np.ndarray:
     """
     Loads `video` to a numpy array.
 
