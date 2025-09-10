@@ -1368,7 +1368,7 @@ ALLOWED_LAYER_TYPES = (
 
 
 def layer_type_validation(layer_types: list[str], num_hidden_layers: int):
-    """Check that each entry in `layer_types` are allowed."""
+    """ Check `layer_types` correctly defined. """
     if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
         raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
     if num_hidden_layers != len(layer_types):
