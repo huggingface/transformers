@@ -40,7 +40,7 @@ def main():
 
     for i, issue in enumerate(open_issues):
         print(i, issue)
-        comments = sorted(list(issue.get_comments()), key=lambda i: i.created_at, reverse=True)
+        comments = sorted(issue.get_comments(), key=lambda i: i.created_at, reverse=True)
         last_comment = comments[0] if len(comments) > 0 else None
         if (
             last_comment is not None

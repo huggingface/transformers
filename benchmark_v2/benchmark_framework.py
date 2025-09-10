@@ -597,7 +597,7 @@ class ModelBenchmark(AbstractModelBenchmark):
     def _is_kernelization_available(self) -> bool:
         """Check if kernelization is available. Override in subclasses."""
         try:
-            from kernels import Mode, kernelize
+            from kernels import Mode, kernelize  # noqa: F401
 
             return True
         except ImportError:

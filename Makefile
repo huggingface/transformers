@@ -1,9 +1,8 @@
-.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples benchmark benchmark_v2
-
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples benchmark
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils benchmark scripts
+check_dirs := examples tests src utils scripts benchmark benchmark_v2
 
 exclude_folders :=  ""
 
