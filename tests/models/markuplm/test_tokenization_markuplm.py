@@ -1107,7 +1107,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -1508,7 +1508,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(tokens[key].shape[-2], 6)
 
     @unittest.skip(reason="TO DO: overwrite this very extensive test.")
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         pass
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):

@@ -401,7 +401,7 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: torch.FloatTensor = None,
+        video: Optional[torch.FloatTensor] = None,
         video_height: Optional[int] = None,
         video_width: Optional[int] = None,
         inference_device: Union[torch.device, str] = "cpu",
@@ -973,8 +973,8 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
+    high_res_masks: Optional[torch.FloatTensor] = None
+    object_pointer: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -987,8 +987,8 @@ class Sam2VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    pred_masks: torch.FloatTensor = None
-    frame_idx: int = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    frame_idx: Optional[int] = None
 
 
 @auto_docstring

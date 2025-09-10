@@ -96,7 +96,7 @@ class RequestState:
         prompt_ids (list[int] | None): The tokens IDs currently being processed.
         remaining_prompt_ids (list[int]): The tokens IDs remaining to be processed (for split requests).
         static_outputs (list[int]): The generated tokens.
-        allocated_blocks (list[int]): The identifiers of the allocated blocks to the request.
+        allocated_blocks (int): The number of blocks allocated to the request.
         position_offset (int): The current position in the sequence for position_ids.
         status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
@@ -112,7 +112,7 @@ class RequestState:
     prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed (initial + generated)
     remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     static_outputs: list[int] = field(default_factory=list)  # Generated tokens
-    allocated_blocks: list[int] = field(default_factory=list)  # Block IDs allocated to the request
+    allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int = 20  # Maximum number of new tokens to generate
