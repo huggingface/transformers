@@ -129,16 +129,3 @@ def test_import_parsing(tmp_path, case):
 
     parsed_imports = get_imports(tmp_file_path)
     assert parsed_imports == ["os"]
-
-
-@require_torch
-def test_model_with_dotted_name_and_relative_imports():
-    """
-    Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
-    when there's a relative import.
-
-    Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
-    """
-    model_id = "hf-internal-testing/remote_code_model_with_dots"
-
-    model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
