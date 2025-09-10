@@ -275,11 +275,6 @@ from .peft_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
-TF2_WEIGHTS_NAME = "tf_model.h5"
-TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
-TF_WEIGHTS_NAME = "model.ckpt"
-FLAX_WEIGHTS_NAME = "flax_model.msgpack"
-FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
 SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"

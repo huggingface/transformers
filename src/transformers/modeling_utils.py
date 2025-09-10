@@ -1163,8 +1163,7 @@ def _get_resolved_checkpoint_files(
                                     name="Thread-auto_conversion",
                                 ).start()
                     else:
-                        # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
-                        # We try those to give a helpful error message.
+                        # Otherwise, no PyTorch file was found
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,

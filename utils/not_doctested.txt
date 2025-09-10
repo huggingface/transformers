@@ -536,7 +536,6 @@ src/transformers/models/llava_next/modeling_llava_next.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
-src/transformers/models/longt5/convert_longt5x_checkpoint_to_flax.py
 src/transformers/models/luke/configuration_luke.py
 src/transformers/models/luke/convert_luke_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/luke/modeling_luke.py
@@ -677,7 +676,6 @@ src/transformers/models/switch_transformers/configuration_switch_transformers.py
 src/transformers/models/switch_transformers/convert_big_switch.py
 src/transformers/models/switch_transformers/modeling_switch_transformers.py
 src/transformers/models/t5/configuration_t5.py
-src/transformers/models/t5/convert_t5x_checkpoint_to_flax.py
 src/transformers/models/t5/convert_t5x_checkpoint_to_pytorch.py
 src/transformers/models/t5/modeling_t5.py
 src/transformers/models/table_transformer/configuration_table_transformer.py

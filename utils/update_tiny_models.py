@@ -36,18 +36,12 @@ from transformers.image_processing_utils import BaseImageProcessor
 
 def get_all_model_names():
     model_names = set()
-    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
-    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name, None)
-        if module is None:
-            continue
+
+    module_name = "modeling_auto"
+    module = getattr(transformers.models.auto, module_name, None)
+    if module is not None:
         # all mappings in a single auto modeling file
-        mapping_names = [
-            x
-            for x in dir(module)
-            if x.endswith("_MAPPING_NAMES")
-            and (x.startswith("MODEL_") or x.startswith("TF_MODEL_") or x.startswith("FLAX_MODEL_"))
-        ]
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES") and x.startswith("MODEL_")]
         for name in mapping_names:
             mapping = getattr(module, name)
             if mapping is not None:

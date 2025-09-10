@@ -276,10 +276,7 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

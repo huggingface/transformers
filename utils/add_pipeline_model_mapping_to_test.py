@@ -117,10 +117,9 @@ def get_pipeline_model_mapping_string(test_class):
 
 def is_valid_test_class(test_class):
     """Restrict to `XXXModelTesterMixin` and should be a subclass of `unittest.TestCase`."""
-    base_class_names = {"ModelTesterMixin", "TFModelTesterMixin", "FlaxModelTesterMixin"}
     if not issubclass(test_class, unittest.TestCase):
         return False
-    return len(base_class_names.intersection([x.__name__ for x in test_class.__bases__])) > 0
+    return "ModelTesterMixin" in [x.__name__ for x in test_class.__bases__]
 
 
 def find_test_class(test_file):
@@ -300,9 +299,7 @@ if __name__ == "__main__":
     else:
         pattern = os.path.join("tests", "models", "**", "test_modeling_*.py")
         for test_file in glob.glob(pattern):
-            # `Flax` is not concerned at this moment
-            if not test_file.startswith("test_modeling_flax_"):
-                test_files.append(test_file)
+            test_files.append(test_file)
 
     for test_file in test_files:
         if test_file in TEST_FILE_TO_IGNORE:

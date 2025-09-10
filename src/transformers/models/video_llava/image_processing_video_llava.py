@@ -259,10 +259,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         data = {}
         if videos is not None:

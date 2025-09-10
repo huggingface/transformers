@@ -214,16 +214,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
         trimaps = make_flat_list_of_images(trimaps, expected_ndims=2)
 
         if not valid_images(trimaps):
-            raise ValueError(
-                "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

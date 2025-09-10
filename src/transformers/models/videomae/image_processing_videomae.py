@@ -312,10 +312,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         if not valid_images(videos):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         videos = make_batched(videos)
 
