@@ -5612,7 +5612,7 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices and self.args.world_size >=1:
+            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
             elif self.args.n_gpu >= 1:
                 # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
