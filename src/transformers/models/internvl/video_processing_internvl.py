@@ -50,7 +50,7 @@ if is_vision_available():
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs):
-    initial_shift: Union[bool, float, int]
+    initial_shift: Optional[Union[bool, float, int]]
 
 
 @requires(backends=("torchvision",))

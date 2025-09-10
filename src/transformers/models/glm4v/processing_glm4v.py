@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
+    fps: Optional[Union[list[float], float]]
 
 
 class Glm4vImagesKwargs(ImagesKwargs):

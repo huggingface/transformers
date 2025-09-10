@@ -14,6 +14,7 @@
 """
 Processing saving/loading class for common processors.
 """
+# from __future__ import annotations
 
 import bisect
 import copy
@@ -42,9 +43,9 @@ from .utils.type_validators import (
     device_validator,
     image_size_validator,
     padding_validator,
+    positive_any_number,
+    positive_int,
     resampling_validator,
-    strictly_positive_int,
-    strictly_positive_number,
     tensor_type_validator,
     truncation_validator,
     video_metadata_validator,
@@ -54,7 +55,6 @@ from .video_utils import VideoInput, VideoMetadata
 
 if is_vision_available():
     from .image_utils import PILImageResampling
-
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -156,10 +156,10 @@ class TextKwargs(TypedDict, total=False):
     add_special_tokens: Optional[bool]
     padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
     truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
-    max_length: Annotated[Optional[int], strictly_positive_int()]
-    stride: Annotated[Optional[int], strictly_positive_int()]
+    max_length: Annotated[Optional[int], positive_int()]
+    stride: Annotated[Optional[int], positive_int()]
     is_split_into_words: Optional[bool]
-    pad_to_multiple_of: Annotated[Optional[int], strictly_positive_int()]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_token_type_ids: Optional[bool]
     return_attention_mask: Optional[bool]
     return_overflowing_tokens: Optional[bool]
@@ -186,6 +186,8 @@ class ImagesKwargs(TypedDict, total=False):
             The size by which to make sure both the height and width can be divided.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):
@@ -212,9 +214,10 @@ class ImagesKwargs(TypedDict, total=False):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Annotated[Optional[dict[str, int]], image_size_validator()]
-    size_divisor: Annotated[Optional[int], strictly_positive_int()]
+    size_divisor: Annotated[Optional[int], positive_int()]
     crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
     resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
@@ -283,7 +286,7 @@ class VideosKwargs(TypedDict, total=False):
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Annotated[Optional[dict[str, int]], image_size_validator()]
-    size_divisor: Annotated[Optional[int], strictly_positive_int()]
+    size_divisor: Annotated[Optional[int], positive_int()]
     default_to_square: Optional[bool]
     resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
@@ -301,8 +304,8 @@ class VideosKwargs(TypedDict, total=False):
     video_metadata: Annotated[
         Optional[Union[VideoMetadata, dict, Iterable[VideoMetadata, dict]]], video_metadata_validator()
     ]
-    fps: Annotated[Optional[Union[int, float]], strictly_positive_number()]
-    num_frames: Annotated[Optional[int], strictly_positive_int()]
+    fps: Annotated[Optional[Union[int, float]], positive_any_number()]
+    num_frames: Annotated[Optional[int], positive_int()]
     return_metadata: Optional[bool]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
@@ -337,12 +340,12 @@ class AudioKwargs(TypedDict, total=False):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    sampling_rate: Annotated[Optional[int], strictly_positive_int()]
+    sampling_rate: Annotated[Optional[int], positive_int()]
     raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
     padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
-    max_length: Annotated[Optional[int], strictly_positive_int()]
+    max_length: Annotated[Optional[int], positive_int()]
     truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
-    pad_to_multiple_of: Annotated[Optional[int], strictly_positive_int()]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_attention_mask: Optional[bool]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
@@ -1335,9 +1338,14 @@ class ProcessorMixin(PushToHubMixin):
             for kwarg in output_kwargs.values():
                 kwarg.update(common_kwargs)
 
-        # Perform type validation on collected kwargs
+        # Finally perform type validation on collected kwargs
+        # NOTE: When we inherit from BaseTypedDict, the bases won't be in MRO of ModelTypedDict
+        # That causes errors if certain type annotations are not defined/imported in model processor
+        # file. So we will pass globalns of `processing_utils.py` manually to bypass it
+        base_globalns = getattr(sys.modules.get(ProcessingKwargs.__module__, None), "__dict__", {})
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            type_validator = TypedDictAdapter(typed_dict_obj)
+            child_localns = getattr(sys.modules.get(typed_dict_obj.__module__, None), "__dict__", {})
+            type_validator = TypedDictAdapter(typed_dict_obj, globalns=base_globalns, localns=child_localns)
             type_validator.validate_fields(**output_kwargs[key])
         return output_kwargs
 

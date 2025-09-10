@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import MISSING, field, make_dataclass
-from typing import Annotated, Optional, TypedDict, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Optional, TypedDict, Union, get_args, get_origin, get_type_hints
 
 from huggingface_hub.dataclasses import as_validated_field, strict
 
@@ -21,7 +21,7 @@ def unpack_annotated_type(type):
     return type, field(default=MISSING)
 
 
-# Minimalistic version on pydantic.TypeAdapter tailored for `TypedDict`
+# Minimalistic version of pydantic.TypeAdapter tailored for `TypedDict`
 class TypedDictAdapter:
     """
     A utility class used to convert a TypedDict object to dataclass and attach
@@ -31,8 +31,15 @@ class TypedDictAdapter:
         type: The TypedDict object that needs to be validated.
     """
 
-    def __init__(self, type: type[TypedDict]) -> None:
+    def __init__(
+        self,
+        type: type[TypedDict],
+        globalns: Optional[dict[str, Any]] = None,
+        localns: Optional[dict[str, Any]] = None,
+    ):
         self.type = type
+        self.globalns = globalns
+        self.localns = localns
         self.dataclass = self.create_dataclass()
         self.dataclass = strict(self.dataclass)
 
@@ -68,22 +75,22 @@ class TypedDictAdapter:
         # The dataclass can also be used as a simple config class for easier kwarg management
         dataclass = dataclass_from_typed_dict(TokenizerKwargs)
         """
-        hints = get_type_hints(self.type, include_extras=True)
+        hints = get_type_hints(self.type, globalns=self.globalns, localns=self.localns, include_extras=True)
         fields = [(k, *unpack_annotated_type(v)) for k, v in hints.items()]
         self.fields = fields
         return make_dataclass(self.type.__name__ + "Config", fields)
 
 
 @as_validated_field
-def strictly_positive_number(value: Optional[Union[int, float]] = None):
-    if value is not None and (not isinstance(value, (int, float)) or not value > 0):
-        raise ValueError(f"Value must be strictly positive, got {value}")
+def positive_any_number(value: Optional[Union[int, float]] = None):
+    if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
+        raise ValueError(f"Value must be a positive integer or floating number, got {value}")
 
 
 @as_validated_field
-def strictly_positive_int(value: Optional[int] = None):
-    if value is not None and (not isinstance(value, int) or not value > 0):
-        raise ValueError(f"Value must be strictly positive integer, got {value}")
+def positive_int(value: Optional[int] = None):
+    if value is not None and (not isinstance(value, int) or not value >= 0):
+        raise ValueError(f"Value must be a positive integer, got {value}")
 
 
 @as_validated_field

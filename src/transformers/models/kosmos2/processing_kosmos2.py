@@ -17,7 +17,7 @@
 import copy
 import math
 import re
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -35,7 +35,7 @@ BboxInput = Union[
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[list[float]]
+    bboxes: Optional[list[Any]]
     num_image_tokens: Optional[int]
     first_image_token_id: Optional[int]
 

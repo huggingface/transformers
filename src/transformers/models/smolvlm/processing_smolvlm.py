@@ -21,7 +21,14 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import (
+    AllKwargsForChatTemplate,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    VideosKwargs,
+)
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
@@ -108,8 +115,14 @@ class SmolVLMImagesKwargs(ImagesKwargs, total=False):
     max_image_size: Optional[dict[str, int]]
 
 
+class SmolVLMVideosKwargs(VideosKwargs, total=False):
+    return_row_col_info: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
+
+
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SmolVLMImagesKwargs
+    videos_kwargs: SmolVLMVideosKwargs
 
     _defaults = {
         "text_kwargs": {
