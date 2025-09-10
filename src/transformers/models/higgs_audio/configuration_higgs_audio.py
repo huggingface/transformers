@@ -14,18 +14,21 @@
 # limitations under the License.
 """HiggsAudioConfig."""
 
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
+from transformers.models.llama.configuration_llama import LlamaConfig
 
 
-class HiggsAudioConfig(PretrainedConfig):
+class HiggsAudioConfig(LlamaConfig):
     r"""
     This is the configuration class for the HiggsAudioModel. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [bosonai/higgs-audio-v2-generation-3B-base](https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base) architecture.
 
+    This class inherits from [`LlamaConfig`]. All text backbone fields are available directly
+    on this config. For backward compatibility, a `text_config` argument can still be provided
+    (as a dict or some config class) and will be merged into the root config.
+
     Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*):
+        text_config (`Union[AutoConfig, LlamaConfig, dict]`, *optional*):
             The config object or dictionary of the text backbone.
         audio_adapter_type (`str`, *optional*, defaults to `"dual_ffn_fast_forward"`):
             The type of audio adapter to use. We support three types of adapter:
@@ -92,13 +95,9 @@ class HiggsAudioConfig(PretrainedConfig):
         audio_eos_token_id (`int`, *optional*, defaults to 128012):
             The token ID corresponding to `audio_eos_token` ("<|audio_eos|>").
             Marks the end of an audio segment.
-
     """
 
     model_type = "higgs_audio"
-    is_composition = True
-
-    sub_configs = {"text_config": AutoConfig}
 
     def __init__(
         self,
@@ -154,10 +153,13 @@ class HiggsAudioConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"]()
+            for k, v in text_config.items():
+                kwargs.setdefault(k, v)
+        elif text_config is not None:
+            for k, v in text_config.to_dict().items():
+                kwargs.setdefault(k, v)
+        kwargs.setdefault("pad_token_id", pad_token_id)
+        super().__init__(**kwargs)
 
         if audio_adapter_type not in [
             "stack",
@@ -167,13 +169,11 @@ class HiggsAudioConfig(PretrainedConfig):
         if audio_adapter_type.startswith("dual_ffn"):
             if audio_dual_ffn_layers is None:
                 raise ValueError("audio_dual_ffn_layers must be specified when using dual_ffn adapter.")
-        self.text_config = text_config
         self.audio_adapter_type = audio_adapter_type
         self.audio_dual_ffn_layers = audio_dual_ffn_layers
         self.encode_audio_in_tokens = encode_audio_in_tokens
         self.use_delay_pattern = use_delay_pattern
         self.use_audio_out_embed_projector = use_audio_out_embed_projector
-
         self.audio_num_codebooks = audio_num_codebooks
         self.audio_codebook_size = audio_codebook_size
         self.audio_bos_token = audio_bos_token
@@ -187,8 +187,6 @@ class HiggsAudioConfig(PretrainedConfig):
         self.audio_stream_eos_id = audio_stream_eos_id
         self.audio_out_bos_token_id = audio_out_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
-
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
 
 __all__ = ["HiggsAudioConfig"]
