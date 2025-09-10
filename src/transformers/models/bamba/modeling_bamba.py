@@ -1492,6 +1492,12 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
                 "cache_position": cache_position,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
 
