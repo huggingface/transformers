@@ -67,15 +67,10 @@ class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
         self.top_k = config.moe_topk
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.norm_topk_prob = config.norm_topk_prob
 
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
-
-    @property
-    def weight(self):
-        return self.classifier.weight
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
@@ -89,15 +84,12 @@ class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
         scores = router_logits.softmax(dim=-1)
         topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(DeepseekV3MoE):
+class LongcatFlashMoE(nn.Module):
     def __init__(self, config):
         # ugly double getattr, will be solved when model and configs are converted
 
@@ -109,11 +101,12 @@ class LongcatFlashMoE(DeepseekV3MoE):
         del self.shared_experts
 
         self.experts = nn.ModuleList(
-            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
+            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)] 
+            + [nn.Identity() for _ in range(self.zero_expert_num)]
         )
 
         # Override total_experts to include zero experts
-        self.total_experts = len(self.experts) + (0 if self.zero_expert_num is None else self.zero_expert_num)
+        self.total_experts = len(self.experts) + self.zero_expert_num
         self.router = LongcatFlashTopkRouter(config)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
@@ -129,13 +122,7 @@ class LongcatFlashMoE(DeepseekV3MoE):
             if token_indices.numel() > 0:
                 expert_weights = topk_weights[token_indices, weight_indices]
                 expert_input = hidden_states[token_indices]
-
-                if expert_idx < len(self.experts):
-                    expert_output = self.experts[expert_idx](expert_input)
-                elif self.zero_expert_type == "identity":
-                    expert_output = expert_input
-                else:
-                    raise ValueError("Unknown zero expert type")
+                expert_output = self.experts[expert_idx](expert_input)
 
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)

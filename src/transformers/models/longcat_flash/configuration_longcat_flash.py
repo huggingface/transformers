@@ -207,13 +207,10 @@ class LongcatFlashConfig(PretrainedConfig):
         qk_head_dim=None,
         moe_topk=6,
         n_routed_experts=64,
-        zero_expert_num=None,
-        zero_expert_type="identity",
+        zero_expert_num=256,
         expert_ffn_hidden_size=1408,
         moe_intermediate_size=1408,
         routed_scaling_factor=1.0,
-        norm_topk_prob=False,
-        router_bias=False,
         **kwargs,
     ):
         if num_key_value_heads is None:
@@ -253,12 +250,10 @@ class LongcatFlashConfig(PretrainedConfig):
         self.moe_topk = moe_topk
         self.n_routed_experts = n_routed_experts
         self.zero_expert_num = zero_expert_num
-        self.zero_expert_type = zero_expert_type
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.moe_intermediate_size = moe_intermediate_size
         self.routed_scaling_factor = routed_scaling_factor
-        self.norm_topk_prob = norm_topk_prob
-        self.router_bias = router_bias
+
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:

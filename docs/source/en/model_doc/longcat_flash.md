@@ -22,7 +22,7 @@ limitations under the License.
 
 ## Overview
 
-The LongCatFlash model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The LongCatFlash model was proposed in [LongCat-Flash Technical Report](https://arxiv.org/abs/2509.01322) by the Meituan LongCat Team.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
