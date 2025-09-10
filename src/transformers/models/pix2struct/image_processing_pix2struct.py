@@ -316,9 +316,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
-        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
-        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
-
         Args:
             image (`np.ndarray`):
                 Image to normalize.
@@ -361,10 +358,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         Preprocess an image or batch of images. The processor first computes the maximum possible number of
         aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
-        images are standardized following the tensorflow implementation of `per_image_standardization`
-        (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
-
+        image with zeros to make the image respect the constraint of `max_patches`.
 
         Args:
             images (`ImageInput`):

@@ -452,8 +452,6 @@ class TrainerMemoryTracker:
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```
 
-    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
-
     To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 

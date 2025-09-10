@@ -624,12 +624,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     def _convert_to_list(token_ids):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
-            if "torch" in str(type(token_ids)):
-                token_ids = token_ids.cpu().numpy()
-            elif "tensorflow" in str(type(token_ids)):
-                token_ids = token_ids.numpy()
-        elif "jaxlib" in str(type(token_ids)):
-            token_ids = token_ids.tolist()
+            token_ids = token_ids.cpu().numpy()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
