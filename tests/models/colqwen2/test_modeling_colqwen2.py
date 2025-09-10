@@ -382,5 +382,3 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
 
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
-
-
