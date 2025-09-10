@@ -80,7 +80,7 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: PretrainedConfig = None,
+        backbone_config: Optional[PretrainedConfig] = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,

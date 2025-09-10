@@ -845,7 +845,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
                 )
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
         config_dict.pop("disable_exllama", None)
         return config_dict
