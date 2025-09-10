@@ -586,6 +586,21 @@ def is_mamba_2_ssm_available() -> bool:
     return False
 
 
+def is_flash_linear_attention_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("fla"):
+                import fla
+
+                if version.parse(fla.__version__) >= version.parse("0.2.2"):
+                    return True
+    return False
+
+
 def is_causal_conv1d_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         import torch
