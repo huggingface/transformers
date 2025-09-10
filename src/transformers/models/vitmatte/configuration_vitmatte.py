@@ -15,6 +15,7 @@
 """VitMatte model configuration"""
 
 import copy
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
