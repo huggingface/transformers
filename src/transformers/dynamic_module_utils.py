@@ -49,16 +49,8 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 def _sanitize_module_name(name: str) -> str:
     """
-    Sanitize a module name to be a valid Python identifier.
-
-    Replaces dots with '_dot_' to avoid conflicts with Python's module hierarchy
-    while ensuring the name is a valid identifier.
-
-    Args:
-        name (`str`): The module name to sanitize.
-
-    Returns:
-        `str`: The sanitized module name.
+    Replace `.` in module names with `_dot_` so that it doesn't
+    look like an import path separator.
     """
     return name.replace(".", "_dot_")
 
