@@ -95,23 +95,15 @@ class Glm4vImageProcessingTester:
             if hasattr(image, "shape") and len(image.shape) >= 3:
                 if isinstance(image, np.ndarray):
                     if len(image.shape) == 4:
-                        t, height, width = image.shape[:3]
+                        height, width = image.shape[1:3]
                     elif len(image.shape) == 3:
                         height, width = image.shape[:2]
-                        t = 1
                     else:
-                        t, height, width = self.temporal_patch_size, self.min_resolution, self.min_resolution
+                        height, width = self.min_resolution, self.min_resolution
                 else:
-                    if len(image.shape) == 4:
-                        t = image.shape[0]
-                        height, width = image.shape[-2:]
-                    elif len(image.shape) == 3:
-                        height, width = image.shape[-2:]
-                        t = 1
-                    else:
-                        t, height, width = self.temporal_patch_size, self.min_resolution, self.min_resolution
+                    height, width = image.shape[-2:]
             else:
-                t, height, width = self.temporal_patch_size, self.min_resolution, self.min_resolution
+                height, width = self.min_resolution, self.min_resolution
 
             resized_height, resized_width = smart_resize(
                 self.temporal_patch_size,
