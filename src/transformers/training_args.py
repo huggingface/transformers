@@ -1802,18 +1802,6 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available():
             self.device
 
-        # Disable average tokens when using single device
-        if self.average_tokens_across_devices:
-            try:
-                if self.world_size == 1:
-                    logger.info(
-                        "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
-                    )
-                    self.average_tokens_across_devices = False
-            except ImportError as e:
-                logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
-                self.average_tokens_across_devices = False
-
         if self.torchdynamo is not None:
             warnings.warn(
                 "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"

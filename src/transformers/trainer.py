@@ -2483,8 +2483,7 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
-        elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            # In this case we are in DDP + LOMO, which should be supported
+        else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
@@ -4137,7 +4136,7 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes
+            loss *= self.accelerator.num_processes if self.args.n_gpu == 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -5613,15 +5612,19 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices:
+            if self.args.average_tokens_across_devices and self.args.world_size >=1:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
+            elif self.args.n_gpu >= 1:
+                # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
+                # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu
+                num_items_in_batch = num_items_in_batch // self.args.n_gpu
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
 
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
-                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
-                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                    # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
                 if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
