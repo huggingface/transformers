@@ -36,13 +36,6 @@ if is_sagemaker_available():
             "instance_type": "ml.p3.16xlarge",
             "results": {"train_runtime": 600, "eval_accuracy": 0.7, "eval_loss": 0.6},
         },
-        {
-            "framework": "tensorflow",
-            "script": "run_tf_dist.py",
-            "model_name_or_path": "distilbert/distilbert-base-cased",
-            "instance_type": "ml.p3.16xlarge",
-            "results": {"train_runtime": 600, "eval_accuracy": 0.6, "eval_loss": 0.7},
-        },
     ]
 )
 class MultiNodeTest(unittest.TestCase):

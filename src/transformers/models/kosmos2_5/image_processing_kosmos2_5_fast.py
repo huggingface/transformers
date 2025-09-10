@@ -105,9 +105,6 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
-        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
-        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
-
         Args:
             image (`torch.Tensor`):
                 Image to normalize.

@@ -29,13 +29,6 @@ if is_sagemaker_available():
             "instance_type": "ml.g4dn.xlarge",
             "results": {"train_runtime": 650, "eval_accuracy": 0.6, "eval_loss": 0.9},
         },
-        {
-            "framework": "tensorflow",
-            "script": "run_tf.py",
-            "model_name_or_path": "distilbert/distilbert-base-cased",
-            "instance_type": "ml.g4dn.xlarge",
-            "results": {"train_runtime": 600, "eval_accuracy": 0.3, "eval_loss": 0.9},
-        },
     ]
 )
 class SingleNodeTest(unittest.TestCase):

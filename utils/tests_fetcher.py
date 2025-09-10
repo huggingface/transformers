@@ -817,26 +817,22 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
     test_example_deps = {}
     all_examples = []
-    for framework in ["flax", "pytorch", "tensorflow"]:
-        test_files = list((PATH_TO_EXAMPLES / framework).glob("test_*.py"))
-        all_examples.extend(test_files)
-        # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
-        # or example test files).
-        examples = [
-            f for f in (PATH_TO_EXAMPLES / framework).glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / framework
+
+    test_files = list((PATH_TO_EXAMPLES / "pytorch").glob("test_*.py"))
+    all_examples.extend(test_files)
+    # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
+    # or example test files).
+    examples = [f for f in (PATH_TO_EXAMPLES / "pytorch").glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / "pytorch"]
+    all_examples.extend(examples)
+    for test_file in test_files:
+        with open(test_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Map all examples to the test files found in examples/pytorch.
+        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
+            str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
         ]
-        all_examples.extend(examples)
-        for test_file in test_files:
-            with open(test_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            # Map all examples to the test files found in examples/framework.
-            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
-                str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
-            ]
-            # Also map the test files to themselves.
-            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
-                str(test_file.relative_to(PATH_TO_REPO))
-            )
+        # Also map the test files to themselves.
+        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(str(test_file.relative_to(PATH_TO_REPO)))
     return test_example_deps, all_examples
 
 

@@ -313,7 +313,6 @@ docs/source/en/troubleshooting.md
 src/transformers/activations.py
 src/transformers/audio_utils.py
 src/transformers/commands/add_new_model_like.py
-src/transformers/commands/convert.py
 src/transformers/commands/download.py
 src/transformers/commands/env.py
 src/transformers/commands/run.py
@@ -807,7 +806,6 @@ src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py
 src/transformers/utils/dummy_sentencepiece_objects.py
 src/transformers/utils/dummy_speech_objects.py
-src/transformers/utils/dummy_tensorflow_text_objects.py
 src/transformers/utils/dummy_tokenizers_objects.py
 src/transformers/utils/dummy_vision_objects.py
 src/transformers/utils/fx.py

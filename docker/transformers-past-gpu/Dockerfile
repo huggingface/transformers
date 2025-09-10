@@ -27,7 +27,7 @@ ARG VERSION
 RUN [ "$VERSION" != "1.10" ] && python3 -m pip install -U setuptools || python3 -m pip install -U "setuptools<=59.5"
 
 # Remove all frameworks
-RUN python3 -m pip uninstall -y torch torchvision torchaudio tensorflow jax flax
+RUN python3 -m pip uninstall -y torch torchvision torchaudio
 
 # Get the libraries and their versions to install, and write installation command to `~/.profile`.
 RUN python3 ./transformers/utils/past_ci_versions.py --framework $FRAMEWORK --version $VERSION
