@@ -18,6 +18,7 @@ import unittest
 from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -79,7 +80,7 @@ class LongcatFlashModelTester:
         self.ffn_hidden_size = ffn_hidden_size
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.num_layers = num_layers
-        self.num_hidden_layers = num_layers
+        self.num_hidden_layers = 2 * num_layers  # for compatibility
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_lora_rank = kv_lora_rank
@@ -200,7 +201,7 @@ class LongcatFlashModelTester:
 
 
 @require_torch
-class LongcatFlashModelTest(ModelTesterMixin, unittest.TestCase):
+class LongcatFlashModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (LongcatFlashModel, LongcatFlashForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (LongcatFlashForCausalLM,) if is_torch_available() else ()
 
