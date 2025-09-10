@@ -1656,9 +1656,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         if return_assistant_tokens_mask and chat_schema:
+            # TODO This probably needs to be reverted - in cases with tool calls or thinking, we are unlikely to
+            #      correctly capture the assistant boundaries with the regexes, without making them a lot more
+            #      failure-prone. Generation tags in the template are more reliable and should be fully embraced.
             generation_indices = []  # This takes priority over jinja generation parsing
-            # TODO Check the schema actually has regexes/parsers for the assistant turns, not just that a schema exists
-            # TODO Make a test comparing the indices we get from this to the ones we get from % generation % tags
             for chat in rendered_chat:
                 parsed_chat = recursive_parse(chat, chat_schema, offset=0)
                 assistant_messages = [

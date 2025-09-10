@@ -150,20 +150,41 @@ cohere_schema = {
         "messages": {
             "type": "array",
             "items": {
-                "type": "object",
+                "type": "object",\
                 "properties": {
                     "role": {
                         "type": "string",
-                        "enum": ["user", "assistant", "system"],
-                        "x-mapping": {"SYSTEM": "system", "USER": "user", "CHATBOT": "assistant"},
+                        "enum": ["user", "assistant", "system", "tool"],
+                        "x-mapping": {"<|SYSTEM_TOKEN|>": "system", "<|USER_TOKEN|>": "user", "<|CHATBOT_TOKEN|>": "assistant", "<|SYSTEM_TOKEN|><results>\n": "tool"},
                     },
                     "content": {"type": "string"},
+                    "tool_calls": {
+                        "x-parser": "json",
+                        "x-parser-args": {"transform": "[*].{type: 'function', function: @"},
+                        "type": "array",
+                        "prefixItems": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"const": "function"},
+                                    "function": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "arguments": {
+                                                "type": "object",
+                                            },
+                                        }
+                                    }
+                                 }
+                            }
+                        ]
+                    },
                 },
                 "required": ["role", "content"],
             },
             "x-regex": r"^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
-            "x-regex-iterator": "<\\|START_OF_TURN_TOKEN\\|><\\|(?P<role>SYSTEM|USER|CHATBOT)_TOKEN\\|>(?P<content>.*?)(?:\nAction:\n```(?P<tool_calls>.*?(?:<\\|END_OF_TURN_TOKEN\\|>|\n\n## Available Tools)",
-            #      2) Mapping the role names like CHATBOT -> assistant with some kind of re.sub or mapping deal
+            "x-regex-iterator": r"<\|START_OF_TURN_TOKEN\|>(?P<role><\|(?:SYSTEM|USER|CHATBOT)_TOKEN\|>(?:<results>\n?)?)(?P<content>.*?)(?:\nAction:\n```json\n(?P<tool_calls>.*?)```|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>)",
         },
     },
 }
