@@ -523,32 +523,15 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "ydshieh/kosmos-2.5"
+        model_name = "microsoft/kosmos-2.5"
         model = Kosmos2_5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
-        super().test_model_parallelism()
-
-    # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 flash attention does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    # TODO: ydshieh
-
     @require_torch_gpu
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")
@@ -587,7 +570,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # Overwrite because Kosmos-2.5 need to padd pixel values and pad image-attn-mask
+        # Overwrite because Kosmos-2.5 need to pad pixel values and pad image-attn-mask
 
         def _prepare_model_kwargs(input_ids, attention_mask, pad_size, signature):
             model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
@@ -669,11 +652,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
@@ -706,11 +689,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     def test_sdpa(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
@@ -747,11 +730,11 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,

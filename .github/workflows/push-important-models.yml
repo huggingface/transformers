@@ -145,6 +145,7 @@ jobs:
     name: Model CI
     uses: ./.github/workflows/self-scheduled.yml
     needs: get_modified_models
+    if: needs.get_modified_models.outputs.matrix != '' && needs.get_modified_models.outputs.matrix != '[]'
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-push"

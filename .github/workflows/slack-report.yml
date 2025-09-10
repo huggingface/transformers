@@ -93,7 +93,7 @@ jobs:
             python utils/notification_service.py "${{ inputs.quantization_matrix }}"
           else
             python utils/notification_service.py "${{ inputs.folder_slices }}"
-          fi          
+          fi
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts

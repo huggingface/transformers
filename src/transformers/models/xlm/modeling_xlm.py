@@ -16,7 +16,6 @@
 PyTorch XLM model.
 """
 
-import itertools
 import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
@@ -495,11 +494,9 @@ class XLMSequenceSummary(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    NEW_ID = itertools.count()
-
-    def __init__(self, n_heads, dim, config):
+    def __init__(self, n_heads, dim, config, layer_idx: int = 0):
         super().__init__()
-        self.layer_id = next(MultiHeadAttention.NEW_ID)
+        self.layer_id = layer_idx
         self.dim = dim
         self.n_heads = n_heads
         self.head_dim = dim // n_heads
@@ -743,8 +740,8 @@ class XLMModel(XLMPreTrainedModel):
         #     self.layer_norm15 = nn.ModuleList()
         #     self.encoder_attn = nn.ModuleList()
 
-        for _ in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config))
+        for i in range(self.n_layers):
+            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i))
             self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
@@ -828,7 +825,7 @@ class XLMModel(XLMPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if cache is None:
-            cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if isinstance(cache, tuple):
             cache = EncoderDecoderCache.from_legacy_cache(cache)

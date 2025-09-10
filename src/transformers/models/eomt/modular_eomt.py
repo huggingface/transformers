@@ -229,7 +229,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -249,9 +249,9 @@ class EomtPatchEmbeddings(Dinov2PatchEmbeddings):
     pass
 
 
-class EomtEmbeddings(Dinov2Embeddings, nn.Module):
+class EomtEmbeddings(Dinov2Embeddings):
     def __init__(self, config: EomtConfig) -> None:
-        Dinov2Embeddings().__init__()
+        nn.Module.__init__(self)
 
         self.config = config
         self.patch_size = config.patch_size
@@ -395,7 +395,6 @@ class EomtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": EomtLayer,
         "attentions": EomtAttention,
@@ -431,9 +430,9 @@ class EomtPreTrainedModel(PreTrainedModel):
     The EoMT Model with head on top for instance/semantic/panoptic segmentation.
     """
 )
-class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Module):
+class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
     def __init__(self, config: EomtConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.embeddings = EomtEmbeddings(config)
@@ -510,7 +509,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
 
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()

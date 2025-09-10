@@ -21,8 +21,9 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -30,8 +31,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
-
-from transformers.utils.generic import OutputRecorder, TransformersKwargs
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -44,6 +43,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
 )
+from ...utils.generic import OutputRecorder, TransformersKwargs
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 
@@ -125,7 +125,7 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: torch.FloatTensor = None,
+        video: Optional[torch.FloatTensor] = None,
         video_height: Optional[int] = None,
         video_width: Optional[int] = None,
         inference_device: Union[torch.device, str] = "cpu",
@@ -478,7 +478,7 @@ class Sam2VideoAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -628,16 +628,16 @@ class Sam2VideoImageSegmentationOutput(ModelOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
+    high_res_masks: Optional[torch.FloatTensor] = None
+    object_pointer: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -650,8 +650,8 @@ class Sam2VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    pred_masks: torch.FloatTensor = None
-    frame_idx: int = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    frame_idx: Optional[int] = None
 
 
 @auto_docstring
@@ -989,7 +989,7 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(config.memory_fuser_intermediate_dim, config.memory_fuser_embed_dim)
         self.scale = nn.Parameter(
-            config.memory_fuser_layer_scale_init_value * torch.ones((config.memory_fuser_embed_dim)),
+            config.memory_fuser_layer_scale_init_value * torch.ones(config.memory_fuser_embed_dim),
             requires_grad=True,
         )
 
@@ -1123,7 +1123,7 @@ class Sam2VideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1893,7 +1893,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1924,9 +1924,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
         elif input_points is not None:
             num_objects = input_points.shape[1]
