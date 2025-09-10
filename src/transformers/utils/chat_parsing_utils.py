@@ -1,6 +1,7 @@
 import ast
 import json
 import re
+import jmespath  # TODO Make this a proper optional dependency
 from collections import namedtuple
 
 # Next line only used because eval might grab them. Can be removed once we have something better than eval
@@ -90,12 +91,16 @@ def recursive_parse(
         parser = node_schema["x-parser"]
         offset = None  # We cannot track offsets through parsers, so stop trying
         if parser == "json":
+            parser_args = node_schema.get("x-parser-args", {})
             try:
-                node_content = json.loads(node_content)
+                parsed_json = json.loads(node_content)
             except json.JSONDecodeError as e:
                 raise ValueError(
                     f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
                 )
+            if "transform" in parser_args:
+                parsed_json = jmespath.search(parser_args["transform"], parsed_json)
+            node_content = parsed_json
         elif parser == "python_type":
             # TODO eval is obviously enormously insecure and only used for prototyping here
             #      make a safer parser before merging
@@ -109,11 +114,6 @@ def recursive_parse(
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema["type"]
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-to-dict" in node_schema
-    if not has_regex and isinstance(node_content, str) and node_type == "array":
-        raise TypeError(
-            f"array node got a string input, but has no parser or regex.\nInput: {node_content}\n",
-            f"Schema: {node_schema}",
-        )
     if has_regex and not isinstance(node_content, str):
         raise TypeError(
             "Schema node got a non-string input, but has a regex for parsing.\n"
@@ -228,10 +228,10 @@ def recursive_parse(
     elif node_type == "array":
         if not node_content:
             return []
-        if not isinstance(node_content, list):
-            raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
         parsed_schema = []
         if "items" in node_schema:
+            if not isinstance(node_content, list):
+                raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
             for item in node_content:
                 if isinstance(item, offset_content):
                     item_content = item.content
@@ -242,6 +242,12 @@ def recursive_parse(
                 parsed_schema.append(recursive_parse(item_content, node_schema["items"], scope_vars, item_offset))
             return parsed_schema
         elif "prefixItems" in node_schema:
+            if not isinstance(node_content, list):
+                if len(node_schema["prefixItems"]) == 1:
+                    # If there's only one prefix item, this is a single item array, we can just wrap the string
+                    node_content = [node_content]
+                else:
+                    raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
             if len(node_content) != len(node_schema["prefixItems"]):
                 raise ValueError(
                     f"Array node has {len(node_content)} items, but schema only has "
