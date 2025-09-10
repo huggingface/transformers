@@ -45,7 +45,7 @@ class SageMakerTestEnvironment:
 
     @property
     def base_job_name(self) -> str:
-        return f"{self.framework}-transfromers-test"
+        return f"{self.framework}-transformers-test"
 
     @property
     def test_path(self) -> str:
