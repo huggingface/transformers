@@ -515,7 +515,7 @@ TOLERANCE = 1e-4
 class LEDModelIntegrationTests(unittest.TestCase):
     """All the below results were obtained with the original checkpoints and code
     base from https://github.com/allenai/longformer.
-    IMPORTANT: Note that the original checkpoints include a `postion_embeddings` "hack"
+    IMPORTANT: Note that the original checkpoints include a `position_embeddings` "hack"
     and have to be cut to have the correct shape.
     See: https://github.com/huggingface/transformers/pull/9278#issue-544709661.
     """
