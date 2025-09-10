@@ -280,8 +280,8 @@ class HiggsAudioDualFFNFastDecoderLayer(nn.Module):
         return hidden_states
 
 
-class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
-    """We implement a slow dual-path FFN decoder layer where the audio tokens and text tokens go through separate FFN layers.
+class HiggsAudioDualFFNDecoderLayer(nn.Module):
+    """We implement a dual-path FFN decoder layer where the audio tokens and text tokens go through separate FFN layers.
 
     The audio and text tokens share the text-attention layer, but will be encoded with separate feedforward layers.
 
@@ -449,7 +449,7 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": Union[
-            HiggsAudioDecoderLayer, HiggsAudioDualFFNFastDecoderLayer, HiggsAudioDualFFNSlowDecoderLayer
+            HiggsAudioDecoderLayer, HiggsAudioDualFFNFastDecoderLayer, HiggsAudioDualFFNDecoderLayer
         ],
         "attentions": HiggsAudioAttention,
     }
@@ -638,20 +638,12 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self.embed_tokens = nn.Embedding(self.vocab_size, config.text_config.hidden_size, self.padding_idx)
         self.config.text_config._attn_implementation = self.config._attn_implementation
 
-        if config.audio_adapter_type == "dual_ffn":
-            layers = []
-            for j in range(config.text_config.num_hidden_layers):
-                if j in config.audio_dual_ffn_layers:
-                    layers.append(HiggsAudioDualFFNSlowDecoderLayer(config.text_config, j))
-                else:
-                    layers.append(HiggsAudioDecoderLayer(config.text_config, j))
-            self.layers = nn.ModuleList(layers)
-        elif config.audio_adapter_type == "dual_ffn_fast_forward":
+        if config.audio_adapter_type == "dual_ffn_fast_forward":
             layers = []
             for j in range(config.text_config.num_hidden_layers):
                 if j in config.audio_dual_ffn_layers:
                     layers.append(
-                        HiggsAudioDualFFNSlowDecoderLayer(
+                        HiggsAudioDualFFNDecoderLayer(
                             config.text_config,
                             j,
                         )

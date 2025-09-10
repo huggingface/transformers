@@ -31,9 +31,6 @@ class HiggsAudioConfig(PretrainedConfig):
             The type of audio adapter to use. We support three types of adapter:
             - stack:
                 We stack additional Transformer layers after the main LLM backbone for audio generation.
-            - dual_ffn:
-                For selected part of the LLM backbone, we replace the text FFN with a dual FFN architecture
-                that contains an additional audio FFN. The audio FFN will be triggered when the location is marked for audio tokens.
             - dual_ffn_fast_forward:
                 We pick a few layers in the LLM backbone to plug-in the audio FFN. For the remaining layers,
                 the audio hidden states will be directly fast-forward to the next layer.
@@ -164,7 +161,6 @@ class HiggsAudioConfig(PretrainedConfig):
 
         if audio_adapter_type not in [
             "stack",
-            "dual_ffn",
             "dual_ffn_fast_forward",
         ]:
             raise ValueError("Invalid audio adapter type: {audio_adapter_type}")
