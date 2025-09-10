@@ -482,7 +482,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             videos=video_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=172,
         )
