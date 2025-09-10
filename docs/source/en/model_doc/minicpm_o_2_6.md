@@ -490,6 +490,47 @@ MiniCPM-o 2.6 (vision-only mode) can run with llama.cpp. See our fork of [llama.
 
 Download the int4 quantized version for lower GPU memory (7GB) usage: [MiniCPM-o-2_6-int4](https://huggingface.co/openbmb/MiniCPM-o-2_6-int4).
 
+## MiniCPM_o_2_6Processor
+
+[[autodoc]] MiniCPM_o_2_6Processor
+
+## MiniCPMVImageProcessorFast
+
+[[autodoc]] MiniCPMVImageProcessorFast
+
+## MiniCPM_o_2_6FeatureExtractor
+
+[[autodoc]] MiniCPM_o_2_6FeatureExtractor
+
+## MiniCPM_o_2_6Config
+
+[[autodoc]] MiniCPM_o_2_6Config
+
+## MiniCPM_o_2_6ForConditionalGeneration
+
+[[autodoc]] MiniCPM_o_2_6ForConditionalGeneration
+    - forward
+
+## MiniCPMConditionalChatTTSModel
+
+[[autodoc]] MiniCPMConditionalChatTTSModel
+    - generate
+
+## MiniCPMConditionalTTSTextModel
+
+[[autodoc]] MiniCPMConditionalTTSTextModel
+    - forward
+
+## MiniCPMVisionModel
+
+[[autodoc]] MiniCPMVisionModel
+    - forward
+
+## MiniCPM_o_2_6TextModel
+
+[[autodoc]] MiniCPM_o_2_6TextModel
+    - forward
+
 ## License
 
 #### Model License

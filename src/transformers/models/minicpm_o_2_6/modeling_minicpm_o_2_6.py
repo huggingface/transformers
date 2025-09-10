@@ -656,7 +656,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             self.omni_config.vision_config._attn_implementation = "flash_attention_2"
         else:
             self.omni_config.vision_config._attn_implementation = "eager"
-        model = MiniCPMVisionTransformer(self.omni_config.vision_config)
+        model = MiniCPMVisionModel(self.omni_config.vision_config)
         if self.omni_config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -679,7 +679,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         return model
 
     def init_tts_module(self):
-        model = ConditionalChatTTS(self.omni_config.tts_config)
+        model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         return model
 
     def get_input_embeddings(self):
@@ -3004,9 +3004,9 @@ class CustomRepetitionPenaltyLogitsProcessorRepeat:
 
 
 @dataclass
-class ConditionalChatTTSGenerationOutput(ModelOutput):
+class MiniCPMConditionalChatTTSModelGenerationOutput(ModelOutput):
     """
-    Output class for ConditionalChatTTS generation.
+    Output class for MiniCPMConditionalChatTTSModel generation.
 
     Args:
         new_ids (torch.LongTensor): Newly generated audio code sequence, shape (batch_size, sequence_length, num_vq).
@@ -3552,7 +3552,7 @@ def make_streaming_chunk_mask_generation(
     return causal_mask
 
 
-class ConditionalChatTTS(PreTrainedModel):
+class MiniCPMConditionalChatTTSModel(PreTrainedModel):
     """A conditional text-to-speech model that can generate speech from text with speaker conditioning.
 
     This model extends PreTrainedModel to provide text-to-speech capabilities with:
@@ -4102,7 +4102,7 @@ class ConditionalChatTTS(PreTrainedModel):
             # there is no eos token
             genrated_input_ids = input_ids[:, condition_length:, :]
 
-        return ConditionalChatTTSGenerationOutput(
+        return MiniCPMConditionalChatTTSModelGenerationOutput(
             new_ids=genrated_input_ids,
             audio_input_ids=input_ids,  # for update purpose
             past_key_values=past_key_values,  # for update purpose
@@ -5122,7 +5122,7 @@ SIGLIP_VISION_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     """The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING
 )
-class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
+class MiniCPMVisionModel(MiniCPMVisionPreTrainedModel):
     config_class = MiniCPMVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -5215,4 +5215,13 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         )
 
 
-__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6PreTrainedModel"]
+__all__ = [
+    "MiniCPM_o_2_6ForConditionalGeneration",
+    "MiniCPM_o_2_6PreTrainedModel",
+    "MiniCPMConditionalChatTTSModel",
+    "MiniCPMConditionalTTSTextModel",
+    "MiniCPMConditionalTTSTextPreTrainedModel",
+    "MiniCPMVisionModel",
+    "MiniCPMVisionPreTrainedModel",
+    "MiniCPM_o_2_6TextModel",
+]

@@ -29,11 +29,7 @@ from transformers import (
     AutoModel,
     AutoProcessor,
 )
-from transformers.utils.import_utils import(
-    is_torch_available,
-    is_soundfile_available,
-    _is_package_available
-)
+from transformers.utils.import_utils import is_torch_available, is_soundfile_available, _is_package_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -45,6 +41,8 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
+    from transformers import MiniCPM_o_2_6ForConditionalGeneration
+
 if is_soundfile_available():
     import soundfile as sf
 
@@ -55,6 +53,8 @@ if _is_package_available("moviepy"):
 @require_torch
 class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     """Test for MiniCPM_o_2_6Model."""
+
+    all_model_classes = (MiniCPM_o_2_6ForConditionalGeneration,) if is_torch_available() else ()
 
     def setUp(self):
         """initial test environment"""
@@ -236,7 +236,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     def test_audio_mimick(self):
         if not is_soundfile_available():
             self.skipTest("test requires soundfile")
-    
+
         try:
             self.model.init_tts()
 

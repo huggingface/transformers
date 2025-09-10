@@ -18,13 +18,23 @@ from typing import Optional, Union
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-from PIL import Image
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import to_pil_image
 from ...image_utils import valid_images, make_nested_list_of_images
 from ...utils import TensorType, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.import_utils import is_torchvision_available, is_torchvision_v2_available
+from ...utils.import_utils import (
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    is_vision_available,
+    is_torch_available,
+)
 from .processing_minicpm_o_2_6 import MiniCPMOBatchFeature
+
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
@@ -41,6 +51,13 @@ def recursive_converter(converter, value):
         return new_value
     else:
         return converter(value)
+
+
+def to_tensor(x):
+    if is_torchvision_v2_available():
+        img = F.to_image(x)
+        return F.to_dtype(img, dtype=torch.float32, scale=True)
+    return F.to_tensor(x)
 
 
 class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
@@ -65,10 +82,8 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
 
         self.slice_mode = kwargs.pop("slice_mode", True)
 
-        self.image_mean = np.array(
-            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN)
-        self.image_std = np.array(
-            image_std if image_std is not None else IMAGENET_STANDARD_STD)
+        self.image_mean = np.array(image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN)
+        self.image_std = np.array(image_std if image_std is not None else IMAGENET_STANDARD_STD)
 
     def ensure_divide(self, length, patch_size):
         return max(round(length / patch_size) * patch_size, patch_size)
@@ -116,26 +131,21 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
     def slice_image(self, image, max_slice_nums=9, scale_resolution=448, patch_size=14, never_split=False):
         original_size = image.size
         source_image = None
-        best_grid = self.get_sliced_grid(
-            original_size, max_slice_nums, never_split)
+        best_grid = self.get_sliced_grid(original_size, max_slice_nums, never_split)
         patches = []
 
         if best_grid is None:
             # dont need to slice, upsample
-            best_size = self.find_best_resize(
-                original_size, scale_resolution, patch_size, allow_upscale=True)
-            source_image = image.resize(
-                best_size, resample=Image.Resampling.BICUBIC)
+            best_size = self.find_best_resize(original_size, scale_resolution, patch_size, allow_upscale=True)
+            source_image = image.resize(best_size, resample=Image.Resampling.BICUBIC)
         else:
             # source image, down-sampling and ensure divided by patch_size
-            best_resize = self.find_best_resize(
-                original_size, scale_resolution, patch_size)
+            best_resize = self.find_best_resize(original_size, scale_resolution, patch_size)
             source_image = image.copy().resize(best_resize, resample=Image.Resampling.BICUBIC)
             refine_size = self.get_refine_size(
                 original_size, best_grid, scale_resolution, patch_size, allow_upscale=True
             )
-            refine_image = image.resize(
-                refine_size, resample=Image.Resampling.BICUBIC)
+            refine_image = image.resize(refine_size, resample=Image.Resampling.BICUBIC)
             patches = self.split_to_patches(refine_image, best_grid)
 
         return source_image, patches, best_grid
@@ -146,8 +156,7 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
         if not self.slice_mode:
             return [image]
 
-        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(
-            max_slice_nums)
+        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
         if max_slice_nums <= 0:
             raise ValueError(f"max_slice_nums must be greater than 0, got {max_slice_nums}")
         source_image, patches, sliced_grid = self.slice_image(
@@ -168,8 +177,7 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
     def get_sliced_grid(self, image_size, max_slice_nums, nerver_split=False):
         original_width, original_height = image_size
         log_ratio = math.log(original_width / original_height)
-        ratio = original_width * original_height / \
-            (self.scale_resolution * self.scale_resolution)
+        ratio = original_width * original_height / (self.scale_resolution * self.scale_resolution)
         multiple = min(math.ceil(ratio), max_slice_nums)
         if multiple <= 1 or nerver_split:
             return None
@@ -257,21 +265,20 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
                 for patch in image_patches:
                     # Convert PIL to tensor (0-1 range) and normalize
                     # Shape: [C, H, W], range [0, 1]
-                    tensor_patch = F.to_tensor(patch)
+                    tensor_patch = to_tensor(patch)
                     if do_normalize:
-                        normalized_patch = F.normalize(tensor_patch, mean=self.image_mean.tolist(),
-                                                       std=self.image_std.tolist())  # Apply normalization
+                        normalized_patch = F.normalize(
+                            tensor_patch, mean=self.image_mean.tolist(), std=self.image_std.tolist()
+                        )  # Apply normalization
                     image_patches_tensors.append(normalized_patch)
 
                 # Convert back to numpy for compatibility with existing code
-                image_patches = [patch.numpy()
-                                 for patch in image_patches_tensors]
+                image_patches = [patch.numpy() for patch in image_patches_tensors]
 
                 for slice_image in image_patches:
                     new_images.append(self.reshape_by_patch(slice_image))
                     tgt_sizes.append(
-                        np.array(
-                            (slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
+                        np.array((slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
                     )
 
             # in batch inference, it may be []
@@ -283,8 +290,7 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
             tgt_sizes_list.append(tgt_sizes)
 
         return MiniCPMOBatchFeature(
-            data={"pixel_values": new_images_list,
-                  "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list},
+            data={"pixel_values": new_images_list, "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list},
             tensor_type=return_tensors,
         )
 

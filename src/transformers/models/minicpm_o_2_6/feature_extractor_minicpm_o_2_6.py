@@ -58,7 +58,9 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
 
         if audio_parts is not None:
             if len(audio_parts) != len(audios_list):
-                raise ValueError(f"Length of audio_parts ({len(audio_parts)}) must equal length of audios_list ({len(audios_list)})")
+                raise ValueError(
+                    f"Length of audio_parts ({len(audio_parts)}) must equal length of audios_list ({len(audios_list)})"
+                )
             for parts, audios in zip(audio_parts, audios_list):
                 if len(parts) != len(audios):
                     raise ValueError(f"Length of parts ({len(parts)}) must equal length of audios ({len(audios)})")
@@ -94,7 +96,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
                     final_merge_audio.append(audio)
                 else:
                     for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(audio[i * max_audio_inp_len: (i + 1) * max_audio_inp_len])
+                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
 
             if audios:
                 audio_inputs = super().__call__(

@@ -26,14 +26,16 @@ import json
 from copy import deepcopy
 from functools import lru_cache
 
-from PIL import Image
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...feature_extraction_utils import BatchFeature
 from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType, logging
-from ...utils.import_utils import is_jinja_available, is_torch_available
+from ...utils.import_utils import is_jinja_available, is_torch_available, is_vision_available
+
+if is_vision_available():
+    from PIL import Image
 
 if is_torch_available():
     import torch
@@ -155,7 +157,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     r"""
     Constructs a MiniCPM-o-2.6 processor which wraps a MiniCPMV image processor, feature extractor, and tokenizer into a single processor.
 
-    [`MiniCPM_o_2_6Processor`] offers all the functionalities of [`MiniCPMVImageProcessor`], [`MiniCPM_o_2_6FeatureExtractor`] and tokenizer. 
+    [`MiniCPM_o_2_6Processor`] offers all the functionalities of [`MiniCPMVImageProcessor`], [`MiniCPM_o_2_6FeatureExtractor`] and tokenizer.
     See the [`~MiniCPM_o_2_6Processor.__call__`] and [`~MiniCPM_o_2_6Processor.decode`] for more information.
 
     This processor supports multimodal inputs including text, images, and audio. It can handle various tasks such as:
@@ -199,16 +201,24 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "MiniCPMVImageProcessorFast"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
 
-    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None, chat_template=None, tts_chat_template=None, parse_template=None):
+    def __init__(
+        self,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        chat_template=None,
+        tts_chat_template=None,
+        parse_template=None,
+    ):
         super().__init__(tokenizer, image_processor, feature_extractor, chat_template=chat_template)
 
         self.tts_chat_template = tts_chat_template
         self.parse_template = parse_template
 
-        self.image_tag = getattr(tokenizer, 'image_tag', "(<image>./</image>)")
-        self.image_pattern = getattr(tokenizer, 'image_pattern', "\(<image>./</image>\)")
-        self.audio_tag = getattr(tokenizer, 'audio_tag', "(<audio>./</audio>)")
-        self.audio_pattern = getattr(tokenizer, 'audio_pattern', "\(<audio>./</audio>\)")
+        self.image_tag = getattr(tokenizer, "image_tag", "(<image>./</image>)")
+        self.image_pattern = getattr(tokenizer, "image_pattern", "\(<image>./</image>\)")
+        self.audio_tag = getattr(tokenizer, "audio_tag", "(<audio>./</audio>)")
+        self.audio_pattern = getattr(tokenizer, "audio_pattern", "\(<audio>./</audio>\)")
         self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
 
         self.terminators = [tokenizer.eos_token, tokenizer.pad_token, tokenizer.tts_end]
@@ -290,26 +300,21 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         return msgs, images, audios, audio_parts, use_tts_template
 
     def parse_msgs_jinja(self, msgs, omni_input=False, use_tts_template=False):
-        results = {
-            'images': [],
-            'audios': [],
-            'audio_parts': [],
-            'use_tts_template': use_tts_template
-        }
+        results = {"images": [], "audios": [], "audio_parts": [], "use_tts_template": use_tts_template}
 
         # 获取预编译的模板
         template = self.get_precompiled_template(self.parse_template)
 
         # 添加自定义函数
         def collect_image(img, msg_list):
-            results['images'].append(img)
+            results["images"].append(img)
             msg_list.append("(<image>./</image>)")
             return ""
 
         def collect_audio(audio, i, msg_list):
-            results['audios'].append(audio)
-            results['audio_parts'].append(i)
-            results['use_tts_template'] = True
+            results["audios"].append(audio)
+            results["audio_parts"].append(i)
+            results["use_tts_template"] = True
             msg_list.append("(<audio>./</audio>)")
             return ""
 
@@ -334,31 +339,16 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             collect_audio=collect_audio,
             collect_text=collect_text,
             join_content=join_content,
-            raise_error=raise_error
+            raise_error=raise_error,
         )
 
-        return (
-            msgs,
-            results['images'],
-            results['audios'],
-            results['audio_parts'],
-            results['use_tts_template']
-        )
+        return (msgs, results["images"], results["audios"], results["audio_parts"], results["use_tts_template"])
 
     @lru_cache(maxsize=1)
     def get_precompiled_template(self, template):
-        env = Environment(
-            cache_size=100,
-            auto_reload=False,
-            optimized=True
-        )
+        env = Environment(cache_size=100, auto_reload=False, optimized=True)
 
-        env.globals.update({
-            'enumerate': enumerate,
-            'isinstance': isinstance,
-            'Image': Image,
-            'np': np
-        })
+        env.globals.update({"enumerate": enumerate, "isinstance": isinstance, "Image": Image, "np": np})
 
         return env.from_string(template)
 
@@ -401,7 +391,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             if len(msgs) == 0:
                 raise ValueError("input messagees is empty")
 
-            parsed_msgs, images, audios, audio_parts, use_tts_template = self.parse_msgs_jinja(deepcopy(msgs), omni_input, use_tts_template)
+            parsed_msgs, images, audios, audio_parts, use_tts_template = self.parse_msgs_jinja(
+                deepcopy(msgs), omni_input, use_tts_template
+            )
             prompts = self.tokenizer.apply_chat_template(
                 parsed_msgs,
                 tokenize=False,
@@ -473,13 +465,17 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         audio_start_idx = torch.where(input_ids == self.tokenizer.audio_start_id)[0]
         audio_end_idx = torch.where(input_ids == self.tokenizer.audio_end_id)[0]
         if len(audio_start_idx) != len(audio_end_idx):
-            raise ValueError(f"Mismatched audio start and end tokens: {len(audio_start_idx)} start tokens vs {len(audio_end_idx)} end tokens")
+            raise ValueError(
+                f"Mismatched audio start and end tokens: {len(audio_start_idx)} start tokens vs {len(audio_end_idx)} end tokens"
+            )
         audio_bounds = torch.hstack([(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
 
         spk_start_idx = torch.where(input_ids == self.tokenizer.spk_start_id)[0]
         spk_end_idx = torch.where(input_ids == self.tokenizer.spk_end_id)[0]
         if len(spk_start_idx) != len(spk_end_idx):
-            raise ValueError(f"Mismatched speaker start and end tokens: {len(spk_start_idx)} start tokens vs {len(spk_end_idx)} end tokens")
+            raise ValueError(
+                f"Mismatched speaker start and end tokens: {len(spk_start_idx)} start tokens vs {len(spk_end_idx)} end tokens"
+            )
         spk_bounds = torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
 
         return input_ids, image_bounds, audio_bounds, spk_bounds
@@ -527,12 +523,16 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 if images is None:
                     raise ValueError("Found image tags but no images provided")
                 if len(image_tags) != len(image_sizes[index]):
-                    raise ValueError(f"Number of image tags ({len(image_tags)}) doesn't match number of image sizes ({len(image_sizes[index])})")
+                    raise ValueError(
+                        f"Number of image tags ({len(image_tags)}) doesn't match number of image sizes ({len(image_sizes[index])})"
+                    )
             if audio_tags:
                 if audio_phs is None:
                     raise ValueError("Found audio tags but no audio placeholders provided")
                 if len(audio_tags) != len(audio_phs[index]):
-                    raise ValueError(f"Number of audio tags ({len(audio_tags)}) doesn't match number of audio placeholders ({len(audio_phs[index])})")
+                    raise ValueError(
+                        f"Number of audio tags ({len(audio_tags)}) doesn't match number of audio placeholders ({len(audio_phs[index])})"
+                    )
 
             image_id = 0
             audio_id = 0
@@ -633,9 +633,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         slice_placeholder = "\n".join(slices)
         return slice_placeholder
 
-    def get_audios_placeholder(self, audios,
-                               chunk_input: Optional[bool] = False,
-                               chunk_length: Optional[int] = 1):
+    def get_audios_placeholder(self, audios, chunk_input: Optional[bool] = False, chunk_length: Optional[int] = 1):
         audios_list = self.feature_extractor.format_audios(audios)
         audio_ph_list = []
         for audios in audios_list:

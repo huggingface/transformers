@@ -81,14 +81,15 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
-if _is_package_available('vector_quantize_pytorch') and _is_package_available('vocos'):
+if _is_package_available("vector_quantize_pytorch") and _is_package_available("vocos"):
     from vector_quantize_pytorch import GroupedResidualFSQ
     from vocos import Vocos
     from vocos.pretrained import instantiate_class
 
-_tts_deps = _is_package_available('vector_quantize_pytorch') and _is_package_available('vocos')
+_tts_deps = _is_package_available("vector_quantize_pytorch") and _is_package_available("vocos")
 
 logger = logging.get_logger(__name__)
+
 
 class MiniCPMConditionalTTSTextConfig(LlamaConfig):
     pass
@@ -169,17 +170,20 @@ class MiniCPMConditionalTTSConfig(PretrainedConfig):
 class MiniCPM_o_2_6TextConfig(Qwen2Config):
     model_type = "minicpm_o_2_6_text"
 
+
 class MiniCPMVisionConfig(SiglipVisionConfig):
     pass
 
+
 class MiniCPMWhisperConfig(WhisperConfig):
-    pass 
+    pass
+
 
 class MiniCPM_o_2_6Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniCPM_o_2_6Model`]. It is used to instantiate a
     MiniCPM-o-2.6 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6 
+    with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6
     [openbmb/MiniCPM-o-2_6](https://huggingface.co/openbmb/MiniCPM-o-2_6) architecture.
 
     The MiniCPM-o-2.6 model is a multimodal large language model that supports text, image, and audio inputs. It consists of
@@ -241,6 +245,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
         ... )
         ```
     """
+
     model_type = "minicpm_o_2_6"
 
     default_vision_config = {
@@ -282,8 +287,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
             self.text_config = text_config
 
         if vision_config is None:
-            self.vision_config = MiniCPMVisionConfig(
-                **self.default_vision_config)
+            self.vision_config = MiniCPMVisionConfig(**self.default_vision_config)
             logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):
             self.vision_config = MiniCPMVisionConfig(**vision_config)
@@ -392,8 +396,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         if not os.path.exists(tts_text_tokenizer_path):
             # try from hf model_id
             tts_text_tokenizer_path = "openbmb/chattts_tokenizer"
-        
+
         from ..bert.tokenization_bert_fast import BertTokenizerFast
+
         tts_text_tokenizer = BertTokenizerFast.from_pretrained(tts_text_tokenizer_path)
         self.tts_processor = ChatTTSProcessor(text_tokenizer=tts_text_tokenizer)
 
@@ -434,7 +439,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             self.omni_config.vision_config._attn_implementation = "flash_attention_2"
         else:
             self.omni_config.vision_config._attn_implementation = "eager"
-        model = MiniCPMVisionTransformer(self.omni_config.vision_config)
+        model = MiniCPMVisionModel(self.omni_config.vision_config)
         if self.omni_config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -457,7 +462,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         return model
 
     def init_tts_module(self):
-        model = ConditionalChatTTS(self.omni_config.tts_config)
+        model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         return model
 
     def get_input_embeddings(self):
@@ -574,7 +579,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
         return vision_hidden_states
 
-    def get_vllm_embedding(self, tgt_sizes=None, pixel_values=None, image_bound=None, input_ids=None, vision_hidden_states=None, **kwargs):
+    def get_vllm_embedding(
+        self, tgt_sizes=None, pixel_values=None, image_bound=None, input_ids=None, vision_hidden_states=None, **kwargs
+    ):
         """
         Compute all visual embeddings, and set into llm embeddings.
         Args:
@@ -767,7 +774,16 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         else:
             return []
 
-    def get_omni_embedding(self, input_embeddings, chunk_length=-1, stream_input=False, audio_features = [], audio_feature_lens = [], audio_bounds=None, **kwargs):
+    def get_omni_embedding(
+        self,
+        input_embeddings,
+        chunk_length=-1,
+        stream_input=False,
+        audio_features=[],
+        audio_feature_lens=[],
+        audio_bounds=None,
+        **kwargs,
+    ):
         """
         Args:
             input_embeddings:
@@ -777,19 +793,16 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             final embeddings with audio feature
         """
         if stream_input:
-            audio_embeddings = self.get_audio_embedding_streaming(
-                audio_features, audio_feature_lens
-            )
+            audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
         else:
-            audio_embeddings = self.get_audio_embedding(
-                audio_features, audio_feature_lens, chunk_length
-            )
+            audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
 
         bs = len(input_embeddings)
         if len(audio_features) > 0:
             if len(audio_embeddings) != len(input_embeddings):
                 raise ValueError(
-                    f"Length mismatch: audio_embeddings length {len(audio_embeddings)} != input_embeddings length {len(input_embeddings)}")
+                    f"Length mismatch: audio_embeddings length {len(audio_embeddings)} != input_embeddings length {len(input_embeddings)}"
+                )
 
             if self.omni_config.chunk_input:
                 for i in range(bs):
@@ -939,7 +952,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         if input_ids is None:
             raise ValueError("input_ids cannot be None")
         if len(input_ids) != len(pixel_values):
-            raise ValueError(f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}")
+            raise ValueError(
+                f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
+            )
         if not sampling and stream:
             raise ValueError("if use stream mode, make sure sampling=True")
 
@@ -2042,6 +2057,7 @@ def whisper_eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 # Borrowed from transformers.models.whisper.modeling_whisper.WhisperAttention and support past_key_value
 class MiniCPMWhisperAttention(WhisperAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -2697,7 +2713,9 @@ def apply_spk_emb(
         mask_ = input_ids_ == spk_emb_token_id  # [batch_size, seq_len_max]
         nonzero_position_idx = mask_.nonzero(as_tuple=False)  # [num_spk_emb, 1]
         if nonzero_position_idx.shape[0] != num_spk_embs:
-            raise ValueError(f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}")
+            raise ValueError(
+                f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
+            )
         begin_idx = nonzero_position_idx.min()
         end_idx = nonzero_position_idx.max()
         input_embeds[idx, begin_idx : end_idx + 1, :] = spk_emb_
@@ -2801,9 +2819,9 @@ class CustomRepetitionPenaltyLogitsProcessorRepeat:
 
 
 @dataclass
-class ConditionalChatTTSGenerationOutput(ModelOutput):
+class MiniCPMConditionalChatTTSModelGenerationOutput(ModelOutput):
     """
-    Output class for ConditionalChatTTS generation.
+    Output class for MiniCPMConditionalChatTTSModel generation.
 
     Args:
         new_ids (torch.LongTensor): Newly generated audio code sequence, shape (batch_size, sequence_length, num_vq).
@@ -2929,6 +2947,7 @@ class MiniCPMConditionalTTSTextDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class MiniCPMConditionalTTSTextPreTrainedModel(LlamaPreTrainedModel):
     config_class = MiniCPMConditionalTTSTextConfig
+
 
 @auto_docstring
 class MiniCPMConditionalTTSTextModel(LlamaModel):
@@ -3107,7 +3126,7 @@ class MiniCPMConditionalTTSTextModel(LlamaModel):
         return causal_mask
 
 
-class ConditionalChatTTS(PreTrainedModel):
+class MiniCPMConditionalChatTTSModel(PreTrainedModel):
     """A conditional text-to-speech model that can generate speech from text with speaker conditioning.
 
     This model extends PreTrainedModel to provide text-to-speech capabilities with:
@@ -3511,7 +3530,9 @@ class ConditionalChatTTS(PreTrainedModel):
 
             # If you are using according to the guidelines, this should be passed.
             if progress != (past_key_values[0][0].shape[2] + 1):
-                raise ValueError(f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}")
+                raise ValueError(
+                    f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
+                )
 
             if audio_bos:
                 # Generate the first token, activate the model with `self.audio_bos_token_id`, the model will predict a new audio token. This is a special case because without the `audio bos token`, it is impossible to generate the first audio token in our streaming setting.
@@ -3655,7 +3676,7 @@ class ConditionalChatTTS(PreTrainedModel):
             # there is no eos token
             genrated_input_ids = input_ids[:, condition_length:, :]
 
-        return ConditionalChatTTSGenerationOutput(
+        return MiniCPMConditionalChatTTSModelGenerationOutput(
             new_ids=genrated_input_ids,
             audio_input_ids=input_ids,  # for update purpose
             past_key_values=past_key_values,  # for update purpose
@@ -3829,7 +3850,9 @@ class Resampler(nn.Module):
 
     def forward(self, x, tgt_sizes=None):
         if x.shape[0] != tgt_sizes.shape[0]:
-            raise ValueError(f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}")
+            raise ValueError(
+                f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
+            )
         bs = x.shape[0]
 
         device = x.device
@@ -4480,7 +4503,9 @@ class MiniCPMVisionEncoderLayer(SiglipEncoderLayer):
         self.embed_dim = config.hidden_size
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.self_attn = (
-            MiniCPMVisionAttention(config) if not  config._attn_implementation == "flash_attention_2" else MiniCPMVisionFlashAttention2(config)
+            MiniCPMVisionAttention(config)
+            if not config._attn_implementation == "flash_attention_2"
+            else MiniCPMVisionFlashAttention2(config)
         )
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = MiniCPMVisionMLP(config)
@@ -4646,7 +4671,7 @@ class MiniCPMVisionEncoder(SiglipEncoder):
 @add_start_docstrings(
     """The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING
 )
-class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
+class MiniCPMVisionModel(MiniCPMVisionPreTrainedModel):
     config_class = MiniCPMVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -4739,4 +4764,14 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         )
 
 
-__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6PreTrainedModel", "MiniCPM_o_2_6Config"]
+__all__ = [
+    "MiniCPM_o_2_6Config",
+    "MiniCPM_o_2_6ForConditionalGeneration",
+    "MiniCPM_o_2_6PreTrainedModel",
+    "MiniCPMConditionalChatTTSModel",
+    "MiniCPMConditionalTTSTextModel",
+    "MiniCPMConditionalTTSTextPreTrainedModel",
+    "MiniCPMVisionModel",
+    "MiniCPMVisionPreTrainedModel",
+    "MiniCPM_o_2_6TextModel",
+]

@@ -27,11 +27,12 @@ from transformers import (
     MiniCPM_o_2_6Processor,
 )
 from transformers.testing_utils import require_librosa, require_torch, require_torchaudio, require_vision
-from transformers.utils import is_torch_available 
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
 
 @require_vision
 @require_torch
