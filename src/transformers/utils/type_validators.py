@@ -142,7 +142,7 @@ def device_validator(value: Optional[Union[str, int]] = None):
 
 
 @as_validated_field
-def resampling_validator(value: Optional[Union[int, PILImageResampling]] = None):
+def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = None):
     if value is None:
         pass
     elif isinstance(value, int) and value not in list(range(6)):
