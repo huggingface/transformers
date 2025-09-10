@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Evolla model."""
 
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -25,9 +26,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
-)
-from transformers.utils import (
-    cached_property,
 )
 
 from ...test_configuration_common import ConfigTester

@@ -45,6 +45,16 @@ from .utils.import_utils import VersionComparison, split_package_version
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+def _sanitize_module_name(name: str) -> str:
+    """
+    Replace `.` in module names with `_dot_` so that it doesn't
+    look like an import path separator.
+    """
+    return name.replace(".", "_dot_")
+
+
 _HF_REMOTE_CODE_LOCK = threading.Lock()
 
 
@@ -358,9 +368,9 @@ def get_cached_module_file(
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     is_local = os.path.isdir(pretrained_model_name_or_path)
     if is_local:
-        submodule = os.path.basename(pretrained_model_name_or_path)
+        submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
+        submodule = _sanitize_module_name(pretrained_model_name_or_path.replace("/", os.path.sep))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
@@ -395,7 +405,7 @@ def get_cached_module_file(
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == os.path.basename(pretrained_model_name_or_path):
+    if submodule == _sanitize_module_name(os.path.basename(pretrained_model_name_or_path)):
         # We copy local files to avoid putting too many folders in sys.path. This copy is done when the file is new or
         # has changed since last copy.
         if not (submodule_path / module_file).exists() or not filecmp.cmp(

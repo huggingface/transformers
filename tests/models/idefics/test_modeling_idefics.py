@@ -15,6 +15,7 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 import pytest
 from parameterized import parameterized
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -494,21 +494,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     @pytest.mark.generate
     @unittest.skip(reason="""IDEFICS cannot generate with no images provided!""")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     def test_attention_outputs(self):

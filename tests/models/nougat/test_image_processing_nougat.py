@@ -14,13 +14,14 @@
 
 
 import unittest
+from functools import cached_property
 
 import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers.image_utils import SizeDict, load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import cached_property, is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
@@ -315,7 +316,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        # Adding a larget than usual tolerance because the slow processor uses reducing_gap=2.0 during resizing.
+        # Adding a larger than usual tolerance because the slow processor uses reducing_gap=2.0 during resizing.
         torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=2e-1, rtol=0)
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-2
