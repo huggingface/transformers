@@ -37,7 +37,15 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,  # Pad to longest sequence in the batch
             "truncation": True,  # Truncate overlong prompts for safety
         },
-        "audio_kwargs": {},
+        "audio_kwargs": {
+            "return_attention_mask": True,
+            "padding": "max_length",
+            "truncation": True,
+            "sampling_rate": 16_000,
+            "hop_length": 160,
+            "max_seconds": 30,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -87,10 +95,22 @@ class AudioFlamingo3Processor(ProcessorMixin):
             **kwargs,
         )
 
+        text_kwargs = output_kwargs["text_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        common_kwargs = output_kwargs["common_kwargs"]
+
+        # Enforce torch tensors, like Dia
+        return_tensors = common_kwargs.pop("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
         fe = self.feature_extractor
-        sr = int(getattr(fe, "sampling_rate", 16_000))
-        hop = int(getattr(fe, "hop_length", 160))
-        n_samples = int(getattr(fe, "n_samples", int(30.0 * sr)))
+
+        # Resolve core audio params from audio_kwargs (visible up top)
+        sr = int(audio_kwargs.get("sampling_rate", getattr(fe, "sampling_rate")))
+        hop = int(audio_kwargs.get("hop_length", getattr(fe, "hop_length")))
+        max_seconds = float(audio_kwargs.get("max_seconds"))
+        n_samples = int(max_seconds * sr)
         nb_max_frames = int(getattr(fe, "nb_max_frames", math.ceil(n_samples / hop)))
 
         # Frontend downsampling (conv k=3,p=1,s=2 → pool k=2,s=2)
@@ -103,17 +123,14 @@ class AudioFlamingo3Processor(ProcessorMixin):
         feat_masks_all: list[torch.Tensor] = []
         token_masks_all: list[torch.Tensor] = []
 
-        # Feature extraction call arguments with mask and padding enforced
-        fe_kwargs = dict(output_kwargs.get("audio_kwargs", {}))
-        fe_kwargs.update(
-            {
-                "return_attention_mask": True,
-                "padding": "max_length",
-                "truncation": True,
-                "return_tensors": "pt",
-                "sampling_rate": sr,
-            }
-        )
+        # Feature extraction call arguments come from audio_kwargs + common_kwargs (like Dia)
+        fe_kwargs = {
+            "return_attention_mask": audio_kwargs.get("return_attention_mask", True),
+            "padding": audio_kwargs.get("padding", "max_length"),
+            "truncation": audio_kwargs.get("truncation", True),
+            "return_tensors": return_tensors,
+            "sampling_rate": sr,
+        }
 
         for t, a in zip(text, audio):
             if a.ndim != 1:
@@ -168,9 +185,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         prompts = [self.tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in convs]
         enc = self.tokenizer(
             prompts,
-            padding=output_kwargs["text_kwargs"].get("padding", True),
-            truncation=output_kwargs["text_kwargs"].get("truncation", True),
-            return_tensors="pt",
+            padding=text_kwargs.get("padding", True),
+            truncation=text_kwargs.get("truncation", True),
+            return_tensors=return_tensors,
         )
 
         return BatchFeature(
