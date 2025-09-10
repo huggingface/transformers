@@ -550,6 +550,9 @@ class GenerationMixin(ContinuousMixin):
         Prepare the model inputs for generation. Notable steps include selecting the correct input key and cloning when appropriate,
         creating position_ids from the attention_mask when missing, slicing inputs and converting 2D attention masks to 4D for
         compilable caches, and finally forwarding all additional keyword arguments unchanged to the model's forward pass.
+
+        See the forward pass in the model documentation for expected arguments (different models might have different
+        requirements for e.g. `past_key_values`). This function should work as is for most LLMs.
         """
 
         # 1. Handle BC:
